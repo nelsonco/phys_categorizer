@@ -64,6 +64,9 @@ conda install -c plotly plotly-orca
 ### To use the preprocessed and catagorized article's associated text file:
 Run main.py if using python 3  
 Run main.ipynb if using jupyter notebook  
+Note: main_directory = must be set to the full directory where your physics file is located
+main directory = 'directory repositroy was cloned to' + '\physics'
+
 
 ### To download the documents mine them for text and categorize the files: 
 Download the documents from Kaggle, in this experiment only the physics folders documents were downloaded.
