@@ -57,7 +57,7 @@ pip install plotly
 
 
 ```bash
-pip install -U kaleido
+conda install -c plotly plotly-orca
 ```
 
 ## How to use:  
