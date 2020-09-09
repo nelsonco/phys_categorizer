@@ -1,0 +1,1274 @@
+5
+0
+0
+2
+ 
+n
+u
+J
+ 
+6
+2
+ 
+ 
+]
+h
+p
+-
+o
+e
+g
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+2
+9
+1
+6
+0
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Geodynamo and mantle convection simulations on
+the Earth Simulator using the Yin-Yang grid
+
+Akira Kageyama and Masaki Yoshida
+The Earth Simulator Center, Japan Agency for Marine-Earth Science and Technology,
+Showa-machi 3173-25, Yokohama, Japan
+
+E-mail: kage@jamstec.go.jp
+
+Abstract. We have developed ﬁnite diﬀerence codes based on the Yin-Yang grid for the
+geodynamo simulation and the mantle convection simulation. The Yin-Yang grid is a kind of
+spherical overset grid that is composed of two identical component grids. The intrinsic simplicity
+of the mesh conﬁguration of the Yin-Yang grid enables us to develop highly optimized simulation
+codes on massively parallel supercomputers. The Yin-Yang geodynamo code has achieved 15.2
+Tﬂops with 4096 processors on the Earth Simulator. This represents 46% of the theoretical
+peak performance. The Yin-Yang mantle code has enabled us to carry out mantle convection
+simulations in realistic regimes with a Rayleigh number of 107 including strongly temperature-
+dependent viscosity with spatial contrast up to 106.
+
+1. Introduction
+The Earth (radius r = 6400km) is composed of three spherical layers; the inner core (r =
+1200km), the outer core (r = 3500km), and the mantle. Computer simulations of the Earth’s
+interior need eﬃcient spatial discretization methods in the spherical shell geometry. To achieve
+high sustained performance on massively parallel supercomputer such as the Earth Simulator,
+spatially localized discretization methods rather than spectral methods are desirable. Recently,
+we proposed a new spherical grid system, the “Yin-Yang grid,” for geophysical simulations.
+Because there is no grid mesh that is orthogonal over the entire spherical surface and, at the
+same time, free of coordinate singularity or grid convergence, we have chosen an overset grid
+approach. A spherical surface is decomposed into two identical subregions. The decomposition
+(or dissection) enables us to cover each subregion by a grid system that is individually orthogonal
+and singularity-free. Each component grid in this Yin-Yang grid is a low latitude component of
+the usual latitude-longitude grid on the spherical polar coordinates (90 degree about the equator
+and 270 degree in the longitude). Therefore, the grid spacing is quasi-uniform and the metric
+tensors are simple and analytically known. One can directly apply mathematical and numerical
+resources that have been written in the spherical polar coordinates or latitude-longitude grid.
+Since the two component grids are identical and they are combined in a complementary way,
+various routines of the code can be recycled twice for each component grid at every simulation
+time step. We have developed ﬁnite diﬀerence codes based on the Yin-Yang grid for (i) the
+geodynamo simulation in the outer core, and (ii) the mantle convection simulation.
+
+In general, a dissection of a computational domain generates internal borders or internal
+In the overset grid methodology [1], the subregions are
+
+boundaries between the subregions.
+
+permitted to partially overlap one another on their borders. The overset grid is also called as
+overlaid grid, or composite overlapping grid, or Chimera grid [2]. The validity and importance
+of the overset approach in the aerodynamical calculations was pointed out by Steger [3]. Since
+then this method is widely used in this ﬁeld. It is now one of the most important grid techniques
+in the computational aerodynamics.
+
+In the computational geosciences, the idea of the overset grid approach appeared rather early.
+Phillips proposed a kind of composite grid in 1950’s to solve partial diﬀerential equations on
+a hemisphere, in which the high latitude region of the latitude-longitude grid is “capped” by
+another grid system that is constructed by a stereographic projection to a plane on the north
+pole [4, 5, 6]. After a long intermission, the overset grid method seems to attract growing interest
+in geoscience these days. The “cubed sphere” [7] is an overset grid that covers a spherical surface
+with six component grids that correspond to six faces of a cube. The “cubed sphere” is recently
+In the atmospheric research, other kind of
+applied to the mantle convection simulation [8].
+spherical overset grid is used in a global circulation model [9], in which the spherical surface
+is covered by two component grids—improved stereographic projection grids—in northern and
+souther hemispheres that overlap in the equator.
+
+Among indeﬁnite variations of spherical overset grid systems, what is the simplest one? In
+general, the structure of a spherical overset grid is largely determined by the number of divided
+pieces of the sphere n (
+2). Here we consider the minimum case of n = 2, i.e., the spherical
+dissections by two pieces. One can divide a sphere into two parts, for example, by cutting along
+a small circle at any latitude. We concentrate on a special class of n = 2 dissections in which
+the two pieces are geometrically identical, i.e., they have exactly same size and shape. Another
+condition we impose here to maximize the simplicity is the symmetry of the piece. It should
+have two fold symmetry in two perpendicular directions; up-down and right-left. Here we call
+this special class of dissections as yin-yang dissection of a sphere.
+
+≥
+
+A trivial example of the yin-yang dissection is obtained by cutting along the equator or any
+
+great circle, producing two hemispheres.
+
+Figure 1. An example of yin-yang dissection
+of a sphere: A sphere is divided into two
+identical pieces, with same shape and size.
+Each piece has two fold symmetry; up-
+down and right-left. They are combined
+in a complemental way to cover a spherical
+surface. The two identical pieces of the yin-
+yang dissection is transformed each other by
+two successive rotations, or one rotation.
+
+Other yin-yang dissections are obtained by modifying the cut curve from the great circle. Let
+Syin be a piece of a sphere S with radius r = √2. We should keep the surface area of Syin being
+2πr2, just a half of S’s surface. An example of Syin is shown in the upper left panel in Fig. 1.
+
+1,
+
+−
+
+−
+
+−
+
+−
+
+1) and D at (0,
+
+1, +1), B at (0, +1, +1), C at (0, +1,
+
+The border curve of Syin passes through the following four points on the sphere; point A at
+1). The curve AB,
+(x, y, z) = (0,
+between A and B, is arbitrarily as long as it is symmetric about the y = 0 plane. Other three
+curves, BC, CD, and DA, are uniquely constructed from the curve AB as follows: The curve
+BC is a copy of AB followed by two successive rotations, ﬁrst 180 degree about the z axis, then
+90 degree about the x axis. The curve CD is the mirror image of AB about z = 0 plane. The
+curve DA is the mirror image of BC about y = 0 plane. From this deﬁnition of the border curve
+ABCD, it is obvious that the surface area of Syin is just a half of that of the sphere S. Now
+we make a copy of Syin and call it Syang which is rotated for 180◦ around z-axis. (See lower left
+panel of Fig. 1.) Then, rotate it again, but this time for 90◦ degree around x-axis, as shown in
+the lower right panel. Then the original piece Syin (the upper left) and the rotated copy Syang
+(the lower right) can be combined, and they just cover the original sphere S as shown in the
+upper right in this ﬁgure. This is an constructive illustration of the yin-yang dissection of a
+sphere.
+
+Since the initial curve AB was arbitrarily, it is obvious that there are indeﬁnite variations of
+
+the yin-yang dissection of the sphere S.
+
+2. Yin-Yang grids
+
+Figure 2.
+A dissection of a sphere into
+two identical pieces—Yin and Yang—with a
+partial overlap. The thick and thin curves
+are the borders of Yin and Yang piece,
+respectively. the thick curve (Yin’s border) is
+always located in either constant latitudes or
+constant longitudes. The Yin (Yang) piece is
+a rectangle in the computational (θ, φ) space
+of the Yin (Yang) grid.
+
+The overset grid methodology gives us a freedom to design the shape of the component grid as
+long as the grids has minimum overlap one another [1]. Therefore, we can take the component
+grid as a rectangle in the computational (θ, φ) space. Fig. 2 shows a spherical dissection by
+two identical pieces with partial overlap. The Yin piece is surrounded by a thick red curve and
+Yang piece is surrounded by a thin curve. Note that the northern and southern borders of the
+Yin piece are located in constant latitudes and the western and eastern borders are located in
+constant longitudes. In other words, the Yin piece in Fig. 2 is a rectangle in the (θ, φ) space
+of the Yin’s spherical coordinates, and therefore, the Yang piece is also (the same) rectangle
+
+in Yang’s coordinates that is perpendicular to the Yin’s. The Yin-Yang grid based on this
+partially overlapped spherical dissection is shown in Fig. 3. Here, each component grid spans
+the subregion Sy deﬁned by
+
+Sy :=
+
+,
+θ, φ
+}
+{
+
+θ
+
+|
+
+−
+
+π/2
+
+| ≤
+
+π/4 + δ,
+
+φ
+
+3π/4 + δ,
+
+|
+
+| ≤
+
+(1)
+
+with a small buﬀer δ which is necessary to keep the minimum overlap between Yin and Yang.
+Note that in the simulation code, one subroutine for the ﬂuid solver, for instance, can be recycled
+twice because the grid distribution is exactly the same for the Yin and Yang.
+
+Figure 3. A Yin-Yang grid based on the yin-yang dissection with partial overlap shown in
+Fig. 2. Each component grid is rectangle in the computational (θ, φ) space.
+
+The Yin and Yang are converted each other by a rotation. The Yin’s cartesian coordinates
+
+i for i = 1, 2, 3 and that Yang’s coordinates xe
+xn
+
+i are related by
+
+i = Mijxn
+xe
+j
+
+for i, j = 1, 2, 3
+
+where M11 =
+satisﬁes
+
+−
+
+1, M23 = M32 = 1, and Mij = 0 for other components. Note that the matrix M
+
+M = M t = M
+
+−1
+
+,
+
+which indicates a complemental relation between the Yin and Yang.
+The coordinate
+transformation from Yin to Yang is mathematically the same as that from Yang to Yin. This
+enables us to make only one, instead of two, subroutines that involve any data transformation
+between Yin and Yang, which is required in the mutual interpolation for the internal boundary
+condition on the overset grid borders.
+
+The transformation formula of any vector components v = (vr, vθ, vφ) between Yin and Yang
+
+is given by
+
+(2)
+
+(3)
+
+(4)
+
+ve
+r
+ve
+θ
+ve
+φ
+
+
+
+
+
+
+
+
+
+= P
+
+vn
+r
+vn
+θ
+vn
+φ
+
+
+
+
+
+,
+
+
+
+
+
+with the transformation matrix
+
+1
+0
+0
+
+0
+sin φe sin φn
+−
+cos φn/ sin θe
+
+0
+cos φn/ sin θe
+sin φe sin φn 
+
+
+.
+
+−
+−
+
+P =
+
+
+
+
+
+(5)
+
+The inverse transformation is given by the same matrix; P −1 = P , which is another reﬂection
+of the complemental nature between the Yin and Yang.
+
+Another merit of the Yin-Yang grid resides in the fact that the component grid is nothing
+but (a part of ) the latitude-longitude grid. We can directly deal with the equations to be solved
+with the usual spherical polar coordinates. The analytical form of metric tensors are familiar in
+the spherical coordinates. We can directly code the basic equations in the program as they are
+formulated in the spherical coordinates. We can make use of various resources of mathematical
+formulas, program libraries, and other tools that have been developed in the spherical polar
+coordinates.
+
+In order to illustrate the programing strategy in the Yin-Yang method, let us consider a
+two-dimensional ﬂuid problem on a sphere S. Suppose that two components of the ﬂow velocity
+v = (vθ, vφ) and the pressure p are written in vel t, vel p, and press in a Fortran 90/95
+program. They can be combined into one structure or “type” in Fortran 90/95 as
+
+type fluid
+real(DP), dimension(NT,NP) :: vel t, vel p, press
+end type fluid
+
+where NT, NP are the grid size integers in θ and φ directions in the subregion Sy of eq. (1). Using
+this structured type, we declare two variables for the ﬂuid; one is for Yin and another for Yang:
+
+type(fluid ) :: fluid yin, fluid yang
+
+Then, we call a ﬂuid solver subroutine, here named navier stokes solver, that numerically
+solves the Navier-Stokes equation in the spherical coordinates in the subregion Sy:
+
+call navier stokes solver(fluid yin)
+call navier stokes solver(fluid yang)
+
+The ﬁrst call of navier stokes solver solves the ﬂuid motion in the Sy region deﬁned in the
+Yin’s spherical coordinates and the second call is for the same region Sy deﬁned in the Yang’s
+coordinates. But in the program code, we do not have to distinguish the two Sy regions since
+the basic equations, numerical grid distribution, and therefore, all numerical tasks are identical
+in the computational space. For a rotating ﬂuid problem with a constant angular velocity Ω, we
+have the Coriolis force term in the Navier-Stokes equation that seems to break the symmetry
+between the Yin grid and Yang grid, but it is still possible to write the equation in exactly the
+same form for the Yin and Yang grids by explicitly writing three components of angular velocity
+in the Coriolis force term 2v
+Ω in the subroutine. Then, we call the routine with the angular
+velocity vector in each grid (Yin or Yang) as the second argument:
+
+×
+
+call navier stokes solver(fluid yin,omega yin)
+call navier stokes solver(fluid yang,omega yang)
+
+where omega yin and omega yang are again structured variables that hold three components of
+the Ω vector: For example, omega yin holds three components of cartesian vector components
+in the Yin grid (Ωn
+z ) = (0, 0, Ω), and omega yang holds (Ωe
+
+z) = (0, Ω, 0).
+
+x, Ωn
+
+y , Ωn
+
+x, Ωe
+
+y, Ωe
+
+Our experience tells that it is easy to convert an existing latitude-longitude based program
+into a Yin-Yang based program since there are many shared routines between them. In addition
+to that the size of the code as well as its complexity is drastically reduced by the code conversion
+because we can remove routines that are designed to resolve the pole problems on the latitude-
+longitude grid.
+
+3. Application to the mantle convection simulation
+3.1. Simulation model
+We applied the Yin-Yang grid described in the previous secion for the mantle convection
+simulation. The details of the adopted numerical methods and benchmark tests can be found
+in [10].
+
+We model the mantle convection as a thermal convection of a Boussinesq ﬂuid with
+inﬁnite Prandtl number heated from bottom of a spherical shell [11]. The ratio of the inner
+radius (r = r0) and the outer radius (r = r1) is 0.55. The normalization factors for the
+non-dimensionalization of the length, velocity, time and temperature are ˆd, ˆκ/ ˆd, ˆd2/ˆκ and
+∆ ˆT = ˆTbot
+ˆTtop, respectively, where d is the thickness of the shell, ˆκ the thermal diﬀusivity,
+and ˆTbot and ˆTtop are the temperatures on the bottom and top surfaces. The hat stands
+for dimensional quantity. The non-dimensional equations of mass, momentum, and energy
+conservation governing the thermal convection are,
+
+−
+
+−
+where v is the velocity vector, p pressure, µ viscosity, T temperature, t time, ˙e strain-rate tensor,
+and ˆr is the unit vector in the r-direction. The Rayleigh number is deﬁned by
+
+· ∇
+
+∇
+
+where ˆρ is the density, ˆg the gravitational acceleration, and ˆα is the thermal expansivity. Most
+of the heat for Earth’s mantle comes from a combination of radioactive decay of isotopes and
+secular cooling of the mantle. The internal heating is deﬁned by
+
+v = 0,
+
+∇ ·
+
+0 =
+
+p +
+
+−∇
+
+∇ ·
+
+(µ ˙e) + RaT ˆr,
+
+=
+
+2
+
+T
+
+v
+
+T + H,
+
+∂T
+∂t
+
+ˆρˆg ˆα∆ ˆT ˆd3
+ˆκˆµ
+
+,
+
+Ra
+
+≡
+
+ˆQ ˆd2
+ˆκˆcp∆ ˆT
+
+,
+
+H
+
+≡
+
+where ˆQ is the internal heating rate per unit mass, and ˆcp is the speciﬁc heat at constant
+pressure.
+
+According to the laboratory experiments on silicate rock deformation, the viscosity of the
+Earth’s mantle depends on various parameters such as temperature, pressure, stress, and so
+on [12]. Among them, temperature dependence is the most dominant factor. Here we assume
+that viscosity µ depends only on temperature;
+
+µ(T ) = exp [
+
+E (T
+
+Tbot)] .
+
+−
+
+−
+
+The viscosity contrast across the spherical shell is deﬁned by γµ
+µ(Ttop)/µ(Tbot) = exp(E).
+The mechanical boundary conditions at the top and bottom surface are immpermiable and
+stress-free. The boundary conditions for T are ﬁxed; Tbot = 1 and Ttop = 0.
+
+≡
+
+3.2. Steady state convection
+The thermal convection in the spherical shell with inﬁnite Prandtl number has two stable
+solutions with polyhedral symmetry when the Rayleigh number is low. The two solutions
+are found by linear theory and conﬁrmed by numerical simulations [13]: One solution is a
+convection with the tetrahedral symmetry which has four upwellings; the other has the cubic
+
+(6)
+
+(7)
+
+(8)
+
+(9)
+
+(10)
+
+(11)
+
+Figure 4. The iso-surface of the residual temperature δT (the deviation from horizontally
+averaged temperature at each depth) started from the initial condition of (a) the tetrahedral
+and (b) the cubic symmetries. The Rayleigh number is Ra = 104. Blue and Yellow iso-surfaces
+indicate δT =
+0.125 and δT = 0.150, respectively. Red spheres indicate the bottom of the
+−
+mantle with ﬁxed temperature.
+
+(12)
+
+(13)
+
+symmetry with six upwellings. To conﬁrm these symmetric solutions and their stabilities, we
+performed two simulations with diﬀerent initial conditions of temperature ﬁeld; T (r, θ, φ) =
+2Tcond(r) = 0, with the
+Tcond(r) + Tprtb(r, θ, φ), where Tcond(r) is the purely conductive proﬁle,
+thermal boundary conditions given above. The perturbation term Tprtb(r, θ, φ) is given by,
+
+∇
+
+Tprtb(r, θ, φ) = 0.1 Y
+
+2
+3 (θ, φ) sin π(r
+
+r0),
+
+−
+
+for the tetrahedral symmetric solution, and
+
+Tprtb(r, θ, φ) = 0.1
+
+Y4
+
+(θ, φ) +
+
+Y4
+
+(θ, φ)
+
+sin π(r
+
+r0),
+
+0
+
+(cid:26)
+
+4
+
+5
+7
+
+(cid:27)
+
+−
+
+m(θ, φ) is the normalized spherical harmonic functions
+for the cubic symmetric solution, where Yℓ
+of degree ℓ and order m. Fig. 4 shows the steady state convection pattern with the tetrahedral
+and cubic symmetries. We have performed benchmark tests with previously reported numerical
+mantle convection codes that employed various numerical schemes. In spite of the diﬀerences of
+the discretization methods, numerical techniques, and number of grid points among the codes,
+we found that the calculated values such as the Nusselt number obtained by our Yin-Yang
+mantle code agree well with previous calculations within a few percent.
+
+≥
+
+106) and with internal heating (H
+
+3.3. Time-dependent convection
+The Earth’s mantle is obviously in a time-dependent convection under a very high Rayleigh
+20). When Ra = 105, the convection pattern
+number (Ra
+becomes weakly time-dependent, and the geometrical symmetry is broken. Fig. 5 shows the
+thermal structures of the mantle convection when Ra = 107 which is characteristic of the Earth’s
+mantle. Without internal heating, the thermal structure is strongly time-dependent, driven by
+narrow, cylindrical upwelling (hot) plumes surrounding by a network of long downwelling (cold)
+sheets (Fig. 5a). This feature is in contrast with the convective feature at low Rayleigh number
+(Ra < 105) where the convection is nearly steady state (Fig. 4). On the other hand, when the
+
+≤
+
+Figure 5. The iso-surface of the temperature T and the residual temperature δT for the cases
+of (a) H = 0 and (b) H = 20. The Rayleigh number is Ra = 107. Iso-surfaces on the half
+spherical shell indicate the temperature (see color bars). Blue and Yellow iso-surfaces indicate
+0.1, respectively. Red spheres indicate the bottom of the mantle with ﬁxed temperature.
+δT =
+
+internal heating is taken into account (H = 20), the convective feature is dominated by the
+short-wavelength structure with numerous quasi-cylindrical downwellings spaced relatively close
+together. The downwellings are surrounded by a broad and diﬀuse upwelling of hotter ﬂuid
+(Fig. 5b). We have found that internal heating has a strong inﬂuence on the scale and structure
+of the mantle convection, especially on the shape of downwellings.
+
+The convection pattern is also drastically changed by taking the viscosity variation into
+account. Fig. 6 shows the thermal structures of the mantle convection with temperature-
+dependent viscosity at Ra = 107 and H = 0. When the temperature dependence of viscosity is
+rather moderate (the viscosity contrast across the convecting shell γµ is 103–104), the convection
+
+Figure 6. The iso-surface of the residual temperature for the cases of (a) γmu = 104 (E = 9.210)
+and (b) γµ = 106 (E = 13.816). Blue and Yellow iso-surfaces indicate (a) δT =
+0.25 and
+0.10, respectively. Red spheres indicate the bottom of the mantle with ﬁxed temperature.
+δT =
+
+±
+
+±
+
+±
+
+has long-wavelength thermal structure with a mobile, stiﬀ layer, or, “sluggish-lid” along the cold
+top surface of the mantle. When Ra = 107 and γµ = 104, the convection pattern comes to be
+dominated by the degree-one pattern; the one cell structure that consists of a pair of cylindrical
+downwelling plume and cylindrical upwelling plume (Fig. 6a). On the other hand, the convective
+105. The stagnant-lid,
+ﬂow pattern that belongs to the “stagnant-lid” regime emerges when γµ
+which is an immobile, stiﬀ layer, prevents the heat ﬂux through the top boundary and leads to
+a small temperature diﬀerence in the mantle below the lid. Convection under the stagnant-lid is
+characterized by numerous, small-scale cylindrical plumes surroundings sheet-like downwelling
+(Fig. 6b). We have found that the variable viscosity with temperature dependence induces
+drastic eﬀects on the mantle convection pattern.
+
+≥
+
+4. Application to geodynamo simulation
+The magnetic compass points to the north since the Earth is surrounded by a dipolar magnetic
+ﬁeld. It is broadly accepted that the geomagnetic ﬁeld is generated by a self-excited electric
+current in the Earth’s core, The inner core is iron in solid state, and the outer core is also iron
+but in liquid state due to the high temperature of the planetary interior. The electrical current
+is generated by magnetohydrodynamic (MHD) dynamo action—the energy conversion process
+from ﬂow energy into magnetic energy—of the liquid iron in the outer core. In the last decade,
+computer simulation has emerged as a central research method for geodynamo study [14].
+
+In this section, we show the application of the Yin-Yang grid to the geodynamo simulation
+with a special emphasize on the code parallelization and sustained performance achieved by the
+Earth Simulator. We consider a spherical shell vessel bounded by two concentric spheres. The
+inner sphere of radius r = ri denotes the inner core and the outer sphere of r = ro denotes the
+core-mantle boundary. An electrically conducting ﬂuid is conﬁned in this shell region. Both
+the inner and outer spherical boundaries rotate with a constant angular velocity Ω. We use a
+rotating frame of reference with the same angular velocity. There is a central gravity force in
+the direction of the center of the spheres. The temperatures of both the inner and outer spheres
+are ﬁxed; hot (inner) and cold (outer). When the temperature diﬀerence is suﬃciently large, a
+convection motion starts when a random temperature perturbation is imposed at the beginning
+of the calculation. At the same time an inﬁnitesimally small, random “seed” of the magnetic
+ﬁeld is given.
+
+The system is described by the following normalized MHD equations:
+
+∂ρ
+∂t
+
+=
+
+f ,
+
+−∇ ·
+
+∂f
+∂t
+
+=
+
+∂p
+∂t
+
+(vf )
+
+p + j
+
+B + ρg + 2ρv
+
+Ω + µ(
+
+−∇ ·
+
+− ∇
+
+×
+
+2v +
+
+1
+3 ∇
+
+(
+∇ ·
+
+v)),
+
+=
+
+v
+
+p
+
+γp
+
+v + (γ
+
+1)K
+
+T + (γ
+
+−
+
+· ∇
+
+−
+
+∇ ·
+
++ (γ
+
+1)Φ,
+
+−
+
+×
+
+2
+
+∇
+
+∇
+1)ηj2
+
+−
+
+−
+
+×
+
+∂A
+∂t
+
+= v
+
+B + η
+
+2A,
+
+∇
+
+with
+
+p = ρT,
+
+B =
+
+A,
+
+j =
+
+B = 0,
+
+Φ = 2µ
+
+eijeij
+
+∇ ·
+
+∇ ×
+
+(cid:16)
+
+1
+3 (
+
+−
+
+∇ ·
+
+B,
+
+,
+
+∇ ×
+v)2
+
+(cid:17)
+
+g =
+−
+eij = 1
+2
+
+g0/r2ˆr,
+∂vi
+∂xj
+
++ ∂vj
+∂xi
+
+(cid:16)
+
+.
+
+(cid:17)
+
+Here the mass density ρ, pressure p, mass ﬂux density f , magnetic ﬁeld’s vector potential A are
+the basic variables in the simulation. Other quantities; magnetic ﬁeld B, electric current density
+j, and electric ﬁeld E are treated as subsidiary ﬁelds. The ratio of the speciﬁc heat γ, viscosity
+
+(14)
+
+(15)
+
+(16)
+
+(17)
+
+(18)
+
+Table 1. Speciﬁcations of the Earth Simulator.
+
+Peak performance of arithmetic processor (AP)
+Number of AP in a processor node (PN)
+Total number of PN
+Total number of AP
+Shared memory size of PN
+Total peak performance
+Total main memory
+Inter-node data transfer rate
+
+8 Gﬂops
+8
+640
+8 AP
+×
+16 GB
+8 Gﬂops
+10 TB
+12.3 GB/s
+
+×
+
+640 PN = 5120
+
+5120 AP = 40Tﬂops
+
+2
+
+×
+
+µ, thermal conductivity K and electrical resistivity η are assumed to be constant. The vector
+g is the gravity acceleration and ˆr is the radial unit vector; g0 is a constant. We normalize the
+quantities as follows: The radius of the outer sphere ro = 1; the temperature of the outer sphere
+T (1) = 1; and the mass density at the outer sphere ρ(1) = 1. The temperature on the inner and
+outer spheres are ﬁxed. The boundary condition for the velocity is rigid;
+
+The boundary condition for the magnetic ﬁeld is given by
+
+v = 0,
+
+at r = ri, 1.
+
+Bθ = Bφ = 0,
+
+at r = ri, 1.
+
+(19)
+
+(20)
+
+We will consider the improvement of this rather artiﬁcial boundary condition into more realistic
+one in the end of this section. The spatial derivatives in the above equations are discretized by
+the second-order central ﬁnite diﬀerence method on the Yin-Yang grid. The fourth-order Runge-
+Kutta method is used for the temporal integration. Initially, both the convection energy and the
+magnetic energy are negligibly small. For geodynamo study, it is necessary to follow the time
+development of the MHD system until the thermal convection ﬂow and the dynamo-generated
+magnetic ﬁeld are both suﬃciently developed and saturated.
+
+We developed this Yin-Yang based geodynamo simulation code for the Earth Simulator by
+converting our previous geodynamo code, which was based on the traditional latitude-longitude
+grid, into the Yin-Yang grid. We have found that the code conversion from our previous latitude-
+longitude based code into the new Yin-Yang based code is straightforward and rather easy. Our
+experience with the rapid and easy conversion from latitude-longitude code into Yin-Yang code
+would be encouraging for others who have already developed codes that are based on latitude-
+longitude grids in the spherical coordinates, and who are bothered by numerical problems and
+ineﬃciency caused by the pole singularity. We would like to suggest that they try the Yin-Yang
+grid.
+
+Since the Yin grid and Yang grid are identical, dividing the whole computational domain into
+a Yin grid part and a Yang grid part is not only natural but also eﬃcient for parallel processing.
+In addition to this Yin-and-Yang division, further domain decomposition within each grid is
+applied to for the massively parallel computation on the Earth Simulator.
+
+The Earth Simulator, whose hardware speciﬁcations are summarized in Table 1 has three
+diﬀerent levels of parallelization: Vector processing in each arithmetic processor (AP); shared-
+memory parallelization by 8 APs in each processor node (PN); and distributed-memory
+parallelization by PNs.
+
+In our Yin-Yang dynamo code, we apply vectorization in the radial dimension of the three-
+dimensional (3D) arrays for physical variables. The radial grid size is 255 or 511, which is just
+below the size (or doubled size) of the vector register of the Earth Simulator (256) to avoid bank
+conﬂicts in the memory. We use MPI both for the inter-node (distributed memory) parallel
+processing and for the intra-node (shared memory) parallel processing. This approach is called
+“ﬂat-MPI” parallelization.
+
+As we mentioned above, we ﬁrst divide the whole computational domain into two identical
+parts that correspond to the Yin grid and Yang grid shown in Fig. 3(a). (Therefore, the total
+number of processes is always even.) For further parallelization within each component grid, we
+applied the two-dimensional decomposition in the horizontal space, colatitude θ and longitude
+φ. More details on the parallelization of this code is described in [15].
+
+×
+
+514(latitudinal)
+
+1538(longitudinal)
+
+The best performance of the Yin-Yang geodynamo code with the ﬂat MPI parallelization is
+15.2 Tﬂops. This performance is achieved by 4096 processors (512 nodes) with the total grid size
+2(Yin and Yang). Since the theoretical
+of 511(radial)
+peak performance of 4096 processors is 4096
+8 Gﬂops = 32.8Tﬂops, we have achieved 46%
+×
+of peak performance in this case. The average vector length is 251.6, and the vector operation
+ratio is 99%. The high performance of the Yin-Yang dynamo code is a direct consequence of
+the simple and symmetric conﬁguration design of the Yin-Yang grid: It makes it possible to
+minimize the communication time (10%) between the processes in the horizontal directions, and
+enables optimum vector processing (with 99% of operation ratio) in the radial direction in each
+process.
+
+×
+
+×
+
+Before concluding this section, we brieﬂy describe our recent improvement of the Yin-Yang
+geodynamo code. We have improved the boundary condition denoted by eq. (20) of the magnetic
+ﬁeld into more realistic one,
+In this boundary
+1) is
+condition, the magnetic ﬁeld generated by the MHD dynamo in the outer core (r
+smoothly connected to the magnetic ﬁeld Bv of the outer region r > 1 that is assumed to be an
+insulator;
+
+i.e., so called vacuum boundary condition.
+
+≤
+
+Therefore, the Bv is written by a scalar function ψ,
+
+Bv = 0,
+
+for r > 1.
+
+∇ ×
+
+Bv =
+
+ψ,
+
+for r > 1,
+
+−∇
+
+where, from
+
+Bv = 0, ψ satisﬁes the potential equation
+
+∇ ·
+1
+r2
+
+2
+
+∇
+
+ψ =
+
+∂
+∂θ (cid:19)
+The boundary condition of ψ at r = 1 is given by
+
+∂
+r
+∂r (cid:18)
+
+1
+r2 sin θ
+
+2 ∂
+∂r (cid:19)
+
+∂
+∂θ (cid:18)
+
+sin θ
+
++
+
+"
+
++
+
+1
+r2 sin2 θ
+
+∂2
+∂φ2
+
+#
+
+ψ = 0,
+
+for r
+
+1
+
+(23)
+
+≥
+
+ψ(r = 1) = Br(r = 1), where Br(r = 1)
+is determined from the dynamo region (r
+1). Other component of the magnetic ﬁeld at the
+surface Bθ(r = 1) and Bφ(r = 1) are determined by the solution of eq. (23). In order to solve
+this boundary value problem, we ﬁrst apply a coordinate transformation of r.
+
+−∇
+
+≤
+
+The equation (23) is converted into the following form
+
+ζ = 1/r.
+
+r
+
+→
+
+2 ∂2
+∂ζ 2 +
+
+1
+sin θ
+
+ζ
+
+"
+
+∂
+∂θ (cid:18)
+
+sin θ
+
+∂
+∂θ (cid:19)
+
++
+
+1
+sin2 θ
+
+∂2
+∂φ2
+
+#
+
+ψ = 0,
+
+for 0
+
+ζ
+
+1
+
+≤
+
+≤
+
+The problem to solve eq. (23) outside a unit sphere r
+solve eq. (25) inside a unit sphere ζ
+given by ψ(ζ = 0) = 0 since ψ(r =
+
+≤
+) = 0.
+
+1 is now converted into the problem to
+1. The boundary condition of ψ at the origin ζ = 0 is
+
+≥
+
+∞
+
+(21)
+
+(22)
+
+(24)
+
+(25)
+
+Figure 7. The Yin-Yang multigrid method for the solution of the vacuum magnetic ﬁeld
+potential ψ. The full approximation storage algorithm is used. The horizontal boundary values
+of the Yin and Yang grids for the overset are determined by the mutual interpolation (white
+arrows) at the every grid level in the V-cycle of the multigrid method (gray arrows).
+
+To solve eq. (25), we apply the multigrid method [16], which is practically the optimal way to
+solve this kind of boundary value problem. The base grid system is the Yin-Yang grid deﬁned
+in the full spherical region including the origin. See Fig. 7. We adopt the full approximation
+storage algorithm of the multigird method. The Jacobi method is used as the smoother. The
+V-cycle is repeated for a couple of times until we get the convergence. The internal boundary
+condition of each component grid (Yin and Yang) are set by mutual bi-cubic interpolation at
+every grid level as indicated by white arrows in Fig. 7. Although, the code is not parallelized
+yet, its ﬂat-MPI parallelization will be straightforward. We have combined this non-parallelized
+Yin-Yang multigrid solver of the vacuum potential ψ with the non-parallel version of the Yin-
+Yang geodynamo code. We have found that the vacuum ﬁeld condition has been successfully
+implemented by this multigrid potential solver with almost the same computational cost (CPU
+time) as with the MHD solver part. This is a very promising result for further development.
+
+5. Summary
+We have developed a new spherical overset grid, “Yin-Yang grid”, for geophysical simulations.
+The Yin-Yang grid is constructed from a dissection of a sphere into two identical and
+complemental pieces. Among various possible overset grids over a sphere, we believe that the
+Yin-Yang grid is the simplest and the most powerful especially on massively parallel computers
+from the following reasons:
+
+•
+•
+
+It is an orthogonal system, since it is a part of the latitude-longitude grid.
+The grid spacing is quasi-uniform, since we picked up only the low latitude region of the
+latitude-longitude grid.
+
+•
+
+•
+
+•
+
+The metric tensors are simple and analytically known, since it is deﬁned based on the
+spherical polar coordinates.
+Routines for the ﬂuid (or MHD) solver can be recycled twice, since Yin and Yang are
+identical.
+Routines for mutual interpolations of the overset grid borders can also be recycled twice,
+since Yin and Yang are complemental.
+Parallelization is easy and eﬃcient, since the domain decomposition is straightforward.
+
+•
+We have developed ﬁnite diﬀerence codes of the geodynamo simulation and the mantle
+convection simulation on the Yin-Yang grid. The Yin-Yang geodynamo code has achieved 15.2
+Tﬂops with 4096 processors on the Earth Simulator. This represents 46% of the theoretical
+peak performance. By the Yin-Yang mantle code, we can carry out realistic mantle convection
+simulations under the Rayleigh number of 107,
+including strongly temperature-dependent
+viscosity whose contrast reaches upto 106.
+
+In the Earth Simulator Center, the Yin-Yang grid is also applied to advanced general
+
+circulation modes of the atmosphere and ocean [17, 18, 19].
+
+Acknowledgments
+The authors would like to thank Prof. Tetsuya Sato, the director-genenal of the Earth Simulator
+Center, for instructive discussions and Dr. Masanori Kameyama for useful comments on the
+application of the multigrid method to the Yin-Yang grid. All the simulations were performed
+on the Earth Simulator.
+
+References
+[1] Chesshire G and Henshaw W D 1990 Composite overlapping meshes for the solution of partial diﬀerential
+
+equations J. Comput. Phys. 90 1–64
+
+[2] Steger J L, Dougherty F C and Benek J A 1983 A Chimera grid scheme Proc. Advances in Grid Generation
+
+ed K N Ghia and U Ghia (Houston) ASME FED vol 5 pp 59–69
+
+[3] Steger J L 1982 On application of body conforming curvilinear grids for ﬁnite diﬀerence solution of external
+
+ﬂow Numerical Grid Generation ed J F Thomposon (Amsteram: North-Holland) pp 295–316
+
+[4] Phillips N A 1957 A map projection system suitable for large-scale numerical weather prediction J. Meteor.
+
+[5] Phillips N A 1959 Numerical integration of the primitive equations on the hemisphere Month. Weather Rev.
+
+Soc. Japan 75 262–7
+
+87 333–45
+
+[6] Browning G L, Hack J J and Swarztrauber P N 1989 A comparison of three numerical methods for solving
+
+diﬀerential equations on the sphere Month. Weath. Rev. 117 1058–75
+
+[7] Ronchi C, Iacono R and Paolucci P S 1996 The “cubed sphere”: A new method for the solution of partial
+
+diﬀerential equations in spherical geometry J. Comput. Phys. 124 93–114
+
+[8] Hernlund J W and Tackley P J 2003 Three-dimensional spherical shell convection at inﬁnite Prandtl
+number using the ‘cubed sphere’ method Proc. Second MIT Conference on Computational Fluid and
+Solid Mechanics (Cambridge)
+
+[9] Dudhia J and Bresch J F 2002 A global version of the PSU-NCAR mesoscale model Month. Weather Rev.
+
+130 2989–3007
+
+[10] Yoshida M and Kageyama A 2004 Application of the Yin-Yang grid to a thermal convection of a Boussinesq
+ﬂuid with inﬁnite Prandtl number in a three-dimensional spherical shell Geophys. Res. Lett. 31 L12609
+[11] McKenzie D P, Roberts J M and Weiss N O 1974 Convection in the earth’s mantle: Towards a numerical
+
+simulation. J. Fluid Mech. 62 465–538
+
+[12] Turcotte D L and Schubert G 2002 Geodynamics (Cambridge: Cambridge Univ. Press)
+[13] Bercovici B, Schubert G, Glatzmaier G A and Zebib A 1989 Three dimensional thermal convection in a
+
+[14] Kono M and Roberts P H 2002 Recent geodynamo simulations and observations of the geomagnetic ﬁeld
+
+spherical shell J. Fluid Mech. 206 75–104
+
+Rev. Geophys. 40 1013
+
+[15] Kageyama A, Kameyama M, Fujihara S, Yoshida M, Hyodo M and Tsuda Y 2004 A 15.2 Tﬂops simulation
+of geodynamo on the earth simulator Proc. ACM/IEEE Supercomputing Conference SC2004 (Pitssburgh)
+
+[16] Wesseling P 2004 An Introduction to Multigrid Methods (Philadelphia: R. T. Edwards Inc., John Wiley &
+
+Sons Ltd., 1992. Corrected Reprint)
+
+[17] Takahashi K et al 2004 Development of nonhydrostatic coupled ocean-atmosphere simulation code on the
+earth simulator Proc. 7th International Conference on High Performance Computing and Grid in Asia
+Paciﬁc Region (Omiya) pp 487–94
+
+[18] Komine K, Takahashi K and Watanabe K 2004 Development of a global non-hydrostatic simulation code
+using yin-yang grid system Proc. 2004 workshop on the solution of partial diﬀerential equations on the
+sphere (Yokohama) pp 67–9
+
+[19] Takahashi K 2004 Development of nonhydrostatic coupled ocean-atmosphere simulation code Annual Report
+
+of the Earth Simulator for Fiscal year 2003 pp 63–7
+
+

@@ -1,0 +1,1461 @@
+Pricing options with VG model using FFT
+
+Andrey Itkin∗
+
+24th September 2013
+
+Summary
+
+We discuss why for VG model Carr-Madan’s FFT method blows up for certain values of the
+model parameters when used to price European vanilla options. An alternative method originally
+proposed by Lewis is considered which seems to work ﬁne for any value of the VG parameters.
+Test examples are given to demonstrate an eﬃciency of this method.
+
+5
+0
+0
+2
+ 
+r
+a
+
+M
+ 
+6
+1
+ 
+ 
+]
+h
+p
+-
+c
+o
+s
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+7
+3
+1
+3
+0
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+∗Current address: Amaranth LLC, One American Lane, Greenwich, CT 06831, aitkin@amaranthllc.com
+
+1
+
+2 Carr-Madan’s FFT approach and the VG model
+
+Contents
+
+1 Introducrtion
+
+3 Lewis’s regularization
+
+List of Figures
+
+1
+
+2
+
+5
+
+4
+
+3
+
+6
+
+European option values in VG model at T = 0.02yrs, K = 90, σ = 0.01 obtained
+with FRFT. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+European option values in VG model at T = 0.02yrs, K = 90, σ = 0.01 obtained
+with the adaptive integration. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+European option values in VG model at T = 0.02yrs, K = 90, σ = 0.01 obtained
+with FFT. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+European option values in VG model at T = 1.0yrs, K = 90, σ = 1.0 obtained with
+the FFT.
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+European option values in VG model at T = 1.0yrs, K = 90, σ = 1.0 obtained with
+the FRFT.
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+European option values in VG model at T = 1.0yrs, K = 90, σ = 1.0 obtained with
+the adaptive integration. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+Denominator of the Eq. (13) at T = 0.8, ν = 0.1, α = 3, σ = 1 as a function of v and
+Θ.
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+Denominator of the Eq. (13) at T = 0.8, ν = 0.1, α = 3, v = 0 as a function of σ and
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+Θ.
+European option values in VG model at T = 1.0yr, K = 90, σ = 0.1 obtained with
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+the new FFT method.
+10 European option values in VG model at T = 1.0yrs, K = 90, σ = 0.5 obtained with
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+11 European option values in VG model at T = 1.0yr, K = 90, σ = 0.5 obtained with
+. . . . . . . . . . . . . . . . . . . . . . . . .
+12 The diﬀerence between the European call option values for the VG model obtained
+with Carr-Madan FFT method and the new FFT method. Parameters of the test
+0.33, r = q = 0. at various strikes).
+are: S = 100, T = 0.5yr, σ = 0.2, ν = 0.1, Θ =
+
+the new FFT method (rotated graph).
+
+the new FFT method.
+
+7
+
+8
+
+9
+
+−
+
+3
+
+3
+
+8
+
+4
+
+4
+
+5
+
+5
+
+6
+
+6
+
+7
+
+7
+
+12
+
+12
+
+12
+
+13
+
+2
+
+1 Introducrtion
+
+This paper summarizes some results of the work originally initiated by Peter Carr. Peter proposed
+to create a documented research prototype of the VG model that can be used as a reference
+implementation. This should include:
+
+Pricing engine prototype
+
+Calibration prototype
+
+Documentation for the prototypes.
+
+Test results for ﬁtting to select pricing data
+
+•
+
+•
+
+•
+
+•
+
+General documentation for the VG model, calibration, etc.
+
+•
+There are several methods to price a European option under the VG model. One method uses
+the closed form solution derived in [1]. Although the expression is analytic it requires computation
+of modiﬁed Bessel functions, and, hence, may not be as fast as we would like our pricing model to
+be. Therefore, initial work provided by Mike Konikov and Dilip Madan consisted of 2 steps. First,
+the FFT method of Carr and Madan [2], nowadays almost standard in math ﬁnance, was applied
+to the VG model [1] to price the European vanilla option since the characteristic function of the
+log-return process has a very simple form. Unfortunately, it turned out that the methods blows up
+at some values of the VG parameters. Second, Madan and Konikov developed yet another method
+based on the deﬁnition of the VG process as being a time changed Brownian motion where the
+time change is assumed independent of the Brownian motion. This method was described in detail
+in [3] while has not been implemented yet.
+
+Also Mike Konikov and I independently implemented a modiﬁcation of the FFT method - the
+Fractional Fourier Transform, which is described in detail in [4, 5]. This method usually allows
+acceleration of the pricing function by factor 8-10, while for the VG model it still demonstrates
+same problem as the original FFT.
+
+Below we discuss why the Carr and Madan FFT approach fails for the VG model, and propose
+
+another method originally developed by Lewis [6] which seems to be free of such problems.
+
+2 Carr-Madan’s FFT approach and the VG model
+
+It was worked out for
+Let us start with a short description of the Carr-Madan FFT method.
+models where the characteristic function of underlying price process (St) is available. Therefore,
+the vanilla options can be priced very eﬃciently using FFT as described in Carr and Madan [2].
+The characteristic function of the price process is given by
+
+φ(u, t) = E(eiuXt),
+
+where Xt = log(St). Note that the above representation holds for all models and is not just
+restricted to L´evy models where the characteristic functions have a time homogeneity constraint
+that φ(u, t) = e−tψ(u), where ψ(u) is the L´evy characteristic exponent.
+
+Once the characteristic function is available, then the vanilla call option can be priced using
+
+Carr-Madan’s FFT formula:
+
+(1)
+
+(2)
+
+C(K, T ) =
+
+e−α log(K)
+π
+
+∞
+
+Re
+
+−iv log(K)ω(v)
+e
+i
+
+h
+
+dv,
+
+0
+
+Z
+
+3
+
+where
+
+ω(v) =
+
+e−rT φ(v
+α2 + α
+
+−
+
+(α + 1)i, T )
+−
+v2 + i(2α + 1)v
+
+(3)
+
+The integral in the ﬁrst equation can be computed using FFT, and as a result we get call option
+
+prices for a variety of strikes. For complete details, see Carr & Madan paper [2].
+The put option values can just be constructed from Put-Call symmetry.
+Parameter α in Eq. (2) must be positive. Usually α = 3 works well for various models. It is
+important that the denominator in Eq. (11) has only imaginary roots while integration in Eq. (2)
+is provided along real v. Thus, the integrand of Eq. (2) is well-behaved.
+
+But as it turned out, this is not the case for the VG model. To show this let us consider the
+European call option values obtained by Mike Konikov by computing FFT of the VG characteristic
+function according to Eq. (2).
+
+Figure 1: European option values in VG
+model at T = 0.02yrs, K = 90, σ = 0.01
+obtained with FRFT.
+
+Figure 2: European option values in VG
+model at T = 0.02yrs, K = 90, σ = 0.01
+obtained with the adaptive integration.
+
+≈
+
+In Fig. 1 the results of that test obtained using the FRFT algorithm are given for strike K = 90,
+2
+maturity T = 0.02 yrs and volatility σ = 0.01. It is seen that at positive coeﬃcients of skew Θ
+and coeﬃcients of kurtosis ν
+0.5 the option value has a delta-function-wise pick that doesn’t
+seem to be a real option value behavior. In Fig. 2 similar results are obtained using a diﬀerent
+method of evaluation of the integral in Eq. (2) - an adaptive integration. Eventually, in Fig. 3 same
+test was provided using a standard FFT method. The results look quite diﬀerent that allows a
+guess that something is wrong with FRFT and the adaptive integration. One could also note that
+this test plays with an option with a very short maturity. Therefore, to let us make another test
+with a longer maturity. In Fig. 4-6 the results of the test that uses same integration procedures,
+but for the option with K = 90, T = 1, σ = 1, are presented. It is seen that for longer maturities
+
+≈
+
+4
+
+FFT also blows up almost at the same region of the model parameters. Moreover, it occurs not
+only at positive value of the skew coeﬃcient but at negative as well. Thus, the problem lies not
+in the numerical method that was used to evaluate the integral in the Eq. (2), but in the integral
+itself.
+
+Figure 3: European option values in VG
+model at T = 0.02yrs, K = 90, σ = 0.01
+obtained with FFT.
+
+Figure 4: European option values in VG
+model at T = 1.0yrs, K = 90, σ = 1.0
+obtained with the FFT.
+
+To show this let us brieﬂy describe the main features of the model. The Variance Gamma
+model (VG for short) with parameter vector (σ, ν, θ) assumes that the forward price satisﬁes the
+following equation
+
+ln Ft = ln F0 + Xt + ωt,
+
+where
+
+Xt = θγt(1, ν) + σWγt(1,ν),
+where γt(1, ν) is a Gamma process playing the role of time in this case, and ω is chosen to make Ft
+a martingale. Conditioning on time change like in Romano-Touzi for stochastic volatility models,
+we can derive both formula for the characteristic function of Xt (and, hence, Ft), and the value of
+a vanilla European option. First, the density for our Gamma process is
+
+(5)
+
+(4)
+
+(6)
+
+fγt(1,ν)(x) =
+
+− x
+ν
+
+t
+ν
+
+−1e
+t
+ν Γ
+
+x
+
+ν
+
+t
+ν
+
+,
+
+(cid:0)
+
+(cid:1)
+
+5
+
+Figure 5: European option values in VG
+model at T = 1.0yrs, K = 90, σ = 1.0
+obtained with the FRFT.
+
+Figure 6: European option values in VG
+model at T = 1.0yrs, K = 90, σ = 1.0
+obtained with the adaptive integration.
+
+and, hence, its characteristic function can be computed as
+
+φγt(1,ν)(u) = E[eiuγt(1,ν)] =
+
+eiuxfγt(1,ν)(x)dx =
+
+∞
+
+0
+Z
+− x(1−iuν)
+ν
+
+dx
+
+=
+
+∞
+
+t
+ν
+
+x
+
+−1e
+t
+ν Γ
+ν
+
+0
+Z
+
+= (1
+
+− t
+ν
+
+iuν)
+
+= (1
+
+− t
+ν
+
+iuν)
+
+−
+
+−
+
+t
+ν
+∞
+(cid:1)
+
+∞
+
+(cid:0)
+
+0
+Z
+
+0
+Z
+
+∞
+
+eiux x
+ν
+
+t
+ν
+
+−1e
+t
+ν Γ
+
+− x
+ν
+
+t
+ν
+
+0
+
+Z
+
+dx
+
+(cid:0)
+
+(cid:1)
+
+(x(1
+
+−
+
+t
+ν
+
+iuν))
+t
+ν Γ
+
+ν
+
+−1e
+t
+ν
+
+− x(1−iuν)
+ν
+
+d(x(1
+
+iuν))
+
+−
+
+(cid:1)
+(cid:0)
+dy = (1
+
+iuν)
+
+− t
+
+ν .
+
+−
+
+t
+ν
+
+−1e
+t
+ν Γ
+
+y
+
+ν
+
+− y
+ν
+
+t
+ν
+
+(cid:0)
+
+(cid:1)
+
+φXt(u) = E[eiuXt] = E[E[eiuXt
+= E[eiuθγt(1,ν)− 1
+
+|
+
+2 u2σ2γt(1,ν)] = E[ei(uθ+i 1
+
+γt(1, ν)]] = E[E[eiu(θγt(1,ν)+σWγt (1,ν))
+
+γt(1, ν)]]
+
+|
+
+= φγt(1,ν)(uθ + i
+
+u2σ2) =
+
+1
+
+iθνu +
+
+σ2νu2
+
+.
+
+1
+2
+
+−
+
+(cid:18)
+
+2 u2σ2)γt(1,ν)]
+− t
+ν
+
+1
+2
+
+(cid:19)
+
+Now, to prevent arbitrage, we need Ft be a martingale, and, since Ft is already an independent
+
+increment process, all we need is
+
+or
+
+This tells us that
+
+E[F0eXt+ωt] = F0φXt(
+
+i)eωt = F0.
+
+−
+
+E[Ft] = F0,
+
+6
+
+(7)
+
+(8)
+
+(9)
+
+(10)
+
+ω =
+
+i)
+
+ln φXt(
+t
+
+−
+
+−
+
+=
+
+−
+
+−
+
+t
+ν ln
+
+1
+
+1
+2 σ2ν
+
+−
+
+θν
+t
+
+−
+
+(cid:0)
+
+1
+ν
+
+=
+
+ln
+
+1
+
+θν
+
+−
+
+−
+
+(cid:18)
+
+(cid:1)
+
+1
+2
+
+σ2ν
+
+.
+
+(cid:19)
+
+Note that from the deﬁnition of ω above, in order to have a risk neutral measure for VG model,
+
+its parameters must satisfy an inequality:
+
+Now having expression Eq. (7) for the VG characteristic function let us substitute it and Eq. (11)
+
+into the Eq. (2) that gives
+
+1
+ν
+
+> θ +
+
+σ2
+2
+
+.
+
+(11)
+
+(12)
+
+−α log(K)−rT
+e
+
+∞
+
+C(K, T )
+
+∝
+
+π
+
+0 ℜ
+Z
+
+α2 + α
+
+v2 + i(2α + 1)v
+
+1
+
+iθνv +
+
+σ2νv2
+
+−
+
+1
+2
+
+−iv log(K)
+e
+
+−
+
+(cid:18)
+
+(cid:3)
+
+
+
+
+
+(cid:2)
+
+dv,
+
+(13)
+
+t
+ν
+
+(cid:19)
+
+
+
+
+
+v
+
+≡
+
+−
+
+where u
+(α + 1)i. At small T close to zero the second term in the denominator of the Eq. (13)
+is close to 1. Therefore at small T the denominator has no real roots. To understand what happens
+at larger maturities, let us put T = 0.8, ν = 0.1, α = 3, σ = 1 and see how the denominator behaves
+as a function of v and Θ. The results of this test obtained with the help of Mathematica package
+are given in Fig 7.
+
+Figure 7: Denominator of the Eq. (13)
+at T = 0.8, ν = 0.1, α = 3, σ = 1 as a
+function of v and Θ.
+
+Figure 8: Denominator of the Eq. (13)
+at T = 0.8, ν = 0.1, α = 3, v = 0 as a
+function of σ and Θ.
+
+It is seen that at v = 0 at positive Θ the characteristic function has a singularity. To investigate
+it in more detail, we assume v = 0 and plot the denominator as a function of σ and Θ (see Fig. ??).
+
+7
+
+As follows from this Figure in the interval 0 < σ < 2 there exists a value of Θ that makes the
+integrand in the Eq. (13) singular. This means that singularity of the integrand can not be
+eliminated, and thus the Carr-Madan FFT method can not be used together with the VG model
+for pricing European vanilla options. Using FRFT or adaptive integration that both are slight
+modiﬁcations of the FFT, also doesn’t help.
+
+Note that for the VG model the authors of [2] derived condition which keeps the characteristic
+
+function to be ﬁnite, that reads
+
+α <
+
+2
+νσ2 +
+
+Θ2
+σ4 −
+
+Θ
+σ2 −
+
+1.
+
+s
+
+(14)
+
+Also as can be seen, for Θ, ν and σ corresponding to the above mentioned tests α becomes
+
+negative that doesn’t allow using this method to price the options in terms of strike.
+
+In order to solve these problems one needs to ﬁnd another way how to regularize the integrand,
+
+i.e. eliminate doing it in the way as Carr and Madan did it using a regularization factor e−αk.
+
+3 Lewis’s regularization
+
+Another approach of how to apply FFT to the pricing of European options was proposed by Alan
+Lewis [6]. Lewis notes that a general integral representation of the European call option value with
+a vanilla payoﬀ is
+
+CT (x0, K) = e
+
+−rT
+
+(ex
+
+K)+ q(x, x0, T )dx,
+
+(15)
+
+Z
+where x = log ST is a stock price that under a pricing measure evolves as ST = S0 exp[(r
+r
+−
+E[exp(iuXT )] = 1, and q is the density of the log-return distribution x.
+
+q)T +XT ,
+q is the cost of carry, T is the expiration time for some option, XT is some Levy process satisfying
+
+−
+
+The central point of the Lewis’s work is to represent the Eq. (15) as a convolution integral and
+
+∞
+
+−∞
+
+−
+
+then apply a Parseval indentity
+
+∞
+
+−∞
+
+Z
+
+f (x)g(x0 −
+
+x)dx =
+
+1
+2π
+
+∞
+
+−∞
+
+Z
+
+−iux0 ˆf (u)ˆg(u)du,
+e
+
+(16)
+
+where the hat over function denotes its Fourier transform.
+
+The idea behind this formula is that the Fourier transform of a transition probability density
+for a Levy process to reach Xt = x after the elapse of time t is a well-known characteristic
+function, which plays an important role in mathematical ﬁnance. For Levy processes it is φt(u) =
+E[exp(iuXt)], u
+, and typically has an analytic extension (a generalized Fourier transform)
+u
+
+SX parallel to the real z-axis.
+−
+K)+dx and the characteristic function φt(z) both exist (we will discuss this below), i.e. Then from
+a chain of equalities the call option value can be expressed as follows
+
+Now suppose that the generalized Fourier transform of the payoﬀ function ˆw(z) =
+
+C, regular in some strip
+
+∞
+−∞ eizx(ex
+
+∈ ℜ
+
+→
+
+∈
+
+R
+
+z
+
+CT (x0, K) = e
+
+−rT E
+
+(ex
+
+K)+
+
+=
+
+−
+
+(cid:2)
+
+(cid:3)
+
+−rT
+e
+
+2π
+
+E
+
+iµ+∞
+
+−izxT ˆw(z)dz
+e
+
+(cid:21)
+
+iµ−∞
+
+(cid:20)Z
+
+8
+
+(17)
+
+iµ+∞
+
+iµ−∞
+
+(cid:20)Z
+iµ+∞
+
+=
+
+=
+
+E
+
+−rT
+e
+
+2π
+−rT
+e
+
+2π
+
+iµ−∞
+
+Z
+
+−iz[x0+(r−q+ω)T ]e
+e
+
+−izXT ˆw(z)dz
+
+−iz[x0+(r−q+ω)T ]E[e
+e
+
+(cid:21)
+−izXT ] ˆw(z)dz =
+
+−rT
+e
+
+2π
+
+iµ+∞
+
+iµ−∞
+
+Z
+
+−izY φ(
+e
+
+z) ˆw(z)dz.
+
+−
+
+Here Y = x0 + (r
+
+≡
+if all the integrals in Eq. (17) exist.
+
+−
+
+q + ω)T , µ
+
+Im z. This is a formal derivation which becomes a valid proof
+
+The Fourier transform of the vanilla payoﬀ can be easily found by a direct integration
+
+ˆw(z) =
+
+eizx(ex
+
+K)+dx =
+
+−
+
+∞
+
+−∞
+
+Z
+
+K iz+1
+z2
+iz
+
+,
+
+−
+
+−
+
+Imz > 1.
+
+(18)
+
+transforms ˆw(z) for typical claims exist and are regular in their own strips
+z-plane, just like characteristic functions.
+
+Note that if z were real, this regular Fourier transform would not exist. As shown in [7], payoﬀ
+Sw in the complex
+SX.
+∗
+X . Thus, the Eq. (17) is deﬁned at the strip
+S
+
+Above we denoted the strip where the characteristic function φ(z) is well-behaved as
+
+z) is deﬁned at the conjugate strip
+
+Therefore, φ(
+SV =
+
+∗
+X
+
+S
+
+−
+Sw, where it has the form
+Ke
+
+C(S, K, T ) =
+
+T
+
+and k = log(S/K) + (r
+
+q + ω)T .
+
+−
+
+has the form
+
+−rT
+
+iµ+∞
+
+−
+
+2π
+
+iµ−∞
+
+Z
+
+−izkφ(
+e
+
+z)
+
+−
+
+z2
+
+, µ
+
+∈ SV ,
+
+iz
+
+dz
+
+−
+
+As follows from the Eqs. (8) and also shown in [6] the characteristic function of the VG process
+
+and is deﬁned in the strip β
+
+γ < Im z < β + γ, where
+
+−
+
+φt(z) =
+
+1
+
+iθνz +
+
+−
+
+(cid:18)
+
+− t
+ν
+
+,
+
+σ2νz2
+
+1
+2
+
+(cid:19)
+
+β =
+
+γ =
+
+Θ
+σ2 ,
+
+2
+νσ2 +
+
+Θ2
+σ4 + 2(Rez)2.
+
+s
+
+This condition can be relaxed by assuming in the Eq. (21) Rez = 0 1. Accordingly, φ(
+
+z) is
+
+deﬁned in the strip γ
+
+β
+−
+Now let us choose Im z in the form
+
+β > Im z >
+
+−
+
+γ.
+
+−
+
+µ
+
+Im z =
+
+1 +
+
+≡
+
+s
+
+2Θ
+σ2 +
+
+Θ2
+σ4 −
+
+Θ
+σ2 .
+
+Taking into account the Eq. (12) which makes a constrain on the available values of the VG
+β. On the
+1 at any value of Θ and positive volatilities σ, and the
+∗
+X as well as in the strip
+S
+
+parameters, it is easy to see that µ deﬁned in such a way obeys the inequality µ < γ
+other hand, as also can be easily seen, µ
+equality is reached when Θ = 0. It means, that Im z = µ lies in the strip
+Sw, i. e. µ
+
+∈ SV .
+
+≥
+
+−
+
+1In other words, if it is valid at Rez = 0, it will be valid for any Rez
+
+9
+
+(19)
+
+(20)
+
+(21)
+
+(22)
+
+−
+
+Now one more trick with contour integration. The integrand in Eq. (19) is regular throughout
+∗
+Ke−rT i/(2π), and
+X except for simple poles at z = 0 and z = i. The pole at z = 0 has a residue
+S
+the pole at z = i has a residue Se−qT i/(2π) 2. The analysis of the previous paragraph shows that
+the strip
+γ < 0.
+β > Imz >
+β
+−
+(0, 1). Then by the residue theorem, the
+Therefore we can move the integration contour to µ1 ∈
+call option value must also equal the integral along Im z = µ1 minus 2πi times the residue at z = i.
+That gives us a ﬁrst alternative formula
+
+∗
+X is deﬁned by the condition γ
+S
+
+β > 1, and
+
+γ, where γ
+
+−
+
+−
+
+−
+
+−
+
+−
+
+−
+
+β
+
+C(S, K, T ) = Se
+
+−qT
+
+−rT
+
+Ke
+
+iµ1+∞
+
+−
+
+2π
+
+iµ1−∞
+
+Z
+
+−izkφ(
+e
+
+z)
+
+−
+
+z2
+
+, µ1 ∈
+
+iz
+
+(0, 1).
+
+(23)
+
+dz
+
+−
+
+For example, with µ1 = 1/2 which is symmetrically located between the two poles, this last
+
+formula becomes
+
+C(S, K, T ) = Se
+
+√SKe
+
+−(r+q−ω)T /2
+
+Re
+
+−iukφ
+e
+
+−qT
+
+1
+π
+
+−
+
+∞
+
+0
+Z
+
+(cid:20)
+
+i
+2
+
+u
+
+−
+
+−
+
+(cid:18)
+
+du
+
+,
+
+1
+4
+
+(cid:19)(cid:21)
+
+u2 +
+
+where it is taken into account that the integrand is an even function of its real part. The last
+integral can be rewritten in the form
+
+∞
+
+0
+
+Z
+
+−iukφ1(u)du,
+e
+
+φ1(u) =
+
+4
+4u2 + 1
+
+φT
+
+u
+
+−
+
+−
+
+(cid:18)
+
+i
+2
+
+.
+
+(cid:19)
+
+This can be immediately recognized as a standard inverse Fourier transform, and by derivation
+the integrand is regular everywhere. Thus, a standard FFT or FRFT method can be applied to
+get the value of the integral.
+
+(24)
+
+(25)
+
+In Fig. 9 -10 the results of the European vanilla option pricing with the VG model conducted
+by using this new FFT method are displayed. Two test has been provided with parameters T = 1
+yr, K = 90, σ = 0.1 (Fig. 9) and T = 1 yr, K = 90, σ = 0.5 (Fig. 10). It is seen that the option
+value surface is regular in both cases. Zero values indicates that region, where the VG constrain
+Eq. (12) is not respected. The higher values of σ and Θ are the lower values of ν are required
+to obey this constraint. Therefore, at higher values of ν the model is not deﬁned that produces
+irregularity in the graph. This eﬀect is better observable in Fig. 11 that is obtained by rotation of
+the Fig. 10. The above means that the new FFT method can be used with no essential problem.
+A generalization of this method for FRFT is also straightforward.
+
+In the region of the VG parameters value where an application of Carr-Madan FFT procedure
+doesn’t cause the problem the results of that method are almost identical to what the described
+above method gives. An example of such a comparison is given in Fig. 12 (my NewFFT Matlab
+code vs Mike’s FFT code). It is seen that the diﬀerence is of the order of 10−7.
+
+2This is because φT (
+
+i) = e−ωT
+
+−
+
+10
+
+References
+
+[1] Dilip Madan, Peter Carr, and Eric Chang. The variance gamma process and option pricing.
+
+European Finance Review, 2:79–105, 1998.
+
+[2] Peter Carr and Dilip Madan. Option valuation using the fast fourier transform. Journal of
+
+Computational Finance, 2(4):61–73, 1999.
+
+[3] Dilip Madan and Michael Konikov. Variance gamma model: Gamma weighted black-scholes
+
+implementation. Technical report, Bloomberg L.P., July 2004.
+
+[4] D. H. Bailey and P.N. Swarztrauber. The fractional fourier transform and applications. SIAM
+
+Review, 33(3):389–404, 1991.
+
+[5] K. Chourdakis. Option pricing using the fractional ﬀt. Technical report, 2004.
+
+[6] Alan L. Lewis. A simple option formula for general jump-diﬀusion and other exponential
+l´evy processes. manuscript, Envision Financial Systems and OptionCity.net, Newport Beach,
+California, USA, 2001.
+
+[7] Alan L. Lewis. Option Valuation under Stochastic Volatility. Finance Press, Newport Beach,
+
+California, USA, 2000.
+
+11
+
+Figure 9: European option values in VG
+model at T = 1.0yr, K = 90, σ = 0.1
+obtained with the new FFT method.
+
+Figure 10: European option values in VG
+model at T = 1.0yrs, K = 90, σ = 0.5
+obtained with the new FFT method.
+
+Figure 11: European option values in VG model at T = 1.0yr, K = 90, σ = 0.5 obtained with the new
+FFT method (rotated graph).
+
+12
+
+Figure 12: The diﬀerence between the European call option values for the VG model obtained with
+Carr-Madan FFT method and the new FFT method. Parameters of the test are: S = 100, T =
+0.5yr, σ = 0.2, ν = 0.1, Θ =
+
+0.33, r = q = 0. at various strikes).
+
+−
+
+13
+
+

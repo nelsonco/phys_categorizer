@@ -1,0 +1,1253 @@
+6
+0
+0
+2
+ 
+n
+a
+J
+ 
+6
+1
+ 
+ 
+]
+h
+p
+-
+o
+i
+b
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+4
+0
+1
+1
+0
+6
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Ensemble based convergence assessment of
+biomolecular trajectories
+
+Edward Lyman∗, and Daniel M. Zuckerman†
+
+February 20, 2014
+
+Abstract
+
+Assessing the convergence of a biomolecular simulation is an es-
+sential part of any computational investigation. This is because many
+important quantities (e.g., free energy diﬀerences) depend on the rela-
+tive populations of diﬀerent conformers; insuﬃcient convergence trans-
+lates into systematic errors. Here we present a simple method to self-
+consistently assess the convergence of a simulation. Standard cluster-
+ing methods ﬁrst generate a set of reference structures to any desired
+precision. The trajectory is then classiﬁed by proximity to the refer-
+ence structures, yielding a one-dimensional histogram of structurally
+distinct populations. Comparing ensembles of diﬀerent trajectories (or
+diﬀerent parts of the same trajectory) built with the same reference
+structures provides a sensitive, quantitative measure of convergence.
+Please note: this is a preliminary manuscript, and should be read
+as such. Comments are most welcome, especially regarding pertinent
+prior work.
+
+1 Introduction
+
+Conformational ﬂuctuations are essential to the function of proteins, whether
+they are motor proteins[1], enzymes[2, 3], signalling proteins[4, 5], or almost
+any other. Diﬀerent experiments allow observation of protein ﬂuctuations
+
+∗elyman@ccbb.pitt.edu
+†dmz@ccbb.pitt.edu
+
+1
+
+over a huge range of timescales, from picoseconds[6] to microseconds[5] to
+milliseconds[3, 7] to seconds and longer[8].
+
+Naturally then, simulations aim to observe conformational ﬂuctuations
+as well. A gap remains, however, between the timescale of many biologically
+important motions (µsec–sec), and that accessible to atomically detailed sim-
+ulation (nsec). To put it another way, some problems are simply not possible
+to study computationally, since it is so far impossible to run a simulation
+which is “long-enough.”
+
+For those problems which are at the very edge of being feasible, we would
+like to know whether we have indeed sampled enough to draw quantitative
+conclusions. These problems include the calculation of free energies of bind-
+ing[], ab initio protein folding[9, 10], and simulation of ﬂexible peptides[11]
+and conformational changes.
+
+Convergence assessment is also crucial for rigorous tests of simulation
+protocols and empirical force ﬁelds. Many algorithms propose to improve
+the sampling of conformation space, but quantitative estimation of this type
+of eﬃciency is diﬃcult. In the case of force ﬁeld validation, it is important to
+know whether systematic errors are a consequence of the force ﬁeld, or are
+due to undersampling.
+
+The observed convergence of a simulation depends on how convergence
+is deﬁned and measured. It is therefore important to consider what sort of
+quantity is to be calculated from the simulation, and choose an appropri-
+ate way to assess the adequacy of the simulation trajectory (or trajectories).
+Many methods relatively simple are commonly used, such as measuring dis-
+tance from the starting structure as a function of simulation time, and calcu-
+lation of various autocorrelation functions[12, 13]. Other, more sophisticated
+methods are based on principal components[14, 15] or calculation of energy-
+based ergodic measures[16].
+
+Many applications, however, require a thorough and equilibrated sam-
+pling of the space of structures. All of the methods just listed are only
+related indirectly to structural sampling. For example, there are many ex-
+amples of groups of structures which are very close in energy, but very dissi-
+miliar structurally. In such cases, we might expect energy–based methods to
+be insensitive to the relative populations of the diﬀerent structural groups.
+It is therefore of interest to develop methods which are more directly related
+to the sampling of diﬀerent structures, and see how such methods compare
+to more traditional techniques.
+
+Other authors have previously considered convergence assessment by count-
+
+2
+
+ing structural clusters. Daura et. al. developed a method which assigns clus-
+ters based upon a cutoﬀ in the RMSD metric[17, 18]. The authors then assess
+the convergence of a simulation by considering the number of clusters as a
+function of time. Convergence is deemed suﬃcient when the curve plateaus.
+This is surely a better measure than simpler, historically used methods, such
+as RMSD from the starting structure or the running average energy. How-
+ever, it is worth noting that long after the curve of number of clusters vs.
+time plateaus, the populations of the clusters may still be changing.
+In-
+deed, an important conformational substate which has been visited just once
+will appear as a cluster, but its relative population will certainly not have
+equilibrated.
+
+The method of Daura et. al. also suﬀers from the need to store the en-
+tire matrix of pairwise distances. For a trajectory of length N, the memory
+needed scales as N 2, rendering the method impractical for long trajectories.
+At least two groups have developed methods which rely on nonhierarchical
+clustering schemes, and therefore require memory which is only linear in N.
+Karpen et. al. developed a method which optimizes the clusters based on dis-
+tance from the cluster center[19], with distances measured in dihedral angle
+space. Elmer and Pande have optimized clusters subject to a constraint on
+the number of clusters[20], with distance deﬁned by the atom-atom distance
+root mean square deviation[21, 22]. We will simply select reference structures
+at random from the trajectory, but ensure that all reference structures are
+separated by a (user-deﬁned) minimum distance.
+
+In this paper, we address systematically the measurement of sampling
+quality. Our method classiﬁes (or bins) a trajectory based upon the “dis-
+tances” between a set of reference structures and each structure in the tra-
+jectory. Our method is unique in that it not only builds clusters of structures,
+it also compares the cluster populations. By comparing diﬀerent fragments
+of the trajectory to one another, convergence of the simulation is judged
+by the relative populations of the clusters. We believe the key to assessing
+convergence is tracking relative bin populations.
+
+In the next section, we present a detailed description of the algorithm
+and discuss possible choices of metric. We then demonstrate the method on
+simulations of met-enkephalin, a structurally diverse peptide.
+
+3
+
+2 Theory and methods
+
+We will evaluate sampling by comparing “structural histograms”, to be de-
+scribed below. These histograms provide a ﬁngerprint of the conformation
+space sampled by a protein, by projecting a trajectory onto a set of refer-
+ence structures. Comparing histograms for diﬀerent pieces of a trajectory
+(or for two diﬀerent trajectories), projected onto the same set of reference
+structures, provides a very sensitive measure of convergence. Not only are
+we comparing how broadly has each trajectory sampled conformation space,
+but also how frequently each substate has been visited.
+
+2.1 Histogram construction
+
+We generated the set of reference structures and corresponding histogram in
+the following simple way (our choice for measuring conformational distance
+will be discussed below):
+
+(i) A cutoﬀ distance dc is deﬁned.
+(ii) A structure S1 is picked at random from the trajectory.
+(iii) S1 and all structures less than dc from S1 are removed from the
+trajectory.
+(iv) Repeat (ii) and (iii) until every structure is clustered, generating
+a set S of reference structures.
+(v) The set S of reference structures is then used to build a histogram,
+by grouping each frame with its nearest reference structure.
+
+Such a partitioning guarantees a set of clusters whose centers are at least
+dc apart. Furthermore, for a trajectory of N frames, the number of M
+reference structures, and therefore the memory needed to store the resulting
+M × N matrix of distances, is controlled by dc. For physically reasonable
+cutoﬀs (e.g., dc & 1 ˚A), the number of reference structures is at least an
+order of magnitude smaller than the number of frames in the trajectory.
+The memory requirements are therefore manageble, and the computation of
+pairwise distances scales as N log N.
+
+There is nothing in principle which prevents the use of a more carefully
+chosen set of reference structures with our convergence assessment method.
+For example, we may consider a set of structures which correspond to min-
+ima of the potential energy surface. The cutoﬀ would then be chosen to
+be the smallest observed distance between any pair of the minimum energy
+
+4
+
+structures, and the set of reference structures so determined would be aug-
+mented by the random selection of more references in order to span the whole
+trajectory.
+
+However, we expect that the purely random selection used here will nat-
+urally ﬁnd the lowest free energy (i.e., most populated) structures. In either
+case, any set of reference structures deﬁnes a unique histogram for any tra-
+jectory.
+
+Once we have a set of reference structures, we may easily compare two
+diﬀerent trajectories classiﬁed by the same set of reference structures, by com-
+paring the populations of the various bins as observed in the two trajectories:
+given a (normalized) population pi(1) for cluster i in the ﬁrst trajectory, and
+pi(2) in the second, the diﬀerence in the populations ∆Pi = pi(1) − pi(2)
+measures the convergence of substate i’s population between the two trajec-
+tories.
+
+Note that the “two” trajectories just discussed may be two diﬀerent pieces
+of the same simulation. In this way, we may self-consistently assess the con-
+vergence of a simulation, by looking to see whether the relative populations
+of the most populated substates are changing with time. Of course, this
+cannot answer aﬃrmatively that a simulation has converged (no method can
+do so), however, it may answer negatively. In fact, we will see later that our
+method indicates that structural convergence is much slower than previously
+appreciated.
+
+2.2 Metrics
+
+Many diﬀerent metrics have been used to measure distance between con-
+formations. The choice depends on both physical and mathematical con-
+siderations. For example, dihedral angle based metrics are well-suited to
+capture local structural information[19], but are not sensitive to more global
+rearrangements of the molecule. Least-squares superposition followed by
+calculation of the average positional ﬂuctuation per atom (RMSD) is quite
+popular, but the problem of optimizing the superposition can be both sub-
+tle and time-consuming for large, multi-domain proteins[23].
+In addition,
+RMSD does not satisfy a triangle inequality[24]. This is not an issue for
+the algorithm presented here, but is a consideration for more sophisticated
+clustering methods[20]. We will use RMSD to measure distance here, though
+we note that “distance root mean square deviation” (drms) (or sometimes,
+“distance matrix error”)[21, 22] may be appropriate when RMSD is not.
+
+5
+
+Labelling the two structures by a and b, the traditional root mean square
+
+deviation (RMSD) is deﬁned to be the minimum of
+
+RMSD(a, b) =
+
+||xa
+
+j − xb
+
+j||2,
+
+(1)
+
+1
+N
+
+v
+u
+u
+t
+
+N
+
+X
+j=1
+
+where N is the number of atoms and xj is the position of atom j in the
+aligned frame.
+
+2.3 Choice of cutoﬀ
+
+It is clear that the choice of dc, together with the choice of metric, determines
+the resolution of the histogram. Reducing dc increases the number of refer-
+ence structures, and reduces the size of the bins. How is dc chosen? There
+is no general answer, the cutoﬀ will depend on the problem under investiga-
+tion. If the magnitude of some important conformational change is known
+in advance, then this information will guide the selection of an appropriate
+cutoﬀ. If not, then a series of histograms ought to be constructed at various
+dc’s. The behavior of the histogram as a function of dc will give a sense of
+the appropriate value, as we will see below.
+
+3 Results
+
+We have tested our classiﬁcation algorithm on implicitly solvated met-enkephalin,
+a pentapeptide neurotransmitter. By focusing ﬁrst on a small peptide, we
+aim to develop the methodology on a system which may be thoroughly sam-
+In addition to comparing our
+pled and analyzed by standard techniques.
+ensemble method to other techniques, we will compare ensembles based on
+RMSD classiﬁcation, to those based on the drms metric.
+
+The trajectories analyzed in this section were generated by Langevin dy-
+namics simulations, as implemented in the Tinker v. 4.2.2 simulation pack-
+age[25]. The temperature was 298 K, friction constant was 5 ps−1, and
+solvation energy was treated by the GB/SA method [26]. Two 100 nsec tra-
+jectories were generated, each starting from the PDB structure 1plw, model
+1. The trajectories will be referred to as plw-a and plw-b. Coordinates were
+written every 10 psec, for a total of 2 × 104 frames per trajectory.
+
+6
+
+g
+n
+A
+ 
+n
+i
+ 
+
+D
+S
+M
+R
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+0
+
+(A)
+
+(B)
+
+5
+
+10
+Simulation Time [nsec]
+
+15
+
+20
+
+0
+
+2
+
+8
+
+6
+
+4
+Simulation Time [nsec]
+
+10 12 14 16 18 20
+
+Figure 1: (A) RMSD from starting structure for met-enkephalin trajectory
+plw-a. (B) Number of populated clusters vs. simulation time for the plw-
+a trajectory. After 7 nsec, the simulation appears equilibrated. No more
+clusters appear in the 198 nsec plw-ab trajectory.
+
+An often used indicator of equilibration is the RMSD from the starting
+structure (see ﬁg. 1A). Such plots are motivated by the recognition that the
+starting structure (e.g., a crystal structure) may not be representative of the
+protein at the simulation conditions (e.g., native conditions). This is clearly
+the case in ﬁg. 1A, as the computation was preformed with an implicit water
+model, and the experimental structure was determined in the presence of
+bicelles[27]. The system fails to settle down to a relatively constant distance
+from the starting structure—rather, it is moving between various substates,
+some nearer and some farther from the starting structure. While this is not
+surprising for a peptide reknowned for its ﬂoppy character, it also indicates
+that this method cannot determine when the peptide simulation has con-
+verged.
+Indeed, ﬁg. 1A can tell us nothing about the convergence of the
+simulation, only that it spends most of its time more than 2.0 ˚A from the
+starting structure.
+
+A perhaps better indication of equilibration is provided by ﬁg. 1B, in
+which we have used the method of Daura, et. al[17], albeit with clusters
+built by the procedure described in sec. 2.1. The premise is that convergence
+is achieved when the number of clusters no longer increases, as this means
+that the simulation has visited every substate. This analysis suggests that
+convergence is observed by about 7 nsec, and the curve has the comforting
+appearance of saturation. However, ﬁg. 1B is insensitive to the relative popu-
+lations of the clusters. To illustrate the problem, consider a simple potential,
+
+s
+r
+e
+t
+s
+u
+l
+c
+ 
+f
+o
+ 
+r
+e
+b
+m
+u
+N
+
+25
+
+20
+
+15
+
+10
+
+5
+
+0
+
+7
+
+dc in ˚A number of clusters (dc in RMSD)
+
+σ
+
+1.5
+2.0
+2.5
+3.0
+3.5
+
+72.8
+23.3
+10.3
+
+3.8
+2.2
+0.5
+
+Table 1: Number of reference structures generated for various cutoﬀs (dc in
+RMSD). Reported are the average and standard deviation in the number
+of reference structures for four independent clustering runs of the plw-ab
+trajectory.
+
+with two smooth wells separated by a high barrier. By ﬁg. ??B, a simulation
+will be converged as soon as it has crossed the barrier once. It is clear, how-
+ever, that many crossings will be required before the populations of the two
+in ref.??.)
+states have equilibrated. (This was mentioned by Daura et. al.
+We will address this question using our ensemble-based method. We ﬁnd,
+in fact, that the relative populations of the clusters continue to change, long
+after their number has equilibrated.
+
+3.1 Ensemble based comparison of trajectories
+
+3.1.1 Reference structure generation and cutoﬀ selection
+
+A compound trajectory was formed from trajectories plw-a and plw-b, by
+discarding the ﬁrst 1 nsec of each trajectory and concatenating the two into
+a single, 198 nsec trajectory (plw-ab). We then generated a set of reference
+structures for the compound trajectory, as described earlier: a structure is
+picked at random, and it is temporarily discarded along with every structure
+within a predeﬁned cutoﬀ distance, dc. The process is repeated on the re-
+maining structures until the trajectory has been exhausted. The result is a set
+of reference structures which are separated from one another by at least the
+pre-deﬁned cutoﬀ distance. Lowering the cutoﬀ (making the reference struc-
+tures more similiar) increases the resolution of the clustering, and increases
+the number reference structures (see table 1). While RMSD is system-size
+dependent[28], for a particular system the cutoﬀ deﬁnes a resolution.
+
+The dependence of the histogram on dc is shown in Fig. 2. With dc = 3.0
+
+8
+
+˚A the ﬁrst three bins already account for more than 50% of the total popu-
+lation. It might be expected that such a coarse description of the ensemble
+may not be particularly informative—however, we will see in the next sec-
+tions that this level is already suﬃcient to make powerful statements about
+convergence.
+
+Lowering the cutoﬀ, the general features of the histogram remain un-
+changed: a steep slope initially, which accounts for half of the total popula-
+tion, followed by a ﬂatter region. In each case, most (90%) of the population
+is accounted for by approximately half of all the reference structures. How-
+ever, a closer inspection reveals that the fraction of bins required to account
+for the noted percentages of population (50, 75, and 90%) is decreasing with
+the cutoﬀ—although the diﬀerences between the 2.0 and 1.5 ˚A data are very
+slight.
+
+Though we do not pursue it here, we note that the tail of the distribution—
+where half of all the bins account for only 10% of the population—might
+contain some very interesting structures. Indeed, at the very end of the tail
+are found bins which sometimes contain a single structure. Might some of
+these low population bins represent transition states? For now, we set this
+question aside, and focus instead on convergence assessment.
+
+3.1.2 Comparing trajectories to a “gold standard” ensemble
+
+In some applications, we want to compare a trajectory to a “gold standard”
+ensemble. For example, the gold standard might be the ensemble sampled
+by a long molecular dynamics simulation, and we may wish to check the
+ensemble produced by a new simulation protocol against the long molecular
+dynamics trajectory.
+
+Once a set of references is calculated, an ensemble is built by grouping
+each frame in a trajectory with its nearest reference structure. Carrying
+out this procedure on the entire 198 nsec compound trajectory orders the
+reference structures, as in ﬁgure 3, where we used a cutoﬀ of 3.0 ˚A RMSD.
+We can then assess the convergence of portions of the trajectory against this
+full ensemble (see ﬁgs. 3A-D).
+
+From ﬁg. 3A, it is clear that after the ﬁrst 2 nsec, the simulation is far from
+converged. Many important substates have not yet been visited, and many
+of the populations are over or underpopulated by several kBT. (On a semilog
+scale, a factor of 2 in the population represents an error of approximately
+1/2 kBT.) After 50 nsec (ﬁg. 3(C)), all clusters are populated, but many
+
+9
+
+-1
+
+10
+
+Pi
+10
+
+-2
+
+10
+
+-3
+0
+
+-1
+
+10
+
+-2
+
+10
+Pi
+
+-3
+
+10
+
+0
+
+52%
+
+3.0 Ang cutoff
+
+-1
+
+10
+
+50%
+
+74%
+
+90%
+
+2.5 Ang cutoff
+
+75%
+
+90%
+
+2
+
+4
+
+6
+
+10 12 14 16 18 20 22 24
+
+8
+Reference Structure
+
+0
+
+20
+
+40
+Reference Structure
+
+60
+
+80
+
+2.0 Ang cutoff
+
+1.5 Ang cutoff
+
+50%
+
+75%
+
+90%
+
+50%
+
+75%
+
+90%
+
+100
+
+200
+
+Reference Structure
+
+300
+
+0
+
+200
+
+400
+
+600
+
+800
+Reference Structure
+
+1000 1200 1400 1600
+
+Figure 2: caption here
+
+-2
+
+10
+Pi
+
+-3
+
+10
+
+-2
+
+10
+
+Pi
+10
+
+-3
+
+-4
+
+10
+
+10
+
+-1
+
+10
+
+Pi
+10
+
+-2
+
+-1
+
+10
+
+Pi
+10
+
+-2
+
+52%
+
+74%
+
+(A) 2 nsec
+
+52%
+
+(B) 10 nsec
+
+90%
+
+74%
+
+90%
+
+10
+
+-3
+0
+
+2
+
+4
+
+6
+
+10 12 14 16 18 20 22 24
+
+8
+Reference Structure
+
+10 12 14 16 18 20 22 24
+
+8
+Reference Structure
+
+10
+
+-3
+0
+
+2
+
+4
+
+6
+
+52%
+
+(C) 50 nsec
+
+52%
+
+(D) 99 nsec
+
+74%
+
+90%
+
+74%
+
+90%
+
+10
+
+-3
+0
+
+2
+
+4
+
+6
+
+10 12 14 16 18 20 22 24
+
+8
+Reference Structure
+
+10 12 14 16 18 20 22 24
+
+8
+Reference Structure
+
+10
+
+-3
+0
+
+2
+
+4
+
+6
+
+Figure 3: Ensembles for diﬀerent fractions of trajectory plw-a (bars), com-
+pared to the ensemble of the entire 198 nsec compound trajectory (solid line):
+2 nsec(A), 10 nsec(B), 50 nsec(C), 99 nsec(D). dc = 3.0 ˚A RMSD. Note that
+lnPi is a free-energy like quantity; hence on the semilog scale the diﬀerence
+in populations may be read oﬀ units of kbT : a factor of 2 on the y-axis cor-
+responds to 0.5 kbT . The percentages indicate the fraction of the 198 nsec
+trajectory binned to that point.
+
+-1
+
+10
+
+Pi
+10
+
+-2
+
+-1
+
+10
+
+Pi
+10
+
+-2
+
+11
+
+important substates have not converged to within 1/2 kBT of the 198 nsec
+values.
+
+Fig. 3 presents a picture of a very conformationally diverse peptide. The
+ﬁrst 3 substates contain only 52% of the observed structures, while the ﬁrst 9
+account for 74%. Indeed, the (experimentally determined) starting structure
+is located in the second most populated substate.
+
+The experimental structure was determined in the presence of bicelles, as
+it was hypothesized that interaction of the peptide with the cell membrane
+induces a shift in the conformational distribution[27]. We therefore classiﬁed
+the entire set of 80 NMR structures against our set of reference structures.
+The overwhelming majority of the NMR structures—75%—were nearest to
+reference number 23—the second-least populated bin in our simulation. The
+next largest group of NMR structures (15 of 80) were nearest to reference
+number 2, which held a comparable portion of the simulation trajectory. The
+remaining 5 NMR structures were scattered among 4 diﬀerent bins. While
+not conclusive, the comparison between our simulation data and the NMR
+structures supports the hypothesis that binding to the membrane induces a
+shift in the distribution of met-enkephalin conformers. While such confor-
+mational diversity is not surprising for a peptide, which is known to be a
+promiscuous neurotransmitter by virtue of its ﬂexibility[27, 29, 30], it will be
+interesting to revisit the issue in the study of a protein.
+
+3.2 Convergence Assessment
+
+Fig. 3 is the sort of plot that might be used to compare simulation protocols–
+ensembles from a new protocol may be compared to a “gold-standard” ensem-
+ble. (Here, the gold standard is the 198 nsec compound trajectory.) However,
+it is not useful as a means of assessing the convergence of a simulation. After
+all, given only a 4 nsec trajectory, one must attempt an assessment without
+reference to “the answer”. Instead, we can only compare, for example, the
+ﬁrst 2 nsec to the second 2 nsec, as in ﬁg. 4A. The series of ﬁgures in ﬁg.
+4 shows that the populations of the clusters are still changing signiﬁcantly,
+even between the ﬁrst and second 50 nsec. Presuming we had run only a sin-
+gle 100 nsec simulation, we could make ﬁg. 4C, and sum up the convergence
+by saying, “at a resolution of 3.0 ˚A RMSD, considering bins containing 75%
+of the structures, 6 of 9 bins have not yet converged to within 1/2 kBT.”
+Note the contrast with ﬁg. 1B, where it appears convergence is reached after
+just 7 nsec.
+
+12
+
+-1
+
+10
+
+Pi
+10
+
+-2
+
+-1
+
+10
+
+Pi
+10
+
+-2
+
+(A) 2 nsec vs. 2 nsec
+72 %
+
+91 %
+
+62 %
+
+(B) 10 nsec vs. 10 nsec
+
+50 % 
+
+75 %
+
+90 %
+
+10
+
+-3
+0
+
+2
+
+4
+
+6
+
+10 12 14 16 18 20 22 24
+
+8
+Reference Structure
+
+(C) 50 nsec vs. 50 nsec
+
+10 12 14 16 18 20 22 24
+
+8
+Reference Structure
+
+(D) 99 nsec vs. 99 nsec
+
+10
+
+-3
+0
+
+2
+
+4
+
+6
+
+52 %
+
+50 %
+
+75 %
+
+91 %
+
+74 %
+
+90 %
+
+10
+
+-3
+0
+
+2
+
+4
+
+6
+
+10 12 14 16 18 20 22 24
+
+8
+Reference Structure
+
+10 12 14 16 18 20 22 24
+
+8
+Reference Structure
+
+10
+
+-3
+0
+
+2
+
+4
+
+6
+
+Figure 4: Self-consistent convergence of diﬀerent trajectory lengths. Each
+plot compares the ﬁrst half (diagonal ﬁll) to the second half (gray shading)
+of the trajectory for total trajectory lengths of (A), 4 nsec; (B), 20 nsec;
+(C), 100 nsec; (D), 198 nsec. Percentages indicate the portion of the total
+trajectory binned to that point.
+
+-1
+
+10
+
+Pi
+
+-2
+
+10
+
+-1
+
+10
+
+Pi
+10
+
+-2
+
+13
+
+block length number of pairs
+
+2 nsec
+10 nsec
+20 nsec
+49.5 nsec
+
+36
+36
+36
+6
+
+h∆Pi
+0.557
+0.402
+0.302
+0.295
+
+σ∆P
+0.208
+0.133
+0.080
+0.070
+
+Table 2: Histogram comparisons for diﬀerent block lengths. The quantity
+∆P is calculated according to equation 2, and then averaged over a number
+of diﬀerent pairs of blocks, given in column 2. The standard deviation of the
+set of pairs is given in column 4.
+
+Fig. 4 provides a nice visual summary of the convergence of a simulation,
+however, we would like to be able to compare diﬀerent plots, which may not
+be easily distinguished by eye. We therefore deﬁne a quantity ∆P (a, b), which
+measures the diﬀerence between histograms for two trajectories, labeled “a”
+and “b”:
+
+∆P(a, b) =
+
+|Pi(a) − P i(b)|,
+
+(2)
+
+1
+2
+
+N
+
+X
+i=1
+
+where Pi is the population of bin i, and the sum runs over the N bins. The
+factor 1/2 accounts for the fact that two trajectories are compared, so that
+∆P (a, b) is bounded by 0 (identical trajectories), and 1 (no populated bins
+in common).
+
+In answer to the question “is my simulation well-converged?”, plots like
+those in ﬁg. 4 are able to unambiguously answer only, “No.” An apparently
+positive answer, as suggested by ﬁg. 4D, may simply represent a fortuitous
+moment in a still-relaxing simulation. We therefore consider whether the
+histograms in ﬁg. 4 are representative of the typical pair.
+
+To this end, we have computed ∆P for several pairs of histograms (table
+2). The trend from 2 nsec to 20 nsec blocks is clear: both ∆P and its variance
+decrease, indicating the simulation is better converged, as we would expect.
+The observed ensembles and corresponding ∆P’s depend on both the
+metric used and the value of dc. (This is of course true of any clustering
+algorithm.) It is therefore important to report this information along with
+Indeed,
+any statements about the convergence of a particular simulation.
+lowering the cutoﬀ, and hence increasing the resolution of the classiﬁcation, is
+bound to reduce the observed level of convergence. Instead of ﬁg. 3, in which
+
+14
+
+each panel is a diﬀerent length of the trajectory, we could have plotted the
+same trajectory length at diﬀerent resolutions. At a high enough resolution,
+we will always ﬁnd some substates which are under- or over-populated. In
+other words, since all trajectories are ﬁnite, a physically acceptable value of
+dc must be chosen.
+
+4 Discussion
+
+The results for met-enkephalin indicate that it takes quite some time for
+the relative populations of the various substates to equilibrate. This makes
+sense—after all, a single substate will appear on a plot such as ﬁg. 1B after
+having been visited only once. However, we can expect that many transitions
+into and out of each substate will be required to equilibrate their relative
+populations.
+
+In order to carefully assess convergence of a simulation, we must therefore
+compare the populations of the various substates from diﬀerent fragments of
+the trajectory. A simple, fast way to carry out such a comparison is provided
+by the comparative ensemble method described above. A higher level of
+rigor can be achieved by comparing multiple pairs of independent blocks of
+the trajectory.
+
+It must be stressed that—though our method may provide an unambigu-
+ous negative answer to the question, “is the simulation converged?”—it may
+only provide a provisionally positive answer. A longer simulation may well
+reveal longer timescale phenomena, parts of structure space not yet visited.
+We hope that this method will ﬁnd application especially in the area
+of simulation eﬃciency evaluation. Many algorithms have recently gener-
+ated broad interest by virtue of their potential to enhance the sampling of
+biomolecular conformation space. Some of these algorithms, notably the
+various parallel exchange simulations[31], invest considerable CPU time in
+pursuit of this goal. It is therefore important to ask whether these methods
+are in fact worth the extra expense, i.e.,“does running the algorithm in ques-
+tion increase the quantity: (observed conformational sampling)/(total CPU
+time)”? The CPU time is easy enough to quantify, and we hope the present
+report will aid in evaluating the numerator.
+
+15
+
+References
+
+[1] Karel Svoboda, Partha P. Mitra, and Steven M. Block. Fluctuation
+analysis of motor protein movement and single enzyme kinetics. Proc.
+Nat. Acad. Sci. USA, 91:11782–11786, 1994.
+
+[2] S. A. McCallum, T. K. Hitchens, C. Torborg, and G. S. Rule. Ligand
+induced changes in the structure and dynamics of a human class mu
+glutathione s transferase. Biochemistry, 39:7343–7356, 2000.
+
+[3] Elan Zohar Eisenmesser, Daryl A. Bosco, Mikael Akke, and Dorothee
+Kern. Enzyme dynamics during catalysis. Science, 295:1520–1523, 2002.
+
+[4] Mingjie Zhang, Toshiyuki Tanaka, and Mitsuhiko Ikura. Calcium in-
+duced conformational transition revealed by the solution structure of
+apo calmodulin. Nature Struct. Bio., 2:758–767, 1995.
+
+[5] Brian F. Volkman, Doron Lipson, David E. Wemmer, and Dorothee
+Kern. Two-state allosteric behavior in a single-domain signaling protein.
+Science, 291:2429–2433, 2001.
+
+[6] Friedrich Schotte, Manho Lim, Timothy A. Jackson, Aleksandr V.
+Smirnov, Jayashree Soman, John S. Olson, George N. Phillips Jr.,
+Michael Wulﬀ, and Phillip A. Anﬁnrud. Watching a protein as it
+functions with 150–ps time–resolved X–ray crystallography. Science,
+300:1944–1947, 2003.
+
+[7] Ryo Kitahara, Shigeyuki Yokoyama, and Kazuyuki Akasaka. NMR snap-
+shots of a ﬂuctuating protein structure: Ubiquitin at 30 bar—3 kbar. J.
+Mol. Biol., 347:277–285, 2005.
+
+[8] Michele Vedruscolo, Emanuele Paci, Christopher M. Dobson, and Mar-
+tin Karplus. Rare ﬂuctuations of native proteins sampled by equilibrium
+hydrogen exchange. J. Am. Chem. Soc., 125:15686–15687, 2003.
+
+[9] Philip Bradley, Kira M. S. Misura, and David Baker. Toward high-
+resolution de novo structure prediction for small proteins. Science,
+309:1868–1871, 2005.
+
+[10] Carlos Simmerling, Bentley Strockbine, and Adrian E. Roitberg. All-
+atom structure prediction and folding simulations of a stable protein. J.
+Am. Chem. Soc., 124:11258–11259, 2002.
+
+16
+
+[11] Min-Yi Shen and Karl F. Freed. Long time dynamics of met-enkephalin:
+comparison of explicit and implicit solvent models. Biophys. J., 82:1791–
+1808, 2002.
+
+[12] M. H. Zaman, M.-Y. Shen, R. S. Berry, and K. F. Freed. Computer
+simulation of met-enkephalin using explicit atom and united atom po-
+tentials: similiarities, diﬀerences and suggestions for improvement. J.
+Phys. Chem., 107:1686–1691, 2003.
+
+[13] Wei Zhang, Chun Wu, and Yong Duan. Convergence of replica exchange
+molecular dynamics. J. Chem. Phys., 123:154105–1–154105–9, 2005.
+
+[14] Berk Hess. Convergence of sampling in protein simulations. Phys. Rev.,
+
+E65:031910–1–031910–10, 2002.
+
+[15] K. Y. Sanbonmatsu and A. E. Garc´ia. Structure of met-enkephalin in
+explicit aqueous solution using replica exchange molecular dynamics.
+PROTEINS, 46:225–234, 2002.
+
+[16] John E. Straub, Alissa B. Rashkin, and D. Thirumalai. Dynamics in
+rugged energy landscapes with applications to the S-peptide ribonucle-
+ase A. J. Am. Chem. Soc., 116:2049–2063, 1994.
+
+[17] Xavier Daura, Wilfred F. van Gunsteren, and Alan E. Mark. Folding-
+unfolding thermodynamics of a β-heptapeptide from equilibrium simu-
+lations. PROTEINS, 34:269–280, 1999.
+
+[18] Lorna J. Smith, Xavier Daura, and Wilfred F. van Gunsteren. Assessing
+equilibration and convergence in biomolecular simulations. PROTEINS,
+48:487–496, 2002.
+
+[19] Mary E. Karpen, Douglas J. Tobias, and Charles L. III Brooks. Sta-
+tistical clustering techniques for the analysis of long moolecular dynam-
+ics trajectories: analysis of 2.2-ns trajectories of YPGDV. Biochem.,
+32:412–420, 1993.
+
+[20] Sidney P. Elmer and Vijay S. Pande. Foldamer simulations: novel com-
+putational methods and applications to poly-phenylacetylene oligomers.
+J. Chem. Phys., 121:12760–12771, 2004.
+
+17
+
+[21] K. Nishikawa and T. Ooi. Tertiary structure of a protein ii. freedom of
+dihedral angles and energy calculations. J. Phys. Soc. Japan, 32:625–
+634, 1972.
+
+[22] Michael Levitt. A simpliﬁed representation of protein conformations for
+rapid simulation of protein folding. J. Mol. Biol., 104:59–107, 1976.
+
+[23] David A. Snyder and Gaetano T. Montelione. Clustering algorithms
+for identifying core atom sets and for assessing the precision of protein
+structure ensembles. PROTEINS, 59:673–686, 2005.
+
+[24] Gordon M. Crippen and Yoshiaki Zenmai Ohkubo. Statistical mechanics
+of protein folding by exhaustive enumeration. PROTEINS, 32:425–437,
+1998.
+
+[25] J. W. Ponder and F. M. Richard. An eﬃcient newton-like method for
+molecular mechanics energy minimization of large molecules. J. Comput.
+Chem., 8:1016–1024, 1987. http://dasher.wustl.edu/tinker/.
+
+[26] W. C. Still, A. Tempczyk, and R. C. Hawley. Semianalytical treatment
+of solvation for molecular mechanics and dynamics. J. Am. Chem. Soc.,
+112:6127–6129, 1990.
+
+[27] Isabelle Marcotte, Frances Separovic, Mich`ele Auger, and St´ephane M.
+Gang´e. A multidimensional 1H NMR investigation of the conformation
+of methionine enkephalin in fast-tumbling bicelles. Biophys. J., 86:1587–
+1600, 2004.
+
+[28] Vladimir N. Maiorov and Gordon M. Crippen. Signiﬁcane of root-mean-
+square deviation in comparing three-dimensional structures of globular
+proteins. J. Mol. Biol., 235:625–634, 1994.
+
+[29] N. P. Plotnikoﬀ, R. E. Faith, A. J. Murgo, and R. A. Good. Enkephalins
+and endorphins: stress and the immune system. Plenum, New York,
+1986.
+
+[30] W. H. Graham, E. S. Carter II, and R. P. Hicks. Conformational anal-
+ysis of met-enkephalin in both aqueous solution and in the presence
+of sodium dodecyl sulfate micelles using multidimensional NMR and
+molecular modeling. Biopolymers, 32:1755–1764, 1992.
+
+18
+
+[31] Dietmar Paschek and Angel E. Garc´ia. Reversible temperature and pres-
+sure denaturation of a protein fragment: A replica exchange molecular
+dynamics simulation study. Phys. Rev. Lett., 93:238105–1–238105–4,
+2004.
+
+19
+
+

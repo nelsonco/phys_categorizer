@@ -1,0 +1,2370 @@
+Patch dynamics with buﬀers for homogenization problems
+
+Giovanni Samaey1, Dirk Roose1, and Ioannis G. Kevrekidis2
+
+1 Dept. of Computer Science, K.U. Leuven, Celestijnenlaan 200A, 3001 Leuven, Belgium
+2 Dept. of Chemical Engineering and PACM, Princeton University, Princeton, NJ08544
+
+February 2, 2008
+
+Abstract
+
+An important class of problems exhibits smooth behaviour on macroscopic space and
+time scales, while only a microscopic evolution law is known. For such time-dependent
+multi-scale problems, an “equation-free” framework has been proposed, of which patch
+dynamics is an essential component. Patch dynamics is designed to perform numerical
+simulations of an unavailable macroscopic equation on macroscopic time and length
+scales; it uses appropriately initialized simulations of the available microscopic model in
+a number of small boxes (patches), which cover only a fraction of the space-time domain.
+To reduce the eﬀect of the artiﬁcially introduced box boundaries, we use buﬀer regions to
+“shield” the boundary artefacts from the interior of the domain for short time intervals.
+We analyze the accuracy of this scheme for a diﬀusion homogenization problem with
+periodic heterogeneity, and propose a simple heuristic to determine a suﬃcient buﬀer
+size. The algorithm performance is illustrated through a set of numerical examples,
+which include a non-linear reaction-diﬀusion equation and the Kuramoto–Sivashinsky
+equation.
+
+4
+0
+0
+2
+ 
+c
+e
+D
+ 
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+5
+0
+0
+2
+1
+4
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+1
+
+1
+
+Introduction
+
+For an important class of multi-scale problems, a separation of scales prevails between the
+(microscopic, detailed) level of description of the available model, and the (macroscopic,
+continuum) level at which one would like to observe and analyze the system. Consider,
+for example, a kinetic Monte Carlo model of bacterial growth [31]. A stochastic model
+describes the probability of an individual bacterium to run or “tumble”, based on the
+rotation of its ﬂagellae. Technically, it would be possible to simply evolve the detailed
+model and observe the macroscopic variables of interest (e.g. cell density), but this could
+be prohibitively expensive. It is known, however, that, under certain conditions, one could
+write a deterministic equation for the evolution of the macroscopic observable (here bacteria
+concentration, the zeroth moment of the evolving distribution) on macroscopic space and
+time scales, but it is hard to obtain an accurate closed formula explicitly.
+
+The recently proposed equation-free framework [19] can then be used instead of stochas-
+tic time integration in the entire space-time domain. This framework is built around the
+central idea of a coarse time-stepper, which is a time-δt map from coarse variables to coarse
+variables. It consists of the following steps: (1) lifting, i.e. the creation of appropriate initial
+conditions for the microscopic model; (2) evolution, using the microscopic model and (pos-
+sibly) some constraints; and (3) restriction, i.e. the projection of the detailed solution to
+the macroscopic observation variables. This coarse time-stepper can subsequently be used
+as “input” for time-stepper based algorithms performing macroscopic numerical analysis
+tasks. These include, for example, time-stepper based bifurcation codes to perform bifur-
+cation analysis for the unavailable macroscopic equation [24, 25, 35, 36]. This approach has
+already been used in several applications [15, 34], and also allows to perform other system
+level tasks, such as control and optimization [33].
+
+When dealing with systems that would be described by (in our case, unavailable) par-
+tial diﬀerential equations (PDEs), one can also reduce the spatial complexity. For systems
+with one space dimension, the gap-tooth scheme [19] was proposed; it can be generalized in
+several space dimensions. A number of small intervals, separated by large gaps, are intro-
+duced; they qualitatively correspond to mesh points for a traditional, continuum solution of
+the unavailable equation. In higher space dimensions, these intervals would become boxes
+around the coarse mesh points, a term that we will also use throughout this paper. We
+construct a coarse time-δt map as follows. We ﬁrst choose a number of macroscopic grid
+points. Then, we choose a small interval around each grid point; initialize the ﬁne scale,
+microscopic solver within each interval consistently with the macroscopic initial condition
+proﬁles; and provide each box with appropriate boundary conditions. Subsequently, we use
+the microscopic model in each interval to simulate until time δt, and obtain macroscopic
+information (e.g. by computing the average density in each box) at time δt. This amounts
+to a coarse time-δt map; the procedure is then repeated. The resulting scheme has already
+
+2
+
+been used with lattice-Boltzmann simulations of the Fitzhugh–Nagumo dynamics [18, 19]
+and with particle-based simulations of the viscous Burgers equation [10].
+
+To increase the eﬃciency of time integration, one can use the gap-tooth scheme in
+conjuction with any method-of-lines time integration method, such as projective integration
+[8]. We then perform a number of gap-tooth steps of size δt to obtain an estimate of the
+time derivative of the unavailable macroscopic equation. This estimate is subsequently used
+to perform a time step of size ∆t ≫ δt. This combination has been termed patch dynamics
+[19].
+
+In this paper, we will study the patch dynamics scheme for a model diﬀusion homog-
+enization problem. Here, the microscopic equation is a diﬀusion equation with a spatially
+periodic diﬀusion coeﬃcient with small spatial period ǫ, while the macroscopic (eﬀective)
+equation describes the averaged behaviour. In the limit of ǫ going to zero, this eﬀective
+equation is the classical homogenized equation. Our goal is to approximate the eﬀective
+equation by using only the microscopic equation in a set of small boxes. In [29], we already
+studied the gap-tooth scheme for periodic reaction-diﬀusion homogenization problems. We
+showed that the gap-tooth scheme approximates a ﬁnite diﬀerence scheme for the homoge-
+nized equation, when the averaged gradient is constrained at the box boundaries. However,
+generally, a given microscopic code only allows us to run with a set of predeﬁned boundary
+conditions. It is highly non-trivial to impose macroscopically inspired boundary conditions
+on such microscopic codes, see e.g. [23] for a control-based strategy. Therefore, we cir-
+cumvent this problem here by introducing buﬀer regions at the boundary of each small
+box, which shield the short-term dynamics within the computational domain of interest
+from boundary eﬀects. One then uses the microscopic code with its built-in boundary con-
+ditions.
+In this paper, we study the resulting gap-tooth scheme with buﬀers, which was
+introduced in [28, 29], when used inside a patch dynamics scheme, and analyze the relation
+between buﬀer size, time step and accuracy for a model diﬀusion homogenization problem.
+The analysis in this context is important, because we can clearly show the inﬂuence of
+the microscopic scales on the accuracy of the solution for this model problem. However,
+we emphasize that the real advantage of the method lies in its applicability for non-PDE
+microscopic simulators, e.g. kinetic Monte Carlo or molecular dynamics.
+
+It is worth mentioning that many numerical schemes have been devised for the ho-
+mogenization problem. Hou and Wu developed the multi-scale ﬁnite element method that
+uses special basis functions to capture the correct microscopic behaviour [13, 14]. Schwab,
+Matache and Babuska have devised a generalized FEM method based on a two-scale ﬁnite
+element space [26, 30]. Runborg et al. [27] proposed a time-stepper based method that
+obtains the eﬀective behaviour through short bursts of detailed simulations appropriately
+averaged over many shifted initial conditions. The simulations were performed over the
+whole domain, but the notion of eﬀective behaviour is identical. In their recent work, E and
+Engquist and collaborators address the same problem of simulating only the macroscopic
+
+3
+
+behaviour of a multiscale model, see e.g. [1, 7]. In what they call the heterogeneous mul-
+tiscale method, a macroscale solver is combined with an estimator for quantities that are
+unknown because the macroscopic equation is not available. This estimator subsequently
+uses appropriately constrained runs of the microscopic model [7]. It should be clear that
+patch dynamics does exactly this: by taking a few gap-tooth steps, we estimate the time
+derivative of the unknown eﬀective equation, and give this as input to an ODE solver,
+such as projective integration. The diﬀerence in their work is that, for conservation laws,
+the macro-ﬁeld time derivative is estimated from the ﬂux of the conserved quantity; their
+generalized Godunov scheme is based on this principle.
+
+This paper is organized as follows. In section 2, we describe the model homogenization
+problem. In section 3, we show how to use the gap-tooth scheme to approximate the time
+derivative of the unavailable macroscopic equation. We prove a consistency result and
+propose a simple heuristic to obtain a suﬃcient buﬀer size. We also discuss to what extent
+the results depend on the speciﬁc setting of our model problem. In section 4, we describe the
+full patch dynamics algorithm and give some comments on stability. Section 5 contains some
+numerical examples which illustrate the accuracy and eﬃciency of the proposed method,
+and we conclude in section 6.
+
+2 The homogenization problem
+
+As a model problem, we consider the following parabolic partial diﬀerential equation,
+
+∂tuǫ(x, t) = ∂x (a (x/ǫ) ∂xuǫ(x, t)) , in [0, T ) × [0, 1]
+
+uǫ(x, 0) = u0(x) ∈ L2([0, 1]),
+
+uǫ(0, t) = uǫ(1, t) = 0,
+
+where a(y) = a (x/ǫ) is uniformly elliptic and periodic in y and ǫ is a small parameter. We
+choose homogeneous Dirichlet boundary conditions for simplicity.
+
+According to classical homogenization theory [5], the solution to (1) can be written as
+
+an asymptotic expansion in ǫ,
+
+uǫ(x, t) = u0(x, t) +
+
+ǫi (ui(x, x/ǫ, t)) ,
+
+∞
+
+Xi=1
+
+where the functions ui(x, y, t) ≡ ui(x, x/ǫ, t), i = 1, 2, . . . are periodic in y. Here, u0(x, t) is
+the solution of the homogenized equation
+
+∂tu0(x, t) = ∂x (a∗∂xu0(x, t)) , in [0, T ) × [0, 1]
+
+u0(x, 0) = u0(x) ∈ L2([0, 1]),
+
+u0(0, t) = u0(1, t) = 0,
+
+the coeﬃcient a∗ is the constant eﬀective coeﬃcient, given by
+
+(1)
+
+(2)
+
+(3)
+
+(4)
+
+a∗ =
+
+1
+
+0
+Z
+
+a(y)
+
+1 −
+
+χ(y)
+
+dy,
+
+d
+dy
+
+(cid:19)
+
+(cid:18)
+
+4
+
+and χ(y) is the periodic solution of
+
+the so-called cell problem. The solution of (5) is only deﬁned up to an additive constant, so
+we impose the extra condition
+
+From this cell problem, we can derive u1(x, y, t) = ∂xu0χ(y). We note that in one space
+dimension, an explicit formula is known for a∗, [5],
+
+d
+dy
+
+(cid:18)
+
+d
+dy
+
+d
+dy
+
+(cid:19)
+
+a(y)
+
+χ(y)
+
+=
+
+a(y),
+
+1
+
+0
+Z
+
+χ(y)dy = 0.
+
+a∗ =
+
+1
+
+1
+a(y)
+
+dy
+
+−1
+
+.
+
+(cid:21)
+
+0
+
+(cid:20)Z
+
+These asymptotic expansions have been rigorously justiﬁed in the classical book [5], see
+also [6]. Under the assumptions made on a(x/ǫ), one obtains strong convergence of uǫ(x, t)
+to u0(x, t) as ǫ → 0 in L2([0, 1]) × C([0, T )). Indeed, we can write
+
+kuǫ(x, t) − u0(x, t)kL2([0,1]) ≤ C0ǫ,
+
+uniformly in t.
+
+It is important to note that the gradient of u(x, t) is given by
+
+∂xuǫ(x, t) = ∂xu0(x, t) + ∂yu1(x, y, t) + O(ǫ),
+
+from which it is clear that the micro-scale ﬂuctuations have a strong eﬀect on the local
+detailed gradient.
+
+Using the gap-tooth scheme, we will approximate the homogenized solution u0(x, t) by
+
+a local spatial average, deﬁned as
+
+U (x, t) = Sh(uǫ)(x, t) =
+
+uǫ(ξ, t)dξ.
+
+1
+h
+
+x+h/2
+
+x−h/2
+
+Z
+
+It can easily be seen that that U (x, t) is a good approximation to u0(x, t) in the following
+sense.
+
+Lemma 2.1. Consider uǫ(x, t) to be the solution of (1), and u0(x, t) to be the solution of
+the associated homogenized equation (3). Then, assuming
+
+h = O(ǫp),
+
+p ∈ (0, 1),
+
+the diﬀerence between the homogenized solution u0(x, t) and the averaged solution U (x, t) is
+bounded by
+
+kU (x, t) − u0(x, t)kL∞([0,1]) ≤ C1h2 + C2ǫ1−p.
+
+For a proof, we refer to [29, Lemma 3.1]. Note that this error bound can be improved
+
+if we have more knowledge about the convergence of uǫ to u0 (e.g. in L∞([0, 1])).
+
+(5)
+
+(6)
+
+(7)
+
+(8)
+
+(9)
+
+(10)
+
+5
+
+3 Estimation of the time derivative
+
+We devise a scheme for the evolution of the averaged behaviour U (x, t), while making only
+use of the given detailed equation (1). Moreover, we assume that a time integration code
+for (1) has already been written and is available with a number of standard boundary
+conditions, such as no-ﬂux or Dirichlet. We also assume that the order d of the unavailable
+macroscopic equation (the highest spatial derivative) is known. A strategy to obtain this
+information is given in [22]. So, we know that the macroscopic equation is of the form
+
+∂tU = F (U, ∂xU, . . . , ∂d
+
+xU, t),
+
+(11)
+
+where ∂t denotes the time derivative and ∂k
+
+x denotes the k-th spatial derivative.
+
+3.1 The gap-tooth scheme with buﬀers
+
+Suppose we want to obtain the solution of (11) on the interval [0, 1], using an equidistant,
+macroscopic mesh Π(∆x) := {0 = x0 < x1 = x0 + ∆x < . . . < xN = 1}. For convenience,
+we deﬁne a macroscopic comparison scheme, which is a space-time discretization for (11) in
+the assumption that this equation is known. We will denote the numerical solution of this
+scheme by U n
+i ≈ U (xi, tn). Here, we choose as a comparison scheme a forward Euler/spatial
+ﬁnite diﬀerence scheme, which is deﬁned by
+
+U n+δ = S(U n, tn; δt) = U n + δt F (U n, D1(U n), . . . , Dd(U n), tn),
+
+(12)
+
+where Dk(U n) denotes a suitable ﬁnite diﬀerence approximation for the k-th spatial deriva-
+tive.
+
+Since equation (11) is not known explicitly, we construct a gap-tooth scheme to approx-
+imate the comparison scheme (12). We denote the solution of the gap-tooth scheme by
+¯U n
+i ≈ U n
+i . The gap-tooth scheme is now constructed as follows. Consider a small interval
+(box, tooth) of length h around each mesh point, as well as a larger buﬀer interval of size
+H > h. (See ﬁgure 1.) We will perform a time integration using the microscopic model
+(1) in each box of size H, and we provide this simulation with the following initial and
+boundary conditions.
+
+Initial condition We deﬁne the initial condition by constructing a local Taylor expansion,
+based on the (given) box averages ¯U n
+
+i , i = 0, . . . , N , at mesh point xi and time tn,
+
+¯ui(x, tn) =
+
+Dk
+
+i ( ¯U n)
+
+(x − xi)k
+k!
+
+,
+
+x ∈ [xi −
+
+, xi +
+
+H
+2
+
+H
+2
+
+],
+
+(13)
+
+d
+
+Xk=0
+
+i ( ¯U n), k > 0 are the
+where d is the order of the macroscopic equation. The coeﬃcients Dk
+same ﬁnite diﬀerence approximations for the k-th spatial derivative that would be used in
+
+6
+
+Figure 1: A schematic representation of the gap-tooth scheme with buﬀer boxes. We choose a number
+of boxes of size h around each macroscopic mesh point xi and deﬁne a local Taylor approximation
+as initial condition in each box. Simulation is performed inside the larger (buﬀer) boxes of size H,
+where some boundary conditions are imposed.
+
+the comparison scheme (12), whereas D0
+
+i ( ¯U n) is chosen such that
+
+1
+h
+
+xi+h/2
+
+xi−h/2
+
+Z
+
+¯ui(ξ, tn)dξ = ¯U n
+i .
+
+(14)
+
+For example, when d = 2, and using standard (second-order) central diﬀerences, we have
+
+D2
+
+i ( ¯U n) =
+
+i+1 − 2 ¯U n
+¯U n
+∆x2
+
+i + ¯U n
+i−1
+
+, D1
+
+i ( ¯U n) =
+
+i+1 − ¯U n
+¯U n
+i−1
+∆x
+
+, D0
+
+i ( ¯U n) = ¯U n
+
+i −
+
+D2
+
+i ( ¯U n). (15)
+
+h2
+12
+
+The resulting initial condition was used in [29], where it was derived as an interpolating
+polynomial for the box averages.
+
+Boundary conditions The time integration of the microscopic model in each box should
+provide information on the evolution of the global problem at that location in space. It is
+therefore crucial that the boundary conditions are chosen such that the solution inside each
+box evolves as if it were embedded in the larger domain. We already mentioned that, in many
+cases, it is not possible or convenient to impose macroscopically-inspired constraints on the
+microscopic model (e.g. as boundary conditions). However, we can introduce a larger box of
+size H > h around each macroscopic mesh point, but still only use (for macro-purposes) the
+evolution over the smaller, inner box. The simulation can subsequently be performed using
+any of the built-in boundary conditions of the microscopic code. Lifting and (short-term)
+evolution (using arbitrary available boundary conditions) are performed in the larger box;
+yet the restriction is done by processing the solution (here taking its average) over the inner,
+small box only. The goal of the additional computational domains, the buﬀers, is to buﬀer
+the solution inside the small box from the artiﬁcial disturbance caused by the (repeatedly
+updated) boundary conditions. This can be accomplished over short enough time intervals,
+provided the buﬀers are large enough; analyzing the method is tantamount to making these
+statements quantitative.
+
+7
+
+The idea of a buﬀer region was also introduced in the multiscale ﬁnite element method of
+Hou (oversampling) [13] to eliminate boundary layer eﬀects; also Hadjiconstantinou makes
+use of overlap regions to couple a particle method with a continuum code [12].
+If the
+microscopic code allows a choice of diﬀerent types of microscopic boundary conditions,
+selecting the size of the buﬀer may also depend on this choice.
+
+The algorithm The complete gap-tooth algorithm to proceed from tn to tn + δt is given
+below:
+
+1. Lifting At time tn, construct the initial condition ¯ui(x, tn), i = 0, . . . , N using the
+
+box averages ¯U n
+
+i , as deﬁned in (13).
+
+2. Simulation Compute the box solution ¯ui(x, t), t > tn, by solving equation (1) in the
+interval [xi − H/2, xi + H/2] with some boundary conditions up to time tn+δ = tn + δt.
+The boundary conditions can be anything that the microscopic code allows.
+
+3. Restriction Compute the average ¯U n+δ
+
+= 1/h
+
+i
+
+xi+h/2
+xi−h/2 ¯ui(ξ, tn+δ)dξ over the inner,
+
+small box only.
+
+R
+
+It is clear that this procedure amounts to a map of the macroscopic variables ¯U n at
+time tn to the macroscopic variables at time tn+δ, i.e. a “coarse to coarse” time δt-map. We
+write this map as follows,
+
+¯U n+δ = ¯Sd( ¯U n, tn; δt, H) = ¯U n + δt ¯F d( ¯U n, tn; δt, H),
+
+where we introduced the time derivative estimator
+
+¯F d( ¯U n, tn; δt, H) =
+
+¯U n+δ − ¯U n
+δt
+
+.
+
+The superscript d denotes the highest spatial derivative that has been prescribed by the
+initialization scheme (13). The accuracy of this estimate depends on the buﬀer size H, the
+box size h and the time step δt.
+
+(16)
+
+(17)
+
+3.2 Consistency
+
+To analyze convergence, we solve the detailed problem approximately in each box. Because
+h ≫ ǫ, we can resort to the homogenized solution, and bound the error using equation (7).
+It is important to note that we use the homogenized equation for analysis purposes only.
+The algorithm uses box averages of solutions of the detailed problem (1), so it does not
+exploit more knowledge of the homogenized equation than the order d. We choose to study
+convergence in the case of Dirichlet boundary conditions, but we will show numerically that
+the results do not depend crucially on the type of boundary conditions.
+
+8
+
+(18)
+
+(19)
+
+(20)
+
+(21)
+
+(22)
+
+(23)
+
+(24)
+
+We ﬁrst relate the gap-tooth time-stepper as constructed in section 3.1 to a gap-tooth
+time-stepper in which the microscopic equation has been replaced by the homogenized
+equation.
+
+Lemma 3.1. Consider the model equation,
+
+∂tuǫ(x, t) = ∂x (a (x/ǫ) ∂xuǫ(x, t)) ,
+
+where a(y) = a (x/ǫ) is periodic in y and ǫ ≪ 1, with initial condition uǫ(x, 0) = u0(x) and
+Dirichlet boundary conditions
+
+uǫ(−H/2, t) = u0(−H/2),
+
+uǫ(H/2, t) = u0(H/2).
+
+For ǫ → 0, this problem converges to the homogenized problem
+
+∂tu0(x, t) = ∂x (a∗∂xu0(x, t))
+
+with initial condition u0(x, 0) = u0(x) and Dirichlet boundary conditions
+
+uǫ(−H/2, t) = u0(−H/2),
+
+uǫ(H/2, t) = u0(H/2).
+
+and the solution of (18)-(19) converges pointwise to the solution of (20)-(21), with the
+following error estimate
+
+kuǫ(x, t) − u0(x, t)kL2([−H/2,H/2]) ≤ C3ǫ.
+
+This is a standard result, whose proof can be found in e.g. [2, 6].
+
+We now deﬁne two gap-tooth time-steppers. Let
+
+¯U n+δ = ¯S2( ¯U n, tn; δt, H) = ¯U n + δt ¯F 2( ¯U n, tn; δt, H)
+
+be a gap-tooth time-stepper that uses the detailed, homogenization problem (18)-(19) inside
+each box, and
+
+ˆU n+δ = ˆS2( ˆU n, tn; δt, H) = ˆU n + δt ˆF 2( ˆU n, tn; δt, H)
+
+be a gap-tooth time-stepper where the homogenization problem for each box has been
+replaced by the homogenized equation (20)-(21). The box initialization is done using a
+quadratic polynomial as deﬁned in (15).
+
+We can apply [29, Lemma 4.2] to bound the diﬀerence between ¯F 2( ¯U , tn; δt, H) and
+
+Lemma 3.2. Consider ¯U n+δ = ¯S2( ¯U n, tn; δt, H) and ˆU n+δ = ˆS2( ˆU n, tn; δt, H) as deﬁned
+in (23) and (24), respectively. Assuming ¯U n = ˆU n, h = O(ǫp), p ∈ (0, 1), ǫ → 0, we have
+
+ˆF 2( ˆU , tn; δt, H).
+
+and therefore
+
+− ˆU n+δ
+i
+
+≤ C4ǫ1−p/2,
+
+¯U n+δ
+i
+(cid:13)
+(cid:13)
+(cid:13)
+
+¯F 2( ¯U n, tn; δt, H) − ˆF 2( ˆU n, tn; δt, H)
+(cid:13)
+(cid:13)
+(cid:13)
+
+(cid:13)
+(cid:13)
+(cid:13)
+
+≤ C4
+
+ǫ1−p/2
+δt
+
+.
+
+(cid:13)
+(cid:13)
+(cid:13)
+
+9
+
+Again, note that the error estimate can be made sharper if additional knowledge of the
+
+convergence of uǫ to u0 is available.
+
+It can easily be checked that the averaged solution U (x, t) also satisﬁes the diﬀusion
+equation (20). Therefore, we deﬁne the comparison scheme (12) for the model problem as
+
+U n+δ = S(U n, tn; δt)
+
+= U n + δt F (U n, D1(U n), D2(U n), tn)
+a∗ D2(U n)
+= U n + δt
+
+.
+
+The following theorem compares the gap-tooth time derivative estimator ˆF 2( ˆU n, tn; δt, H)
+
+(cid:2)
+
+(cid:3)
+
+with the ﬁnite diﬀerence time derivative used in (25).
+
+Theorem 3.3. Consider the gap-tooth time-stepper for the homogenized equation, as deﬁned
+by (24), and the corresponding comparison scheme (25). Assuming U n = ˆU n, and deﬁning
+the error
+
+we have the following result for δt/H 2 → 0, h ≪ H,
+
+E(δt, H) =
+
+E(δt, H) ≤
+
+,
+
+ˆF 2( ˆU n, tn; δt, H) − a∗ D2(U n)
+(cid:13)
+(cid:13)
+(cid:13)
+(cid:13)
+(cid:13)
+(cid:13)
+1 − exp(−a∗π2 δt
+H 2 )
+(cid:19)
+
+C1 + C2
+
+h2
+δt
+
+(cid:19) (cid:18)
+
+(cid:18)
+
+Proof. First, we solve the equation (20)-(21) analytically inside each box, with initial con-
+dition given by (13). Using the technique of separation of variables, we obtain
+
+(25)
+
+(26)
+
+ˆui(x, t) = ˆU n
+i −
+∞
+
+h2
+12
+
+D2
+
+i ( ˆU n) + D2
+−a∗ m2π2
+
++
+
+ai
+m exp
+
+m=1
+X
+
+(cid:18)
+
+i ( ˆU n)
+
++ D1
+
+i ( ˆU n)(x − xi)
+
+H 2
+8
+
+H 2 (t − tn)
+(cid:19)
+
+sin
+
+(cid:18)
+
+mπ
+H
+
+(x − xi −
+
+H
+2
+
+,
+
+)
+(cid:19)
+
+where
+
+ai
+m =
+
+2
+H
+
+xi+H/2
+
+xi−H/2
+
+Z
+
+1
+2
+
+D2
+
+i ( ˆU n)
+
+(x − xi)2 −
+
+(cid:18)
+
+H 2
+4
+
+mπ
+H
+
+sin
+
+(cid:19)
+
+(cid:18)
+
+(x − xi −
+
+dx.
+
+H
+2
+
+)
+(cid:19)
+
+This can be simpliﬁed to
+
+ai
+m = −
+
+2H 2D2
+
+i ( ˆU n) ((−1)m − 1)
+
+,
+
+m3π3
+
+which yields the following solution,
+
+ˆui(x, t) = ˆU n
+
+D2
+
+h2
+i −
+12
+i ( ˆU n)
+4H 2D2
+(2m − 1)3π3 exp
+
+i ( ˆU n) + D2
+
+H 2
+i ( ˆU n)
+8
+−a∗ (2m − 1)2π2
+
+H 2
+
+(cid:18)
+
+∞
+
++
+
+m=1
+X
+
++ D1
+
+i ( ˆU n)(x − xi)
+
+(t − tn)
+
+sin
+
+(cid:19)
+
+(cid:18)
+
+(2m − 1)π
+H
+
+(x − xi −
+
+(27)
+
+H
+2
+
+.
+
+)
+(cid:19)
+
+10
+
+When taking the average over a box of size h, we obtain,
+
+1
+h
+
+xi+h/2
+
+xi−h/2
+
+Z
+
+ˆui(x, t)dx = ˆU n
+
+i −
+
+D2
+
+i ( ˆU n) + D2
+
+i ( ˆU n)
+
+h2
+12
+
+∞
+
++
+
+Xm=1
+
+with αm determined by
+
+αm =
+
+1
+h
+
+xi+h/2
+
+sin
+
+(2m − 1)π
+H
+
+(x − xi −
+
+Z
+
+xi−h/2
+H
+(2m − 1)hπ
+
+(cid:18)
+
+cos
+
+=
+
+= (−1)m
+
+(cid:18)
+
+(cid:18)
+2H
+(2m − 1)hπ
+
+(2m − 1)π
+2H
+(2m − 1)π
+2H
+
+sin
+
+(cid:18)
+
+(cid:19)
+.
+
+h
+
+(cid:19)
+
+H 2
+8
+
+(cid:18)
+
+H
+2
+
+)
+(cid:19)
+
+dx
+
+4H 2αm
+(2m − 1)3π3 D2
+
+i ( ˆU n) exp
+
+−a∗ (2m − 1)2π2
+
+H 2
+
+(t − tn)
+
+,
+
+(28)
+
+(cid:19)
+
+(H + h)
+
+− cos
+
+(H − h)
+
+(2m − 1)π
+2H
+
+(cid:18)
+
+(cid:19)(cid:19)
+
+The coeﬃcients αm tend to 1 in absolute value as h → 0. To obtain the time derivative
+estimate ˆF ( ˆU n, tn; δt, H), we proceed as follows:
+
+i ( ˆU n, tn; δt, H) =
+ˆF 2
+
+ˆui(x, tn + δt) − ˆui(x, tn) dx
+
+=
+
+xi+h/2
+
+xi−h/2
+
+Z
+∞
+
+1
+δt h
+
+1
+δt
+
+= 4D2
+
+m=1
+X
+i ( ˆU n)
+
+1
+ξ  
+
+4H 2αm
+(2m − 1)3π3 D2
+
+i ( ˆU n)
+
+∞
+
+αm
+
+exp
+
+−a∗ (2m − 1)2π2
+
+exp
+
+(cid:18)
+(cid:18)
+−a∗(2m − 1)2π2ξ
+(2m − 1)3π3
+
+H 2
+
+− 1
+
+δt
+
+− 1
+
+(cid:19)
+
+(cid:19)
+
+m=1
+X
+where we introduced ξ = δt/H 2. It can easily be checked (e.g. using Maple) that
+
+(cid:0)
+
+(cid:0)
+
+(cid:1)
+
+!
+
+(cid:1)
+
+i ( ˆU n, tn; δt, H) = a∗D2
+ˆF 2
+
+i ( ˆU n),
+
+lim
+ξ→0
+
+which already shows that the gap-tooth scheme is consistent in this limit. Obtaining an
+i ( ˆU n, tn; δt, H) as follows,
+error bound in terms of ξ is somewhat more involved. We split ˆF 2
+
+ˆF ( ˆU n, tn; δt, H) = ˆF1 + ˆF2,
+
+with ˆF1 and ˆF2 deﬁned as
+
+ˆF1 = 4D2
+
+i ( ˆU n)
+
+ˆF2 = 4D2
+
+i ( ˆU n)
+
+1
+ξ  
+
+1
+ξ  
+
+∞
+
+m=1
+X
+∞
+
+m=1
+X
+
+exp
+
+(−1)m
+
+−a∗(2m − 1)2π2ξ
+(2m − 1)3π3
+(cid:0)
+(cid:0)
+(αm − (−1)m)
+
+!
+−a∗(2m − 1)2π2ξ
+
+− 1
+
+(cid:1)
+
+(cid:1)
+
+exp
+(2m − 1)3π3
+
+(cid:0)
+
+(cid:0)
+
+− 1
+
+.
+
+!
+
+(cid:1)
+
+(cid:1)
+
+We now show that ˆF1 approaches the correct estimate exponentially. Some algebraic ma-
+nipulation results in
+
+ˆF1 − a∗D2
+
+i ( ˆU n) = 4D2
+
+i ( ˆU n)
+
+= 4D2
+
+i ( ˆU n)
+
+exp
+
+−a∗(2m − 1)2π2ξ
+(2m − 1)3π3
+(cid:0)
+
+(cid:0)
+1 − a∗(2m − 1)2π2ξ − exp
+
+(cid:1)
+
+− 1
+
+− a∗D2
+
+i ( ˆU n)
+
+!
+
+(cid:1)
+−a∗(2m − 1)2π2ξ
+
+(2m − 1)3π3ξ
+
+(cid:0)
+
+!
+
+(cid:1)
+
+∞
+
+(−1)m
+
+m=1
+X
+(−1)m+1
+
+1
+ξ  
+∞
+
+m=1
+X
+
+ 
+
+11
+
+Therefore, we have
+
+ˆF1 − a∗D2
+
+=
+
+i ( ˆU n)
+(cid:13)
+(cid:13)
+i ( ˆU n)
+(cid:13)
+
+4D2
+
+(cid:13)
+(cid:13)
+(cid:13)
+
+(cid:13)
+(cid:13)
+(cid:13)
+(cid:13)
+(cid:13)
+
+∞
+
+m=1
+X
+
+(−1)m+1a∗
+
+ 
+
+1 − a∗(2m − 1)2π2ξ − exp
+
+−a∗(2m − 1)2π2ξ
+
+a∗(2m − 1)3π3ξ
+
+(cid:0)
+
+1 − a∗π2ξ − exp
+a∗π2ξ
+−a∗π2ξ
+
+1 − exp
+
+ 
+
+(cid:0)
+
+≤ C
+
+≤ C
+
+−a∗π2ξ
+
+!
+
+(cid:1)
+
+It remains to show the asymptotic behaviour of ˆF2.
+
+(cid:0)
+
+(cid:0)
+
+(cid:1)(cid:1)
+
+ˆF2
+
+=
+
+(cid:13)
+(cid:13)
+(cid:13)
+
+(cid:13)
+(cid:13)
+(cid:13)
+4D2
+(cid:13)
+(cid:13)
+(cid:13)
+(cid:13)
+(cid:13)
+(cid:13)
+
+i ( ˆU n)
+
+(−1)m
+
+∞
+
+Xm=1
+
+sin
+
+(cid:16)
+
+(cid:16)
+
+2H
+
+(2m−1)πh
+2H
+(cid:17)
+(2m − 1)3π3
+
+(2m−1)πh − 1
+(cid:17)
+
+exp
+
+−a∗ (2m − 1)2 π2ξ
+
+− 1
+
+(cid:16)
+
+(cid:16)
+
+(cid:17)
+
+(cid:17)
+
+1 − exp
+
+−a∗π2ξ
+
+(cid:0)
+
+(cid:1)(cid:1)
+
+≤ C
+
+≤ C
+
+sin
+
+πh
+2H
+
+2H
+πh − 1
+
+ξπ3
+(cid:1)
+
+(cid:0)
+
+!
+(cid:0)
+1 − exp(−a∗π2ξ)
+ξπ3
+
+≤ C
+
+1 − exp(−a∗π2ξ)
+
+ 
+h2
+H 2
+h2
+δt
+
+(cid:0)
+
+(cid:1)
+
+(cid:1)
+
+!(cid:13)
+(cid:13)
+(cid:13)
+(cid:13)
+(cid:13)
+
+(29)
+
+(cid:13)
+(cid:13)
+(cid:13)
+(cid:13)
+(cid:13)
+(cid:13)
+
+(30)
+
+The combination of (29) and (30) proves the theorem.
+
+The error bound (26) clearly shows an exponential decay of the error as a function of
+δt/H 2 when the microscopic problem is replaced by the eﬀective equation. The restriction
+(here performed by taking the box average) also aﬀects the accuracy of the estimate. Ideally,
+one would just use the eﬀective function value at x = xi inside each box (this corresponds
+to h = 0), but when microscopic scales are present, this value is generally impossible to
+obtain.
+
+We illustrate this result numerically.
+
+Example 3.4. Consider the model problem (20) with a∗ = 0.45825686 as a microscopic
+problem on the domain [0, 1] with homogeneous Dirichlet boundary conditions and initial
+condition u(x, 0) = 1−4(x−1/2)2. To solve this microscopic problem, we use a second order
+ﬁnite diﬀerence discretization with mesh width δx = 2 · 10−7 and lsode as time-stepper.
+The concrete gap-tooth scheme for this example is deﬁned by the initialization (15). We
+compare a gap-tooth step with h = 2 · 10−3 and ∆x = 1 · 10−1 with the reference estimator
+a∗D2( ˆU n). Figure 2 shows the error with respect to the ﬁnite diﬀerence time derivative as a
+
+12
+
+Figure 2: Error of the gap-tooth estimator ˆF 2(U n, tn; δt, H) (which uses the homogenized problem
+(20)-(21) inside each box) with respect to the ﬁnite diﬀerence time derivative a∗D2(U n) on the same
+mesh. Left: Error with respect to H for ﬁxed δt. Right: Error with respect to δt for ﬁxed H.
+
+function of H (left) and δt (right). It is clear the convergence is in agreement with theorem
+3.3. The stagnation for large buﬀer sizes is due to the ﬁnite accuracy of the microscopic
+solver.
+
+We are now ready to state the general consistency result.
+
+Theorem 3.5. Let ¯U n+δ = ¯S2( ¯U n, tn; δt, H) be a gap-tooth time-stepper for the homoge-
+nization problem (18)-(19), as deﬁned in (23), and U n+δ = S(U n, tn; δt) a comparison ﬁnite
+diﬀerence scheme as deﬁned in (25). Then, assuming U n = ¯U n, we have,
+
+¯F 2( ¯U n, tn; δt, H) − a∗D2(U n)
+
+≤ C4
+
+(cid:13)
+(cid:13)
+
+ǫ1−p/2
+δt
+
++C5
+
+1 +
+
+(cid:18)
+
+h2
+δt
+
+1 − exp(−a∗π2 δt
+H 2 )
+(cid:19)
+(cid:18)
+
+(cid:19)
+
+averaging
+
+boundary conditions
+
+|
+
+{z
+
+}
+
+|
+
+{z
+
+(31)
+}
+
+(cid:13)
+(cid:13)
+
+microscales
+
+| {z }
+
+Proof. This simply follows by combining theorem 3.3 with lemma 3.1.
+
+Formula (31) shows the main consistency properties of the gap-tooth estimator. The
+error decays exponentially as a function of buﬀer size, but the optimal accuracy of the
+estimator is limited by the presence of the microscopic scales. Therefore, we need to make
+a trade-oﬀ to determine an optimal choice for H and δt. The smaller δt, the smaller H can
+be to reach optimal accuracy (and thus the smaller the compational cost), but smaller δt
+implies a larger optimal error. This is illustrated in the following numerical example.
+
+Example 3.6. Consider the model problem (18) with
+
+a(x/ǫ) = 1.1 + sin(2πx/ǫ),
+
+ǫ = 1 · 10−5
+
+(32)
+
+13
+
+Figure 3: Error of the gap-tooth estimator ¯F (U n, tn; δt, H) (which uses the detailed, homogenization
+problem (18)–(19) inside each box) with respect to the ﬁnite diﬀerence time derivative a∗D2(U n)
+on the same mesh. Left: Error with respect to H for ﬁxed δt. Right: Error with respect to δt with
+ﬁxed H.
+
+as a microscopic problem on the domain [0, 1] with homogeneous Dirichlet boundary condi-
+tions and initial condition u(x, 0) = 1 − 4(x − 1/2)2. This diﬀusion coeﬃcient has also been
+used as a model example in [1, 29]. To solve this microscopic problem, we use a second order
+ﬁnite diﬀerence discretization with mesh width δx = 1 · 10−7 and lsode as time-stepper.
+The concrete gap-tooth scheme for this example is deﬁned by the initialization (15). We
+compare a gap-tooth step with h = 2 · 10−3 and ∆x = 1 · 10−1 with the reference estima-
+tor a∗D2( ˆU n), in which the eﬀective diﬀusion coeﬃcient is known to be a∗ = 0.45825686.
+Figure 3 shows the error with respect to the ﬁnite diﬀerence time derivative as a function
+of H (left) and δt (right). It is clear that the convergence is in agreement with theorem
+3.5. We see that smaller values of δt result in larger values for the optimal error, but the
+convergence towards this optimal error is faster.
+
+3.3 Choosing the method parameters
+
+When performing time integration using patch dynamics, one must determine a macroscopic
+mesh width ∆x, an inner box size h, a buﬀer box size H and a time step δt. These method
+parameters need to be chosen adequately to ensure an accurate result. Since the gap-tooth
+estimator approximates the time derivative that would be obtained through a method-
+of-lines discretization of the macroscopic equation, the macroscopic mesh width ∆x can
+be determined by macroscopic properties of the solution only, enabling reuse of existing
+remeshing techniques for PDEs. The box width h has to be suﬃciently large to capture
+all small scale eﬀects, but small enough to ensure a good spatial resolution. Here, we just
+
+14
+
+In our simpliﬁed setting, where the microscopic model is also a partial
+choose h ≫ ǫ.
+diﬀerential equation, we are free to choose δt, which allows us to illustrate the convergence
+properties of the method. However, in practical problems, the choice of δt will be problem-
+dependent, since it will need to be chosen large enough to deduce reliable information on
+the macroscopic time derivative.
+
+Therefore, we focus on determining the buﬀer width H, assuming that all other pa-
+rameters have already been ﬁxed. From theorem 3.5, it follows that the desired value of
+H depends on the eﬀective diﬀusion coeﬃcient a∗, which is unknown. We thus need to
+resort to a heuristic. Consider the model problem (18)-(19) inside one box, centered around
+x0 = 5·10−1, with H = 8·10−3, with initial condition u0(x) = 1− 4(x− 1/2)2. The diﬀusion
+coeﬃcient is given by (32), see example 3.6. Denote the solution of this problem by ¯u(x, t),
+and deﬁne
+
+¯F (x, t) = Sh (¯u(x, t) − ¯u(x, 0))
+
+=
+
+1
+t
+
+ξ−x0+h/2
+
+ξ−x0−h/2
+
+Z
+
+¯u(ξ, t) − ¯u(ξ, 0)
+h
+
+dξ,
+
+(33)
+
+(34)
+
+with h = 2 · 10−3 and x ∈ [(−H + h)/2, (H − h)/2]. Figure 4 (left) shows ¯F (x, t) for a
+number of values of t. We clearly see how the error in the estimator propagates inwards
+from the boundaries. The same function is plotted on the right, only now the microscopic
+model is the reaction-diﬀusion equation
+
+∂tuǫ(x, t) = ∂x (a(x/ǫ)∂xuǫ(x, t)) + uǫ(x, t)
+
+1 −
+
+uǫ(−H/2, t) = u0(−H/2),
+
+uǫ(x, t)
+1.2 + sin(2πx)
+
+(cid:19)
+(cid:18)
+uǫ(H/2, t) = u0(H/2),
+
+again with a(x/ǫ) deﬁned as in (32). In the presence of reaction terms, ¯F (x, t) is no longer
+constant in the internal region. Based on these observations, we propose the following test
+for the quality of the buﬀer size,
+
+k ¯F (0, δt) − ¯F (0, (1 − α)δt)k < Tr,
+
+0 < α ≪ 1.
+
+(35)
+
+Figure 5 shows this heuristic, together with the error, as a function of H for δt = 5 · 10−6
+and α = 0.04. It is clear that the computed quantity in (35) is proportional to the error for
+suﬃciently large H. However, this heuristic is far from perfect, since the simulations inside
+each box can converge to a steady state due to the Dirichlet boundary conditions. If this
+steady state is reached in a time interval smaller than δt, equation (35) will underestimate
+the error, resulting in an insuﬃcient buﬀer size H getting accepted. However, as soon as
+the problem-dependent parameters α and Tr have been determined, this heuristic can be
+used during the simulation to check whether the currently used buﬀer size is still suﬃcient.
+
+15
+
+Figure 4: The function ¯F (x, t) as deﬁned in equation (33) for a number of values of time, using a
+buﬀer size H = 8 · 10−3 and h = 2 · 10−3. Left: the model diﬀusion problem (18-19). Right: the
+reaction-diﬀusion equation 34. The estimate clearly gets aﬀected by the boundary conditions as
+time advances.
+
+Figure 5: Error of the gap-tooth estimator (dashed) and heuristic error estimate (solid) as a function
+of buﬀer size for the model equation (18) with diﬀusion coeﬃcient (32) for δt = 5·10−6 and α = 0.04.
+
+16
+
+Figure 6: Error of the gap-tooth estimator ¯F (U n, tn; δt, H) (using the microscopic problem (36) with
+diﬀusion coeﬃcient (32) in each box) with respect to the ﬁnite diﬀerence time derivative a∗D2(U n)
+on the same mesh.
+
+3.4 Discussion
+
+Other boundary conditions
+
+In section 3.2, we studied the convergence of the gap-tooth
+estimator both analytically and numerically in the case of Dirichlet boundary conditions.
+We will now show numerically that the results obtained in that section do not depend
+crucially on the type of boundary conditions. Consider again the diﬀusion problem (18),
+with the diﬀusion coeﬃcient deﬁned as in (32), see also example 3.6. We construct the gap-
+tooth time derivative estimator ¯F (U n, tn; δt, H) as outlined in section 3.1, but now we use
+no-ﬂux instead of Dirichlet boundary conditions. In each box, we then solve the following
+problem,
+
+∂tuǫ(x, t) = ∂x (a(x/ǫ)∂xuǫ(x, t)) ,
+
+∂xuǫ(−H/2, t) = 0,
+
+∂xuǫ(H/2, t) = 0
+
+(36)
+
+The concrete gap-tooth scheme that is used, as well as the corresponding ﬁnite diﬀerence
+comparison scheme, are deﬁned by the initialization (15). Figure 6 shows the error with
+respect to the ﬁnite diﬀerence time derivative a∗D2(U n). We see qualitatively the same
+behaviour as for Dirichlet boundary conditions.
+
+In general, the choice of boundary conditions might inﬂuence the required buﬀer size. In
+the ideal case, where the boundary conditions are chosen to correctly mimic the behaviour
+in the full domain, we can choose H = h. Then there is no buﬀer and the computational
+complexity is, in some sense, optimal. For reaction-diﬀusion homogenization problems,
+this can be achieved by constraining the averaged gradient around each box edge [29]. In
+situations where the correct boundary conditions are not known, or prove impossible to
+implement, one is forced to resort to the use of buﬀers.
+
+17
+
+Microscopic simulators
+
+It is possible that the microscopic model is not a partial dif-
+ferential equation, but some microscopic simulator, e.g. kinetic Monte Carlo or molecular
+dynamics code. In fact, this is the case where we expect our method to be most useful.
+In this case, the lifting step, i.e. the construction of box initial conditions, becomes more
+involved. In general, the microscopic model will have many more degrees of freedom, the
+higher order moments of the evolving distribution. These will quickly become slaved to the
+governing moments (the ones where the lifting is conditioned upon), see e.g. [19, 24]. The
+crucial assumption in theorem 3.5 is that the solution in each box evolves according to the
+macroscopic equation. For a microscopic simulation, this will usually mean that we need to
+construct an initial condition in which, for example, a number of higher order moments are
+already slaved to the governing moments (so-called mature initial conditions). To this end,
+it is possible to perform a constrained simulation before initialization to create such mature
+initial conditions [9, 15]. If this is not done, the resulting evolution may be far from what
+is expected, see [21] for an illustration in the case of a lattice-Boltzmann model.
+
+4 Patch dynamics
+
+Once a good gap-tooth time derivative estimator has been constructed, it can be used as
+a method-of-lines spatial discretization in conjunction with any time integration scheme.
+Consider for concreteness the forward Euler scheme for (11), given by
+
+U n+1 = U n + ∆t F (U n, D1(U n), . . . , Dd(U n), tn),
+
+which we will abbreviate as
+
+U n+1 = U n + ∆t F (U n, tn)
+
+and the corresponding patch dynamics scheme
+
+¯U n+1 = ¯U n + ∆t ¯F d( ¯U n, tn; δt, H),
+
+where ¯F d( ¯U n, tn; δt, H) is deﬁned as in (17). Theorem 3.5 establishes the consistency of the
+gap-tooth estimator. In order to obtain convergence, we also need to prove stability. For
+this purpose, we deﬁne the class K of discrete functions with bounded divided diﬀerences
+up to order d on the numerical grid (xi, tn), i = 0, . . . , N ; tn = n∆t, n = 0, . . . , T /∆t, as
+
+K = {{U n
+
+i }|kDα
+
+∆xU n
+
+i k ≤ Cα for α ≤ d, n∆t ≤ T } ,
+
+where d is the highest spatial derivative present in equation (11), Dα
+∆x is the ﬁnite diﬀerence
+operator of order α on a mesh of width ∆x, and Cα is independent of ∆t and ∆x. We can
+then make use of [7, Theorem 5.5] to state the following result. (See also [29, Theorem 4.5]
+in the case of constrained gradient boundary conditions.)
+
+18
+
+(37)
+
+(38)
+
+(39)
+
+Theorem 4.1. Consider the patch dynamics scheme (39) and the corresponding ﬁnite dif-
+ference comparison scheme (37). Assume that { ¯U n}, {U n}, { ˆU n} ∈ K, U 0 = ˆU 0 = ¯U 0 and
+the comparison scheme (37) is stable, then we have
+
+k ¯U n − u0(xi, tn)k ≤ C1(∆xk + ∆t) + C2 max
+
+k ¯F d( ¯U n, tn; δt, H) − F (U n, tn)k.
+
+0≤k≤T /∆t
+
+in the limit where
+
+k ¯F d( ¯U n, tn; δt, H) − F (U n, tn)k → 0.
+
+Thus the patch dynamics scheme is stable if the ﬁnite diﬀerence comparison scheme is
+stable. We note that, although this result is very general, its applicability is limited due to
+the assumption that ¯U n ∈ K, which has to be checked separately. Therefore, this result does
+not prevent the patch dynamics scheme to become unstable, due to e.g. an insuﬃcient buﬀer
+size H. However, we can study the stability of the patch dynamics scheme numerically by
+computing the eigenvalues of the time derivative estimator as a function of H.
+
+Consider the homogenization diﬀusion equation (18) with the diﬀusion coeﬃcient a(x/ǫ)
+given by (32). The homogenized equation is given by (20) with a∗ = 0.45825686. In this
+case, the time derivative operator F (U n, tn) in the comparison scheme (37) has eigenvalues
+
+which, using the forward Euler scheme as time-stepper, results in the stability condition
+
+λk = −
+
+4a∗
+∆x2 sin2(πk∆x),
+
+(40)
+
+max
+k
+
+|1 + λk∆t| ≤ 1
+
+or
+
+∆t
+∆x2 ≤
+
+1
+2
+
+a∗
+
+It can easily be checked that the operator ¯F (U n, tn; δt, H) is linear, so we can interpret the
+evaluation of ¯F (U n, tn; δt, H) as a matrix-vector product. We can therefore use any matrix-
+free linear algebra technique to compute the eigenvalues of ¯F (U n, tn; δt, H), e.g. Arnoldi.
+We choose to compute ¯F (U n, tn; δt, H) and F (U n, tn) on the domain [0, 1] with Dirichlet
+boundary conditions, on a mesh of width ∆x = 0.05 and with an inner box width of
+h = 2 · 10−3. We choose δt = 5 · 10−6 and compute the eigenvalues of ¯F (U n, tn; δt, H) as
+a function of H. The results are shown in ﬁgure 7. Two conclusions are apparent: since
+the most negative eigenvalue for ¯F (U n, tn; δt, H) is always smaller in absolute value than
+the corresponding eigenvalue of F (U n, tn) the patch dynamics scheme is always stable if
+the comparison scheme is stable. Moreover, we see that, with increasing buﬀer size H, the
+eigenvalues of ¯F (U n, tn; δt, H) approximate those of F (U n, tn), which is an indication of
+consistency.
+
+5 Numerical results
+
+We will consider two example systems to illustrate the method. The ﬁrst example is a system
+of two coupled reaction-diﬀusion equations, which models CO oxidation on a heterogeneous
+
+19
+
+Figure 7: Spectrum of the estimator ¯F (U n, tn; δt, H) (dashed) for the model equation (18) with
+diﬀusion coeﬃcient (32) for H = 2 · 10−3, 4 · 10−3, . . . , 2 · 10−2 and δt = 5 · 10−6, and the eigenvalues
+(40) of F (U n, tn) (solid).
+
+catalytic surface. Due to the reaction term, the proof of theorem 3.5 is strictly speaking not
+valid, but nevertheless the conclusions are the same. The second example is the Kuramoto–
+Sivashinsky equation. This fourth-order non-linear parabolic equation is widely used e.g. in
+combustion modeling. The patch dynamics scheme with buﬀers also works in this case,
+showing the more general applicability of the method. All computations were performed in
+Python, making use of the SciPy package [16] for scientiﬁc computing.
+
+5.1 Example 1: A nonlinear travelling wave in a heterogeneous excitable
+
+medium
+
+Consider the following system of two coupled reaction-diﬀusion equations,
+
+∂tu(x, t) = ∂2
+
+xu(x, t) +
+
+u(x, t)(1 − u(x, t))
+
+u(x, t) −
+
+w(x, t) + b(x)
+a(x)
+
+,
+
+(cid:19)
+
+(cid:18)
+
+∂tw(x, t) = g(u(x, t)) − w(x, t),
+
+with
+
+(41)
+
+(42)
+
+1 − 6.75 u(1 − u)2, 1/3 ≤ u < 1,
+
+u < 1/3,
+
+u ≥ 1.
+
+1
+δ
+
+0,
+
+1,
+
+g(u) = 
+
+
+
+This equation models the spatiotemporal dynamics of CO oxidation on microstructured cat-
+alysts, which consist of, say, alternating stripes of two diﬀerent catalysts, such as platinum,
+Pt, and palladium, Pd, or platinum and rhodium, Rh [11, 4, 32]. The goal is to improve
+the average reactivity or selectivity by combining the catalytic activities of the diﬀerent
+metals, which are coupled through surface diﬀusion. In the above model, u corresponds to
+
+20
+
+the surface concentration of CO, w is a so-called surface reconstruction variable and g(u)
+is an experimentally ﬁtted sigmoidal function. Details can be found in [17, 3].
+
+In this model a and b and the time-scale ratio parameter δ are physical parameters that
+incorporate the experimental conditions: partial pressures of O2 and CO in the gas phase,
+temperature, as well as kinetic constants for the surface. Here, we will study a domain of
+length L = 21 with a periodically varying medium: a striped surface that can be thought
+of as consisting of equal amounts of Pt and Rh, with stripe width ǫ/2. The medium is then
+deﬁned by
+
+a(x) = 0.84,
+
+b(x) = −0.025 + 0.725 sin(2πx/ǫ),
+
+δ = 0.025.
+
+(43)
+
+This particular choice of parameters is taken from [27], where an eﬀective bifurcation anal-
+ysis for this model was presented. For these parameter values, the eﬀective equation (given
+by (41)-(42) with
+
+a(x) = 0.84,
+
+b(x) = −0.025,
+
+δ = 0.025,
+
+(44)
+
+supports travelling waves. It was shown in [27] that this conclusion remains true for the
+given heterogeneity. This was done by computing the eﬀective behaviour as the average of a
+large number of spatially shifted realization of the wave. Here, using the gap-tooth scheme,
+the solution is spatially averaged inside each box, but the notion of eﬀective behaviour is
+identical. We choose the small scale parameter ǫ = 1 · 10−4.
+
+The macroscopic comparison scheme for the eﬀective equation (41-42)-(44) is deﬁned as
+a standard second order central diﬀerence discretization in space on a macroscopic mesh of
+width ∆x = 0.25, combined with a forward Euler time-stepper. The time-step is chosen as
+∆t = 1 · 10−2, which ensures stability. The patch dynamics scheme for the detailed equation
+(41-43) is then obtained by using a gap-tooth estimator for the time derivative using the
+initialization (15) with the same forward Euler time-stepper.
+
+Accuracy We perform a numerical simulation for this model on the domain [0, L] using
+the patch dynamics scheme. The gap-tooth parameters are given by h = 5 · 10−4, H =
+1.5 · 10−2 and δt = 5 · 10−7. Inside each box, we used a ﬁnite diﬀerence approximation in
+space, with mesh width δx = 1 · 10−6 and lsode as time-stepper. The initial condition is
+given by
+
+u(x, 0) =
+
+1, x ∈ [8, 18]
+
+else
+
+
+
+
+0,
+
+
+
+w(x, 0) = 
+
+
+
+0.5 − 0.05x,
+
+x ≤ 8,
+
+0.07x − 0.46,
+
+8 < x ≤ 18,
+
+−0.1x + 2.6,
+
+x > 18.
+
+The results are shown in ﬁgure 8. We clearly see both the initial transient and the ﬁnal
+travelling wave solution. For comparison purposes, the same computation was performed
+
+21
+
+Figure 8: Left: solution of equation (41-43) using the patch dynamics scheme as a function of space
+and time. Colors indicate values (blue = 1, red = 0). Right: snapshots of the solution at certain
+moments in time, clearly showing the approach to a travelling wave solution.
+
+using the ﬁnite diﬀerence comparison scheme for the eﬀective equation. We also computed
+an “exact” solution for the eﬀective equation using a much ﬁner grid (∆x = 5 · 10−3 and
+∆t = 1·10−5. Figure 9 shows the errors of the patch dynamics simulation with respect to the
+ﬁnite diﬀerence simulation of the eﬀective equation and the “exact” solution, respectively.
+We clearly see that the patch dynamics scheme is a very good approximation of the ﬁnite
+diﬀerence scheme, and the error with respect to the exact solution is dominated by the error
+of the ﬁnite diﬀerence scheme.
+
+Eﬃciency Time integration using the patch dynamics scheme is more eﬃcient than a
+complete simulation using the microscopic model, since the microscopic model is used only
+in small portions of the space-time domain (the patches). An obvious (but not always
+correct) way to study the eﬃciency is to compare the size of the total space-time domain
+with the size of the patches. In this example, the simulations are only performed in 6%
+of the spatial domain. Of course, when it is possible to apply physically correct boundary
+conditions around the inner box, the buﬀer boxes are not necessary, and the boxes would
+only cover 0.2 % of the space domain. For reaction-diﬀusion homogenization problems, we
+showed that buﬀer boxes are not required when we constrain the average gradient at the
+box boundary [29]. The gain in the spatial dimension is determined by the separation in
+spatial scales. It can be large when the macroscopic solution is smooth (few macroscopic
+mesh points are needed) and propagation of boundary artefacts is slow (small buﬀer box is
+suﬃcient). Note that in higher spatial dimensions, this gain can be even more spectacular.
+
+The gain in the temporal dimension can be determined similarly.
+
+In the example of
+section 5.1, the gap-tooth step was chosen as δt = 5 · 10−7, whereas for macroscopic time
+integration, the forward Euler scheme was used with ∆t = 1 · 10−2. Therefore, in the
+
+22
+
+Figure 9: Error of a patch dynamics simulation for equation (41-43) with respect to the “exact”
+solution of the eﬀective equation (top) and a ﬁnite diﬀerence comparison scheme (bottom). The
+error is dominated by the error of the ﬁnite diﬀerence scheme.
+
+temporal dimension, we gain a factor of 2 · 105. In more realistic applications, when the mi-
+croscopic model is not a partial diﬀerential equation, we expect this gain to be smaller, since
+additional computational eﬀort will be required to remove the errors that were introduced
+during the lifting step, e.g. in the form of constrained simulation [9].
+
+5.2 Example 2: Kuramoto–Sivashinsky equation
+
+Consider the Kuramoto–Sivashinsky equation
+
+∂tu(x, t) = −ν∂4
+
+xu(x, t) − ∂2
+
+xu(x, t) − u(x, t)∂xu(x, t),
+
+x ∈ [0, 2π],
+
+(45)
+
+with periodic boundary conditions. This equation is frequently used in the modelling of
+combustion and thin ﬁlm ﬂow. For the parameter value ν = 4/15, it has been shown
+that the equation supports travelling wave solutions, see e.g. [20]. For the purpose of this
+example, both the microscopic and the macroscopic model are given by (45).
+
+To obtain the macroscopic comparison scheme, we discretize the second and fourth order
+spatial derivatives using second order central diﬀerences, on a macroscopic mesh of width
+∆x = 0.05π, combined with a forward Euler time integrator with time-step ∆t = 1 · 10−5.
+This small macroscopic time-step arises due to the stiﬀness of the eﬀective equation. We
+can accelerate time-stepping by wrapping a so-called projective integration method around
+the forward Euler scheme [8]. This scheme works as follows. First, we perform a number of
+
+23
+
+forward Euler steps,
+
+U k+1,N = U k,N + ∆t F (U k,N , tn),
+
+where, for consistency, U 0,N = U N , followed by a large extrapolation step
+
+U N +1 = (M + 1) U k+1,N − M U k,N ,
+
+M > k.
+
+Here, U k,N ≈ U (N (M + k + 1) ∆t + k∆t). The parameters k and M determine the stability
+region of the resulting time-stepper. An analysis of these methods is given in [8]. It can be
+checked that, for this equation, choosing k = 2 and M = 7 results in a stable time-stepping
+scheme.
+
+The patch dynamics scheme is constructed by replacing the time derivative F (U k,N , tn)
+by a gap-tooth estimator ¯F 4( ¯U k,N , tn; δt, H), obtained by the initialization (13), where
+we choose the order of the Taylor expansion to be d = 4. The coeﬃcients Di
+k, k > 0 are
+determined by the macroscopic comparison scheme. Inside each box, equation (45) is solved,
+on a mesh of width δx = 1 · 10−5, subject to Dirichlet and no-ﬂux boundary conditions,
+using lsode as time-stepper. We ﬁxed the box width h = 1 · 10−3.
+
+Consistency and eﬃciency Because of the fourth order term, theorem 3.5 is not
+proven. Therefore, we numerically check the consistency of the estimator, by computing
+the gap-tooth estimator ¯F 4( ¯U k,N , tn; δt, H) as a function of H for a range of values for δt,
+and comparing the resulting estimate with the time derivative of the comparison scheme.
+As an initial condition, we choose u0(x) = sin(2πx). The results are shown in ﬁgure 10
+(left). We see qualitatively the same behaviour as in section 3.2 for diﬀusion problems.
+There are two main diﬀerences. First, in this case the convergence is no longer monotonic,
+which explains the sharp peaks in the error curves. Also, because boundary artefacts travel
+inwards much faster, the gain will be much smaller.
+Indeed, the ﬁgure suggests that a
+good compromise between accuracy and eﬃciency would be to choose δt = 4 · 10−9 and
+H = 3π · 10−2. The reason for this behaviour is that the macroscopic equation contains
+reasonably fast time scales. Note that this is also the reason why the ﬁnite diﬀerence
+comparison scheme is forced to take small time-steps.
+
+For this choice of the parameters, the computations have to be performed in 60% of the
+spatial domain. However, for a forward Euler step, we only need to simulate in 1/25000 of
+the time-domain. Using the projective integration scheme therefore gives us a total gain
+factor of about 80000 in time. Again, we note that in real applications, this spectacular
+gain will partly be compensated by the additional computational eﬀort that is required to
+create appropriate initial conditions.
+
+We can draw two main conclusions. The scheme allows to simulate higher order macro-
+scopic equations, and the gain in the space domain is heavily dependent on the separation
+of scales in the macroscopic equation.
+
+24
+
+Figure 10: Left: Error of the gap-tooth estimator ¯F ( ¯U 0,0, tn; δt, H) with respect to the ﬁnite diﬀer-
+ence time derivative F (U 0,0, tn). Right: The function (33) as a function of x for a number of values
+of time. We clearly see how the estimate gets aﬀected by the boundary conditions.
+
+Accuracy We perform a numerical simulation for this model on the domain [0, 2π] using
+the patch dynamics scheme. The gap-tooth parameters are given by h = 1 · 10−3, H =
+3π · 10−2 and δt = 4 · 10−9. Inside each box, we used a ﬁnite diﬀerence approximation in
+space, with mesh width δx = 1 · 10−5 and lsode as time-stepper. The initial condition is
+given by
+
+−1,
+
+x ∈ [0, 0.8π],
+
+−1 + 5(x − 0.8π), x ∈ [0.8π, 1.5π],
+
+2.5 − 7(x − 1.5π), x ∈ [1.5π, 2π],
+
+u(x, 0) = 
+
+
+
+The results are shown in ﬁgure 11. We clearly see both the initial transient and the ﬁnal
+travelling wave solution. For comparison purposes, the same computation was performed
+using the ﬁnite diﬀerence comparison scheme for the eﬀective equation. Figure 12 shows
+the errors of the patch dynamics simulation with respect to the ﬁnite diﬀerence simulation.
+We see that during the transient phase the error oscillates somewhat, but once the trav-
+elling wave is steady the error increases linearly, due to a diﬀerence in the approximated
+propagation speed. Note that the error is signiﬁcantly larger than for example 5.1, due to
+the fact that the estimator is less accurate, but also because the macroscopic time-step is
+much smaller, resulting in a larger number of estimations.
+
+25
+
+Figure 11: Left: solution of equation (45) using the patch dynamics scheme as a function of space
+and time. Colors indicate values (blue = 4, red = -4). Right: snapshots of the solution at certain
+moments in time, clearly showing the approach to a travelling wave solution.
+
+Figure 12: Error of a patch dynamics simulation for equation (45) with respect to the a ﬁnite
+diﬀerence comparison scheme for the eﬀective equation. We see that this error grows monotonic
+once the travelling wave has been reached, due to a slight diﬀerence in propagation speed.
+
+26
+
+6 Conclusions
+
+We described the patch dynamics scheme for multi-scale problems. This scheme approxi-
+mates an unavailable eﬀective equation over macroscopic time and length scales, when only
+a microscopic evolution law is given; it only uses appropriately initialized simulations of
+the microscopic model over small subsets (patches) of the space-time domain. Because it is
+often not possible to impose macroscopically inspired boundary conditions on a microscopic
+simulation, we propose to use buﬀer regions around the patches, which temporarily shield
+the internal region of the patches from boundary artefacts.
+
+We analytically derived an error estimate for a model homogenization problem with
+Dirichlet boundary conditions. The numerical results show that the algorithm is more
+widely applicable. We showed the scheme is capable of giving good approximations for
+reaction-diﬀusion systems, as well as for fourth order PDEs, such as the Kuramoto–Sivashinsky
+equation. As such, these results are far more general than those of [29], which are restricted
+to reaction-diﬀusion problems due to the special choice of boundary conditions.
+
+We emphasize that, although analyzed for homogenization problems, the real advantage
+for the methods presented here lies in their applicability for microscopic models that are not
+PDEs, such as kinetic Monte Carlo, or molecular dynamics. Experiments in this direction
+are currently being pursued actively.
+
+Acknowledgments
+
+Giovanni Samaey is a Research Assistant of the Fund for Scientiﬁc Research - Flanders.
+This work has been partially supported by grant IUAP/V/22 and by the Fund of Scien-
+tiﬁc Research through Research Project G.0130.03 (GS, DR), and an NSF/ITR grant and
+AFOSR Dynamics and Control, Dr. S. Heise (IGK).
+
+References
+
+[1] A. Abdulle and W. E. Finite diﬀerence heterogeneous multi-scale method for homog-
+
+enization problems. Journal of Computational Physics, 191(1):18–39, 2003.
+
+[2] G. Allaire. Homogenization and two-scale convergence. SIAM Journal of Mathematical
+
+Analysis, 23(6):1482–1518, 1992.
+
+[3] M. B¨ar. R¨aumliche Strukturbildung bei einer Oberﬂ¨achenreaktion. Chemische Wellen
+und Turbulenz in der CO-Oxidation auf Platin-Einkristall-Oberﬂ¨achen. PhD thesis,
+Freie Universit¨at Berlin, 1993.
+
+27
+
+[4] M. B¨ar, A.K. Bangia, I.G. Kevrekidis, G. Haas, H-H. Rotermund, and G. Ertl. Com-
+posite catalyst surfaces: eﬀect of inert and active heterogeneities on pattern formation.
+Journal of Physical Chemistry, 100:19106–19117, 1996.
+
+[5] A. Bensoussan, J.L. Lions, and G. Papanicolaou. Asymptotic analysis of periodic struc-
+tures, volume 5 of Studies in Mathematics and its Applications. North-Holland, Ams-
+terdam, 1978.
+
+[6] D. Cioranescu and P. Donato. An introduction to homogenization. Oxford University
+
+[7] W. E and B. Engquist. The heterogeneous multi-scale methods. Comm. Math. Sci.,
+
+Press, 1999.
+
+1(1):87–132, 2003.
+
+[8] C.W. Gear and I.G. Kevrekidis. Projective methods for stiﬀ diﬀerential equa-
+tions: problems with gaps in their eigenvalue spectrum. SIAM Journal of Scien-
+tiﬁc Computation, 24(4):1091–1106, 2003. Can be obtained as NEC Report 2001-029,
+http://www.neci.nj.nec.com/homepages/cwg/projective.pdf.
+
+[9] C.W. Gear and I.G. Kevrekidis. Constraint-deﬁned manifolds: a legacy code approach
+
+to low-dimensional computation. J. Sci. Comp., 2004. In press.
+
+[10] C.W. Gear, J. Li, and I.G. Kevrekidis. The gap-tooth method in particle simulations.
+Physics Letters A, 316:190–195, 2003. Can be obtained as physics/0303010 at arxiv.org.
+
+[11] M.D. Graham, I.G. Kevrekidis, K. Asakura, J. Lauterbach, K. Krischer, H-H. Roter-
+mund, and G. Ertl. Eﬀects of boundaries on pattern formation: catalytic oxidation of
+co on platinum. Science, 264:80–82, 1994.
+
+[12] N.G. Hadjiconstantinou. Hybrid atomistic-continuum formulations and the moving
+
+contact-line problem. Journal of Computational Physics, 154:245–265, 1999.
+
+[13] T.Y. Hou and X.H. Wu. A multiscale ﬁnite element method for elliptic problems in
+composite materials and porous media. Journal of Computational Physics, 134:169–
+189, 1997.
+
+[14] T.Y. Hou and X.H. Wu. Convergence of a multiscale ﬁnite element method for el-
+liptic problems with rapidly oscillating coeﬃcients. Mathematics of Computation,
+68(227):913–943, 1999.
+
+[15] G. Hummer and I.G. Kevrekidis. Coarse molecular dynamics of a peptide fragment: free
+energy, kinetics and long-time dynamics computations. J. Chem. Phys., 118(23):10762–
+10773, 2003. Can be obtained as physics/0212108 at arxiv.org.
+
+[16] E. Jones, T. Oliphant, and P. Peterson et al. SciPy: Open source scientiﬁc tools for
+
+Python, 2001–.
+
+28
+
+[17] J.P. Keener. Homogenization and propagation in the bistable equation. Physica D,
+
+136:1–17, 2000.
+
+[18] I.G. Kevrekidis. Coarse bifurcation studies of alternative microscopic/hybrid simula-
+tors. Plenary lecture, CAST Division, AIChE Annual Meeting, Los Angeles, 2000.
+Slides can be obtained from http://arnold.princeton.edu/~yannis/.
+
+[19] I.G. Kevrekidis, C.W. Gear, J.M. Hyman, P.G. Kevrekidis, O. Runborg, and
+C. Theodoropoulos. Equation-free multiscale computation: enabling microscopic sim-
+ulators to perform system-level tasks. Comm. Math. Sciences, 1(4):715–762, 2003.
+
+[20] I.G. Kevrekidis, B. Nicolaenko, and J.C. Scovel. Back in the saddle again: a com-
+puter assisted study of the Kuramoto-Sivashinsky equation. SIAM Journal of Applied
+Mathematics, 50:760–790, 1990.
+
+[21] P. Van Leemput, K. Lust, and I.G. Kevrekidis. Coarse-grained numerical bifurcation
+
+analysis of lattice boltzmann models. Physica D, 2004. Submitted.
+
+[22] J. Li, P.G. Kevrekidis, C.W. Gear, and I.G. Kevrekidis. Deciding the nature of the
+“coarse equation” through microscopic simulations: the baby-bathwater scheme. SIAM
+Multiscale modeling and simulation, 1(3):391–407, 2003.
+
+[23] J. Li, D. Liao, and S. Yip. Imposing ﬁeld boundary conditions in MD simulation of
+ﬂuids: optimal particle controller and buﬀer zone feedback. Mat. Res. Soc. Symp. Proc,
+538:473–478, 1998.
+
+[24] A.G. Makeev, D. Maroudas, and I.G. Kevrekidis. Coarse stability and bifurcation
+analysis using stochastic simulators: kinetic Monte Carlo examples. J. Chem. Phys.,
+116:10083–10091, 2002.
+
+[25] A.G. Makeev, D. Maroudas, A.Z. Panagiotopoulos, and I.G. Kevrekidis. Coarse bi-
+furcation analysis of kinetic Monte Carlo simulations: a lattice-gas model with lateral
+interactions. J. Chem. Phys., 117(18):8229–8240, 2002.
+
+[26] A.M. Matache, I. Babuska, and C. Schwab. Generalized p-FEM in homogenization.
+
+Numerische Mathematik, 86(2):319–375, 2000.
+
+[27] O. Runborg, C. Theodoropoulos, and I.G. Kevrekidis. Eﬀective bifurcation analysis: a
+
+time-stepper based approach. Nonlinearity, 15:491–511, 2002.
+
+[28] G. Samaey, I.G. Kevrekidis, and D. Roose. Damping factors for the gap-tooth scheme.
+In S. Attinger and P. Koumoutsakos, editors, Multiscale Modelling and Simulation,
+volume 36 of Lecture Notes in Computational Science and Engineering, pages 93–102.
+Springer, 2004.
+
+29
+
+[29] G. Samaey, D. Roose, and I.G. Kevrekidis. The gap-tooth scheme for homogenization
+problems. Multiscale Modeling and Simulation: A SIAM Interdisciplinary Journal,
+2004. In press. Can be obtained as physics/031204 from arxiv.org.
+
+[30] C. Schwab and A.M. Matache. Multiscale and Multiresolution methods, volume 20 of
+Lecture Notes in Computational Science and Engineering, chapter Generalized FEM
+for homogenization problems, pages 197–238. Springer-Verlag, 2002.
+
+[31] S. Setayeshar, C.W. Gear, H.G. Othmer, and I.G. Kevrekidis. Application of coarse
+integration to bacterial chemotaxis. SIAM Multiscale modelling and simulation, 2003.
+In press.
+
+[32] S. Shvartsman, E. Sch¨utz, R. Imbihl, and I.G. Kevrekidis. Dynamics on microcomposite
+catalytic surfaces: the eﬀect of active boundaries. Physical Review Letters, 83:2857–
+2860, 1999.
+
+[33] C.I. Siettos, A. Armaou, A.G. Makeev, and I.G. Kevrekidis. Microscopic/stochastic
+timesteppers and coarse control: a kinetic Monte Carlo example. AIChE J., 49(7):1922–
+1926, 2003. can be obtained as nlin.CG/0207017 at arxiv.org.
+
+[34] C.I. Siettos, M.D. Graham, and I.G. Kevrekidis. Coarse Brownian dynamics for ne-
+matic liquid crystals: bifurcation, projective integration and control via stochastic
+simulation. J. Chem. Phys., 118(22):10149–10157, 2003. can be obtained as cond-
+mat/0211455 at arxiv.org.
+
+[35] C. Theodoropoulos, Y.H. Qian, and I.G. Kevrekidis. Coarse stability and bifurcation
+analysis using time-steppers: a reaction-diﬀusion example. In Proc. Natl. Acad. Sci.,
+volume 97, 2000.
+
+[36] C. Theodoropoulos, K. Sankaranarayanan, S. Sundaresan, and I.G. Kevrekidis. Coarse
+bifurcation studies of bubble ﬂow Lattice-Boltzmann simulations. Chem. Eng. Sci.,
+59:2357–2362, 2003. Can be obtained as nlin.PS/0111040 from arxiv.org.
+
+30
+
+

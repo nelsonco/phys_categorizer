@@ -1,0 +1,3131 @@
+3
+0
+0
+2
+ 
+r
+a
+
+M
+ 
+0
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+7
+7
+0
+3
+0
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Lyapunov exponents in constrained and
+unconstrained ordinary diﬀerential equations
+
+Department of Physics, California Institute of Technology, Pasadena CA 91125
+
+Michael D. Hartl
+
+Abstract
+
+We discuss several numerical methods for calculating Lyapunov exponents (a
+quantitative measure of chaos) in systems of ordinary diﬀerential equations. We pay
+particular attention to constrained systems, and we introduce a variety of techniques
+to address the complications introduced by constraints. For all cases considered,
+we develop both deviation vector methods, which follow the time-evolution of the
+diﬀerence between two nearby trajectories, and Jacobian methods, which use the
+Jacobian matrix to determine the true local behavior of the system. We also assess
+the merits of the various methods, and discuss assorted subtleties and potential
+sources of error.
+
+Key words: Lyapunov exponents, constrained systems
+PACS: 05.45.-a, 05.45.Pq, 95.10.Fh
+
+1 Introduction
+
+Chaos exists in a wide variety of nonlinear mathematical and physical sys-
+tems, and ordinary diﬀerential equations are no exception. Since the original
+discovery by Edward Lorenz of deterministic chaos in a toy atmosphere model
+(consisting of twelve diﬀerential equations) [1], a seemingly endless variety of
+ODEs exhibiting extreme sensitivity to initial conditions has emerged. Many
+tools, both qualitative and quantitative, have been developed to investigate
+this chaotic behavior. Perhaps the most important quantitative measures of
+chaos are Lyapunov exponents, which indicate the average rate of separation
+for nearby trajectories. The present paper is concerned with a general method
+for calculating these exponents for arbitrary systems of ODEs. The techniques
+we describe can be applied both to unconstrained systems (where each coor-
+dinate represents a true degree of freedom) and constrained systems (where
+there are more coordinates than there are degrees of freedom).
+
+Preprint submitted to Elsevier Science
+
+21 February 2014
+
+A deﬁning characteristic of a chaotic dynamical system is sensitive dependence
+on initial conditions, and the Lyapunov exponents are a way of quantifying
+this sensitivity. In a system of ordinary diﬀerential equations, this sensitive
+dependence corresponds to an exponential separation of nearby phase-space
+trajectories: if two initial conditions are initially separated by a distance ǫ0,
+the total separation grows (on average) according to
+
+ǫ(t) = ǫ0 eλt,
+
+(1)
+
+where λ is a positive constant (with units of inverse time) called the Lyapunov
+exponent. Two important caveats to Eq. (1) are necessary. First, this prescrip-
+tion yields only the largest Lyapunov exponent, but a dynamical system with n
+degrees of freedom has in general n such exponents. Second, Eq. (1) does not
+constitute a rigorous deﬁnition, since it deﬁnes a true Lyapunov exponent
+only if ǫ is “inﬁnitesimal.” A more precise deﬁnition of Lyapunov exponents
+involves the true local behavior of the dynamical system, i.e., the derivative
+or its higher-dimensional generalization.
+
+We can go beyond Eq. (1) to determine (at least in principle) all n Lyapunov
+exponents by considering not just one nearby initial condition, but rather a ball
+of initial conditions with radius ǫ0. As discussed in Sec. 2, this ball evolves into
+an n-dimensional ellipsoid under the time-evolution of the ﬂow, and the lengths
+of this ellipsoid’s principal axes determine the Lyapunov exponents. We will
+see that there are many advantages to this ellipsoid view, both conceptual and
+computational.
+
+We discuss in Secs. 2 and 3 several techniques for calculating Lyapunov expo-
+nents in ODEs, and compare the relative merits of the various methods. We
+take special care to explain methods for the calculation of all n Lyapunov ex-
+ponents. Our principal examples are two well-studied and simple systems: the
+Lorenz equations (Sec. 2.4.1) and the forced damped pendulum (Sec. 2.4.2).
+The techniques and code were developed and tested on the much more complex
+problem of spinning bodies orbiting rotating (Kerr) black holes, as discussed
+brieﬂy in Sec. 3.4 and at length in [2,3].
+
+Our two model systems are unconstrained, so that each variable represents
+a true degree of freedom. As we see in Sec. 3, following the evolution of
+a phase-space ellipsoid—and hence calculating the Lyapunov exponents—
+becomes problematic when the system is constrained. Such systems are com-
+mon in physics, with constraints arising for both mathematical and physical
+reasons. For example, instead of using the angle θ to describe the position of
+a pendulum, we may ﬁnd it mathematically convenient to integrate the equa-
+tions of motion in Cartesian coordinates (x, y), with a constraint on the value
+of x2 +y2. Another example is a spinning astronomical body, whose spin is typ-
+ically described by the components of its spin vector S = (Sx, Sy, Sz). On phys-
+
+2
+
+y + S2
+ical grounds, we might wish to ﬁx the magnitude
+z ,
+so that only two of the three spin components represent true degrees of free-
+dom.
+
+x + S2
+
+= S =
+
+S
+k
+
+S2
+
+q
+
+k
+
+We describe in Sec. 3 three methods for ﬁnding Lyapunov exponents in con-
+strained systems. Our principal example of a constrained system is the forced
+damped pendulum described in Cartesian coordinates, a system chosen both
+for its conceptual simplicity and to facilitate comparison with the same system
+without constraints. We also show the application of these techniques to the
+dynamics of spinning compact objects in general relativity. It was the investi-
+gation of these constrained systems in [2] that led to the development of the
+key ideas described in this paper.
+
+We have developed a general-purpose implementation of the principal algo-
+rithms in this paper in C++, which is available for download [4]. The user
+must specify the system of equations (and a Jacobian matrix if necessary), as
+well as a few other parameters, but the main procedures are not tied to any
+particular system. Most of the results in this paper were calculated using this
+implementation.
+
+We use boldface to indicate Euclidean vectors, and the symbol log signiﬁes
+the natural logarithm loge in all cases. We refer to the principal semiaxes of
+an n-dimensional ellipsoid as “axes” or “principal axes” for brevity.
+
+2 Lyapunov exponents in unconstrained ﬂows
+
+There are two primary approaches to calculating Lyapunov exponents in sys-
+tems of ordinary diﬀerential equations. The ﬁrst method involves the inte-
+gration of two trajectories initially separated by a small deviation vector; we
+obtain a measure of the divergence rate by keeping track of the length of this
+deviation vector. We refer to this as the deviation vector method. The second
+method uses a rigorous linearization of the equations of motion (the Jacobian
+matrix) in order to capture the true local behavior of the dynamical system.
+We call this the Jacobian method. Though computationally slower, the Jaco-
+bian method is more rigorous, and also opens the possibility of calculating
+more than just the principal exponent. In this section we discuss these two
+methods, and several variations on each theme, in the context of unconstrained
+dynamical systems.
+
+When discussing Lyapunov exponents in ordinary diﬀerential equations, it
+is valuable to have both a general abstract system and a speciﬁc concrete
+example in mind. Abstractly, we write the coordinates of the system as a
+single n-dimensional vector y that lives in the n-dimensional phase space,
+
+3
+
+Fig. 1. The Lorenz attractor. All initial conditions except the origin (which is an
+unstable equilibrium) are attracted to the ﬁgure shown.
+
+and we write the equations of motion as a system of ﬁrst-order diﬀerential
+equations:
+
+We will refer to a solution to Eq. (2) as a ﬂow. As a speciﬁc example, consider
+the Lorenz system of equations:
+
+dy
+dt
+
+= f(y).
+
+˙x =
+−
+˙y =
+−
+˙z = xy
+
+σx + σy
+xz + rx
+bz,
+
+y
+
+−
+
+−
+
+(2)
+
+(3)
+
+where σ, r, and b are constants. In the notation of Eq. (2), we then have
+y = (x, y, z) and f(y) = (
+bz). The Lorenz
+equations exhibit chaos for a wide variety of parameter values; in this paper,
+for simplicity we consider only one such set: σ = 10, b = 8/3, and r = 28. For
+these parameter values, all initial conditions except the origin asymptote to
+the elegant Lorenz attractor (Fig. 1).
+
+σx + σy,
+
+xz + rx
+
+y, xy
+
+−
+
+−
+
+−
+
+−
+
+4
+
+2.1 The deviation vector method
+
+The most straightforward method for calculating the largest Lyapunov ex-
+ponent is to consider an initial point y(1)
+0 =
+y0 + δy0, and then evolve both points forward, keeping track of the diﬀerence
+y(1). If the motion is chaotic, then exponential separation implies
+δy
+≡
+that
+
+0 = y0 and a nearby point y(2)
+
+y(2)
+
+−
+
+δy
+
+k
+
+k
+
+= eλmaxt
+
+,
+
+δy0k
+
+k
+
+so that the largest exponent is
+
+λmax =
+
+log [re(t)]
+t
+
+,
+
+where we write
+
+re =
+
+δy
+
+/
+
+,
+
+δy0k
+
+k
+
+k
+
+k
+
+(4)
+
+(5)
+
+(6)
+
+k·k
+
+with a subscript e that anticipates the ellipsoid axis discussed in Sec. 2.2.3.
+denotes the Euclidean norm (though in principle any positive-deﬁnite
+Here
+norm will do [5]). It is convenient to display the results of this process graph-
+ically by plotting log [re(t)] vs. t, which we refer to as a Lyapunov plot; since
+Eq. (5) is equivalent to log [re(t)] = λmaxt, such plots should be approximately
+linear, with slope equal to the principal Lyapunov exponent. (In practice,
+to extract the slope we perform a least-squares ﬁt to the simulation data,
+which is less sensitive to ﬂuctuations in the value of log [re(t)] than the ratio
+log [re(tf )]/tf at the ﬁnal time.) We refer to this technique as the (unrescaled)
+deviation vector method.
+
+It is important to note that, because of the problem of saturation, Eq. (5) does
+not deﬁne a true Lyapunov exponent. In a chaotic system, any deviation δy0,
+no matter how small, will eventually saturate, i.e., it will grow so large that
+it no longer represents the local behavior of the dynamical system. Moreover,
+chaotic systems are bounded by deﬁnition [in order to eliminate trivial expo-
+nential separation of the form x(t) = x0 eλt], so there is some bound B on the
+distance between any two trajectories. As a result, in the inﬁnite time limit
+Eq. (5) gives
+
+λmax = lim
+t→∞
+
+log
+
+δy
+
+k
+
+/
+
+δy0k
+
+k
+
+k
+t
+
+lim
+t→∞
+
+≤
+
+log B/
+k
+t
+
+δy0k
+
+= 0.
+
+(7)
+
+In the na¨ıve unrescaled deviation vector method, the calculated exponent is
+always zero because of saturation.
+
+5
+
+Fig. 2. Comparison of the unrescaled (light) and rescaled (dark) deviation
+vector methods for calculating the principal Lyapunov exponent of the Lorenz
+system [Eq. (3)]. The slope of the rescaled line is the Lyapunov exponent
+= 10−8, and
+δy0k
+(λmax = 0.905
+k
+10−2. Note the saturation of
+rescaling occurs (for the rescaled method) if
+the unrescaled approach once the deviation has grown too large.
+
+0.003; see Sec. 2.4.1). The initial deviation is
+
+δy
+k
+
+k ≥
+
+±
+
+One solution to the saturation problem is to rescale the deviation once it
+δy0k
+= ǫ for some small ǫ
+grows too large. For example, suppose that we set
+(say 10−8), and then allow the deviation to grow by at most a factor of f .
+, we rescale the deviation back to a size ǫ and
+Then, whenever
+k ≥
+δy0k
+of the expanded vector. If we perform N
+record the length Ri =
+k
+such rescalings in the course of a calculation, the total expansion of the initial
+vector is then
+
+δy0k
+f
+k
+δy
+/
+k
+k
+
+δy
+
+k
+
+k
+
+re = k
+k
+
+δyf
+k
+δy0k
+
+N
+
+Yi=1
+
+Ri,
+
+where δyf is the ﬁnal size of the (rescaled) separation vector. Applying Eq. (5),
+we see that the approximate Lyapunov exponent satisﬁes
+
+λmax =
+
+1
+t "
+
+log
+
+ 
+
+δyf
+k
+δy0k
+
+k
+k
+
++
+
+!
+
+N
+
+i=1
+X
+
+log Ri
+
+.
+
+#
+
+We refer to this as the (rescaled) deviation vector method.
+
+The rescaled deviation vector method is not particularly robust compared to
+the rigorous method described below (Sec. 2.2), and there are signiﬁcant com-
+plications when applying it to constrained systems, but if implemented with
+care it provides a fast and accurate estimate for the largest Lyapunov expo-
+nent. Fig. 2 shows both the rescaled and unrescaled deviation vector methods
+applied to the Lorenz system [Eq. (3)]. Note in particular the saturation of
+the unrescaled approach. We discuss the limitations of the rescaled method
+further in Sec. 4.
+
+6
+
+(8)
+
+(9)
+
+2.2 The Jacobian method
+
+Although the deviation vector method suﬃces for practical calculation in
+many cases, in essence it amounts to taking a numerical derivative. For a
+one-dimensional function of one variable, we can approximate the derivative
+at x = x0 using
+
+f ′(x0)
+
+f (x0 + ǫ)
+ǫ
+
+−
+
+≈
+
+f (x0)
+
+,
+
+≪
+
+for some ǫ
+1, but this prescription is notoriously inaccurate as a numerical
+calculation [6]. Of course, it is better (if possible) to calculate the analytical
+derivative f ′(x) and evaluate it at x0. The higher-dimensional generalization
+of this is the Jacobian matrix, which describes the local (linear) behavior of a
+higher-dimensional function. In the context of a dynamical system, this means
+that we can ﬁnd the time-evolution of a small deviation δy using the rigorous
+linearization of the equations of motion:
+
+f(y + δy)
+
+f(y) = Df
+
+δy + O(
+
+δy
+
+2),
+
+−
+
+·
+
+k
+
+k
+
+is the Jacobian matrix evaluated along the ﬂow. For example, for the Lorenz
+system [Eq. (3)] we have
+
+where
+
+(Df)ij =
+
+∂fi
+∂xj
+
+Df =
+
+r
+
+z(t)
+
+x(t)
+
+,
+
+σ
+
+−
+
+−
+y(t)
+
+σ
+
+0
+
+1
+−
+x(t)
+
+−
+
+b
+−
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+where we write the coordinates as functions of time to emphasize that Eq. (13)
+is diﬀerent at each time t.
+
+2.2.1 Jacobian diagnostic
+
+One note about Jacobian matrices is worth mentioning: practical experience
+has shown that errors occasionally creep into the calculations leading to the
+Jacobian matrix, especially if the equations of motion are complicated. It is
+
+7
+
+(10)
+
+(11)
+
+(12)
+
+(13)
+
+therefore worthwhile to note that Eq. (11) provides an invaluable diagnostic:
+calculate the quantity
+
+∆ = f(y + δy)
+
+f(y)
+
+Df
+
+δy
+
+−
+
+−
+
+·
+
+2, then some-
+for varying values of
+thing is amiss. (The routines in [4] include this important Jacobian diagnostic
+function.)
+
+; if ∆ does not generally scale as
+
+δy
+
+δy
+
+k
+
+k
+
+k
+
+k
+
+2.2.2 The principal exponent
+
+The main value of Eq. (11) in the context of a dynamical system is its combi-
+nation with Eq. (2) to yield an equation of motion for the deviation δy:
+
+f(y + δy) =
+
+(y + δy) = f(y) +
+
+d
+dt
+
+d(δy)
+dt
+
+,
+
+so that (discarding terms higher than linear order) Eq. (11) gives
+
+d(δy)
+dt
+
+= Df
+
+δy.
+
+·
+
+dξ
+dt
+
+= Df
+
+ξ.
+
+·
+
+This equation is only approximately true for ﬁnite (that is, non-inﬁnitesimal)
+deviations, but we can take the inﬁnitesimal limit by identifying the deviation
+δy with an element ξ in the tangent space at y. This leads to an exact equation
+for ξ:
+
+The initial value of ξ is arbitrary, but it is convenient to require that
+k
+so that the factor by which ξ has grown at some later time t is simply
+
+k
+The core of the Jacobian method for the principal Lyapunov exponent is to
+solve Eqs. (2) and (17) as a coupled set of diﬀerential equations. As in Sec. 2.1,
+for chaotic systems the length of the deviation vector will grow exponentially,
+so that
+
+ξ0k
+k
+
+= 1,
+.
+
+ξ(t)
+
+(14)
+
+(15)
+
+(16)
+
+(17)
+
+(18)
+
+(19)
+
+ξ(t)
+
+k
+
+k ≈
+
+eλmaxt,
+
+which implies that
+
+λmax =
+
+log
+
+ξ(t)
+k
+t
+
+k
+
+.
+
+8
+
+vs. t for
+Fig. 3. The natural logarithm of the tangent vector length r1 ≡ k
+the Lorenz system. The slope of the rescaled line is the system’s largest Lyapunov
+0.905). The ﬁgure and exponent are virtually identical to the
+exponent (λmax ≈
+rescaled deviation method show in Fig. 2.
+
+ξ(t)
+k
+
+Fig. 4. The Lorenz system with an evolving ellipsoid. The ellipsoid is calculated
+exactly in the tangent space (for a total time t = 0.4) and is superposed on the phase
+e0.905 t) and
+space for the purposes of visualization. There is one expanding axis (
+e−14.57 t); the third axis has a ﬁxed unit length (Sec. 2.4.1).
+one contracting axis (
+
+∼
+
+∼
+
+For suﬃciently large values of t, Eq. (19) provides an approximation for the
+largest Lyapunov exponent. It is essential to understand that there is no re-
+striction on the length of the tangent vector ξ: the Jacobian method does
+not saturate. The only limitation on the size of ξ in practice is the maximum
+representable ﬂoating point number on the computer.
+
+9
+
+Fig. 5. The natural logarithms of all three of the ellipsoid axes ri vs. t for the
+Lorenz system, calculated using the Jacobian method (Sec. 2.2). The slopes are
+the Lyapunov exponents. The three lines correspond to the exponents λ1 ≈
+0.905,
+14.57 (Sec. 2.4.1). These values agree with the calculations
+λ2 ≈
+in [7].
+
+0.0, and λ3 ≈ −
+
+2.2.3 Ellipsoids and multiple exponents
+
+Although following the time-evolution of a tangent vector ξ in place of a
+ﬁnite deviation δy solves the problem of saturation, it still only allows us
+to determine the principal exponent λmax. For a system with n degrees of
+1 exponents undetermined. In order to calculate all n
+freedom, this leaves n
+exponents, we must introduce n tangent vectors. (We discuss the value of
+knowing all n exponents in Sec. 2.3 below.) Since n (linearly independent)
+vectors span an n-dimensional ellipsoid, this leads to a visualization of the
+Lyapunov exponents in terms of the evolution of a tangent space ellipsoid
+(Fig. 4). Fig. 5 shows the corresponding Lyapunov plot.
+
+−
+
+The general method is to introduce a linearly independent set of vectors
+ξ(1), ξ(2), . . . , ξ(n)
+. It is convenient to begin the integration with vectors that
+{
+0 , . . . , ξ(n)
+form the orthogonal axes of a unit ball, so that the vectors
+0 }
+are orthonormal. Each of these tangent vectors satisﬁes its own version of
+Eq. (17):
+
+ξ(1)
+0 , ξ(2)
+
+{
+
+}
+
+dξ(n)
+dt
+
+= Df
+
+ξ(n).
+
+·
+
+dU
+dt
+
+= Df
+
+U.
+
+·
+
+If we combine the n tangent vectors to form the columns of a matrix U, then
+Eq. (20) implies that
+
+This equation, combined with Eq. (2), describes the evolution of a unit ball
+into an n-dimensional ellipsoid.
+
+10
+
+(20)
+
+(21)
+
+The value of the tangent space ellipsoid is this: if ri is the ith principal ellipsoid
+axis [and ri(0) = 1], then
+
+where λi is the ith Lyapunov exponent. That is, the ellipsoid’s axes grow (or
+shrink) exponentially, and if λi > 0 for any i then the system is chaotic [5].
+[Recall that we refer to the semiaxes as “axes” for brevity (Sec. 1).] Turning
+Eq. (22) around, we can ﬁnd the ith Lyapunov exponent by ﬁnding the average
+stretching (or shrinking) per unit time of the ith principal ellipsoid axis:
+
+ri(t) = eλit,
+
+λi
+
+≈
+
+log [ri(t)]
+t
+
+.
+
+(22)
+
+(23)
+
+In practice, a more robust prescription is to record log [ri(t)] as a function of t
+and perform a least-squares ﬁt to the pairs (tj, log [ri(tj)]) to ﬁnd the slope λi.
+
+Though Eq. (23) provides an estimate for the ith Lyapunov exponent, it re-
+quires us to ﬁnd the n principal axes of the ﬁnal ellipsoid. While it is true that
+the columns of the ﬁnal matrix Uf necessarily span an ellipsoid, but they are
+not in general orthogonal; in particular, the ﬁnal tangent vectors do not nec-
+essarily coincide with the ellipsoid’s principal axes. A ﬁrst step in extracting
+these axes is to note an important theorem in linear algebra (see [7] for a
+proof):
+
+{
+
+}
+
+}
+
+×
+
+vi
+
+s2
+i }
+
+n
+i=1, and let
+
+Theorem 1 Let A be an n
+n
+dent column vectors
+i=1
+{
+the normalized eigenvectors of AT A (where AT is the transpose of A). Then
+n
+vi
+i=1.
+
+n
+i=1 lie on an n-dimensional ellipsoid whose principal axes are
+
+n real matrix consisting of n linearly indepen-
+
+n
+i=1 be the eigenvalues and
+
+{
+In other words, ﬁnding the principal axes of the ellipsoid represented by a
+matrix A is equivalent to ﬁnding the eigensystem of AT A. (We note that the
+n
+ellipsoid is unique: any other matrix B whose columns
+i=1 lie on the same
+ellipsoid as
+
+n
+i=1 must necessarily give the same principal axes.)
+
+si ui
+
+wi
+
+ui
+
+vi
+
+{
+
+{
+
+}
+
+{
+
+}
+
+}
+
+{
+
+}
+
+In principle, we are done: simply evolve U for a long time, and ﬁnd the eigen-
+values of UT U. In practice, this fails miserably; every (generic) initial vec-
+tor ξ(i)
+0 has some component along the direction of greatest stretching, so all
+initial tangent space vectors eventually point approximately along the longest
+principal axis. As a result, all axes but the longest one are lost due to ﬁnite
+ﬂoating point precision.
+
+The solution is to ﬁnd new orthogonal axes as the system evolves. In other
+words, we can let the system evolve for some time T , stop to calculate the
+principal axes of the evolving ellipsoid, and then continue the integration. The
+
+11
+
+method we advocate is the Gram-Schmidt orthogonalization procedure, which
+results in an orthogonal set of vectors spanning the same volume as the original
+ellipsoid, and with directions that converge to the true ellipsoid axes. This
+approach, originally described in [8], is a common textbook approach [7,9],
+and was used successfully by the present author in [2]. Numerically, the Gram-
+Schmidt algorithm is subject to considerable roundoﬀ error [6], and is usually
+considered a poor choice for orthogonalizing vectors, but in the context of
+dynamics its performance has proven to be astonishingly robust. (See Sec. 4
+for further discussion.)
+
+We review brieﬂy the Gram-Schmidt construction, and then indicate its use in
+calculating Lyapunov exponents. Given n linearly-independent vectors
+,
+}
+{
+the Gram-Schmidt procedure constructs n orthogonal vectors
+that span
+the same space, given by
+
+ui
+
+vi
+
+{
+
+}
+
+vi = ui
+
+i−1
+
+ui
+
+−
+
+Xj=1
+
+k
+
+·
+vj
+
+vj
+2
+
+k
+
+vj.
+
+(24)
+
+To construct the ith orthogonal vector, we take the ith vector from the original
+set and subtract oﬀ its projections onto the previous i
+1 vectors produced by
+the procedure. The use of Gram-Schmidt in dynamics comes from observing
+that the resulting vectors approximate the axes of the tangent space ellipsoid.
+After the ﬁrst time T , all of the vectors point mostly along the principal
+expanding direction. We may therefore pick any one as the ﬁrst vector in the
+u1 without loss of generality. If we
+Gram-Schmidt algorithm, so choose ξ1 ≡
+let ei denote unit vectors along the principal axes and let ri be the lengths
+of those axes, the dynamics of the system guarantees that the ﬁrst vector u1
+satisﬁes
+
+−
+
+u1 = r1e1 + r2e2 +
+
+· · · ≈
+
+r1e1 ≡
+
+v1
+
+since e1 is the direction of fastest stretching. The second vector v2 given by
+Gram-Schmidt is then
+
+v2 = u1 −
+
+v1 ≈
+
+u1 −
+
+r1e1 = r2e2,
+
+u1 ·
+v1
+v1k
+2
+k
+
+with an error of order r2/r1. The procedure proceeds iteratively, with each
+successive Gram-Schmidt step (approximately) subtracting oﬀ the contribu-
+tion due to the previous axis direction. In principle, the system should be
+r1, but (amazingly) in practice the
+allowed to expand to a point where r2 ≪
+Gram-Schmidt procedure converges to accurate ellipsoid axes even when the
+system is orthogonalized and even normalized on timescales short compared
+
+12
+
+to the Lyapunov stretching timescale. As a result, the procedure below can be
+abused rather badly and still give accurate results (Sec. 4).
+
+2.2.4 The algorithm in detail
+
+We summarize here the method used to calculate all the Lyapunov exponents
+of an unconstrained dynamical system ˙y = f(y) with n degrees of freedom:
+
+(1) Construct an orthonormal matrix U0 whose columns (the initial tangent
+
+vectors) span a unit ball, and then integrate
+
+˙y = f(y)
+
+and
+
+˙U = Df
+
+U
+
+·
+
+as a coupled set of 2n diﬀerential equations. We recommend choosing a
+random initial ball for genericity.
+
+(2) At various times tj, replace U with the orthogonal axes of the ellipsoid
+deﬁned by U, using the Gram-Schmidt orthogonalization procedure. This
+can be done either every time T , for some suitable choice of T , or every
+time the integrator takes a step. We have found the latter prescription to
+be especially robust in practice.
+
+(3) If the length of any axis exceeds some very large value (say, near the
+maximum representable ﬂoating point value), normalize the ellipsoid and
+record the axis lengths
+
+R(k)
+i
+
+(ith axis at kth rescaling)
+
+at the rescaling time. Do the same if any axis is smaller than some very
+small number.
+(4) Record the value of
+
+log r(j)
+
+i = log [Li(tj)] +
+
+log R(k)
+
+i
+
+kmax
+
+Xk=1
+
+at each time tj, where Li is the ith principal axis length. The second term
+accounts for the axis lengths at the kmax rescaling times. Note that if tj is
+a rescaling time itself, then log [Li(tj)] = log 1 = 0, since by construction
+the ellipsoid has been normalized back to a unit ball.
+
+(5) After reaching the ﬁnal number of time steps N, perform a least squares
+
+ﬁt on the pairs (tj, log r(j)
+
+i ) to ﬁnd the slopes λi. Since
+
+log [ri(t)]
+
+λit,
+
+≈
+
+13
+
+(25)
+
+(26)
+
+(27)
+
+(28)
+
+(29)
+
+Fig. 6. Close-up of Fig. 5, showing the natural logarithms of the two largest ellipsoid
+axes vs. t for the Lorenz system, calculated using the Jacobian method (Sec. 2.2).
+The slopes are the Lyapunov exponents. The plot for the larger axis closely matches
+the ﬁgures for the rescaled deviation vector method (Fig. 2) and the single tangent
+vector Jacobian method (Fig. 3).
+
+the slope λi is the Lyapunov exponent corresponding to the ith principal
+axis. Using the Gram-Schmidt procedure should result in the relationship
+λ1 > . . . > λn.
+
+Most of the value of calculating λi for i > 1 comes from having all n of the
+exponents (Sec. 2.3 below). Nevertheless, it is worth noting that the algorithm
+works for any value 0 < m
+n, so the method above can be used without
+alteration to ﬁnd an arbitrary number of exponents. Fig. 6 shows the axis
+growth for m = 2 in the Lorenz system, while Fig. 5 shows the growth for
+m = n = 3.
+
+≤
+
+2.3 The value of multiple exponents
+
+Calculating all the exponents of a system of diﬀerential equations allows us
+to paint a more complete picture of the dynamics in several diﬀerent ways.
+In particular, with all n exponents comes the ability to visualize the entire
+phase space ellipsoid (instead of just its principal axis), as in Fig. 4. Another
+important beneﬁt of knowing all the exponents is a determination of dissipative
+or conservative behavior. Conservative ﬂows preserve phase space volumes,
+while dissipative ﬂows contract volumes. Geometrically, the volume V of an
+ellipsoid is proportional to the product of its principal axes
+, so that the
+ratio of the ﬁnal to the initial volume is
+
+ri
+
+{
+
+}
+
+Vf
+V0
+
+=
+
+ri,
+
+Yi
+
+14
+
+(30)
+
+assuming that the initial volume is a unit ball. For dissipative systems, phase
+space volumes in general contract exponentially according to
+
+Vf
+V0
+
+= e−Λt,
+
+(31)
+
+where Λ is a positive constant. Combining Eq. (30) and Eq. (31) yields
+
+Λ =
+
+log
+
+−
+
+Vf
+V0 (cid:19)
+
+(cid:18)
+
+=
+
+log
+
+−
+
+ri
+
+=
+
+!
+
+−
+
+ 
+
+i
+Y
+
+i
+X
+
+−
+
+i
+X
+
+log ri =
+
+λi,
+
+(32)
+
+where the λi are the Lyapunov exponents. In other words, the phase space
+volume contraction constant Λ is equal to minus the sum of the Lyapunov
+exponents.
+
+If the Lyapunov exponents sum to zero, then the contraction factor vanishes,
+and volumes are conserved—i.e, the system is conservative. The special case of
+Hamiltonian systems is of particular interest, since the equations of motion for
+many mechanical systems can be derived from a Hamiltonian. The Hamilto-
+nian property strongly constrains the Lyapunov exponents, which must cancel
+pairwise: to each exponent +λ there corresponds a second exponent
+λ [5].
+λ property of Hamiltonian systems appear below.
+Several examples of this
+
+−
+
+±
+
+Having all the Lyapunov exponents also allows us to verify that there is at
+least one vanishing exponent, corresponding to motion tangent to the ﬂow,
+which must be the case for any chaotic system. (See Ref. [7] for a proof.) Since
+we have ﬁnite numerical precision, we do not expect to ﬁnd any exponent to be
+identically zero, but some exponent should always be close to zero. A practical
+criterion for “close to zero” is to compute error estimates for the least-squares
+ﬁts advocated in Sec. 2.2.4; an exponent is “close to zero” if it is zero to within
+the standard error of the ﬁt. Applications of this method appear in Sec. 2.4.1
+and Sec. 2.4.2 below. It is worth noting that the ﬁtting errors are not the
+dominant source of variance in calculating Lyapunov exponents; variations
+in the initial conditions and initial deviation vectors contribute more to the
+uncertainty than errors in the ﬁts. See Sec. 2.4.1 for further discussion.
+
+i λi is equivalent
+One ﬁnal note deserves mention: the statement that Λ =
+to a theorem due to Liouville [7], which relates the volume contraction to the
+trace of the Jacobian matrix:
+
+−
+
+P
+
+Vf
+V0
+
+= exp
+
+Tr Df (t) dt
+
+t
+
+Z0
+
+
+
+
+
+,
+
+
+
+
+15
+
+(33)
+
+where again we assume that V0 corresponds to a unit ball. If the trace of the
+Jacobian matrix happens to be time-independent, then this yields
+
+= exp [(Tr Df) t],
+
+(time-independent trace)
+
+(34)
+
+so that Eq. (32) gives Λ =
+consistency check by verifying that
+
+−
+
+Tr Df. In this special case, we can perform a
+
+λi = Tr Df .
+
+(time-independent trace)
+
+(35)
+
+Vf
+V0
+
+i
+X
+
+2.4 Examples
+
+2.4.1 The Lorenz system
+
+Following the phase space ellipsoid allows us to visualize the dynamics of the
+Lorenz system in an unusual way. Fig. 4 shows the Lorenz attractor together
+with the phase space ellipsoid for a short amount of time (tf = 0.4). The initial
+ball is evolved using Eq. 21, so it represents the true tangent space evolution,
+which is then superposed on the Lorenz phase space (x, y, z). It is evident that
+the initial ball is stretched in one direction and ﬂattened in another, as well as
+rotated. (As we shall see, the third direction is neither stretched nor squeezed,
+corresponding to the zero exponent discussed in Sec. 2.3.)
+
+By recording natural logarithms of the ellipsoid axes as the system evolves,
+we can obtain numerical estimates for the Lyapunov exponents, as discussed
+in Sec. 2.2.4. A plot of log [ri(t)] vs. t appears in Fig. 5 for a ﬁnal time tf = 50,
+with the slopes giving approximate values for the exponents. Using a tf = 5000
+integration for greater accuracy yields the estimates
+
+λ1 = 0.905
+λ2 = 1.5
+λ3 =
+
+×
+14.57
+
+10−6
+1.7
+×
+10−6
+
+9
+×
+±
+10−6
+±
+9
+×
+
+±
+
+−
+
+10−6
+
+(36)
+
+for the parameter values σ = 10, b = 8/3, and r = 28. The
+values are the
+standard errors on the least-squares ﬁt of log [ri(t)] vs. t. One of the exponents
+is close to zero (as required for a ﬂow) in the sense of Sec. 2.3: the error in
+the ﬁt not small compared to the exponent. [In the case shown in Eq. (36),
+the “error” is actually larger than the exponent.] The other two exponents are
+clearly nonzero, with the positive exponent indicating chaos.
+
+±
+
+As mentioned brieﬂy in Sec. 2.3, the largest source of variance in calculating
+Lyapunov exponents is variations in the initial conditions, not errors in the
+
+16
+
+(37)
+
+(38)
+
+(39)
+
+(40)
+
+least-squares ﬁts used to determine the exponents. We express the exponents
+in the form
+
+¯λ
+
+±
+
+σ
+√N
+
+,
+
+where
+
+¯λ =
+
+1
+N
+
+N
+
+j=1
+X
+
+λ(j)
+
+is the sample mean and
+
+1
+
+N
+
+N
+
+1
+
+−
+
+j=1 (cid:16)
+X
+
+λ(j)
+
+2
+
+¯λ
+
+(cid:17)
+
+−
+
+σ = v
+u
+u
+u
+t
+
+is the standard deviation. For the Lorenz system, using a ﬁnal integration time
+of tf = 5000 for N = 50 random initial balls [all centered on the same initial
+value of (x0, y0, z0)] gives
+
+λ1 = 0.9053
+λ2 =
+λ3 =
+
+4.5
+×
+14.5720
+
+4.1
+±
+10−6
+
+×
+±
+4.1
+
+−
+−
+
+±
+
+×
+
+10−4
+7.6
+
+×
+10
+
+10−7
+4
+−
+
+The values of the error are much greater than the standard errors associated
+with the least-squares ﬁt for the slope for any one trial. As expected, it is
+evident that λ2 is consistent with zero.
+
+−
+
+×
+
+There is a strongly expanding direction and a very strongly contracting di-
+rection in the Lorenz system, and the volume contraction constant Λ is large:
+i λi = 13.67, so that after a time t = 5000 the volume is an astonish-
+Λ =
+10−29674. This is despite the exponential growth of the largest
+ingly small 6.75
+P
+101965; the vol-
+principal axis, which grows in this same time to a length 1.52
+10−31639 in
+ume nevertheless contracts, since the smallest axis shrinks to 4.44
+the same time. We note that the periodic renormalization and reorthogonaliza-
+tion of the ellipsoid axes is absolutely essential from a numerical perspective,
+since these axis lengths are far above and below the ﬂoating point (double
+precision) limits of xmax
+10308 on a typical IEEE-compliant ma-
+chine [6].
+
+xmin−1
+
+≈
+
+×
+
+×
+
+≈
+
+The Lorenz system aﬀords an additional check on the numerically determined
+exponents: the trace of the Jacobian matrix [Eq. (13)] is time-independent, so
+
+17
+
+Fig. 7. θ vs. t for the forced damped pendulum [Eq. (42)].
+
+the exponents should satisfy Eq. (35):
+
+λi =
+
+13.67 ?= Tr Df =
+
+(σ + 1 + b) =
+
+−
+
+41
+3 ≈ −
+
+−
+
+13.67.
+
+(41)
+
+−
+
+Xi
+
+Eq. (35) is thus well-satisﬁed.
+
+2.4.2 The forced damped pendulum
+
+We turn now to our second principal example of a chaotic dynamical sys-
+tem, the forced damped pendulum (FDP). This is a standard pendulum with
+damping and periodic forcing; written as a ﬁrst-order ODE, our equations are
+as follows:
+
+˙θ = ω
+˙ω =
+−
+˙t = 1
+
+c ω
+
+sin θ + ρ sin t
+
+−
+
+(42)
+
+Here c is the damping coeﬃcient and ρ is the forcing amplitude, and the grav-
+itational acceleration g and pendulum length ℓ are set to one for simplicity.
+We include the equation ˙t = 1 so that the system is autonomous (i.e., we
+remove the explicit time-dependence by treating time as a dynamical variable
+with unit time derivative). In addition to being an example with transparent
+physical relevance (in contrast to the Lorenz system), the forced damped pen-
+dulum, in slightly altered form, serves as a model constrained system in Sec. 3
+below.
+
+The forced damped pendulum is chaotic for many values of c and ρ. For
+simplicity, in the present case we ﬁx c = 0.1 and ρ = 2.5. A plot of θ vs. t
+shows the system’s erratic behavior (Fig. 7), but a more compelling picture of
+the dynamics comes from a time-2π stroboscopic map. A time-T map involves
+taking a snapshot of the system every time T and then plotting ω vs. θ. Since
+
+18
+
+Fig. 8. ω vs. θ: the time-2π stroboscopic map for the forced damped pendulum. A
+point (ω = ˙θ, θ) is plotted every time 2π, resulting in a fractal attractor character-
+istic of dissipative chaos.
+
+0.0049, λ2 = 0.0, and λ3 =
+
+Fig. 9. The natural logarithms of all three of the ellipsoid axes ri vs. t for the
+forced damped pendulum, calculated using the Jacobian method (Sec. 2.2). The
+slopes are the Lyapunov exponents. The three lines correspond to the exponents
+λ1 = 0.160
+
+−
+the forcing term in Eq. (42) is 2π-periodic, this provides a natural value for T
+in the present case. The resulting plot shows the characteristic folding and
+stretching of a fractal attractor (Fig. 8), which for the FDP attracts almost
+all initial conditions [7].
+
+0.0053 (Sec. 4 and Table 1).
+
+0.262
+
+±
+
+±
+
+The forced damped pendulum is dissipative and strongly chaotic. We calculate
+the Lyapunov exponents (Fig. 9) using the Jacobian matrix:
+
+Df =
+
+cos θ
+
+−
+
+c ρ cos t
+
+,
+
+0
+
+0
+
+
+
+
+
+
+
+
+
+
+1
+
+−
+0
+
+0
+
+0
+
+
+
+
+
+
+
+
+
+
+λ1 = 0.160
+
+10−6
+
+7
+
+±
+
+×
+
+19
+
+The Lyapunov exponents are (for a tf = 5
+
+104 integration)
+
+×
+
+(43)
+
+Fig. 10. The natural logarithms of the ellipsoid axes ri vs. t for the forced damped
+pendulum in the limit of zero dissipation and zero forcing (i.e., a simple pendulum).
+The Lyapunov exponents are zero, and the distance between nearby trajectories
+grows linearly (leading to logarithmic growth in this log plot). Nevertheless, the
+λ symmetry: for each
+Hamiltonian character of the system is manifest in the
+exponent +λ, there is a corresponding exponent
+λ. In the nonchaotic limiting
+case shown here, the Lyapunov exponents approach zero symmetrically.
+
+±
+
+−
+
+(44)
+
+λ2 = 8
+λ3 =
+
+10−8
+×
+0.262
+
+1
+
+10−7
+×
+10−6
+
+±
+7
+
+−
+
+±
+
+×
+
+where the error terms are the standard errors in the least-squares ﬁt for the
+slope. (See Sec. 4 and especially Table 1 for the true errors due to varying initial
+deviations.) One exponent is consistent with zero (as required for a ﬂow) to
+i λi = 0.1. The
+within the error of the ﬁt. The dissipation constant is Λ =
+trace of the Jacobian matrix is time-independent, so that Tr Df =
+c, and
+indeed
+
+c = Tr Df as predicted by Eq. 35.
+
+0.1 =
+
+−
+
+−
+
+P
+
+i λi =
+
+−
+
+−
+
+P
+
+The zero exponent in the FDP is associated with the time “degree of freedom”
+in the Jacobian: if we delete the ﬁnal row and column of the Jacobian matrix,
+only the positive and negative exponents remain (see, e.g., Fig. 13 below).
+Since the time is not an actual dynamical variable, for the remainder of this
+paper we will suppress this “time piece,” but it is important to note that
+the time dependence is absolutely crucial to the presence of chaos. According
+to the Poincar´e-Bendixon theorem [7], an autonomous system of diﬀerential
+equations with fewer than three degrees of freedom cannot be chaotic. We
+will treat the FDP system as a time-dependent system with two degrees of
+freedom, but the extra equation ˙t = 1 in the autonomous formulation is what
+creates the potential for chaos.
+
+An instructive case to consider is the limit c = ρ = 0. In this limit, the system
+is a simple pendulum, which is a Hamiltonian system. A simple pendulum
+is not chaotic, of course, and both its Lyapunov exponents are zero, but the
+λ prop-
+Hamiltonian character of the system nevertheless shows up in the
+erty discussed above (Sec. 2.3): numerically, the exponents approach zero in a
+symmetric fashion, as shown in Fig. 10.
+
+±
+
+20
+
+3 Lyapunov exponents in constrained ﬂows
+
+We come now to the raison d’ˆetre of this paper, namely, the calculation of
+Lyapunov exponents for constrained systems. For pedagogical purposes, our
+primary example is the forced damped pendulum with the position written in
+Cartesian coordinates. In addition to this instructive example, we also discuss
+two constrained systems of astrophysical interest, involving the orbits of spin-
+ning compact objects such as neutron stars or black holes (see, e.g., [2] and [3]
+and references therein).
+
+Written in terms of the Cartesian coordinates (x, y) = (cos θ, sin θ), the equa-
+tions of motion for the FDP [Eq. (42)] become (upon suppressing the time
+piece)
+
+(45)
+
+(46)
+
+ωy
+
+˙x =
+−
+˙y = ωx
+˙ω =
+
+−
+
+c ω
+
+y + ρ sin t
+
+−
+
+x2 + y2 = 1.
+
+For a pendulum with unit radius, the Cartesian coordinates of the pendulum
+satisfy the constraint
+
+Although it is certainly possible to use ( ˙x, ˙y) in the equations of motion, along
+with (x, y), this is an unnecessary complication; in order to keep the equations
+as simple as possible, we retain the variable ω in the equations of motion.
+
+Developing the techniques for solving constrained systems using this toy ex-
+ample has several advantages. The equations of motion and the constraint
+are extremely simple, which makes it easy to see the diﬀerences between the
+constrained and unconstrained cases. In addition, the constraint is easy to
+visualize, and yet it captures the key properties of much more complicated
+constraints. Finally, since we have already solved the same problem in uncon-
+strained form, it is easy to verify that the techniques of this section reproduce
+the results from Sec. 2.4.2.
+
+3.1 Constraint complications
+
+To see how constraints complicate the calculation of Lyapunov exponents,
+consider an implementation of the deviation vector approach (Sec. 2.1). In
+the unconstrained forced damped pendulum, given an initial condition, we
+would construct a deviated trajectory separated by a small angle δθ (and a
+
+21
+
+small velocity δω). In the constrained version, a na¨ıve implementation would
+use a deviated trajectory with spatial coordinates x + δx and y + δy, where
+δy = (δx, δy) is a small but otherwise arbitrary deviation vector. But the
+deviations are not independent; the deviated initial condition must satisfy the
+constraint:
+
+(x + δx)2 + (y + δy)2 = 1.
+
+To lowest order in δx, we must have δy =
+
+(x/y) δx.
+
+−
+
+We can now consider a more general case. Suppose there are k constraints,
+which we write as a k-dimensional vector equation C(y) = 0. (In our example,
+C has only one component: with y = (x, y, ω), we have C1(y) = x2 + y2
+1 =
+0.) Then if a point y satisﬁes the constraints, the deviated trajectory must
+satisfy them as well:
+
+−
+
+C(y + δy) = 0.
+
+We will refer such a δy as a constraint-satisfying deviation.
+
+Let us outline one possible method for constructing such a constraint-satisfying
+deviation. Let n be the number of phase space coordinates (n = 3 for the con-
+strained forced damped pendulum model). Consider an n-dimensional vec-
+tor ˜y0 that has d nonzero entries, where d represents the true number of
+degrees of freedom (d = 2 for the constrained FDP). Assume that we have
+some method for constructing from ˜y0 an n-dimensional initial condition y0
+that satisﬁes the constraints. For example, we could specify the initial val-
+ues of x and ω, and then derive an initial value of y using y = √1
+x2 (or
+x2; more on this later). Now consider an n-dimensional vector
+y =
+˜y′
+0 = ˜y0 + δ˜y0, which adds arbitrary deviations to d degrees of freedom. We
+can then use the same method as above to ﬁnd y′
+
+0, and then set
+
+0 from ˜y′
+
+√1
+
+−
+
+−
+
+−
+
+(47)
+
+(48)
+
+(49)
+
+δy0 = y′
+
+y0
+
+0 −
+
+to arrive at a constraint-satisfying deviation.
+
+3.2 Constrained deviation vectors
+
+Having determined δy0 by Eq. (49) (or by some other method), we can imme-
+diately apply the unrescaled deviation vector approach: simply track y′ and
+y as the two trajectories evolve, and monitor the length of δy = y′
+y. Since
+the equations of motion preserve the constraint, the resulting δy is always
+
+−
+
+22
+
+Fig. 11. Comparison of the unrescaled (light) and rescaled (dark) constrained de-
+viation vector methods for calculating the principal Lyapunov exponent of the
+constrained forced damped pendulum (Sec. 3.2.1). The slope of the rescaled line
+0.0046 (Sec. 4). The initial deviation is
+is the Lyapunov exponent, λ1 = 0.161
+10−2, which
+δy0k
+k
+happens 4 times in this ﬁgure. As in Fig. 2, the unrescaled approach saturates once
+the deviation has grown too large.
+
+= 10−6, and rescaling occurs (for the rescaled method) if
+
+δy
+k
+
+k ≥
+
+±
+
+constraint-satisfying. The only subtlety is using a restricted norm to elimi-
+nate the extra degrees of freedom; for example, the restricted FDP norm is
+
+δy
+
+r = √δx2 + δω2
+
+k
+
+k
+
+(50)
+
+if we choose to eliminate the y degree of freedom. Since δy
+(x/y) δx,
+using the full Euclidean distance would add the term δy2 = (x2/y2) δx2 to the
+expression under the square root, leading to an overestimate for the principal
+exponent. The restricted norm avoids this problem by considering only true
+degrees of freedom.
+
+≈ −
+
+3.2.1 Rescaling for constrained systems
+
+k
+
+δ˜y0k
+r =
+
+= 0 for a rescaling factor r
+
+In contrast to the simplicity of the unrescaled method, the rescaled deviation
+vector method requires great care, since a carelessly rescaled deviation is not
+constraint-satisfying: C(y + δy/r)
+= 1. In this
+case, it is necessary to extract δ˜y from δy and then rescale it back to its initial
+size
+using the restricted norm. By reapplying the procedure leading to
+Eq. (49), we then ﬁnd a new (rescaled) constraint-satisfying δy that satisﬁes
+δy
+. In this case, it is essential that the new deviation vector have
+k
+the same constraint branches as the old one. For example, suppose that in the
+FDP case the value of y is negative before the rescaling. When calculating a
+new y′ to arrive at the rescaled deviation δy, it is then essential to choose the
+negative branch in the equation y′ =
+x′2. The result of implementing
+±
+this constrained deviation vector method to the forced damped pendulum
+appears in Fig. 11.
+
+δ˜y0k
+
+√1
+
+−
+
+k
+
+k
+
+23
+
+6
+6
+ξ(t)
+r vs. t for the
+Fig. 12. The natural logarithm of the tangent vector length r1 ≡ k
+k
+constrained forced damped pendulum, using a constraint-satisfying tangent vector
+(Sec. 3.2.2). We use the restricted norm
+r to calculate phase space distances (see
+k · k
+text). Compare to Fig. 9 (unconstrained Jacobian method) and Fig. 11 (constrained
+deviation vector method).
+
+3.2.2 A Jacobian method for the largest exponent
+
+The method outlined above for unrescaled deviation vectors leads to a remark-
+ably simple implementation of the single tangent vector Jacobian method.
+Given a constraint-satisfying deviation δy0, set
+
+ξ0 = δy0/
+
+δy0k
+
+k
+
+r,
+
+(51)
+
+k · k
+
+r is a restricted norm on the d true degrees of freedom. We refer to
+where
+such a ξ as a constraint-satisfying tangent vector. Since the equations of motion
+preserve the constraints, we can evolve this tangent vector using Eq. (17). The
+Jacobian method does not saturate, so we need only rescale if
+r approaches
+the ﬂoating point limit of the computer. We can then use a procedure based
+on the rescaled deviation method to ﬁnd a new (rescaled) constraint-satisfying
+tangent vector, but this is typically unnecessary since by the time the ﬂoating
+point limit has been reached we already have a good estimate of the principal
+Lyapunov exponent. The resulting Lyapunov plot for the constrained FDP
+appears in Fig. 12.
+
+ξ
+
+k
+
+k
+
+3.2.3 Ellipsoid constraint complications
+
+We now have three methods at our disposal for calculating the largest Lya-
+punov exponent, but for d degrees of freedom there are d exponents. What
+of these other exponents? Here we ﬁnd an essential diﬃculty in implement-
+ing the ellipsoid method described in Sec. 2.2.3. The core problem is this:
+the tangent vectors must be orthogonalized in order to extract all d principal
+ellipsoid axes, but at the same time each tangent vector must be constraint-
+satisfying. Simply put, it is impossible in general to satisfy the requirements
+of orthogonality and constraint satisfaction simultaneously.
+
+24
+
+We present here two diﬀerent solutions to this problem, which we will refer to
+as the restricted Jacobian method and the constrained ellipsoid method.
+
+3.3 Restricted Jacobian method
+
+The most natural response to a system with more coordinates n than degrees
+of freedom d is to eliminate the spurious degrees of freedom using the con-
+straints. Unfortunately, this procedure is often diﬃcult in practice: solving the
+constraint equations may involve polynomial or transcendental equations that
+have no simple closed form. Even for the simple case of the FDP, the sign
+x2 makes a simple variable substitution impractical.
+ambiguity in y =
+Fortunately, such substitutions are unnecessary: since the equations of motion
+d coor-
+preserve the constraints, there is no need in general to eliminate n
+dinates. In fact, constraints can be a virtue, since they can be used to check
+the accuracy of the integration.
+
+√1
+
+−
+
+±
+
+−
+
+The same cannot be said of the Jacobian matrix. As argued above, the ex-
+tra degrees of freedom lead to fundamental diﬃculties in applying the Jaco-
+bian method for ﬁnding Lyapunov exponents; constraints, far from being a
+virtue, are a considerable complication. In contrast to the equations of mo-
+tion, though, it is relatively straightforward to eliminate the spurious degrees
+of freedom. The trick is to write a restricted d
+d Jacobian matrix, with entries
+only for d coordinates.
+
+×
+
+An example should make this clear. For the FDP system in constrained form,
+we wish to eliminate one degree of freedom in the Jacobian matrix, and we can
+choose to eliminate either x or y. Choosing the latter, the Jacobian becomes
+
+Df = 
+
+
+
+∂ ˙x
+∂x
+
+∂ ˙ω
+∂x
+
+∂ ˙x
+∂ω
+
+∂ ˙ω
+∂ω
+
+,
+
+
+
+
+
+
+∂ ˙x
+∂x
+
+=
+
+ω
+
+−
+
+∂y
+∂x
+
+.
+
+where we have suppressed the derivatives with respect to the “time degree
+of freedom” (as discussed in Sec. 2.4.2). The term to focus on here is ∂ ˙x/∂x,
+which seems to be zero a priori since ˙x =
+ωy, but this is only true if we treat
+x and y as independent. Since we are eliminating the y degree of freedom, we
+cannot treat them as independent; y has a nonzero derivative with respect
+to x, so that
+
+−
+
+(52)
+
+(53)
+
+If we ﬁnd ∂y/∂x using y =
+
+x2, we have exactly the same sign ambiguity
+
+√1
+
+±
+
+−
+
+25
+
+Fig. 13. The natural logarithms of both ellipsoid axes for the constrained forced
+damped pendulum, calculated using the restricted Jacobian method (Sec. 3.3). The
+slopes are the Lyapunov exponents. The results agree well with the unconstrained
+case (Fig. 9 and Table 1).
+
+problem that we had in trying to eliminate the y degree of freedom in the
+equations of motion. The diﬀerence here is the we need only the derivative
+of y, not an explicit solution for y in terms of x, and this we can achieve by
+diﬀerentiating the constraint:
+
+0 =
+
+(x2 + y2) = 2x + 2y
+
+∂
+∂x
+
+∂y
+∂x ⇒
+
+∂y
+∂x
+
+=
+
+x
+y
+
+.
+
+−
+
+If we integrate the equations of motion using the variables (x, y, ω), then we
+have the value of y at any particular time, and we never need deal with the
+sign ambiguity. Using the same trick to calculate ∂ ˙ω/∂x, we can write the
+restricted Jacobian as
+
+ω
+
+y
+
+x
+y −
+x
+c
+y −
+
+
+
+
+
+
+
+
+Df = 
+
+
+
+
+
+We now proceed exactly as in the unconstrained Jacobian method, using the
+restricted Jacobian to calculate the evolution of the initial tangent space ball.
+Since we deal only with a number of coordinates equal to the true number
+of degrees of freedom, the constraints are not a consideration, and we can
+reorthogonalize exactly as before.
+
+The general case is virtually the same. For n coordinates and d degrees of
+freedom, there must be m = n
+
+d constraint equations of the form
+
+−
+
+Ck(y) = 0
+
+for k = 1 . . . m. We must choose which d coordinates to keep in the Jacobian
+
+26
+
+(54)
+
+(55)
+
+(56)
+
+Fig. 14. The orbit of a spinning relativistic particle (such as a black hole), calculated
+using the post-Newtonian equations of motion. The equations model two spinning
+bodies, but we use an eﬀective one-body approach to reduce the dynamics to the
+motion of one body. Distances are measured in terms of GM/c2, where M = m1+m2
+is the total mass of the system. For a pair of black holes, each with 10 times the
+mass of the Sun, the length unit is GM/c2 = 20 GM⊙/c2 = 30 km.
+
+matrix, eliminating m coordinates in the process. By diﬀerentiating the con-
+straints, we arrive at m linear equations for the derivatives of the m eliminated
+coordinates in terms of the n variables:
+
+∂Ck
+∂yj
+
+= 0,
+
+(57)
+
+where j ranges over the indices of the eliminated coordinates (j = 2, corre-
+sponding to y, for the FDP). Since these are linear equations, they are both
+d
+easy to solve and do not suﬀer from any sign or branch ambiguities. The d
+Jacobian matrices that result allow the calculation of Lyapunov exponents
+with all the robustness of the Jacobian method for unconstrained systems.
+
+×
+
+We considered the constrained forced damped pendulum for purposes of illus-
+tration, but it is admittedly artiﬁcial. A more realistic example is shown in
+Fig. 14, which illustrates the dynamics of two spinning black holes with com-
+parable masses. (Such systems are of considerable interest for ground-based
+gravitational wave detectors such as the LIGO project.) The equations of mo-
+tion come from the Post-Newtonian (PN) expansion of full general relativity—
+essentially, a series expansion in the dimensionless velocity v/c, where the
+ﬁrst term is ordinary Newtonian gravity and the higher-order terms are post-
+Newtonian corrections (see, e.g., [10,11,12]). The constraint comes from the
+spins of the black holes: it is most natural to think of the spin as having two
+degrees of freedom (a ﬁxed magnitude with two variable angles specifying the
+location on a sphere), but the equations of motion use all three components
+of each hole’s spin. We apply the methods described above to eliminate one
+
+27
+
+Fig. 15. The natural logarithms of the ellipsoid axes ri vs. t for the system shown
+in Fig. 14. Time is measured in units of GM/c3, where M = m1 + m2 is the
+total mass of the system. For two 10 solar-mass black holes, the time unit is
+GM/c3 = 20 GM⊙/c3 = 10−4 s. The spin magnitudes are ﬁxed, so that each spin
+vector represents only two true degrees of freedom. We deal with this constraint
+by using the restricted Jacobian method (Sec. 3.3). Two nonzero exponents are
+clearly visible, but all the others are consistent with zero. Note the
+λ symmetry
+characteristic of Hamiltonian systems.
+
+±
+
+of the spin degrees of freedom for each black hole, using the constraints
+
+x,i + S2
+S2
+
+y,i + S2
+
+z,i = S2
+
+i = const.,
+
+i
+
+1, 2
+
+.
+
+}
+
+∈ {
+
+(58)
+
+Using the eﬀective one-body approach [10], a priori the system has 12 degrees
+of freedom: three each for relative position x, momentum p, and the spins S1
+and S2. Eliminating two spin components leaves 10 true degrees of freedom.
+As a result, the system has 10 Lyapunov exponents, as shown in Fig. 15; note
+in particular the
+
+λ symmetry characteristic of Hamiltonian systems.
+
+±
+
+3.4 Constrained ellipsoid method
+
+The restricted Jacobian method relies on eliminating spurious degrees of free-
+dom from the Jacobian matrix, but such a prescription relies on making a
+choice—namely, which coordinates to eliminate. Each choice results in a dif-
+ferent Jacobian matrix. Since calculating the Jacobian matrix even once can be
+a formidable task for suﬃciently complicated systems, it is valuable to have a
+method that uses the full Jacobian—treating all coordinates as independent—
+which can be calculated once and then never touched again. This requirement
+leads to the constrained ellipsoid method, which uses the full Jacobian ma-
+trix to evolve constraint-satisfying tangent vectors, collectively referred to as
+a “constrained ellipsoid.” When recording ellipsoid axis growth, we extract
+from each vector a number of components equal to the true number of degrees
+of freedom, resulting in vectors that can be orthogonalized and (if necessary)
+normalized just as in the unconstrained case.
+
+28
+
+logarithms of both ellipsoid axes ri vs. t for the con-
+Fig. 16. The natural
+strained forced damped pendulum, calculated using the constrained ellipsoid
+method (Sec. 3.4). The slopes are the Lyapunov exponents. The results agree well
+with the unconstrained case (Fig. 9 and Table 1).
+
+A detailed description of the constrained ellipsoid algorithm appears below,
+but we ﬁrst present an important prerequisite: calculating constraint-satisfying
+tangent vectors. Let a tilde denote a vector with dimension d equal to the
+true number of degrees of freedom (as in Sec. 3.1). We construct a full tangent
+vector ξ (with n components) from a d-dimensional vector ˜ξ at a point y on
+the ﬂow as follows:
+
+(1) Let ˜y′ = ˜y + ǫ ˜ξ for a suitable choice of ǫ.
+(2) Fill in the missing components of ˜y′ using the constraints to form y′ as
+
+in Sec. 3.1.
+
+(3) Infer the full tangent vector ξ using
+
+ξ =
+
+y′
+
+y
+
+.
+
+−
+ǫ
+
+d matrix,
+Setting the initial conditions is now simple: form a random d
+orthonormalize it, and then infer the full d
+n matrix using the method
+above on each column. The construction of constraint-satisfying tangent vec-
+tors described above is also necessary in the reorthogonalization steps of the
+constrained ellipsoid method.
+
+×
+
+×
+
+The full method is an adaptation of the Jacobian method from Sec. 2.2.4:
+
+(1) Construct a random d
+
+d matrix and orthonormalize it to form a unit
+
+ball. Use the constraints to infer the full d
+
+n matrix U.
+
+×
+
+(2) Evolve the system forward using the equations of motion and the evolu-
+
+×
+
+(59)
+
+(60)
+
+tion equation for U,
+
+˙U = Df
+
+U.
+
+·
+
+(3) At each time T , extract the relevant eight components from each tangent
+d ellipsoid, orthonormalize it, and then ﬁll in the
+
+vector to form a d
+
+×
+
+29
+
+n matrix.
+missing components using the constraints, yielding again a d
+The restricted norms of the d tangent vectors contribute to the running
+sum for the logs of the ellipsoid axes [Eq. (28)].
+
+×
+
+It is important to note that, unlike the other Jacobian methods, rescaling every
+time time T (or some similar method) is required for the inference equation
+[Eq. (59)], since the product of ǫ and the components of ξ must be small
+for the inference to work correctly. The method only works if the system is
+renormalized regularly, so the value of T should be chosen to be small enough
+that no principal ellipsoid axis grows too large.
+
+As before, we use the constrained FDP model for purposes of illustration.
+Treating each coordinate as independent yields [upon diﬀerentiation of Eq.
+(45)]:
+
+Df =
+
+∂ ˙x
+∂x
+
+∂ ˙y
+∂x
+
+∂ ˙ω
+∂x
+
+∂ ˙x
+∂y
+
+∂ ˙y
+∂y
+
+∂ ˙ω
+∂y
+
+∂ ˙x
+∂ω
+
+∂ ˙y
+∂ω
+
+∂ ˙ω
+∂ω
+
+
+
+
+
+
+
+
+
+
+0
+
+ω
+
+0
+
+
+
+
+
+
+
+
+
+
+=
+
+
+
+
+
+
+
+
+
+
+ω
+
+−
+0
+
+1
+
+−
+
+y
+−
+x
+
+c
+−
+
+
+
+
+
+
+
+
+
+
+(61)
+
+The coordinates are not independent, of course, but this Jacobian matrix
+satisﬁes Eq. (11) as long as the deviation is constraint-satisfying. For example,
+using the full deviation vector δy = (δx, δy, δω) with Eq. (61) gives the same
+result as the restricted deviation vector δ˜y = (δx, δω) with Eq. (55), as long
+as δy =
+(x/y) δx. As a result, the Lyapunov exponents calculated with
+the constrained ellipsoid method (Fig. 16) agree closely with the restricted
+Jacobian method (and with the original unconstrained results [Fig. (9)]).
+
+−
+
+As a ﬁnal example of the constrained ellipsoid method, consider Fig. 17, which
+shows a solution to equations that model a relativistic spinning test particle
+(e.g., a black hole or neutron star) orbiting a supermassive rotating black hole.
+(The case illustrated is a limiting case of the equations, which is mathemat-
+ically valid but not physically realizable; see [2].) These equations (usually
+called the Papapetrou equations) are highly constrained, so a na¨ıve calcula-
+tion of the Lyapunov exponents is not correct. It was the complicated nature
+of the Jacobian matrix for this system originally motivated the development
+of the methods in this section [2]. A Lyapunov plot corresponding to the orbit
+λ symmetry, a result of
+in Fig. 17 is shown in Fig. 18. Note especially the
+the Hamiltonian nature of the equations of motion.
+
+±
+
+30
+
+Fig. 17. The orbit of a small spinning compact object (such as a solar-mass black
+hole) in the spacetime of a rotating supermassive black hole. (a) The orbit embedded
+in spherical polar coordinates; (b) the orbit’s projection onto the x-y plane. The
+lengths are expressed in terms of GM/c2, where M is the mass of the central black
+hole. For a maximally spinning black hole, the horizon radius is rH = GM/c2. For
+106 M⊙ [13],
+the supermassive black hole at the center of the Milky Way, M = 3
+×
+109 m. The system shown here
+which corresponds to a length unit of GM/c2 = 4.4
+is chaotic (Fig. 18), although this orbit represents a limiting case of the equations
+that is not physically realizable [2].
+
+×
+
+Fig. 18. The natural logarithms of the ellipsoid axes for the system shown in Fig. 17
+vs. relativistic proper time τ , in units of GM/c3, where M is the black hole’s mass.
+106 M⊙ [13],
+For the supermassive black hole at the center of the Milky Way, M = 3
+which corresponds to a time unit of GM/c3 = 15 s. The largest Lyapunov exponent
+10−3 (GM/c3)−1, which corresponds to an e-folding timescale of
+5
+is λmax ≈
+106 M⊙, this means that nearby trajectories
+102 GM/c3. For M = 3
+τλ = 1/λ = 2
+diverge by a factor of e in the local (Lorentz) frame of an observer on this orbit in
+a time τ = 3000 s = 50 min.
+
+×
+×
+
+×
+
+×
+
+4 Comparing the methods
+
+A summary plot of all the methods discussed in this paper, applied to the
+forced damped pendulum, appears in Fig. 19. It is evident that all the methods
+agree closely. A more quantitative comparison appears in Table 1, which gives
+
+31
+
+Fig. 19. Natural logarithms of the ellipsoid axes vs. t for the unconstrained de-
+viation vector method (dashed), the unconstrained Jacobian method from Fig. 9
+(thick) and all the constrained methods. The constrained methods include the fol-
+lowing: rescaled deviation vector (black), Jacobian with single constraint-satisfying
+tangent vector (red), restricted Jacobian (orange), and constrained ellipsoid (dashed
+blue). (The colors appear as shades of gray in print versions of this paper.) All the
+constrained methods start with exactly the same initial conditions.
+
+error estimates based on integrations using ﬁxed initial conditions and random
+initial deviations. This table was produced by using an initial point produced
+from the ﬁnal values of a previous long integration, which avoids any transient
+eﬀects due to starting at a point not on the attractor. The estimates for the
+exponents use a ﬁnal time of tf = 104, with 100 randomly chosen values for the
+deviation vector or initial ball. All the methods agree on the mean exponents
+to within one standard deviation of the mean. (Recall that we omit the zero
+exponent associated with the time “degree of freedom.”)
+
+4.1 Speed
+
+The various methods for calculating the exponents diﬀer signiﬁcantly in their
+execution time, as shown in Table 2. Generally speaking, the deviation meth-
+ods are faster than their Jacobian method counterparts, which is no surprise—
+the deviation vector methods involve fewer diﬀerential equations. More sur-
+prising is the performance penalty for the restricted Jacobian method. This is
+the result of a signiﬁcantly smaller typical step-size in the adaptive integrator
+needed to achieve a particular error tolerance. The restricted Jacobian may
+result in a system of equations that is more diﬃcult to integrate because of
+the elimination of simple degrees of freedom with the potentially complicated
+solutions to the constraint derivative equations ∂Ck/∂yi = 0 [Eq. (57)]. On
+the other hand, the performance penalty of the restricted Jacobian method is
+probably worth the gain in robustness, as discussed below. Moreover, for other
+systems (e.g., the system shown in Figs. 14 and 15), the restricted Jacobian
+method is comparable in speed to the other Jacobian methods.
+
+32
+
+Table 1
+Comparison of diﬀerent Lyapunov exponent methods applied to the forced damped
+pendulum. We consider both the unconstrained [Eq. (42)] and constrained [Eq. (45)]
+formulations. The integrations have a ﬁnal time tf = 104, and for each method we
+consider 100 random initial deviations. We calculate the positive exponent (λ1) and,
+if possible, the negative exponent (λ3) as well. (We omit the zero exponent (λ2) for
+brevity.) The error estimates are the standard deviations in the mean, σ/√N . The
+deviation vector methods are all rescaled. The constrained ellipsoid method rescales
+and reorthogonalizes every time T = 1, and uses a value of ǫ = 10−6 for the tangent-
+vector inference [Eq. (59)]. The error goal is a fractional error of 10−10 per step.
+
+Method
+
+λ3
+
+unconstrained deviation vector
+
+0.1610
+
+0.00050
+
+unconstrained Jacobian
+
+0.1608
+
+0.00050
+
+0.2618
+
+0.00053
+
+−
+
+±
+
+constrained deviation vector
+
+0.1608
+
+0.00051
+
+constrained Jac. (1 tangent vector)
+
+0.1605
+
+0.00048
+
+restricted Jacobian
+
+0.1607
+
+0.00048
+
+0.2614
+
+0.00055
+
+constrained ellipsoid
+
+0.1605
+
+0.00050
+
+0.2617
+
+0.00051
+
+−
+
+−
+
+±
+
+±
+
+λ1
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+Table 2
+Timing comparison for diﬀerent Lyapunov exponent methods applied to the forced
+damped pendulum. The times (on a 2 GHz Pentium 4) for a ﬁnal time of tf = 104 are
+in seconds: t1 for the positive exponent λ1 and t1−3 for the negative exponent λ2; we
+3 to emphasize that calculating
+omit the zero exponent (λ2) for brevity. (We write 1
+λ3 also calculates λ1 as a side-eﬀect.) We consider both the unconstrained [Eq. (42)]
+and constrained [Eq. (45)] formulations. The integrations use a C++ Bulirsch-Stoer
+integrator adapted from [6]. The deviation vector methods are rescaled, and the
+constrained ellipsoid method rescales and reorthogonalizes every time T = 1. The
+error goal is a fractional error of 10−10 per step. The relatively small diﬀerence
+between deviation vector and Jacobian methods is the result of the small number
+of degrees of freedom; for larger systems (with larger Jacobians) the diﬀerence can
+become large [3]. We note that the restricted Jacobian method is unusually slow for
+the forced damped pendulum, but this is not generally the case.
+
+−
+
+Method
+
+t1
+
+t1−3
+
+unconstrained deviation vector
+
+2.57
+
+unconstrained Jacobian
+
+3.65
+
+5.16
+
+constrained deviation vector
+
+3.51
+
+constrained Jacobian (1 tangent vector)
+
+4.05
+
+restricted Jacobian
+
+constrained ellipsoid
+
+35.3
+
+45.0
+
+4.30
+
+5.88
+
+33
+
+Fig. 20. The natural logarithms of the two larger ellipsoid axes for the Lorenz
+system using the Gram-Schmidt algorithm, with the axes rescaled every T = 10−3.
+The largest and smallest directions diﬀer by less than 2% when rescaling this fre-
+quently, but the axes nevertheless converge rapidly to the correct directions (as
+determined by the Jacobian method, Fig. 6). Numerical investigations conﬁrm that
+this robustness persists at least down to T = 10−5.
+
+4.2 Robustness
+
+Numerical methods are more useful if they are relatively insensitive to small
+changes in implementation details, and the Jacobian methods win in this cat-
+egory. When reorthogonalization occurs every time step, without rescaling,
+the plain Jacobian method is virtually bulletproof. The rescaling in this case
+can even occur only when the tangent vector norms reach very large or small
+10±100. This robustness also applies to the restricted Ja-
+values, say
+cobian method, which is considerably less ﬁnicky than any other method for
+constrained systems, and we recommend its implementation if practical.
+
+k ≈
+
+ξ
+
+k
+
+Jacobian methods that rescale and reorthogonalize every time T are less ro-
+bust, since a priori we have no knowledge of appropriate values for T . Ex-
+perimentation in this case is required to ﬁnd good values of T ; for the Lorenz
+system, T = 1 works well, but T = 5 leads to inaccurate estimates for the
+negative exponent, as seen in Fig. 21. It is better to err in the direction of
+small times, since the Gram-Schmidt procedure is quite robust: even when
+rescaling occurs on very short timescales—so that the longest axis has almost
+no chance to outgrow the other principal axes—the Gram-Schmidt method
+still converges to the correct exponents (Fig. 20). Using the Gram-Schmidt
+algorithm to ﬁnd the principal axes beneﬁts from a strong feedback mecha-
+nism, insuring rapid convergence to the correct axes. Using a very small value
+for T greatly increases the execution time, of course. A useful prescription in
+practice is to do a short integration with T chosen to be small compared to
+any characteristic timescales in the problem, in order to obtain a ﬁrst estimate
+for the exponents. We may then choose T to be as large as we like, consistent
+with the avoidance of unacceptable roundoﬀ error.
+
+34
+
+Fig. 21. The natural logarithms of the ellipsoid axes for the Lorenz system, with
+reorthogonalization/rescaling every time T = 1 (dark dots) and T = 5 (light
+lines). The two larger exponents agree exactly, but the negative exponent is in-
+correct due to roundoﬀ error, since the smallest axis shrinks from unity to a size of
+e−5×14.57
+
+10−32 in a time T = 5.
+
+2
+
+≈
+
+×
+
+The constrained ellipsoid method is dependent on frequent rescaling to keep
+the size of the tangent vectors small, since the inference scheme represented
+by Eq. (59) fails for large vector norms. As a result, this method suﬀers from
+the complexity of all time T methods, i.e., it requires care in choosing an
+appropriate value of T . In addition, the value of ǫ in Eq. (59) must be cho-
+sen carefully to achieve accurate tangent-vector inferences: the method relies
+on small values of ǫ for accuracy, but values that are too small suﬀer from
+roundoﬀ errors. It is advisable to calibrate the value of ǫ so that the largest
+Lyapunov exponent agrees with the result of a second method (such as the
+single tangent-vector method or the deviation vector method), as discussed
+in [2]. Such a calibration was required to produce the values in Table 1; the
+largest exponent calculated using the constrained ellipsoid method diﬀers from
+the other methods by several standard deviations when using ǫ = 10−5 for the
+inference, but agrees well when using ǫ = 10−6.
+
+Finally, the deviation vector methods are all very fast, but they are sensitive to
+the size ǫ0 of the initial deviation vector. The rescaled methods are particularly
+inaccurate if the value of ǫ0 is too small, which leads to roundoﬀ error in the
+initial size of the deviation vector and can give inaccurate results, as shown
+in Fig. 22. These methods should be used with care, and should always be
+double-checked with a Jacobian method if possible.
+
+5 Summary and conclusion
+
+Chaotic solutions exist for an enormous variety of nonlinear dynamical sys-
+tems. Lyapunov exponents provide an important quantitative measure of this
+chaos. We have presented a variety of diﬀerent methods for calculating these
+
+35
+
+Fig. 22. The natural logarithms of the largest ellipsoid axis for the constrained
+forced damped pendulum, calculated using the rescaled deviation vector method
+for varying sizes of the initial deviation. We vary the size of the initial deviation
+vector from ǫ0 = 10−4 (bottom) to ǫ0 = 10−13 (top). Values of ǫ0 between 10−4
+and 10−8 agree closely, but smaller values lead to erroneously high values for the
+Lyapunov exponent. It is important to calibrate the deviation vector method using
+the Jacobian method (Sec. 2.2) if possible.
+
+exponents numerically, both for constrained and unconstrained systems. Both
+types of systems can be investigated using deviation vector methods or Ja-
+cobian methods. Deviation vector methods use the equations of motion to
+evolve two nearby trajectories in phase space to determine the time-evolution
+of the small deviation vector joining the trajectories. This family of methods
+is computationally fast, but yields only the largest exponents, and also suﬀers
+from sensitivity to the size of the initial deviations. The Jacobian methods
+share the use of the Jacobian matrix of the system as a rigorous measure of
+the local phase-space behavior. They are computationally robust in general,
+and can be used to determine multiple exponents, but this comes at the cost
+of execution speed.
+
+Calculating Lyapunov exponents for constrained systems presents a variety of
+complications, all revolving around the notion of constraint-satisfying devia-
+tions: “nearby” trajectories must be chosen carefully to insure that they satisfy
+the constraints. We have presented several methods for dealing with these com-
+plications, including a deviation vector method and two Jacobian methods: the
+restricted Jacobian method, which eliminates spurious degrees of freedom in
+the Jacobian by diﬀerentiating the constraints; and the constrained ellipsoid
+method, which uses the full Jacobian matrix to evolve constraint-satisfying
+tangent vectors. These methods allow the determination of all d Lyapunov
+exponents for systems with d degrees of freedom.
+
+36
+
+Acknowledgments
+
+Thanks to Sterl Phinney for encouragement and valuable comments. This
+work was supported in part by NASA grant NAG5-10707.
+
+A Ellipsoid axes and the singular value decomposition
+
+In this appendix, we discuss an alternative method for calculating the ellip-
+soid axes used in the Jacobian method, namely, calculating the ellipsoid axes
+exactly. The method described seems superior on paper to the Gram-Schmidt
+technique described in Sec. 2.2, but suﬀers from subtle complications that
+make it fragile in practice. Nevertheless, within a narrow range of validity
+(speciﬁed below), calculating exact ellipsoid axes provides valuable corrobo-
+ration of the principal Jacobian method discussed above.
+
+Recall Theorem 1 from Sec. 2.2.3, which relates the eigensystem of the matrix
+AT A to the ellipsoid spanned by the columns of A. In order to ﬁnd the axes of
+an evolving ellipsoid, we could apply Theorem 1 directly, but there is a math-
+ematically equivalent prescription that is numerically virtually bulletproof,
+namely, the famous singular value decomposition:
+
+Theorem 2 Let A be a nonsingular n
+mal n
+
+×
+
+n matrices U and V , and a diagonal matrix S, such that
+
+n matrix. Then there exist orthonor-
+
+×
+
+A = USV T .
+
+(A.1)
+
+This is the singular value decomposition (SVD) of A, and the values si in
+S = diag(s1, . . . , sn) are the singular values.
+
+Since V is an orthogonal matrix, we have V T = V −1, so that Eq. (A.1) is
+equivalent to AV = US. Geometrically, this means that the image of the unit
+ball V is equal to an ellipsoid whose ith principal axis is given by si times the
+ith column of U. V in this context is a special ball, but the image of any unit
+ball is the same unique ellipsoid. This leads to the following theorem:
+
+Theorem 3 Let A be a nonsingular n
+n matrix, and let U and S be the
+matrices resulting from the singular value decomposition of A [Eq. (A.1)].
+Then the columns of A span an ellipsoid whose ith principal axis is si ui,
+where S = diag(s1, . . . , sn) and
+
+n
+i=1 are the columns of U.
+
+ui
+
+×
+
+{
+
+}
+
+We thus see that the singular value decomposition is equivalent to ﬁnding the
+eigensystem of AT A. (See Appendix A in [7] for proofs of these theorems.)
+
+37
+
+Fig. A.1. The natural logarithms of the two larger ellipsoid axes for the Lorenz
+system using the singular value decomposition. The axes are rescaled every T = 0.5
+to exaggerate the deviations from the correct results, but any rescaling causes the
+SVD method to fail (see text). Compare to unrescaled SVD (Fig. A.2) and the
+Gram-Schmidt method with frequent rescaling (Fig. 20).
+
+Fig. A.2. The natural logarithms of the two larger ellipsoid axes for the Lorenz
+system using the singular value decomposition, without rescaling. The results agree
+well with the Gram-Schmidt method (Fig. 6). Rescaling (which is always necessary
+if we approach the ﬂoating point limits of
+
+10±308) ruins the agreement.
+
+∼
+
+Substituting the singular value decomposition for the Gram-Schmidt proce-
+dure leads to a replacement of step (2) from Sec. 2.2:
+
+(2′) At various times tj, replace U with the orthogonal axes of the ellipsoid
+deﬁned by U, using the singular value decomposition. This can be done
+either every time T , for some suitable choice of T , or every time the inte-
+grator takes a step. It is essential to order the principal axes consistently.
+We recommend sorting the axes so that s1 ≥
+
+s2 ≥
+
+sn.
+
+. . .
+
+≥
+
+Unfortunately, this prescription behaves badly when rescaling is necessary, as
+shown in Fig. A.1. The underlying cause of this is a fundamental property of
+the singular value decomposition: it is only unique up to a permutation of the
+ellipsoid axes. If we adopt an ordering based on the axis lengths, we can refer,
+for example, to the longest axis as axis 1. During any particular time period,
+axis 1 may grow or shrink; the only requirement is that it be the fast-growing
+
+38
+
+axis on average. Unfortunately, rescaling the axes causes this ordering method
+to fail: if axis 1 should happen to contract between rescaling times, then the
+ordering based on length leads to incorrect axis labels, since axis 1 is no longer
+the longest axis. Even worse, when ordering by axis length, the length of the
+longest axis is always added to the running sum for the largest Lyapunov ex-
+ponent, while the length of the smallest axis always contributes to the smallest
+exponent. This selection bias leads to systematic errors, guaranteeing overes-
+timates for the absolutes values of both the exponents (Fig. A.1).
+
+If the system is not rescaled, there is still some initial ambiguity in axis labels,
+but once axis 1 has grown suﬃciently large it is very unlikely ever to become
+smaller than the other axes. Thus, after an initial expansion and contraction
+phase that establishes the ordering, the axis labels remain ﬁxed, and the results
+of the (unrescaled) SVD method agree well with Gram-Schmidt (Fig. A.2).
+
+It should be possible in principle to follow the axis evolution by tracking the
+continuous deformation of the ellipsoid. This would mean assigning labels to
+the axes and then ensuring, e.g., that axis 1 at a later time is indeed the
+image of the original axis 1. This method would require following the system
+over very short timescales to guarantee the correct tracking of axes, and even
+then is likely to be fragile and error-prone. Because of these complications,
+we recommend the simpler Gram-Schmidt process, which has proven to be
+reliable and robust in practice.
+
+References
+
+[1] E. Lorenz, J. Atmospheric Science 20 (1963) 130.
+
+[2] M. D. Hartl, Phys. Rev. D 67 (2003) 024005.
+
+[3] M. D. Hartl, gr-qc/0302103.
+
+[4] M. D. Hartl, http://www.michaelhartl.com/software/.
+
+[5] J.-P. Eckmann, D. Ruelle, Rev. Mod. Phys. 57 (1985) 617.
+
+[6] W. H. Press, S. A. Teukolsky, W. T. Vetterling, B. P. Flannery, Numerical
+
+Recipes in C, Cambridge University Press, Cambridge, England, 1992.
+
+[7] K. T. Alligood, T. D. Sauer, J. A. Yorke, Chaos: An Introduction to Dynamical
+
+[9] E. Ott, Chaos in Dynamical Systems, Cambridge University Press, Cambridge,
+
+Systems, Springer, New York, 1997.
+
+[8] G. Benettin, et. al., Meccanica 15 (1980) 21.
+
+England, 1993.
+
+[10] T. Damour, Phys. Rev. D 64 (2001) 124013.
+
+39
+
+[11] T. Damour, P. Jaranowski, G. Sch¨afer, Phys. Rev. D 62 (2000) 084011.
+
+[12] T. Damour, G. Sch¨afer, Nuov. Cimento 101 (1988) 127.
+
+[13] R. Genzel, et. al., Mon. Not. Royal Astron. Soc. 317 (2000) 348.
+
+40
+
+

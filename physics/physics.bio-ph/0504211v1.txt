@@ -1,0 +1,2059 @@
+Solving the Advection-Diﬀusion Equations in Biological Contexts
+
+using the Cellular Potts Model.
+
+Debasis Dan,∗ Chris Mueller, Kun Chen, and James A. Glazier†
+
+Biocomplexity Institute and Department of Physics,
+
+727 E. 3rd Street, Swain Hall West 159,
+
+Indiana University, Bloomington, IN 47405-7105 USA.
+
+Abstract
+
+The Cellular Potts Model (CPM ) is a robust, cell-level methodology for simulation of biological
+
+tissues and morphogenesis. Both tissue physiology and morphogenesis depend on diﬀusion of chem-
+
+ical morphogens in the extra-cellular ﬂuid or matrix (ECM ). Standard diﬀusion solvers applied to
+
+the cellular potts model use ﬁnite diﬀerence methods on the underlying CPM lattice. However,
+
+these methods produce a diﬀusing ﬁeld tied to the underlying lattice, which is inaccurate in many
+
+biological situations in which cell or ECM movement causes advection rapid compared to diﬀusion.
+
+Finite diﬀerence schemes suﬀer numerical instabilities solving the resulting advection-diﬀusion
+
+equations. To circumvent these problems we simulate advection-diﬀusion within the framework of
+
+the CPM using oﬀ-lattice ﬁnite-diﬀerence methods. We deﬁne a set of generalized ﬂuid particles
+
+which detach advection and diﬀusion from the lattice. Diﬀusion occurs between neighboring ﬂuid
+
+particles by local averaging rules which approximate the Laplacian. Directed spin ﬂips in the CPM
+
+handle the advective movement of the ﬂuid particles. A constraint on relative velocities in the
+
+ﬂuid explicitly accounts for ﬂuid viscosity. We use the CPM to solve various diﬀusion examples
+
+including multiple instantaneous sources, continuous sources, moving sources and diﬀerent bound-
+
+ary geometries and conditions to validate our approximation against analytical and established
+
+numerical solutions. We also verify the CPM results for Poiseuille ﬂow and Taylor-Aris dispersion.
+
+PACS numbers: 02.70.Uu, 05.10.-a, 47.11.+j,87.10.+e
+
+5
+0
+0
+2
+ 
+r
+p
+A
+ 
+8
+2
+ 
+ 
+]
+h
+p
+-
+o
+i
+b
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+1
+1
+2
+4
+0
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+∗Electronic address: ddan@indiana.edu
+†Electronic address: glazier@indiana.edu
+
+1
+
+I.
+
+INTRODUCTION
+
+Advection-Diﬀusion equations (ADE ) describe a broad range of natural phenomena.
+
+They occur in diverse ﬁeld including physics [1], chemistry [2], biology, geology [3, 4] and
+
+even in migration and epidemiology [5]. They describe the ﬂow (deterministic) and the
+
+spread (stochastic) of a density (of a chemical, heat, charge) which a ﬂuid or deformable
+
+solid carries. The simplest ADE is :
+
+∂n
+∂t
+
+= D
+
+2n
+
+∇
+
+− −→v
+
+·
+
+−→
+∇
+
+n,
+
+(1)
+
+where n is the density of the transported substance, D its diﬀusion constant (here assumed
+
+uniform in space) and −→v is the velocity ﬁeld. The velocity ﬁeld in turn couples to the
+pressure ﬁeld of the medium through the Navier-Stokes equations. Though we can solve the
+
+problem analytically in steady state with simple boundary conditions, most physically rel-
+
+evant ADEs appear within sets of nonlinear coupled equations or with nontrivial boundary
+
+conditions where analytical solutions are not possible [6]. Hence a vast literature exists on
+
+how to solve ADEs. Most solvers use either ﬁnite diﬀerence (FD) or ﬁnite element (FE )
+
+[7] schemes. Besides these deterministic approaches, several schemes use Lattice-Boltzmann
+
+(LB ) methods [8] like Flekkoy’s method [9], Dawson’s method [10], the moment-propagation
+
+method [11]. ADEs in general are diﬃcult to solve in the absence of separation of diﬀu-
+
+sion and advection time scales or in the presence of moving boundaries. Most lattice-based
+
+methods locally reﬁne the grid during solution to avoid instabilities.Moreover, explicit LB
+
+methods require time averaging of the torque to avoid instabilities [12]. Hence the computa-
+
+tional cost of both LB and deterministic methods shoots up. Non-staggered FD grids may
+
+show grid-decoupling instabilities [12]. Also, all explicit methods require consideration of the
+
+general stability constraints from linear analysis, most notably the Neumann diﬀusive crite-
+
+rion linking the time step and the square of the grid size. In this article we try to address the
+
+problems associated with incorporating advection-diﬀusion in biologically-motivated, mul-
+
+tiscale simulations, speciﬁcally those which use the Cellular Potts Model (CPM ) to model
+
+cell behaviors.
+
+Diﬀusion of morphogens and ﬂow of extra-cellular matrix (ECM ) are crucial to many
+
+biological phenomena, including wound healing, morphogenesis, e.g., during mesenchymal
+
+condensation or gastrulation [13] and the immune response where cells emerge from the mi-
+
+crovasculature and migrate towards sites of inﬂammation to kill bacteria, other pathogens
+
+2
+
+and cancer. The generic mechanisms common to all these processes are changes in cell veloc-
+
+ities (chemotaxis) or/and diﬀerentiation in response to the temporal and spatial variations
+
+of chemical morphogens. Other classic examples of diﬀusion-driven morphogenesis involve
+
+Turing instabilities. Turing instabilities arise due to diﬀerent diﬀusion rates of two or more
+
+reacting chemicals resulting in competition between activation by a slow-diﬀusing chemi-
+
+cal (activator ) and inhibition by a faster chemical (inhibitor ). Pattern formation during
+
+morphogenesis due to Turing instabilities is a subject by itself [20].
+
+Besides chemotaxis, the formation and rate of extension of pseudopods which crucially
+
+depends convective mass transport [14, 15] also inﬂuences cell motility. Hydrodynamic shear
+
+can also increase cell-cell adhesion eﬃciency by increasing the number of binding receptors.
+
+Shear has a profound eﬀect on neutrophil-platelet adhesion and neutrophil aggregation, key
+
+events in acute coronary syndromes like arterial thrombosis ([16]). Extensive work has shown
+
+that both ﬂuid shear amplitude and shear exposure time modulate the interactions between
+
+polymorphonuclear leukocytes and colon carcinoma cells [17]. Gene expression and protein
+
+synthesis in endothelial cells also change upon application of arterial shear stresses [18]. In
+
+a prominent example, ﬂuid shear allows optimal L-selectin-mediated leukocyte rolling only
+
+above a minimum threshold shear rate [19]. Hence multicellular modeling tools have to
+
+properly account for the advection-diﬀusion: diﬀusion inﬂuencing the spatial and temporal
+
+distribution of chemical morphogens, advection controlling the rates of cell collisions, de-
+
+formation, receptor-ligand bond formation [21], adhesion and enhanced mixing of chemical
+
+morphogens.
+
+Simulations of the development of multicellular organisms take diverse mathematical ap-
+
+proaches: continuum FE-based models [22] of reaction-diﬀusion which consider cell density
+
+as a continuous variable [23], hybrid models like E-cell [24] and cellular automaton ap-
+
+proaches [25]. Glazier and Graner developed the cell-level CPM, an extension of the energy-
+
+based large-Q Potts model, for organogenesis simulations [26]. The basic CPM explains how
+
+surface binding energies drive cell movement and models cell sorting from an initial random
+
+distribution into diﬀerent patterns depending on the cell adhesion coeﬃcients at homotypic,
+
+heterotypic and cell-medium boundaries [27]. It also provides a platform on which to build
+
+simulations of a wide range of biological experiments by including additional mechanisms
+
+like directed active movement due to external ﬁelds, e.g. chemotaxis to a chemical ﬁeld
+
+gradient, gravity or cell polarity. CPM applications include modeling mesenchymal conden-
+
+3
+
+sation [28, 29, 30], the complete life-cycle of Dictyostelium discoideum [35], tumor growth
+
+[32], vascular development [33], immune response and limb growth [34]. Unlike the simple
+
+Turing mechanism where cells have no feedback on the chemical ﬁeld, most CPM implemen-
+
+tations include this feedback which can give rise to completely diﬀerent patterning from the
+
+Turing mechanism. In the CPM, patterns can arise under the inﬂuence of a single chemi-
+
+cal ﬁeld [13] due to cell movement, biased by gradients in cell-cell adhesion and cell-ECM
+
+binding, which is impossible in Turing mechanism. This unique mechanism also diﬀers from
+
+chemotaxis, which requires long-range cell movement [29].
+
+All existing CPM implementations suﬀer from four main limitations:
+
+(1) They do
+
+not include viscous dissipation explicitly.
+
+Instead dissipation arises from the Metropolis-
+
+Boltzmann energy-minimization dynamics. This implicit dissipation makes viscosity hard
+
+to calculate or control. (2) They do not explicitly describe force transduction through cells,
+
+which arises through the volume constraint and surface constraint (if used) of the Hamil-
+
+tonian.
+
+(3) Aggregates of cells modeled with an ordinary CPM Hamiltonian are highly
+
+overdamped. Modeling the ECM or ﬂuid as an array of generalized cells using the normal
+
+CPM produces a ﬂow resembling the overdamped ﬂow of biological ﬂuid but this ﬂuid slips
+
+at solid surfaces and exerts no shear force unlike a normal ﬂuid. An alternative approach
+
+which describes the ﬂuid as a single, large, unconstrained generalized cell produces nonlocal
+
+movement. Moreover, it cannot advect chemicals or transmit shear forces. (4) The CPM
+
+has no intrinsic concept of rigid-body motion. We will describe an algorithmic solution to
+
+this last problem, which makes the CPM look more like a FE simulation, in a future paper.
+
+All of these problems result from the CPM spins being tied to the underlying lattice,
+
+rather than to objects they describe. The solution in each case is to adopt an FE approach
+
+suited to the CPM, which takes the behavior oﬀ-lattice. Applying standard oﬀ-lattice meth-
+
+ods in the CPM has inherent problems. Since in the CPM cell movement occurs by boundary
+
+ﬂuctuations, connecting normal FE ﬂuid-solvers to the CPM at surfaces requires local grid
+
+reﬁnement during cell movement to avoid numerical instabilities. Hence its computational
+
+cost is high.
+
+To introduce advection-diﬀusion in the CPM correctly and eﬃciently, we propose an oﬀ-
+
+lattice scheme consistent and in harmony with the CPM algorithm. We subdivide the ECM
+
+into small ﬂuid particles having the normal properties of generalized cells like diﬀerential
+
+adhesivity, a surface constraint and a volume constraint. The ﬂuid particles carry chemical
+
+4
+
+morphogens and we assume the concentrations are uniform inside them. Diﬀusion occurs
+
+between neighboring ﬂuid particles by local averaging rules which approximate the Lapla-
+
+cian. Spin ﬂips in the CPM occur only at the boundaries of the cells or particles. A force on
+
+the ﬂuid in any direction due to pressure gradients or external forces biases the probability
+
+of spin ﬂips and generates directed motion [36]. We introduce viscosity into the CPM by
+
+explicitly in the Hamiltonian including a relative-velocity constraint between the neighbor-
+
+ing ﬂuid particles. This scheme allows us to solve the ADEs and generates the creeping ﬂow
+
+of a highly viscous ﬂuid.
+
+In most biologically relevant regimes (e.g., E. Coli in water), we encounter low Reynolds
+
+number (Re) ﬂow
+
+10−5, with the typical diﬀusion coeﬃcient of chemical morphogens being
+
+10−4µm2/s. Thus the Peclet number (deﬁned as Rv
+
+∼
+system, the typical ﬂuid velocity and diﬀusion coeﬃcient respectively) is as low as
+
+D , where R, v, D are typical size of the
+10−2
+
+∼
+
+∼
+
+[37]. We explicitly exclude blood ﬂow in the circulatory system , where Re numbers (hence
+
+inertia) can be quite large and where specialized solution techniques already exist [? ]. Since
+
+most CPM simulations do not demand high precision, sophisticated methods like mimetic
+
+ﬁnite diﬀerence [42] become a computational bottle-neck without many advantages. On
+
+the other hand, our ADE scheme is very stable, with spatial resolution equal to the mean
+
+diameter of the ﬂuid particles, which are much smaller than the simulated biological cells.
+
+Our scheme seamlessly integrates into the main Monte-Carlo loop of the CPM simulation
+
+and boundary conditions like absorbing boundaries or no-ﬂux boundaries are simple to
+
+implement. More-over our oﬀ-lattice scheme does not require re-meshing. We discuss these
+
+issues in detail below.
+
+This paper mainly focuses on the validity and utility of the CPM ADE solver. Section
+
+2 brieﬂy describes the CPM along with the diﬀusion and advection scheme. Section 3
+
+discusses various cases, including diﬀusion from two point sources, a continuous source and
+
+a moving source with either reﬂecting or absorbing boundary conditions and the ﬂow proﬁle
+
+in Poisueille’s ﬂow. Section 4, outlines future directions in developing the ADE scheme. We
+
+will address in a future paper certain additional conditions, ﬂow with inertia, eﬀects of low
+
+or high Peclet numbers, constitutive properties of the ﬂuid phase, etc. As we have stated
+
+before, ours method provides ﬂexibility and eﬃciency in the biologically relevant regime of
+
+low Peclet and Reynolds numbers and where high numerical accuracy is not crucial.
+
+5
+
+II. THE MODEL
+
+The Potts model is an energy-based, lattice Cellular-Automaton (CA) model equivalent
+
+to an Ising model with more than two degenerate spin values. We typically use a cubic
+
+lattice with periodic or ﬁxed boundary condition in each direction. We use 3rd or 4th near-
+
+est neighbor interactions to reduce lattice-anisotropy induced alignment and pinning. Each
+
+lattice site in the Potts model has a spin value. The energy, or Hamiltonian sums the inter-
+
+action energies of these spins, according to predeﬁned rules. In single-spin dynamics (like
+
+Metropolis dynamics) the spin lattice evolves towards its equilibrium state by minimizing
+
+the interaction energy through spin ﬂips. Multi-spin dynamics like Kawasaki dynamics are
+
+also possible. Though the original Potts model studies focuses on equilibrium properties,
+
+it can also model quasi-equilibrium dynamical properties [38]. Using deterministic schemes
+
+for spin ﬂips, patterns often stick in local minima. Finite-temperature Monte-Carlo schemes
+
+circumvent this problem. These schemes accept a spin ﬂip with temperature dependent
+
+Boltzmann or modiﬁed Boltzmann probability if the conﬁguration encounters a potential
+
+barrier (a greater energy after the spin ﬂip than before) [38].
+
+We pick a target lattice site at random and one of its alien neighbor, also selected at
+
+random and attempt to ﬂip the target spin to the value of the selected neighbor. In the
+
+modiﬁed Metropolis algorithm we employ, if the spin ﬂip would produce a change in energy
+
+∆H, we accept the change with probability P given by
+
+P (∆H) =
+
+−
+
+exp(
+
+∆H/T )
+
+if ∆H > 0,
+
+otherwise,
+
+(2)
+
+1
+
+
+
+
+
+
+where T is the ﬂuctuation temperature. T controls the rate of acceptance of the proposed
+
+move. For very large T , all the moves are accepted and the dynamics is a random walk in the
+
+absence of barriers, i.e. interaction energies included in the Hamiltonian are eﬀectively zero
+
+producing a disordered phase. For very small values of T the dynamics is deterministic and
+
+can trap in local minima. We choose T as the median value of the distribution of ∆H, which
+
+is below the order-disorder phase transition temperature. All of our results are very robust
+
+with respect to variation of T . S. Wong has recently shown that optimizing the dynamics of
+
+the modiﬁed Metropolis algorithm requires changes to the acceptance probability in eqn. 2
+
+[39]. However, we do not implement these changes here. Our unit of time is Monte-Carlo
+
+sweep (MCS ), where 1MCS = L3 spin ﬂip attempts, L being the system size.
+
+6
+
+The CPM adapts the Potts model to the context of biology. A CPM cell is a collection
+
+of lattice sites with same spin value (or index) σi. Each cell has a unique spin σ (see ﬁg. 1).
+
+Cells may also have additional characteristics,e.g., a type τ . Links between diﬀerent sites
+
+with spins deﬁne cell boundaries. So cells have both volume and a surface area. The volume,
+
+area, radius relation is highly non-Euclidean for small cells.
+
+FIG. 1: A typical cell conﬁguration in CPM. The bold lines denote cell boundary.
+
+The CPM Hamiltonian contains a variable number of terms. The interaction between
+
+pairs of biological cells involves an adhesive or repulsive interfacial energy. This interfacial
+
+energy is precisely the Potts energy, the sum of the interactions of neighboring unlike spins,
+
+across a link. Each mismatched link contributes a cell-type dependent binding energy per
+
+unit area J(τ, τ
+
+), where τ and τ
+
+are the type of cells on either side of the link. In the CPM
+
+′
+
+′
+
+the eﬀective cell-cell interaction energy is:
+
+Eadhesion =
+
+J(τσ(i,j,k), τσ(l,m,n))(1
+
+δ(σ(i,j,k),σ(l,m,n))),
+
+(3)
+
+−
+
+where δ(σ
+
+′
+
+,σ) = 1 if σ
+
+X(i,j,k),(l,m,n)neighbors
+= σ, otherwise δ(σ
+
+′
+
+′
+
+,σ) = 0.
+
+At any time t, a cell, of type, τ , has a volume v(σ, t) and surface area s(σ, t). The vol-
+
+ume is simple to deﬁne, v(σ0) =
+
+i,j,k δ(σ0,σ(i,j,k)), whereas surface area is more complex,
+
+P
+
+7
+
+since it depends on the interaction range of the lattice, s(σ0) =
+
+δ(σ(i,j,k),σ(i
+eﬀective volume elasticity, λv and target volume vtarget(σ, t). Larger values of λv, produce
+
+))), where (i, j, k) and (i
+
+P
+
+P
+
+, k
+
+, j
+
+−
+) are neighboring lattice sites. Each cell has an
+
+i,j,k δ(σ0,σi,j,k)
+
+′ (1
+
+′
+i
+
+,k
+
+,k
+
+,j
+
+,j
+
+′
+
+′
+
+′
+
+′
+
+′
+
+′
+
+′
+
+less compressible cells. We typically choose v2
+
+targetλv > other constraint energies. This com-
+
+pressibility makes little diﬀerence in low Reynolds number ﬂow but makes pattern evolution
+
+less stiﬀ. We also deﬁne a membrane elasticity, λs, and a target surface area starget(σ, t) to
+
+maintain the generalized shape of the cells. The energy contributions due to surface and
+
+volume ﬂuctuations are:
+
+(4)
+
+(5)
+
+(6)
+
+Esurf ace = λs(s(σ, t)
+
+starget(σ, t))2,
+
+Evolume = λv(v(σ, t)
+
+vtarget(σ, t))2.
+
+−
+
+−
+
+We can extend the Hamiltonian to include a uniform external force ~F , acting on all cells
+
+by including the term:
+
+Ef orce =
+
+−
+
+~F
+
+·
+
+~ri,j,k(1
+
+δσ(i,j,k),σ(l,m,n)),
+
+−
+
+X(ijk),(lmn)neighbors
+
+where ~rijk is the position vector at the lattice site (i, j, k).
+
+Previous CPM applications often treated ﬂuid or ECM as a single large cell with no
+
+constraints. Here we take coarse-grained approach to describe ECM. We assume the ECM
+
+consists of hypothetical ﬂuid cells (which we call particles to avoid confusion with the mod-
+
+eling of biological cells) having all the characteristic interactions and constraints of regular
+
+CPM cells. The volume constraint and the surface tension determine the elastic nature of the
+
+ﬂuid. The ﬂuid particles can move with respect to one another like regular CPM cell via spin
+
+ﬂips. Thus, local pressure developed due to movement or enlargement of actual biological
+
+cells will translate into motion of the surrounding ECM. This ﬂuid motion causes advection
+
+and mixing along with molecular diﬀusion of chemical morphogens. We restrict consider-
+
+ation to the highly overdamped viscous world that most biological cells experience, so our
+
+ﬂuid particles lack inertia. We also restrict to situations where the velocity of movement is
+
+much less than the velocity of sound, which is one lattice unit per MCS.
+
+We now introduce a relative velocity constraint between the cells/particles which faith-
+
+fully captures the eﬀects of shear due to the viscosity of the medium. In the CPM, velocity
+
+8
+
+is a cell property deﬁned as the displacement of the center of mass of the cell per MCS. Since
+the velocity gradient terms in the direction of the ﬂow (e.g., ∂ui
+∂xi
+
+) are the rate of change of
+
+volume [41] which eqn. 5 already includes, we need to keep only the contributions of cross
+terms of the form ( ∂ui
+∂xj
+
+)2. In an incompressible ﬂuid (
+
+u = 0) the cross terms are the
+
+∇ ·
+
+dissipation energy per unit volume [6]. In the CPM we model this term as :
+
+Eviscosity = λviscosity
+
+Vjx)2
+
+Sij
+
+(Vix −
+d2
+ij
+
+s
+
+(yi −
+
+yj)2 + (zi −
+d2
+ij
+
+zj)2
+
+j
+X
++ cyclic permutation of (x, y, z),
+
+i
+X
+
+(7)
+
+j’s are
+the
+xj)2 + (yi −
+
+where
+(xi −
+j. Vix is the
+p
+
+the
+yj)2 + (zi −
+
+indices of
+
+cells neighboring the
+
+ith cell and dij =
+
+zj)2 is the distance between the centers of cell i and cell
+
+x-component of the velocity of the ith cell. Since the cells are of irregular
+
+shape, we further weight the energy penalty by the cells common contact area Sij. We
+
+ensure that the cells are simply connected by using local connectivity checks during spin ﬂip
+
+b
+
+attempts. λviscosity corresponds to the viscosity coeﬃcient η in the Navier-Stokes equations.
+
+η has dependence on other system parameters like J, λvolume and λsurf ace.
+
+The net Hamiltonian including ﬂuids is then :
+
+H = Eadhesion + Esurf ace + Evolume + Eviscosity.
+
+(8)
+
+Diﬀusion Scheme
+
+Since the motion of the ﬂuid particles takes care of advection, we need only to solve the
+
+diﬀusion on the current ﬂuid particles conﬁguration; ∂C(~x,t)
+
+2C(~x, t), where we have
+
+∂t = D
+
+∇
+
+assumed that the diﬀusion constant D is constant and isotropic. Including an anisotropic
+
+or spatially varying D is a trivial extension of our method. We assume that the ﬂuid
+
+particles carry chemical morphogens, whose distribution is uniform over a given ﬂuid particle.
+
+Equivalently we can associate the chemical concentration with the center of mass of the
+
+particles and think of the diﬀusion as taking place between them (a FE view). Because the
+
+shape and volume of the ﬂuid particles are irregular, their centers of mass do not correspond
+
+to lattice points. We then need a numerical scheme for diﬀusion among ﬂuid particles. Few
+
+existing algorithms solve diﬀusion on a random or irregular lattice. The more sophisticated
+
+and accurate ones are computationally expensive [42]. We use a naive iterated Euler method,
+
+9
+
+∇
+
+,
+
+which is fast and stable and reproduces diﬀerent biological experiments with good qualitative
+
+and fair quantitative accuracy. We could of course, use a more elaborate scheme, if necessary.
+
+We locally average the concentration among the particles nearest neighbors. The particle
+
+neighbors change as the ﬂuid ﬂows. We approximate the Laplacian
+
+2C(~r, t) (where C(~r, t)
+
+is the chemical concentration and ~r is the center of mass coordinate of a ﬂuid particle) by
+
+[40]:
+
+D
+
+2Cj(t)
+
+∇
+
+D
+
+∼
+
+Xi next to j
+
+(Ci(~r, t)
+
+Cj(~r, t))
+
+−
+R2
+
+(9)
+
+where R is the average radius of the ﬂuid particles assuming them to be spherical (R =
+
+N
+
+i=1 V 1/3
+N
+
+i
+
+P
+instead of
+
+~ri −
+
+|
+
+~rj|
+
+) and Ci(~r, t) is the concentration in nearest neighbor ﬂuid particles. We use R2
+
+2 to avoid Neumann instability. We can update the concentration once or
+
+multiple times per MCS depending on the diﬀusion coeﬃcient of the chemical morphogen.
+
+D along with number of concentration updates per MCS controls the diﬀusion constant. For
+
+larger diﬀusion coeﬃcients we update the diﬀusion step multiple times per MCS. For typical
+
+chemical morphogens like cAMP the diﬀusion constants are
+
+10−4µm2/s , corresponding
+
+to a spread of 3√2.x10−4µm (0.04µm) per MCS. The typical lattice spacing in our CPM
+
+corresponds to 0.1
+
+1.0µm, hence a ﬂuid particle has a width of
+
+0.3
+
+3.0µm. Therefore
+
+−
+
+a very small amount chemical needs to diﬀuse among adjacent ﬂuid particle per MCS. In
+
+∼
+
+∼
+
+−
+
+fact, for most practical purposes we need at most one diﬀusion step per ﬁve to ten MCS.
+
+Both reﬂecting and constant concentration (zero concentration is absorbing) boundaries are
+
+simple to implement. For reﬂecting boundary condition we exclude from the exchange of
+
+concentration (eqn. 9) any particle whose boundary is reﬂecting. For absorbing boundary
+
+condition (constant concentration), we deﬁne the particles whose boundaries are absorbing
+
+to always have zero concentration. The algorithm handles moving boundaries automatically
+
+and conserves chemical concentration, unlike many other methods.
+
+III. RESULTS AND DISCUSSION
+
+A. Poiseuille Flow
+
+We ﬁrst discuss simulating Poiseuille ﬂow of a viscous ﬂuid in a cylindrical tube with rigid
+
+walls under a uniform force ﬁeld (body force) using the CPM. We consider a cylindrical
+
+tube with a circular cross-section of radius 18 lattice units and length 200 lattice units
+
+10
+
+with periodic boundary condition along the length. Each ﬂuid particle has an average
+
+volume of 64 lattice points. Our CPM AD scheme works for small forces when the ﬂuid
+
+particles remain simply connected. Fig. 2 plots the ensemble averaged (50 diﬀerent initial
+
+conﬁgurations) cross-sectional proﬁle of the viscous ﬂow at x = 150 and t = 2000 MCS
+with a small force ~F = 0.05
+
+x applied on all the ﬂuid particles. The ﬂow is in the x-direction
+
+only. The proﬁle is parabolic as expected. We also show its ﬁt to the analytical solution
+
+velocity
+
+at X = 150
+
+b
+
+A
+
+B
+
+ 0.3
+
+ 0.25
+
+ 0.2
+
+ 0.15
+
+ 0.1
+
+ 0.05
+
+ 0
+
+A
+
+ 0.04
+ 0.03
+ 0.02
+ 0.01
+ 0
+−0.01
+−0.02
+−0.03
+
+n
+o
+i
+t
+a
+l
+u
+m
+i
+s
+_
+V
+−
+
+ 
+
+l
+
+ 
+l
+a
+c
+i
+t
+y
+a
+n
+a
+_
+V
+
+ 0
+
+ 5
+
+ 10
+
+ 40
+
+ 35
+
+ 30
+
+Z
+
+ 25
+
+ 20
+
+ 15
+
+ 10
+
+ 5
+
+ 0
+
+ 0
+
+ 5
+
+ 15
+
+ 10
+
+ 20
+
+ 25
+
+Y
+
+ 40
+
+ 35
+
+ 30
+
+−0.05
+
+ 0
+
+ 5
+
+ 10
+
+ 15
+
+ 20
+
+ 25
+
+ 30
+
+ 35
+
+ 40
+
+Y at Z = 20
+
+FIG. 2: (A) Velocity proﬁle in a cylindrical ﬂow under gravity and its ﬁt to the analytical solution.
+
+(B) Velocity proﬁle across a diameter of the tube with error bars, the bold segment along the
+
+direction denotes the width of a ﬂuid particle.
+
+x
+
+b
+
+    0.02
+    0.01
+       0
+   −0.01
+
+B
+
+    0.05
+    0.03
+    0.01
+
+ 15
+
+ 20
+
+z
+
+ 25
+
+ 30
+
+ 35
+
+ 40  0
+
+ 20
+
+ 15
+
+y
+
+ 10
+
+ 5
+
+ 40
+
+ 35
+
+ 30
+
+ 25
+
+ 0
+
+ 5
+
+ 10
+
+ 15
+
+Z
+
+ 20
+
+ 25
+
+ 10  15  20  25  30  35  40
+
+Y
+
+ 30
+
+ 35
+
+ 40
+
+ 0
+
+ 5
+
+FIG. 3: (A) The absolute error between the analytical solution Vanalytical and the CPM simulation
+
+Vsimulation at x = 150. (B) The rms error of over 50 ensembles.
+
+4η R2(1
+
+V (r) = F
+
+( r
+R)2), where η is viscosity, is a ﬁtting parameter, R = 18 the radius
+of the cylinder and r is the distance from the axis of the cylinder. What is surprising is
+
+−
+
+the excellent agreement (an error of < 5% with the analytical result despite the coarseness
+
+of the simulation (only 9 particles across the diameter). All lattice points inside a ﬂuid
+
+S
+C
+M
+/
+s
+l
+e
+x
+i
+p
+ 
+y
+t
+i
+c
+o
+l
+e
+V
+
+ 0.3
+
+ 0.25
+
+ 0.2
+
+ 0.15
+
+ 0.1
+
+ 0.05
+
+ 0
+
+ 0.07
+ 0.06
+ 0.05
+ 0.04
+ 0.03
+ 0.02
+ 0.01
+ 0
+
+r
+o
+r
+r
+e
+ 
+s
+m
+
+r
+
+11
+
+particle have the same velocity, so regions where the shapes of the ﬂuid particles are regular
+
+for most ensembles will produce plateaux in the velocity proﬁle. Since in the CPM, the
+
+velocity of ﬂuid particles is the center of mass velocity, a lattice point touching a boundary
+
+wall will have a small nonzero velocity as the center of mass of the corresponding particle
+
+lies in the interior (slip boundary). Since the energy contribution of the constraints near
+
+a boundary wall dominates the external applied force and the Monte-Carlo temperature,
+
+boundary particles are more regular in shape than interior particles. This regularity holds
+
+in all ensembles, hence the rms error in the velocity near a boundary wall is small as shown
+
+in ﬁg. 3B and the velocity just near the boundary in ﬁg. 2 has a small plateau. Reducing
+
+the size of the ﬂuid particless compared to the typical length scales of the ﬂow reduces these
+
+anomalies. Increasing λviscosity increases the viscosity coeﬃcient η. A future paper will study
+
+the relation between η and λ, Monte-Carlo temperature, ﬂuid particle size, etc. We shall
+
+also show additional biologically relevant hydrodynamic ﬂows.
+
+We next verify our diﬀusion scheme under various biologically relevant conditions. CPM
+
+models using the modiﬁed ﬁnite temperature Metropolis algorithm have diﬀusion due to the
+
+movement of the CPM cells themselves which adds to the diﬀusion of chemical morphogens.
+
+However for most CPM simulations, e.g. a temperature 0.1 and other parameter values used
+
+through out this paper, the diﬀusion coeﬃcient of the CPM cells is
+
+10−4pixel2/MCS,
+
+which is much smaller than the typical diﬀusion coeﬃcient of
+
+0.1, that we treat in this
+
+∼
+
+∼
+
+paper. Hence for pure diﬀusion in a static medium the ﬂuid is eﬀectively ﬁxed. Besides
+
+the concentration proﬁle of the diﬀusing chemical in a medium, diﬀusion in the presence of
+
+boundaries and moving source is crucially important in biology. We show that the results
+
+of our simple CPM diﬀusion from CPM agree very well with corresponding analytical cal-
+
+culations or ﬁnite element results. We also brieﬂy discuss the validity of our method for
+
+diﬀusion in Poiseuille ﬂow.
+
+The four cases we discuss below employ ﬂuid particles with a target volume vtarget = 27,
+
+unless we mention otherwise. The lattice has 100x100x100 sites. We equilibrate and quench
+
+to remove any disconnected cells which the ﬁnite-temperature equilibration produces [27].
+
+In our model a chemical source at a given lattice point gives all lattice points which belong
+
+to the ﬂuid particle containing that chosen point the same concentration. We apply one
+
+diﬀusion step per MCS. The ﬁrst three cases are for static ﬂuids.
+
+12
+
+B. Two Sources with Reﬂecting and Absorbing Boundaries
+
+We consider two point sources at 15, 50, 50 and 50, 50, 50 with initial concentra-
+
+tions (at t = 0) of 5 and 10 respectively.
+
+The chemicals diﬀuse from these in-
+
+stantaneous sources.
+
+The bounding planes of the cube are reﬂecting.
+
+Figure 4
+
+plots the corresponding one-dimensional diﬀusion proﬁle projection (with no ensem-
+
+ble average) after elapsed times t = 50 MCS, 100 MCS, 200 MCS and ﬁtted
+
+to the exact solution C(x, t) =
+
+10.0
+√(4πDt)
+
+−(x−x1)2
+
+(exp
+
+4Dt + exp
+
+−(2L1−x−x1)2
+4Dt
+
++ exp
+
+−(2L2−x−x1)2
+4Dt
+
+) +
+
+−(x−x2)2
+
+(exp
+
+5.0
+√(4πDt)
+L1 and L2 are the coordinates of the two reﬂecting boundaries and x1 and x2 are the co-
+
+), D being a ﬁt parameter. Here
+
+4Dt + exp
+
++ exp
+
+−(2L1−x−x2)2
+4Dt
+
+−(2L2−x−x2)2
+4Dt
+
+ordinates of the instantaneous sources. The diﬀusion proﬁle matches matches very well at
+
+all times, even near the boundaries. The maximum relative error (compared to the exact
+
+solution) at t = 50MCS is 5%, again, surprisingly good for such a coarse simulation. We
+
+discuss errors in detail for absorbing boundary conditions in the next paragraph. The inset
+
+shows the variation of diﬀusion coeﬃcient calculated from ﬁtting to the exact solution as
+
+function of time. Though the diﬀusion constant should remain constant with time, we ob-
+
+serve a 5%
+
+6% variation from the asymptotic value at small times due to the sharp initial
+
+−
+
+distribution producing structures smaller than the ﬂuid particle scale of our coarse-grained
+
+scheme. We also studied the variation of the diﬀusion coeﬃcient D as function of the target
+
+volume of the ﬂuid particles. D is constant for variations over one order of magnitude of
+
+the target volume of the ﬂuid particles as shown in the inset to ﬁg. 5. Fig. 5 also shows
+
+the chemical proﬁle for an absorbing barrier at x = 0 and x = 100. The ﬁgures show that
+
+the diﬀusion coeﬃcient for both reﬂecting and absorbing barriers cases is same. Hence for a
+
+wide range of ﬂuid particle volumes, our CPM ADE algorithm faithfully reproduces diﬀusion
+
+from two point sources.
+
+Fig. 6 plots the relative error as a function of position at diﬀerent times. As mentioned in
+
+the last paragraph the sharp distribution at the initial time produce errors large compared
+
+to later time, i.e., if we ignore the large errors in the tail (as the magnitude of concentration
+
+is extremely small in the tails) the relative error at t = 150 is < 5% whereas at t = 500
+
+it is < 0.5%.
+
+In the actual biological situation, cells secrete chemical morphogens over
+
+their whole membrane surface and hence such singular cases of high point concentration of
+
+chemical rarely occur.
+
+13
+
+t = 50
+t = 100
+
+t = 200
+
+ 0.8
+
+ 0.7
+
+ 0.6
+
+ 0.5
+
+ 0.3
+
+ 0.2
+
+ 0.1
+
+)
+
+(
+
+X
+C
+
+ 0.4
+
+2
+
+s
+c
+m
+
+/
+ 
+l
+e
+x
+i
+p
+
+D
+
+ 0.345
+
+ 0.34
+
+ 0.335
+
+ 0.33
+
+ 0.325
+
+ 0.32
+
+ 0.315
+
+ 0.31
+ 0
+
+ 100
+
+ 200
+
+ 300
+
+ 400
+
+ 500
+
+ 600
+
+ 700
+
+t
+
+in MCS
+
+ 0
+ 0
+
+ 10
+
+ 20
+
+ 30
+
+ 40
+
+ 50
+X
+
+ 60
+
+ 70
+
+ 80
+
+ 90
+
+ 100
+
+FIG. 4: Symbols denote chemical proﬁle projected on the x-axis (summing in the Y and Z direc-
+
+tions) at t = 50 MCS, 100 MCS, 200 MCS for reﬂecting barriers at x = 0 and 100 denoted by
+
+symbols. The solid line is a ﬁt to the exact solution using the ﬁtting parameter D. The inset shows
+
+variations in D with time, due to coarse graining and the initial sharp distribution.
+
+C. Two Sources with a Reﬂecting Obstacle inside the Medium
+
+Since biological cells can be impermeable to many chemical morphogens, they can act
+
+as reﬂecting boundaries within the ﬂuid medium. We check this situation for the simple
+
+test case of a cylindrical barrier with rectangular cross-section (15x15, pixels centered at
+
+(50, 50, 50) and the axis along the x-direction) within the ﬂuid medium. As in the previous
+
+case, we place two point sources near the two opposite corners of the rectangle at (50, 40, 40)
+
+and (50, 60, 60). We recover the same diﬀusion coeﬃcient as in the previous case. Fig. 7
+
+plots the one-dimensional cross-section of the diﬀusion proﬁle at three diﬀerent z positions.
+
+Along z = 40 and 60 the barrier is absent and the diﬀusion is merely the superposition of
+
+that from the two sources. Along z = 50 we see the eﬀect of the reﬂecting barrier. The inset
+
+on the right side shows the concentration proﬁle obtained from a ﬁnite element calculation
+
+for this situation which matches very well with the CPM concentration proﬁle in the left
+
+inset.
+
+14
+
+t = 70
+t = 100
+t = 200
+
+ 0.4
+
+ 0.35
+
+ 
+
+D
+
+ 0.3
+
+ 0.25
+
+ 0.2
+
+ 10
+
+t = 200
+
+ 100
+Cell Volume
+
+ 1000
+
+)
+x
+(
+C
+
+ 0.7
+
+ 0.6
+
+ 0.5
+
+ 0.4
+
+ 0.3
+
+ 0.2
+
+ 0.1
+
+ 0
+
+−0.1
+
+)
+x
+(
+C
+
+)
+x
+(
+C
+δ
+
+ 0.25
+
+ 0.2
+
+ 0.15
+
+ 0.1
+
+ 0.05
+
+ 0
+
+−0.05
+
+−0.1
+
+ 0
+
+ 0
+
+ 10  20  30  40  50  60  70  80  90  100
+
+x
+
+FIG. 5: Chemical proﬁle projected on the x-axis from diﬀusion of two instantaneous point sources
+
+for an absorbing barrier at x = 0 and x = 100 for t = 70 MCS , 100 MCS , 200 MCS . The inset
+
+shows the variation of D with ﬂuid particle volume on a log scale.
+
+t = 150
+t = 200
+t = 500
+
+ 10
+
+ 20
+
+ 30
+
+ 40
+
+ 50
+
+ 60
+
+ 70
+
+X
+
+FIG. 6: Relative error along the x lattice direction for an absorbing barrier.
+
+D. Moving Continuous Source
+
+Moving cells often secrete morphogens. Hence we correctly simulate cells’ chemotactic
+
+response to secreted chemicals only if we faithfully reproduce diﬀusion from moving sources.
+
+To test our simulation we assign an arbitrary ﬂuid particle a constant concentration C0
+
+(continuous source) and uniform velocity v along the x direction. We keep the source
+
+15
+
+FIG. 7: Chemical proﬁle cross-section along z = 40, 50 and 60 in the presence of a cylindrical
+
+reﬂecting barrier with axis along the
+
+x direction and rectangular cross-section. The sources with
+
+initial concentration 5 and 10 are placed at 50, 40, 40 and 50, 60, 60. The inset shows 2d projection
+
+b
+
+of the proﬁle. The lower ﬁgure shows a two-dimensional projection obtained from ﬁnite element
+
+calculations. The concentration decreases as we go away from the center contours (yellow lines).
+
+suﬃciently distant from the boundary to avoid boundary eﬀects. At t = 0 the source is
+
+at x = 35 and moves with velocity u = 0.04 pixel/MCS. We ﬁt the CPM chemical proﬁle
+
+16
+
+projection in the x direction (no ensemble average) with the 1D analytic solution:
+
+α(x) = ((x
+
+x0)2)/(4D),
+
+−
+
+β = u2/(4D),
+
+γ(x) = exp((x
+
+x0)u/(2D)),
+
+−
+
+C(x, t) =
+
+γ(x)(exp(2
+
+α(x)β)Erf c(
+
++
+
+βt)
+
+C0
+2
+
++ exp(
+
+2
+−
+
+p
+
+p
+
+α(x)β)Erf c(
+
+α(x)
+t
+
+r
+α(x)
+
+t −
+
+r
+
+p
+
+p
+βt)).
+
+(10)
+
+(11)
+
+(12)
+
+(13)
+
+(14)
+
+FIG. 8: CPM simulation of the chemical proﬁle from a moving source (the other two coordinates
+
+integrated out) at t = 300 MCS. The solid line denotes the ﬁt to eqn. 10 . The inset shows a two
+
+dimensional projection of the simulation, where red denotes the highest chemical concentration
+
+and black the lowest.
+
+Figure 8 shows that the CPM diﬀusion agrees very well with the analytical solution. The
+
+diﬀusion coeﬃcient obtained from the ﬁt is D = 0.29.
+
+E. Taylor-Aris Dispersion in Poiseuille ﬂow
+
+We check the qualitative agreement of the dispersion coeﬃcient obtained using our CPM
+
+ADE solver for Poiseuille ﬂow along x direction (described in section III A) in a cylindrical
+
+geometry. We compare our result for an initial delta distribution of chemical in the middle
+
+of the tube. After an initial transient, so that the chemical reaches the boundary in the
+
+y and z direction, we compare the diﬀusion coeﬃcient of chemical distribution along the
+
+17
+
+x direction with the analytical result for the eﬀective diﬀusion coeﬃcient in Poiseuille ﬂow
+along the cylinder axis, i.e. Def f ective = D0 + v2R2
+48D0
+
+. Here D0 is the diﬀusion coeﬃcient in the
+
+absence of ﬂow, v is the average velocity and R is the radius of the cylinder. Figure 9 shows
+
+our results where we have plotted the variation of eﬀective diﬀusion coeﬃcient with time (in
+
+MCS) for diﬀerent mean velocities. For the analytical results given in solid lines in ﬁg. 9,
+
+we use the mean velocity obtained from the ﬁt of the velocity proﬁle like as shown in ﬁg. 2.
+
+Figure 10 shows snapshots of chemical proﬁle after 500 MCS for D0 = 0 and D0 = 0.12.
+
+In this case, we start with a thin sheet of chemical in the x
+
+z plane, at x = 75, i.e.,
+
+−
+
+all the particles at x = 75 have uniform concentration. We take a cut at y = 20 to see
+
+the evolved chemical proﬁle. A detailed study of evolution of chemical proﬁle, eﬀect of
+
+embedded objects like sphere under both stationary and moving condition will be reported
+
+in our future communication.
+
+F = 0.02
+F=0.005
+F=0.009
+D0
+
+ 5000
+
+ 10000
+
+ 15000
+
+ 20000
+
+ 25000
+
+Time in MCS
+
+FIG. 9: Eﬀective diﬀusion coeﬃcient for mean ﬂow velocities v = 0.056, 0.028 and 0.016 respec-
+
+tively from top to the bottom curve. The solid lines show the analytical results corresponding to
+
+e
+v
+i
+t
+c
+e
+f
+f
+e
+_
+D
+
+ 0.32
+
+ 0.3
+
+ 0.28
+
+ 0.26
+
+ 0.24
+
+ 0.22
+
+ 0.2
+
+ 0.18
+
+ 0.16
+
+ 0.14
+
+ 0.12
+
+ 0.1
+
+ 0
+
+above mean velocities.
+
+IV. CONCLUSIONS
+
+We have implemented ﬂuid ﬂow, advection and diﬀusion in the framework of the CPM,
+
+avoiding the programming complexity and computational demands associated with imple-
+
+menting a ﬁnite-element or ﬁnite-diﬀerence Navier-Stokes simulation and interfacing it with
+
+the CPM lattice.
+
+18
+
+FIG. 10: Cross-sectional proﬁle (
+
+x
+
+z plane, y = 20) of chemical concentration at t = 500M CS
+
+−
+
+starting from an initial set of particles at x = 75 with uniform concentration; (A) with no diﬀusion,
+
+b
+(B) with diﬀusion. Particles which move away from the plane in the
+
+b
+
+y direction cannot be seen in
+
+the ﬁgures.
+
+b
+
+We have used three biologically relevant test cases to verify our method. All our results for
+
+diﬀusion in the presence of boundaries or moving sources agree very well with corresponding
+
+analytical or ﬁnite-element solutions. The errors in our scheme are large if we try to probe
+
+far below the diﬀusion time scale or the ﬂuid particle length scale, but the results are
+
+qualitatively correct. Thus we must be cautious when applying this scheme to large P e
+
+number ﬂows. The requirement that ﬂuid particles remains connected, limits the method
+
+to low Re. However, since most biological mechanisms operate at low Re our CPM ADE
+
+solver is appropriate for many cell-level simulations.
+
+[1] C. R. Nugent, W. M. Quarles, and T. H. Solomon, Phys. Rev. Lett. 93, 218301 (2004); J. D.
+
+Seymour, J. P. Gage, S. L. Codd, and R. Gerlach, Phys. Rev. Lett. 93, 198103 (2004); M.
+
+Leconte, J. Martin, N. Rakotomalala, and D. Salin, Phys. Rev. Lett. 90, 128302 (2003); B. F.
+
+Edwards Phys. Rev. Lett. 89, 104501 (2002);
+
+[2] A. Bancaud, G. Wagner, K. D. Dorfman, J. L. Viovy, Anal. Chem. 2004 (submitted);
+
+[3] T. Yanagita and K. Kaneko, Phys. Rev. Lett. 78, 4297-4300 (1997).
+
+[4] J. M. Keller, M. L. Brusseau, Environ. Sci. Technol. 37, 3141 (2003); T. E. McKone and D.
+
+H. Bennett, Environ. Sci. Technol. 37, 3123 (2003).
+
+[5] G. J. Gibson, C. A. Gilligan, and A. Kleczkowski, Proc. R. Soc. Lond. Ser. B. 266, 1743-1753
+
+(1999); J. T. Truscott and C. A. Gilligan, Porc. Natl. Acad. Sci. U.S.A 100, 9067-9072 (2003).
+
+19
+
+[6] T. E. Faber, Fluid Dynamics for Physicists, (Cambridge University Press, Cambridge 1995).
+
+[7] P. M. Gresho and R. L. Sani, Incompressible Flow and the Finite Element Method , (John
+
+Wiley and Sons, 2000); W. Hundsdorfer, J. G. Verwer, Numerical Solution of Time-Dependent
+
+Advection-Diﬀusion-Reaction Equations, (Springer Series in Computational Mathematics,
+
+2003).
+
+[8] Y. H. Qian, D. D’Humieres, and P. Lallemand, Europhys. Lett. 17, 479 (1992).
+
+[9] E. G. Flekkoy, Phys. Rev. E 47, 4247 (1993).
+
+[10] S. P. Dawson, S. Chen, and G. D. Doolean, J. Chem. Phys. 98, 1514, (1993).
+
+[11] C. P. Lowe and D. Frenkel, Physica A, 220, 251, (1995); R. H. Merks, et al, J. of Comp. Phys.
+
+183, 563-576 (2002).
+
+[12] J. C. Anthony, J. Fluid Mech, 271, 285-309 1994.
+
+[13] W. Zeng, G. L. Thomas, S. A. Newman, and J. A. Glazier, Mathematical Modeling and
+
+Computing in Biology and Medicine, 5th ESMTB Conference 2002, V. Capasso editor (Societ
+
+Editrice Esculapio, Bologna, 2003).
+
+[14] D. V. Zhelev, A. M. Alteraiﬁ, and D. Chodniewicz, Biophys. J. 87 (2004), 688-695.
+
+[15] H. C. Berg and P. M. Tedesco, Proc. Natl. Acad. Sci. U. S. A. 72, 3235-3239 (1975).
+
+[16] M. H. Kroll, J. D. Hellums, L. V. McIntire, A. L. Schafer, and J. L. Moake. Blood. 88,
+
+1525-1541 (1996).
+
+[17] S. Jadhav and K. Konstantopoulos, Am. J. Physiol. Cell Phsiol. 283, C1133-C1143 (2002).
+
+[18] M. U. Nollert, N. J. Panaro, and L. V. McIntire, Ann. N. Y. Acad. Sci. 665, 94-104 (1992);
+
+P. F. Davies, Physiol. Rev. 75, 519-560 (1995)
+
+[19] E. B. Finger, K. D. Puri, R. Alon, M. B. Lawrence, U. H. von Andrian, and T. A. Springer,
+
+Nature, 379, 266-269 (1996).
+
+[20] A. M. Turing, Philos. Trans. R. Soc. London B 237, 266-269 (1952); A. Taylor, Prog. in
+
+Reaction Kinetics and Mechanism 27, 247-325 (2002).
+
+[21] A D Taylor, S Neelamegham, JD Hellums, CW Smith, and SI Simon, Biophys. J. 71, 3488-
+
+[22] M. Pavlin, N. Pavselj, and D. Miklavcic, IEEE Trans. Biomed. Engg., 49, 605 (2002).
+
+[23] H. G. E. Hentschel, J. A. Glazier and S.A. Newman, Proc. Royal Soc. Lond. B. 271, 1713
+
+3500 (2004);
+
+(2004).
+
+[24] S. Kikichi, K. Fujimoto, N. Kitagawa, et. al., Neural Networks, 16, 1389 (2003)
+
+20
+
+[25] M. S. Alber, A. Kiskowski, J. A. Glazier, and Y. Jiang, Mathematical Systems Theory in
+
+Biology, Communication, and Finance 132, 1-40 (2003).
+
+[26] F. Graner and J. A. Glazier, Phys. Rev. Lett. 69, 2013-2016 (1992).
+
+[27] J. A. Glazier and F. Graner, Phys. Rev. E 47, 2128-2154 (1993).
+
+[28] M. S. Alber, M. A. Kiskowski, J. A. Glazier, and Y. Jiang, in Mathematical Systems Theory
+
+in Biology, Communication, and Finance, J. Rosenthal, and D. S. Gilliam, editors (IMA 142,
+
+Springer-Verlag, New York, 2002), 1-40.
+
+[29] W. Zeng, G. L. Thomas and J. A. Glazier, Physica A 341, 482-494 (2004).
+
+[30] M. Zajac, G. L. Jones, and J. A. Glazier, Phys. Rev. Lett. 85, 2022 (2000).
+
+[35] S. Maree, From Pattern Formation to Morphogenesis: Multicellular Coordination in Dic-
+
+tyostelium discoideum Ph.D. Thesis (U. Utrecht 2000).
+
+[32] Emma Stott, N. F. Britton, J. A. Glazier, and M. Zajac, Math. and Computer Modelling 30,
+
+[33] R. M. H. Merks, S. A. Newman and J. A. Glazier, Lecture Notes in Computer Science 3305,
+
+[34] R. Chaturvedi, J. A. Izaguirre, C. Huang, T. Cickovski, P. Virtue, G. Thomas, G. Forgacs, M.
+
+Alber, G. Hentschel, S. A. Newman, and J. A. Glazier, Lecture Notes in Computer Science
+
+[35] A. F. Maree and P. Hogeweg, Proc. Nat. Acad. Sci. USA 98 3879 (2001).
+
+[36] Y. Jiang, Cellular Pattern Formation, Ph.D. dissertation (U. of Notre Dame 1998).
+
+[37] E. M. Purcell, Am. J. of Phys. 45, 3-11 (1977).
+
+[38] M. E. J. Newman and G. T. Barkema Monte Carlo Methods in Statistical Physics (Oxford
+
+Univ. Press 1999).
+
+[39] S. Wong, A Cursory Study of the Thermodynamic and Mechanical Properties of Monte-Carlo
+
+Simulations of the Ising Model, Ph.D. thesis (Notre Dame Univ., 2004).
+
+[40] J. D. Murray, Mathematical Biology, Vol 1 (Springer Verlag 2002).
+
+[41] E. M. Lifsihtz and L. D. Landau, Fluid Mechanics, (Butterworth-Heinemann, 1987).
+
+[42] J. Braun and M. Sambridge, Nature 376, 655 (1995).
+
+183-198 (1999).
+
+425-434 (2004).
+
+2659, 39-49 (2003).
+
+21
+
+

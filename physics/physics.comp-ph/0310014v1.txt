@@ -1,0 +1,1105 @@
+3
+0
+0
+2
+ 
+t
+c
+O
+ 
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+4
+1
+0
+0
+1
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Damping factors for the gap-tooth scheme
+
+Giovanni Samaey, Ioannis G. Kevrekidis, and Dirk Roose
+
+February 2, 2008
+
+Abstract
+
+An important class of problems exhibits macroscopically smooth be-
+haviour in space and time, while only a microscopic evolution law is
+known. For such time-dependent multi-scale problems, the gap-tooth
+scheme has recently been proposed. The scheme approximates the evolu-
+tion of an unavailable (in closed form) macroscopic equation in a macro-
+scopic domain; it only uses appropriately initialized simulations of the
+available microscopic model in a number of small boxes. For some model
+problems, including numerical homogenization, the scheme is essentially
+equivalent to a ﬁnite diﬀerence scheme, provided we repeatedly impose
+appropriate algebraic constraints on the solution for each box. Here, we
+demonstrate that it is possible to obtain a convergent scheme without
+constraining the microscopic code, by introducing buﬀers that “shield”
+over relatively short times the dynamics inside each box from boundary
+eﬀects. We explore and quantify the behavior of these schemes system-
+atically through the numerical computation of damping factors of the
+corresponding coarse time-stepper, for which no closed formula is avail-
+able.
+
+1 Introduction
+
+For an important class of multi-scale problems, a separation of scales exists
+between the (microscopic, detailed) level of description of the available model,
+and the (macroscopic, continuum) level at which one would like to observe
+the system. Consider, for example, a kinetic Monte Carlo model of bacterial
+chemotaxis [SGK03]. A stochastic biased random walk model describes the
+probability of an individual bacterium to run or “tumble”, based on the rotation
+of its ﬂagellae. Technically, it would be possible to run the detailed model for
+all space and time, and observe the macroscopic variables of interest, but this
+would be prohibitively expensive.
+It is known, however, that, under certain
+conditions, one can write a closed deterministic model for the evolution of the
+concentration of the bacteria as a function of space and time.
+
+The recently proposed gap-tooth scheme [KGK02] can then be used instead
+of performing stochastic time integration in the whole domain. A number of
+small intervals (boxes, teeth), separated by large gaps, are introduced; they
+
+1
+
+qualitatively correspond to mesh points for a traditional, continuum solution
+of the unavailable chemotaxis equation. The scheme works as follows: We
+ﬁrst choose a number of macroscopic grid points. We then choose a small
+interval around each grid point; initialize the ﬁne scale, microsopic solver within
+each interval consistently with the macroscopic initial conditions; and provide
+each box with appropriate (as we will see, to some extent artiﬁcial) boundary
+conditions. Subsequently, we use the microscopic model in each interval to
+simulate evolution until time ∆t, and obtain macroscopic information (e.g. by
+computing the average density in each box) at time ∆t. This amounts to a
+coarse time-∆t map; this procedure is then repeated.
+
+The generalized Godunov scheme of E and Engquist [EE03] also solves an
+unavailable macroscopic equation by repeated calls to a microscopic code; how-
+ever, the assumption is made that the unavailable equation can be written in
+conservation form.
+In the gap-tooth scheme discussed here, the microscopic
+computations are performed without assuming such a form for the “right-hand-
+side” of the unavailable macroscopic equation; we evolve the detailed model
+in a subset of the domain, and try to recover macroscopic evolution through
+interpolation in space and extrapolation in time.
+
+We have showed analytically, in the context of numerical homogenization,
+that the gap-tooth scheme is close to a ﬁnite diﬀerence scheme for the homoge-
+nized equation [SKR03]. However, that analysis employed simulations using an
+algebraic constraint, ensuring that the initial macroscopic gradient is preserved
+at the boundary of each box over the time-step ∆t. This requires altering an
+existing microscopic code, so as to impose this macroscopically-inspired con-
+straint. This may be impractical (e.g. if the macroscopic gradient has to be
+estimated), undesirable (e.g. if the development of the code is expensive and
+time-consuming) or even impossible (e.g. if the microscopic code is a legacy
+code). Generally, a given microscopic code allows us to run with a set of pre-
+deﬁned boundary conditions. It is highly non-trivial to impose macroscopically
+inspired boundary conditions on such microscopic codes, see e.g. [LLY98] for a
+control-based strategy. This can be circumvented by introducing buﬀer regions
+at the boundary of each small box, which shield the short-time dynamics within
+the computational domain of interest from boundary eﬀects. One then uses the
+microscopic code with its built-in boundary conditions.
+
+Here, we show we can study the gap-tooth scheme (with buﬀers) through
+its numerically obtained damping factors, by estimating its eigenvalues. Inte-
+gration with nearby coarse initial conditions is used to estimate matrix-vector
+products of the linearization of the coarse time-∆t map with known perturbation
+vectors; these are integrated in matrix-free iterative methods such as Arnoldi
+eigensolvers. For a standard diﬀusion problem, we show that the eigenvalues of
+the gap-tooth scheme are approximately the same as those of the ﬁnite diﬀer-
+ence scheme. When we impose Dirichlet boundary conditions at the boundary
+of the buﬀers, we show that the scheme converges to the standard gap-tooth
+scheme for increasing buﬀer size.
+
+2
+
+2 Physical Problem/ Governing Equations
+
+We consider a general reaction-convection-diﬀusion equation with a dependence
+on a small parameter ǫ,
+
+∂
+∂t
+
+u(x, t) = f
+
+u(x, t),
+
+u(x, t),
+
+u(x, t), x,
+
+(1)
+
+∂
+∂x
+
+∂2
+∂x2
+
+(cid:18)
+
+x
+ǫ (cid:19)
+
+,
+
+with initial condition u(x, 0) = u0(x) and Dirichlet boundary conditions u(0, t) =
+vo and u(1, t) = v1. We further assume that f is 1-periodic in y = x
+ǫ .
+
+Since we are only interested in the macroscopic (averaged) behavior, let us
+
+deﬁne an averaging operator for u(x, t) as follows
+
+U (x, t) := Sh(u)(x, t) =
+
+u(ξ, t)dξ.
+
+(2)
+
+x+ h
+2
+
+Z
+
+x− h
+2
+
+This operator replaces the unknown function with its local average in a small
+box of size h >> ǫ around each point. If h is suﬃciently small, this amounts to
+the removal of the microscopic oscillations of the solution, retaining its macro-
+scopically varying components.
+
+The averaged solution U (x, t) satisﬁes an (unknown) macroscopic partial
+
+diﬀerential equation,
+
+∂
+∂t
+
+∂
+∂x
+
+∂2
+∂x2
+
+(cid:18)
+
+U (x, t) = F
+
+U (x, t),
+
+U (x, t),
+
+U (x, t), x; h
+
+,
+
+(3)
+
+(cid:19)
+
+which does not depend on the small scale, but instead has a dependence on the
+box width h.
+
+The goal of the gap-tooth scheme is to approximate the solution U (x, t),
+while only making use of the detailed model (1). For illustration purposes,
+consider as a microscopic model the constant coeﬃcient diﬀusion equation,
+
+∂
+∂t
+
+u(x, t) = a∗ ∂2
+∂x2
+
+u(x, t),
+
+(4)
+
+In this case both U (x, t) and u(x, t) satisfy (4). The microscopic and macro-
+scopic models are the same, which allows us to focus completely on the method
+and its implementation.
+
+3 Multiscale/Multiresolution Method
+
+3.1 The gap-tooth scheme
+
+Suppose we want to obtain the solution of the unknown equation (3) on the
+interval [0, 1], using an equidistant, macroscopic mesh Π(∆x) := {0 = x0 <
+x1 = x0 + ∆x < . . . < xN = 1}. To this end, consider a small interval (tooth,
+box) of length h << ∆x centered around each mesh point, and let us perform a
+
+3
+
+time integration using the microscopic model (1) in each box. We provide each
+box with boundary conditions and initial condition as follows.
+
+Boundary conditions. Since the microscopic model (1) is diﬀusive, it
+makes sense to impose a ﬁxed gradient at the boundary of each small box for
+a time ∆t for the macroscopic function U (x, t). The value of this gradient is
+determined by an approximation of the concentration proﬁle by a polynomial,
+based on the (given) box averages U n
+
+i , i = 1, . . . , N .
+
+u(x, tn) ≈ pk
+
+i (x; tn),
+
+x ∈ [xi −
+
+, xi +
+
+h
+2
+
+h
+2
+
+],
+
+where pk
+approximating polynomial has the same box averages in box i and in k
+to the left and to the right. This gives us
+
+i (x; tn) denotes a polynomial of (even) degree k. We require that the
+2 boxes
+
+1
+h Z
+
+xi+j + h
+2
+
+xi+j− h
+2
+
+pk
+i (ξ; tn)dξ = U n
+
+i+j,
+
+j = −
+
+, . . . ,
+
+(5)
+
+k
+2
+
+.
+
+One can easily check that
+
+Sh(pk
+
+i )(x, tn) =
+
+U n
+i+jLk
+
+i,j(x),
+
+Lk
+
+i,j(x) =
+
+(x − xi+l)
+(xi+j − xi+l)
+
+(6)
+
+k
+2
+
+Xj=− k
+
+2
+
+k
+2
+
+k
+2
+
+Yl=− k
+2
+l6=j
+
+where Lk
+i (x, tn) at xi ± h
+pk
+
+i,j(x) denotes a Lagrange polynomial of degree k. The derivative of
+
+2 is subsequently used as a Neumann boundary condition,
+
+d
+dx
+
+pk
+i (x; tn)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+xi± h
+2
+
+(7)
+
+In [SKR03], it is shown how to enforce the macroscopic gradient to be constant
+when the microscopic model exhibits fast oscillations.
+
+Initial condition. For the time integration, we must impose an initial
+condition ˜ui(x, tn) in each box [xi − h
+2 , xi + h
+2 ], at time tn. We require ˜ui(x, tn)
+to satisfy the boundary condition and the given box average. We choose a
+quadratic polynomial, centered around the coarse mesh point,
+
+˜ui(x, tn) ≡ a(x − xi)2 + b(x − xi) + c.
+
+(8)
+
+Using the constraints (7) and requiring 1
+h
+
+˜ui(ξ, tn)dξ = U n
+
+i , we obtain
+
+a =
+
+i − s−
+s+
+i
+2h
+
+,
+
+b =
+
+i + s−
+s+
+i
+2
+
+,
+
+c = U n
+
+i −
+
+(s+
+
+i − s−
+
+i ).
+
+(9)
+
+h
+24
+
+The algorithm. The complete gap-tooth algorithm to proceed from tn to
+
+tn+1 = tn + ∆t is given below:
+
+xi+ h
+2
+xi− h
+2
+
+R
+
+4
+
+1. At time tn, construct the initial condition ˜ui(x, tn), i = 0, . . . , N , using
+j (j = 0, . . . , N ) as deﬁned in (9).
+
+the box averages U n
+
+2. Compute ˜ui(x, t) by solving the equation (1) until time tn+1 = t+ ∆t with
+
+Neumann boundary conditions (7).
+
+3. Compute the box average U n+1
+
+i
+
+at time tn+1.
+
+It is clear that this amounts to a “coarse to coarse” time-∆t map. We write
+
+this map as follows,
+
+U n+1 = Sk(U n; tn + ∆t),
+
+(10)
+
+where S represents the numerical time-stepping scheme for the macroscopic
+(coarse) variables and k denotes the degree of interpolation.
+
+We emphasize that the scheme is also applicable if the microscopic model
+is not a partial diﬀerential equation.
+In this case, we replace step 2 with a
+coarse time-stepper, based on the lift-run-restrict procedure that was outlined in
+[GKT02]. Numerical experiments using this algorithm are presented in [GLK03,
+GK02]. Figure 1(a) gives a schematic representation of the algorithm.
+
+3.2 The gap-tooth scheme with buﬀers
+
+We already mentioned that, in many cases, it is not possible or convenient to
+constrain the macroscopic gradient. However, the only crucial issue is that the
+detailed system in each box should evolve as if it were embedded in a larger do-
+main. This can be eﬀectively accomplished by introducing a larger box of size
+H >> h around each macroscopic mesh point, but still only use (for macro-
+purposes) the evolution over the smaller, “inner” box. This is illustrated in
+ﬁgure 1(b). Lifting and evolution (using arbitrary outer boundary conditions)
+are performed in the larger box; yet the restriction is done by taking the average
+of the solution over the inner, small box. The goal of the additional computa-
+tional domains, the buﬀers, is to buﬀer the solution inside the small box from
+outer boundary eﬀects. This can be accomplished over short enough times,
+provided the buﬀers are large enough; analyzing the method is tantamount to
+making these statements quantitative.
+
+The idea of using a buﬀer region was also used in the multi-scale ﬁnite
+element method (oversampling) of Hou [HW97] to eliminate the boundary layer
+eﬀect; also Hadjiconstantinou makes use of overlap regions to couple a particle
+simulator with a continuum code [Had99].
+If the microscopic code allows a
+choice of diﬀerent types of “outer” microscopic boundary conditions, selecting
+the size of the buﬀer may also depend on this choice.
+
+4 Results
+
+We ﬁrst show analytically and numerically that the standard gap-tooth scheme
+converges for equation (4). We then analyze convergence of the scheme with
+buﬀers and Dirichlet boundary conditions through its damping factors.
+
+5
+
+Dt
+
+Dt
+
+H
+
+h
+
+h
+
+Dx
+
+...
+
+x
+i 1-
+
+xi
+
+xi 1+
+
+...
+
+Dx
+
+...
+
+x
+i 1-
+
+xi
+
+xi 1+
+
+...
+
+(a) The gap-tooth scheme
+
+(b) Introduction of buﬀers
+
+Figure 1: A schematic representation of the two variants of the gap-tooth scheme
+(with and without buﬀer boxes).
+
+4.1 Convergence of the gap-tooth scheme
+
+Theorem 1. The gap-tooth scheme, applied to equation (4) with exact, an-
+alytical integration within the boxes, and boundary conditions deﬁned through
+interpolating polynomials of (even) order k, is equivalent to a ﬁnite diﬀerence
+discretization of equation (4) of order k central diﬀerences in space and an ex-
+plicit Euler time step.
+
+Proof. When using exact (analytic) integration in each box, we can ﬁnd an
+explicit formula for the gap-tooth time-stepper. The initial proﬁle is given by
+(8), ˜ui(x, tn) = a(x − xi)2 + b(x − xi) + c. Due to the Neumann boundary
+conditions, time integration can be done analytically, using
+
+˜u(x, tn + ∆t) = a(x − xi)2 + b(x − xi) + c + 2a · a∗∆t
+
+Averaging this proﬁle over the box gives the following time-stepper for the box
+averages,
+
+U n
+
+i = U n
+
+i + a∗ s+
+
+i
+
+i − s−
+h
+, where pk
+
+xi± h
+2
+
+∆t.
+
+i (x, tn) is determined by (5).
+
+We know that s±
+dx pk
+One can easily verify that
+
+i = d
+
+i (x, tn)
+(cid:12)
+(cid:12)
+
+d2
+dx2 Sh(pk
+is a k-th order approximation of ∂2u
+
+i )(x, tn) =
+
+i − s−
+s+
+h
+
+i
+
+,
+
+∂x2 , which concludes the proof.
+
+As an example, we apply the gap-tooth scheme to the diﬀusion equation
+(4) with a∗ = 1. We choose an initial condition U (x, t) = 1 − |2x − 1|, with
+Dirichlet boundary conditions, and show the result of a fourth-order gap-tooth
+simulation with ∆x = 0.05, ∆t = 5 · 10−3 and h = 0.01. Inside each box, we
+used a second order ﬁnite diﬀerence scheme with microscopic spatial mesh size
+δx = 1 · 10−3 and δt = 5 · 10−7. The results are shown in ﬁgure 2.
+
+6
+
+U
+
+0.5
+
+1
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0
+
+0
+
+x 10−10
+
+3
+
+e
+c
+n
+e
+r
+e
+f
+f
+i
+d
+
+2
+
+1
+
+0
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0.5
+x
+
+0.5
+x
+
+(a) Numerical solution
+
+(b) Diﬀerence with FD
+
+Figure 2: The gap-tooth scheme of fourth order for eq. (4) at t = 0, 4·10−3, . . . , 2·
+10−2.
+
+4.2 Damping factors
+
+Convergence results are typically established by proving consistency and stabil-
+ity. If one can prove that the error in each time step can be made arbitrarily
+small by reﬁning the spatial and temporal mesh size, and that an error made at
+time tn does not get ampliﬁed in future time-steps, one has proved convergence.
+This requires the solution operator to be stable as well.
+
+In the abscense of explicit formulas, one can examine the damping factors
+of the time-stepper. If, for decreasing mesh sizes, all (ﬁnitely many) eigenvalues
+and eigenfunctions of the time-stepper converge to the dominant eigenvalues
+and eigenfunctions of the time evolution operator, one expects the solution of
+the scheme to converge to the true solution of the evolution problem.
+
+Consider equation (4) with Dirichlet boundary conditions u(0, t) = 0 and
+
+u(1, t), and denote its solution at time t by the time evolution operator
+
+u(x, t) = s(u0(x); t),
+
+(11)
+
+We know that
+
+s(sin(mπx); t) = e−(mπ)2t sin(mπx),
+
+m ∈ N.
+
+Therefore, if we consider the time evolution operator over a ﬁxed time ¯t, s(·, ¯t),
+then this operator has eigenfunctions sin(mπx), with resp. eigenvalues
+
+λm = e−(mπ)2¯t.
+
+(12)
+
+A good (ﬁnite diﬀerence) scheme approximates well all eigenvalues whose eigen-
+functions can be represented on the given mesh. We note that it is possible to
+decouple the time horizon ¯t from the gap-tooth (or ﬁnite-diﬀerence) time-step
+
+7
+
+1
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0
+
+0
+
+λ
+
+2
+
+4
+
+6
+
+8
+
+12
+
+14
+
+16
+
+18
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+10
+
+m
+
+0.5
+x
+
+Figure 3: Comparison between the damping factors (left) and the eigenfunction
+corresponding to eigenvalue λ3 (right) of the exact solution (full line), the ﬁnite
+diﬀerence approximation (dashed) and the gap-tooth scheme (dotted). The
+eigenfunction of the gap-tooth scheme is indistinguishable of the ﬁnite diﬀerence
+eigenfunction.
+
+∆t, in order to study the eﬀect of diﬀerent discretizations on the same reporting
+horizon.
+
+Since the operator deﬁned in (11) is linear, the numerical time integration is
+equivalent to a matrix-vector product. Therefore, we can compute the eigenval-
+ues using matrix-free linear algebra techniques, even for the gap-tooth scheme,
+for which it might not even be possible to obtain a closed expression for the
+matrix. We note that this analysis gives us an indication about the quality of
+the scheme, but it is by no means a proof of convergence.
+
+We illustrate this with the computation of the eigenvalues of the gap-tooth
+scheme with Neumann box boundary conditions. In this case, we know from
+theorem 1 that these eigenvalues should correspond to the eigenvalues of a ﬁnite
+diﬀerence scheme on the same mesh. We compare the eigenvalues of the gap-
+tooth scheme of order k = 2 for equation (4) with diﬀusion coeﬃcient a∗ =
+0.45825686. As method parameters, we choose ∆x = 0.05, h = 5 · 10−3, ∆t =
+2.5·10−4 for a time horizon ¯t = 4·10−3, which corresponds to 16 gap-tooth steps.
+Inside each box, we use a ﬁnite diﬀerence scheme of order 2 with δx = 1·10−4 and
+an implicit Euler time-step of 5 · 10−5. We compare these eigenvalues to those
+the ﬁnite diﬀerence scheme with ∆x = 0.05 and ∆t = 2.5 · 10−4, and with the
+dominant eigenvalues of the “exact” solution (a ﬁnite diﬀerence approximation
+with ∆x = 1 · 10−3 and ∆t = 1 · 10−7). The result is shown in ﬁgure 3. The
+diﬀerence between the ﬁnite diﬀerence approximation and the gap-tooth scheme
+in the higher modes, which should be zero according to theorem 1, is due to the
+numerical solution inside each box and the use of numerical quadrature for the
+average.
+
+We now examine the eﬀect of introducing a buﬀer region, as described in
+section 3.2. We consider again equation (4) with a∗ = 0.45825686, and we take
+the gap-tooth scheme with parameters ∆x = 0.05, h = 5 · 10−3, ∆t = 2.5 · 10−4
+
+1.5
+
+1
+
+0.5
+
+)
+x
+(
+u
+
+3
+
+0
+
+−0.5
+
+−1
+
+−1.5
+0
+
+8
+
+1
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+λ
+
+0.5
+
+0
+
+0
+
+H 
+
+)
+x
+(
+u
+
+3
+
+0
+
+1.5
+
+1
+
+0.5
+
+−0.5
+
+−1
+
+−1.5
+0
+
+2
+
+4
+
+6
+
+8
+
+12
+
+14
+
+16
+
+18
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+10
+
+m
+
+0.5
+x
+
+Figure 4: Comparison between the damping factors (left) and the eigenfunction
+corresponding to the eigenvalue λ3 (right) of the exact solution (full line), the
+ﬁnite diﬀerence scheme (dashed) and the gap-tooth scheme with buﬀers (dash-
+dotted lines) for increasing buﬀer sizes H = 2 · 10−2, 3 · 10−2 . . . , 1 · 10−1.
+
+for a time horizon ¯t = 4 · 10−3, and an internal time-stepper as above. We
+introduce a buﬀer region of size H, and we impose Dirichlet boundary conditions
+at the outer boundary of the buﬀer region. Lifting is done in identically the
+same way as for the gap-tooth scheme without buﬀers; we only use (9) as the
+initial condition in the larger box [xi − H
+2 ]. We compare the eigenvalues
+again with the equivalent ﬁnite diﬀerence scheme and the exact solution, for
+increasing sizes of the buﬀer box H. Figure 4 shows that, as H increases, the
+eigenvalues of the scheme converge to those of the original gap-tooth scheme.
+We see that, in this case, we would need a buﬀer of size H = 4 · 10−2, i.e.
+80% of the original domain, for a good approximation of the damping factors.
+Note that it is conceptually possible, though ineﬃcient, to let the buﬀer boxes
+overlap.
+
+2 , xi + H
+
+5 Summary/Conclusions
+
+We described the gap-tooth scheme for the numerical simulation of multi-scale
+problems. This scheme simulates the macroscopic behaviour over a macroscopic
+domain when only a microscopic model is explicitly available. In the case of
+diﬀusion, we showed equivalence of our scheme to standard ﬁnite diﬀerences of
+arbitrary (even) order, both theoretically and numerically.
+
+We showed that it is possible, even without analytic formulas, to study the
+properties of the gap-tooth scheme and generalizations through the damping
+factors of the resulting coarse time-∆t map. We illustrated this for the original
+gap-tooth scheme and for an implementation using Dirichlet boundary condi-
+tions in a buﬀer box. We showed that, as long as the buﬀer region is “large
+enough” to shield the internal region from the boundary eﬀects over a time ∆t,
+we get a convergent scheme. Therefore, we are able to use microscopic codes in
+
+9
+
+the gap-tooth scheme without modiﬁcation.
+
+In a forthcoming paper, we will explore, using these damping factors for
+many diﬀerent types of boundary conditions, the relation between the quality
+of the boundary conditions, the size of the buﬀer region and the time-step be-
+fore reinitialization. We will investigate the trade-oﬀ between the eﬀort required
+to impose a particular type of boundary conditions (and the eventual macro-
+scopically inspired control-based strategy) and the eﬃciency gain due to smaller
+buﬀer sizes and/or longer possible time-steps before reinitialization. Here, we
+showed that this investigation is made possible by studying the damping factors
+of the resulting coarse time-∆t map.
+
+Acknowledgements GS is a Research Assistant of the Fund of Scientiﬁc
+Research - Flanders. This work has been partially supported by an IUAP grant
+and by the Fund of Scientiﬁc Research through Research Project G.0130.03 (GS,
+DR), and by the AFOSR and the NSF (IGK). The authors thank Olof Runborg
+for discussions that improved this text and the organizers of the Summer School
+in Multi-scale Modeling and Simulation in Lugano.
+
+References
+
+[EE03] W. E and B. Engquist. The heterogeneous multi-scale methods.
+
+Comm. Math. Sci., 1(1):87–132, 2003.
+
+[GK02]
+
+C.W. Gear and I.G. Kevrekidis. Boundary processing for Monte
+Carlo simulations in the gap-tooth scheme. physics/0211043 at
+arXiv.org, 2002.
+
+[GKT02] C.W. Gear, I.G. Kevrekidis, and C. Theodoropoulos. “Coarse” in-
+tegration/bifurcation analysis via microscopic simulators: micro-
+Galerkin methods. Comp. Chem. Eng., 26(7-8):941–963,2002.
+
+[GLK03] C.W. Gear, J. Li, and I.G. Kevrekidis. The gap-tooth method in
+particle simulations. Physics Letters A, 316:190–195, 2003.
+
+[Had99] N. G. Hadjiconstantinou. Hybrid atomistic-continuum formulations
+and the moving contact-line problem. J. Comp. Phys., 154:245–265,
+1999.
+
+[HW97] T.Y. Hou and X.H. Wu. A multiscale ﬁnite element method for el-
+liptic problems in composite materials and porous media. J. Comp.
+Phys. , 134:169–189, 1997.
+
+[KGK02]
+
+I.G. Kevrekidis, C.W. Gear, J.M. Hyman, P.G. Kevrekidis, O. Run-
+borg, and C. Theodoropoulos. Equation-free multiscale computa-
+tion: enabling microscopic simulators to perform system-level tasks.
+Comm. Math. Sci. Submitted, physics/0209043 at arxiv.org, 2002.
+
+10
+
+[LLY98]
+
+J. Li, D. Liao, S. Yip. Imposing ﬁeld boundary conditions in MD sim-
+ulation of ﬂuids: optimal particle controller and buﬀer zone feedback,
+Mat. Res. Soc. Symp. Proc, 538(473-478), 1998.
+
+[SKR03] G. Samaey, I.G. Kevrekidis, and D. Roose. The gap-tooth scheme for
+homogenization problems. SIAM MMS, 2003. Submitted.
+
+[SGK03] S. Setayeshar, C.W. Gear, H.G. Othmer, and I.G. Kevrekidis. Ap-
+plication of coarse integration to bacterial chemotaxis. SIAM MMS.
+Submitted, physics/0308040 at arxiv.org, 2003.
+
+11
+
+

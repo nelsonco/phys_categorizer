@@ -1,0 +1,4726 @@
+5
+0
+0
+2
+ 
+t
+c
+O
+ 
+7
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+4
+5
+2
+0
+1
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+THE COUPLED ELECTRON-ION MONTE CARLO
+METHOD
+
+Carlo Pierleoni1 and David M. Ceperley2
+
+1 Department of Physics, University of L’Aquila, Polo di Coppito, Via Vetoio, L’Aquila,
+
+67010 Italy, carlo.pierleoni@aquila.infn.it
+
+2 Department of Physics and NCSA, University of Illinois at Urbana-Champaign, Urbana,
+
+IL 61801, USA, david.ceperley@uiuc.edu
+
+1 Introduction
+
+Twenty years ago Car and Parrinello introduced an efﬁcient method to perform
+Molecular Dynamics simulation for classical nuclei with forces computed on the
+“ﬂy” by a Density Functional Theory (DFT) based electronic calculation[1]. Because
+the method allowed study of the statistical mechanics of classical nuclei with many-
+body electronic interactions, it opened the way for the use of simulation methods for
+realistic systems with an accuracy well beyond the limits of available effective force
+ﬁelds. In the last twenty years, the number of applications of the Car-Parrinello ab-
+initio molecular dynamics has ranged from simple covalent bonded solids, to high
+pressure physics, material science and biological systems. There have also been ex-
+tensions of the original algorithm to simulate systems at constant temperature and
+constant pressure[2], ﬁnite temperature effects for the electrons [3], and quantum
+nuclei[4].
+
+DFT is, in principle, an exact theory but the energy functional are treated ap-
+proximately at the level of a self consistent mean ﬁeld theory for practical purposes.
+Despite recent progress, DFT suffers from well-known limitations, for example, ex-
+cited state properties such as optical gaps and spectra are generally unreliable. DFT
+shows serious deﬁciencies in describing van der Waals interactions, non-equilibrium
+geometries such as reaction barriers, systems with transition metals and/or cluster
+isomers with competing bonding patterns[5, 6]. As a consequence, current ab-initio
+predictions of metallization transitions at high pressures, or even the prediction of
+phase transitions are often only qualitative. Hydrogen is an extreme case [7, 8, 9] but
+even in silicon the diamond/β-tin transition pressure and the melting temperature are
+seriously underestimated[10].
+
+An alternative route to the ground state properties of a system of many electrons
+in presence of nuclei is the Quantum Monte Carlo method (QMC) [11, 6]. QMC
+methods for bosons are “exact ” meaning that all systematic errors are under con-
+trol and can be reduced as much as desired with a computational cost growing as a
+power of the number of particles. However for fermions the “sign problem” makes
+
+2
+
+Carlo Pierleoni and David M. Ceperley
+
+a direct extension of QMC unstable and one has to resort to the “ﬁxed node approx-
+imation” for practical calculations[11, 6]. Over the years, the level of accuracy of
+the ﬁxed node approximation for simple homogeneous systems, such as 3He and the
+electron gas, has been systematically improved [12, 13, 14]. In more complex, inho-
+mogeneous situations such as atoms, molecules and extended systems of electrons
+and nuclei, progress have been somewhat slower. Nonetheless, in most cases, ﬁxed-
+node QMC methods have proved to be more accurate than mean ﬁeld methods (HF
+and DFT)[6]. Computing ionic forces with QMC to replace the DFT forces in the
+ab-initio MD, is more difﬁcult and a general and efﬁcient algorithm is still missing.
+Moreover, the computer time required for a QMC estimate of the electronic energy
+is, in general, more than for a corresponding DFT-LDA calculation. These problems
+have seriously limited the development of an ab-initio simulation method based on
+the QMC solution of the electronic problem “on the ﬂy”.
+
+In recent years, we have developed a different strategy based entirely on the
+Monte Carlo method, both for solving the electronic problem, and for sampling the
+ionic conﬁguration space[15, 16]. The new method, called the Coupled Electron-Ion
+Monte Carlo method (CEIMC) relies on the Born-Oppenheimer approximation for
+treating ﬁnite temperature ions coupled with ground state electrons. A Metropolis
+Monte Carlo simulation of the ionic degrees of freedom (represented either by clas-
+sical point particles or by path integrals) at ﬁxed temperature is performed based on
+the electronic energies computed during independent ground state Quantum Monte
+Carlo calculations. CEIMC has been applied, so far, to high pressure metallic hydro-
+gen where it has found quite different effects of temperature than CPMD with Local
+Density Approximation (LDA) forces[17]. In these lecture notes, we present the the-
+oretical basis of CEIMC. We start by describing, in some detail, the ground state
+QMC methods implemented in CEIMC, namely the Variational Monte Carlo and the
+Reptation Quantum Monte Carlo methods. We then describe the ﬁxed node or re-
+stricted paths approximation necessary to treat fermions and the ﬁxed phase method
+used to perform the average over boundary conditions needed for metallic system. In
+the subsequent section we describe how to implement the Metropolis algorithm when
+the energy difference has a statistical noise and discuss efﬁcient strategies for energy
+differences within the CEIMC. The next section is devoted to describe the method
+to treat quantum mechanical protons and to integrate efﬁciently this new difﬁculty
+within CEIMC. Finally, we brieﬂy review some CEIMC results for high pressure hy-
+drogen and compare with existing CPMD results. Conclusions and perspectives for
+future developments are collected in the last section.
+
+2 The electronic ground state problem
+
+Let us consider a system of Np nuclei and Ne electrons in a volume V described by
+the non relativistic hamiltonian
+
+ˆH =
+
+N
+
+−
+
+i=1
+X
+
+2
+i +
+
+λi∇
+
+e2
+2
+
+N
+
+Xi6=j
+
+zizj
+ˆri −
+|
+
+ˆrj|
+
+(1)
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+3
+
+where N = Ne + Np, and zi, mi, ˆri represent the charge, mass and position operator
+of particle i respectively and λi = ¯h2/2mi. Let us denote with R = (r1,
+, rNe)
+, rN ) the set of coordinates of all electrons and nuclei respec-
+and S = (rNe+1,
+tively. We restrict the discussion to unpolarized systems, i. e. systems with a van-
+ishing projection of the total spin along a given direction, say Sz = 0. Since the
+Hamiltonian does not ﬂip spins, we can label electrons from 1 to Ne/2 as up spin (
+)
+and electrons from Ne/2 + 1 to Ne as down spin (
+
+· · ·
+
+· · ·
+
+).
+
+↑
+
+Within the Born-Oppenheimer approximation, the energy of the system for a
+given nuclear state S is the expectation value of the hamiltonian ˆH over the corre-
+sponding exact ground state
+
+↓
+
+Φ0(S) >
+|
+
+ˆH
+EBO(S) = < Φ0(S)
+|
+
+Φ0(S) >
+|
+
+(2)
+
+which is a 3Ne dimensional integral over the electronic coordinates in conﬁgura-
+tional space
+
+EBO(S) =
+
+dR Φ∗
+
+0(R
+
+S) ˆH(R, S)Φ0(R
+|
+
+S) =
+|
+
+dR
+
+Φ0(R
+|
+
+2 EL(R
+S)
+|
+|
+
+S) (3)
+|
+
+Z
+with the local energy deﬁned as
+
+Z
+
+(4)
+
+S)
+|
+
+EL(R
+
+S) =
+|
+
+Φ0(R
+|
+
+S) is normalized and
+|
+
+ˆH(R, S)Φ0(R
+S)
+Φ0(R
+|
+2
+Since Φ0(R
+0 everywhere, the 3Ne dimensional
+S)
+|
+|
+integral in eq. (3) can be performed by standard Metropolis Monte Carlo by generat-
+2. Expectation values
+ing a Markov process which sample asymptotically
+S)
+|
+|
+of any observable can be computed along the same Markov chain. In this respect,
+computing the properties of a many-body quantum system is similar to performing a
+MC calculation for a classical system. The square modulus of the ground state wave
+function plays the role of the classical Boltzmann distribution. An important quantity
+in what follows is the measure of the energy ﬂuctuations for a given wave function.
+This can be deﬁned by the variance of the local energy
+
+Φ0(R
+|
+
+≥
+
+σ2(S) =
+
+dR
+
+Φ0(R
+|
+
+S)
+|
+|
+
+2
+
+Z
+
+Z
+
+=
+
+dR
+
+ˆHΦ0(R
+(cid:16)
+
+S)
+|
+
+ˆH(R, S)Φ0(R
+S)
+Φ0(R
+|
+
+S)
+|
+
+−
+
+ 
+
+2
+
+E2
+
+BO(S)
+
+−
+
+EBO(S)
+
+2
+
+!
+
+(cid:17)
+Note that for any exact eigenfunction of the hamiltonian, the local energy EL(R
+S)
+|
+does not depend on the electronic conﬁguration R and is equal to the correspond-
+ing eigenvalue. This implies that the variance vanishes. This is known as the zero
+variance principle in Quantum Monte Carlo.
+
+(5)
+
+2.1 Variational QMC
+
+The problem is to get a computable expression for the ground state wave function
+without solving the Schr¨odinger equation for the many body hamiltonian of eq. (1),
+
+4
+
+Carlo Pierleoni and David M. Ceperley
+
+obviously an impossible task for any non trivial system. As usual in many body
+problems, we can resort to the variational principle which states that the energy of
+any proper trial state
+
+ΨT (S) > will be greater or equal to the ground state energy
+|
+
+EBO(S)
+
+EV (S) =
+
+≤
+
+dR Ψ ∗
+
+S) ˆH(R, S)ΨT (R
+T (R
+|
+dR Ψ ∗
+S)
+S)ΨT (R
+T (R
+|
+|
+
+S)
+|
+
+R
+
+(6)
+
+•
+
+•
+
+1)P ΨT (R
+
+A proper trial wave function must satisfy the following requirements
+
+R
+it has to have the right symmetry under particle permutation: ΨT ( ˆP R
+S) =
+|
+S), where ˆP is the permutation operator for electrons of same spin.
+(
+|
+−
+the quantity ˆHΨT needs to be well deﬁned everywhere which implies that both
+ΨT must be continuous whenever the potential is ﬁnite, including at
+ΨT and
+the periodic boundaries.
+the integrals
+ΨT |
+|
+Carlo evaluation of the variance σ2 the integral
+exist.
+
+ˆHΨT must exist. Furthermore for a Monte
+dR( ˆHΨT )2is also required to
+
+dRΨ ∗
+T
+
+2 and
+
+dR
+
+∇
+
+•
+
+R
+
+R
+
+R
+
+For a given trial function, it is essential to show analytically that these properties
+hold everywhere, in particular at the edge of the periodic box and when two particles
+approach each other (where generally the potential diverges). Otherwise, either the
+upper bound property is not guaranteed or the Monte Carlo error estimates are not
+valid.
+The strategy in Variational Monte Carlo (VMC) is therefore to pick a proper form
+for a trial wave function based on physical insight for the particular system under
+, αk) will appear in the wave func-
+study. In general, a number of parameters (α1,
+tion to be treated as variational parameters. For any given set of
+the Metropolis
+α
+}
+algorithm is used to sample the distribution
+
+· · ·
+
+{
+
+(7)
+
+(8)
+
+Π(R
+
+S,
+|
+
+α
+}
+
+{
+
+) =
+
+S,
+ΨT (R
+|
+dRΨT (R
+
+)
+α
+}
+{
+α
+S,
+}
+{
+|
+
+)
+
+and the electronic properties are then computed as averages over the generated
+R
+Markov chain
+
+ET
+
+V (S,
+
+α
+}
+
+{
+
+) =< EL(R
+
+S,
+|
+
+α
+}
+
+{
+
+) >
+
+.
+
+{
+
+α
+}
+
+where the superscript T as been explicitly written to remember that the variational
+energy depends in general on the chosen analytical form and, for any given form, on
+the numerical values of the variational parameters
+Because of the zero variance principle stated above, the ﬂuctuations in the local en-
+ergy are entirely due to inaccuracies of the trial function for the particular conﬁg-
+urations generated during the MC run. As the trial wave function approaches the
+exact eigenfunction (everywhere in conﬁguration space!) the ﬂuctuations decrease
+and the variational estimate of the energy converges more rapidly with the number
+of MC steps. At the same time, the estimate converges to the exact energy. This is at
+variance with classical Monte Carlo where ﬂuctuations are induced by temperature.
+The variational method is very powerful, and intuitively pleasing. One posits a
+form of the trial function and then obtains an upper bound for the energy. In contrast
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+5
+
+to other theoretical methods, no further approximations are made. The only restric-
+tion on the trial function is to be computable in a reasonable amount of time.
+
+One of the problems with VMC is that it favors simple states over more com-
+plicated states. As an example, consider the liquid-solid transition in helium at zero
+temperature. The solid wave function is simpler than the liquid wave function be-
+cause in the solid the particles are localized so that the phase space that the atoms
+explore is much reduced. This biases the difference between the liquid and solid
+variational energies for the same type of trial function, ( e.g. a pair product form, see
+below) since the solid energy will be closer to the exact result than the liquid. Hence,
+the transition density will be systematically lower than the experimental value. An-
+other illustration is the calculation of the polarization energy of liquid 3He. The
+wave function for fully polarized helium is simpler than for unpolarized helium be-
+cause antisymmetry requirements are higher in the polarized phase so that the spin
+susceptibility computed at the pair product level has the wrong sign!
+
+The optimization of trial functions for many-body systems is time consuming,
+particularly for complex trial functions. The dimension of the parameter space in-
+creases rapidly with the complexity of the system and the optimization can become
+very cumbersome since it is, in general, a nonlinear optimization problem. Here we
+are not speaking of the computer time, but of the human time to decide which terms
+to add, to program them and their derivatives in the VMC code. This allows an ele-
+ment of human bias into VMC; the VMC optimization is more likely to be stopped
+when the expected result is obtained. The basis set problem is still plaguing quantum
+chemistry even at the SCF level where one only has 1-body orbitals. VMC shares
+this difﬁculty with basis sets as the problems get more complex.
+
+Finally, the variational energy is insensitive to long range order. The energy is
+dominated by the local order (nearest neighbor correlation functions). If one is try-
+ing to compare the variational energy of a trial function with and without long range
+order, it is extremely important that both functions have the same short-range ﬂex-
+ibility and both trial functions are equally optimized locally. Only if this is done,
+can one have any hope of saying anything about the long range order. The error in
+the variational energy is second order in the trial function, while any other property
+will be ﬁrst order. Thus variational energies can be quite accurate while correlation
+functions are not very accurate.
+
+As a consequence, the results typically reﬂect what was put into the trial function.
+Consider calculating the momentum distribution. Suppose the trial function has a
+Fermi surface. Then the momentum distribution will exhibits a discontinuity at kf
+signaling the presence of a Fermi surface. This does not imply that the true wave
+function has a sharp Fermi surface.
+
+2.2 Reptation Quantum Monte Carlo
+
+It is possible to go beyond VMC by a number of related methods known as Pro-
+jection Monte Carlo Methods. The general idea is to chose a trial function which
+has a non negligible overlap with the ground state wave function (in general, it is
+enough to require the right symmetry) and to apply a suitable projection operator
+
+6
+
+Carlo Pierleoni and David M. Ceperley
+
+which zeros out all the components of the trial wave function from the excited states
+in the Hilbert space of the system. We will limit the description to the method imple-
+mented in CEIMC, namely the Reptation Quantum Monte Carlo [18] or Variational
+Path Integral [19, 20]. For the discussion of other projection QMC methods such as
+Diffusion Monte Carlo (DMC) and Green Function Monte Carlo (GFMC), we refer
+to the specialized literature[6, 11].
+Let us deﬁne
+as the complete set of eigenfunction and eigenvalues of the
+Φi, Ei}
+hamiltonian ˆH in eq.(1). Any trial state can be decomposed in the eigenstate basis:
+
+{
+
+ΨT >=
+|
+
+Φi >
+
+ci|
+
+i
+X
+where ci is the overlap of the trial state with the ith eigenstate. Let us consider the
+application of the operator e−t ˆH onto this state
+
+Ψ (t) >= e−t ˆH
+|
+
+Ψ (0) >=
+|
+
+cie−tEi
+
+Φi >
+|
+
+i
+X
+
+Ψ (0) >=
+|
+
+with the initial state
+ΨT >. Here t is a control parameter with dimension
+|
+of inverse energy and we will call it “time” since it plays the role of imaginary time
+in the Bloch equation (see below). All excited states will be zeroed exponentially fast
+with increasing t, the rate of the convergence to the ground state depending on the
+energy gap between the ground state and the ﬁrst excited state non-orthogonal to the
+trial function. The total energy as function of time is deﬁned as
+
+E(t) =
+
+ˆH
+Ψ (t/2) >
+< Ψ (t/2)
+|
+|
+Ψ (t/2) >
+< Ψ (t/2)
+|
+
+< ΨT |
+
+=
+
+2
+
+e− t
+< ΨT |
+
+ˆH
+
+ˆH ˆHe− t
+e−t ˆH
+
+2
+
+ΨT >
+|
+ΨT >
+|
+
+Similar to a thermal partition function, let us deﬁne the generating function of the
+moments of ˆH as
+
+Z(t) =< ΨT |
+The total energy at time t is simply the derivative of the logarithm of Z(t)
+
+ΨT > .
+|
+
+e−t ˆH
+
+E(t) =
+
+lnZ(t)
+
+∂
+∂t
+
+−
+
+and the variance of the energy is the second derivative
+
+E(t) =< ( ˆH
+σ2
+
+E(t))2 >=
+
+−
+
+∂
+∂t
+
+−
+
+E(t)
+
+0
+
+≥
+
+which is non-negative by deﬁnition. This implies that the energy decreases mono-
+tonically with time. The ground state is reached at large time (much larger than the
+inverse gap) and
+
+(9)
+
+(10)
+
+(11)
+
+(12)
+
+(13)
+
+(14)
+
+(15)
+
+(16)
+
+lim
+t→∞
+lim
+t→∞
+
+E(t) = E0
+
+σ2(t) = 0
+
+(18)
+
+(19)
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+7
+
+The last relation is the generalization of the zero variance principle in Projection
+Monte Carlo.
+For observables ˆA which do not commute with ˆH, for instance correlation functions,
+the average at “time” t, deﬁned as in eq. (11), takes the following form in conﬁgura-
+tional space 3
+
+A(t) =< ˆA >t=
+
+1
+Z(t)
+
+Z
+
+dR1dR2dR3dR4 < ΨT |
+
+ˆA
+R3 > ρ(R3, R4|
+< R2|
+|
+where Ri represent the set of all electronic coordinates and ρ(R, R′, t) is the thermal
+density matrix of the system at inverse temperature t
+
+) < R4|
+
+ΨT >
+
+(17)
+
+t
+2
+
+)
+
+R1 > ρ(R1, R2|
+t
+2
+
+Similarly, the expression of Z(t) in conﬁgurational space is
+
+ρ(R, R′, t) =< R
+
+e−t ˆH
+|
+
+R′ >
+|
+
+Z(t) =
+
+dR1dR2 < ΨT |
+
+R1 > ρ(R1, R2, t) < R2|
+
+ΨT >
+
+Z
+
+Thus, in order to compute any average over the ground state we need to know the
+thermal density matrix at large enough “time”. Obviously, its analytic form for any
+non-trivial many-body system is unknown. However, at short time (or high tempera-
+ture) the system approaches its classical limit and we can obtain approximations. Let
+us ﬁrst decompose the time interval t in M smaller time intervals, τ = t/M
+
+ρ(R, R′, t) =< R
+
+e−(τ ˆH)M
+|
+
+R′ >=
+|
+
+dR1 · · ·
+
+dRM−1
+
+< Rk−1|
+
+e−τ ˆH
+
+Rk >
+|
+
+(20)
+with the boundary conditions: R0 = R and RM = R′ on the paths. For M large
+enough, we can apply the Trotter factorization to get an explicit form for the short
+time propagator. The simplest factorization, known as the “primitive” approximation,
+consists of ignoring the commutator of the kinetic and potential operators
+
+Z
+
+M−1
+
+Yk=1
+
+≃
+
+e−τ ˆH
+
+e−τ ˆK
+
+Rk >
+|
+
+< Rk−1|
+
+2 [V (Rk)+V (Rk−1)]
+ρ(Rk−1, Rk, τ ) =< Rk−1|
+(21)
+A more accurate, but also more complex form, will be discussed later in the section
+on Path Integral Monte Carlo. Note that we have symmetrized the primitive form in
+order to reduce the systematic error of the factorization [19]. The explicit form of the
+kinetic propagator is the Green’s function of the Bloch equation of a system of free
+fermions [21, 19], i.e. a diffusion equation in conﬁgurational space
+
+Rk > e− τ
+|
+
+< Rk−1|
+
+e−τ ˆK
+
+Rk >=
+|
+
+1
+4πλτ
+
+3N
+2
+
+|Rk
+
+−Rk−1|2
+4λτ
+
+e−
+
+(22)
+
+(cid:18)
+3 the expression gets slightly easier for observables diagonal in conﬁgurational space: <
+
+(cid:19)
+
+R|A|R′ >= A(R)δ(R − R′).
+
+8
+
+Carlo Pierleoni and David M. Ceperley
+
+and therefore we get
+
+M−1
+
+M
+
+ρ(R, R′, t) =
+
+dRk 
+Yk=1
+
+In the continuous limit (M
+Feynman-Kac formula [19]
+
+Yk=1
+
+Z
+
+|Rk
+
+−Rk−1|2
+4λτ
+
+e−
+(4πλτ )3N/2 
+
+
+, τ
+
+→ ∞
+
+→
+
+e−τ
+
+V (R0 )
+
+2 +
+
+M −1
+k=1
+
+V (Rk)+
+
+V (RM )
+2
+
+(cid:2)
+
+(cid:3)
+(23)
+0, t = M τ =const.) it becomes the
+
+P
+
+ρ(R, R′, t) =
+
+exp
+
+dτ V (R(τ ))
+
+(24)
+
+t
+
+(cid:28)
+
+−
+
+(cid:18)
+
+0
+Z
+
+(cid:19)(cid:29)RW
+
+· · ·
+
+>RW indicate a path average over gaussian random walks R(τ ) starting
+
+where <
+at R(0) = R and ending at R(t) = R′ in a time t.
+We have, in principle, developed a scheme for Monte Carlo calculations of ground
+state averages of a general quantum system.
+
+However, this scheme has a serious problem of efﬁciency which prevents its use
+for any non-trivial system. At the origin of the problem are the wild variations of the
+potential V (R) in conﬁguration space. There are cases like electron-proton systems
+where the potential is not bounded and therefore the primitive approximation of the
+propagator is not stable for any ﬁnite time step τ . However, even with well behaved
+effective potentials (like in Helium for instance) the large ﬂuctuations of the poten-
+tial energy would require a very small time step in order to observe convergence of
+the averages to their exact value. Moreover, the efﬁciency will degrade rapidly with
+more particles. The problem was recognized in the early days of QMC and the rem-
+edy introduced by Kalos in 1974. In the community of Ground State QMC it goes
+under the name of “importance sampling” (IS). A different strategy is applied in the
+PIMC community. We now describe importance sampling, not in the original form
+as introduced by Kalos in Green Function Monte Carlo, but following a recent de-
+velopment by Baroni and Moroni in the framework of the Reptation QMC [18].
+In VMC, a good trial function should have a local energy almost constant in con-
+ﬁguration space. Let us assume to know such function ΨT . Let us then rewrite the
+hamiltonian ˆH in terms of a new ﬁctitious hamiltonian ˆ
+H
+
+where
+
+ˆH = ˆ
+H
+
++ EL(R)
+
+= λ
+
+ˆ
+H
+
+−∇
+
+(cid:20)
+
+2 + ∇
+
+EL(R) = V (R)
+
+λ ∇
+
+−
+
+2ΨT
+ΨT (cid:21)
+2ΨT
+ΨT
+
+(25)
+
+(26)
+
+(27)
+
+We can now factorize the short time propagator in a different way (confr. eq. (21) )
+
+ρ(Rk−1, Rk, τ )
+
+< Rk−1|
+
+≃
+
+e−τ ˆH
+
+Rk > e− τ
+|
+
+2 [EL(Rk)+EL(Rk−1)]
+
+(28)
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+9
+
+In this new form, the widely oscillating potential energy is replaced by the local en-
+ergy which is much smoother for an accurate ΨT . We need to ﬁnd the short time
+propagator of the importance sampling hamiltonian ˆ
+which is nothing but the solu-
+H
+tion of the corresponding Bloch equation [21, 19]
+
+−
+
+∂tρIS (R, R′, t) = ˆ
+H
+
+ρIS (R, R′, 0) = δ(R
+
+ρIS (R, R′, t)
+R′)
+
+−
+
+(29)
+
+(30)
+
+It is not difﬁcult to show by direct substitution, that the short time solution of this
+equation is
+
+ρIS (Rk−1, Rk, τ ) =
+
+ΨT (Rk−1)
+ΨT (Rk)
+
+1
+4πλτ
+
+(cid:18)
+
+(cid:19)
+
+3N
+2
+
+exp
+
+(Rk −
+
+Rk−1 −
+4λτ
+
+−
+
+(cid:26)
+F + 1
+
+2λτ Fk−1)2
+
+(cid:27)(31)
+. In these ex-
+
+if we make the short time approximation
+pressions, the drift force is deﬁned as Fk = F (Rk) = 2
+(cid:2)
+This form of the short time propagator does not satisfy an important property of den-
+sity matrices, namely the symmetry under exchange of the two legs, R and R′. We
+can remedy by taking the symmetrized density matrix as short time propagator
+
+2F
+F ∇
+∇Rk ln ΨT (Rk).
+(cid:1)
+(cid:3)
+
+∇
+(cid:0)
+
+1 + τ
+
+≃
+
+1
+
+ρs
+IS (Rk−1, Rk, τ ) = [ρIS (Rk−1, Rk, τ )ρIS (Rk, Rk−1, τ )]
+
+1
+2 =
+
+e−Ls(Rk−1,Rk,τ )
+
+(4πλτ )
+
+3N
+2
+
+where the expression for the symmetrized link action is
+
+Ls(Rk−1, Rk, τ ) =
+
+Rk−1)2
+
+(Rk −
+
+4λτ
+
++
+
+λτ
+2
+
+(F 2
+
+k +F 2
+
+k−1)+
+
+(Rk −
+
+Rk−1)
+·
+2
+
+(Fk −
+
+Fk−1)
+
+Using eqs. (32), (33) we obtain the propagator at any time t as
+
+ρ(R, R′, t) =
+
+dRk
+
+M−1
+
+M
+
+Z
+
+Yk=1
+
+"
+Yk=1
+
+e−Ls(Rk−1,Rk,τ )
+(4πλτ )3N/2
+
+#
+
+e−τ
+
+EL (R0)
+
+2 +
+
+M −1
+k=1
+
+EL(Rk)+
+
+EL(RM )
+2
+
+(cid:2)
+
+P
+
+(cid:3)
+
+(34)
+
+In the continuum limit it is the generalized Feynman-Kac formula
+
+ρ(R, R′, t) =
+
+exp
+
+(cid:28)
+
+−
+
+(cid:18)
+
+0
+Z
+
+t
+
+dτ EL(R(τ ))
+
+(cid:19)(cid:29)DRW
+
+where <
+>DRW indicate a path average over drifted random walks starting at
+R(0) = R and ending at R(t) = R′ in a time t. With this form of the density matrix
+the generating function takes the form
+
+· · ·
+
+Z(t) =
+
+dRdR′ΨT (R)
+
+dτ EL(Q(τ ))
+
+ΨT (R′)
+
+(36)
+
+Z
+
+(cid:29)DRW
+
+t
+
+0
+
+e−
+
+(cid:28)
+
+R
+
+and the average of a generic observable ˆA becomes
+
+(32)
+
+(33)
+
+(35)
+
+10
+
+Carlo Pierleoni and David M. Ceperley
+
+A(t) =
+
+1
+Z(t)
+
+4
+
+Z
+
+Yk=1
+
+dRkΨT (R1)
+
+dτ EL(Q(τ ))
+
+A(R2, R3)
+
+e−
+
+e−
+
+(cid:28)
+
+(cid:28)
+
+t
+2
+
+0
+
+t
+2
+
+0
+
+R
+
+R
+
+dτ EL(Q(τ ))
+
+ΨT (R4)
+
+(37)
+
+(cid:29)DRW
+
+(cid:29)DRW
+
+with obvious boundary conditions on the path averages.
+A special word on the calculation of the energy is in order. In the last equality in
+eq. (11) the hamiltonian operator in the numerator can be pushed either to the left
+or to the right in such a way to operate directly on the trial state. Remembering the
+deﬁnition of the local energy, eq. (4), we can write
+
+E(t) =
+
+dRdR′EL(R)ΨT (R)ρ(R, R′, t)Ψ (R′)
+
+dRdR′ΨT (R)ρ(R, R′, t)Ψ (R′)EL(R′)
+
+1
+Z(t)
+1
+Z(t)
+1
+2
+
+Z
+
+Z
+
+=
+
+=
+
+< EL(R) + EL(R′) >
+
+(38)
+
+We use the last equality in order to improve the efﬁciency of the estimator. When
+computing the variance we push one ˆH operator to the left and the other to the right
+to obtain
+
+σ2(t) =
+
+dRdR′EL(R)ΨT (R)ρ(R, R′, t)Ψ (R′)EL(R′)
+
+E2(t)
+
+(39)
+
+Z
+
+Then reaching the ground state with vanishing variance means taking paths long
+enough (t large enough) for the correlation between the two ends to vanish. On the
+other hand the VMC method is obtained for t = 0 as ρ(R, R′, 0) = δ(R
+
+R′).
+
+−
+
+−
+
+2.3 Fermions
+
+Up to now we have tacitly ignored the particle statistics and derived the formalism
+as if the particles were distinguishable. As far as the Hamiltonian does not depend
+explicitly on spin, the formalism remains valid for fermions if we consider states
+ˆP Ri >= (
+completely antisymmetric under particle permutation
+Ri >. The
+|
+|
+importance sampling hamiltonian ˆ
+, deﬁned in the same way, is symmetric under
+H
+particle exchange even for antisymmetric trial states. The only place where we need
+care is in the initial condition of the Bloch equation, eq. (30), which must be replaced
+by a completely antisymmetric delta function
+
+)P
+
+−
+
+ρIS (R, R′, 0) =
+
+δ(R
+
+A
+
+−
+
+R′) =
+
+1
+N !
+
+1)P δ(R
+
+ˆP R′)
+
+−
+
+(
+−
+
+XP
+
+(40)
+
+Since [ ˆH, ˆP ] = 0, the imaginary time evolution preserves the symmetry and the
+fermion thermal density matrix takes the form
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+11
+
+ρF (R, R′, t) =
+
+1
+N !
+
+1)P ρD (R, ˆP R′, t)
+
+(
+−
+
+(41)
+
+XP
+where ρD is the density matrix of a system of distinguishable particles derived above
+(see eq. (35)). The fermion density matrix between conﬁgurations R and R′ at “time”
+t is the sum over permutations of the density matrix of distinguishable particles be-
+tween the initial conﬁgurations R and the permutation of the ﬁnal conﬁguration ˆP R′,
+multiplied by the sign of the permutation. Each of those density matrices arises from
+the sum over all paths with given boundary conditions in time as expressed by the
+generalized Feynman-Kac formula. We can therefore think of a path in the conﬁg-
+urational space of distinguishable particles as an object carrying not only a weight
+(given by the exponential of minus the integral of the local energy along the path)
+but also a sign ﬁxed by its boundary conditions in time. The fermion density matrix
+is the algebraic sum over all those paths. While ρD (R, R′, t)
+0 for any R′ and t at
+given R, this property obviously does not apply to ρF (R, R′, t). This is at the origin
+of the “fermion sign problem” [26]. Brieﬂy, the sign problem arises from the fact
+that the optimal probability to sample the electronic paths is the absolute value of
+the fermion density matrix which, however, is a bosonic density matrix (symmetric
+under particle permutation). With this sampling, the sign of the sampled paths will
+be left in the estimator for the averages. The normalization of any average will be
+given by the number of sampled positive paths minus the number of sampled neg-
+ative paths. Since the sampling is bosonic, i.e. symmetric, these two numbers will
+eventually be equal and the noise on any average will blow up for a long enough
+sampling. The fundamental reason behind this pathology is that the Hilbert space of
+any time independent Hamiltonian (with local interactions) can be divided in the set
+of symmetric states, antisymmetric states and states of mixed symmetry. These sets
+are disjoint, e. g. any symmetric state is orthogonal to any antisymmetric one; in prin-
+ciple we cannot extract information for a fermionic state from a bosonic sampling
+[22].
+
+≥
+
+A general solution of the fermion sign problem is still unavailable, although in-
+teresting algorithms have been proposed [11]. A class of methods try to build the
+antisymmetry constraint into the propagator, while other methods try to reformulate
+the problem of sampling in the space of antisymmetric wavefunctions (determinants)
+[23, 24, 25]. All these “fermions” methods are still at an early stage and their appli-
+cation has been limited so far to quite small numbers of fermions. The more robust
+and widely used, although approximate, method is the so-called restricted path or
+ﬁxed node method [6, 26].
+
+Within the ﬁxed-node method, we need to consider the nodal surfaces of the
+fermion density matrix. For any given conﬁguration R, these are deﬁned by the im-
+plicit equation ρF (R, R′, t) = 0, as the locations R′ at which the density matrix at
+time t vanishes. The nodal surfaces of the initial conﬁguration R divide the conﬁg-
+urational space of R′ in regions of positive ρF and regions of negative ρF . In terms
+of individual paths, the nodal locations are hypersurfaces in conﬁgurational space on
+which the sum of contributions of the positive and negative paths to the density ma-
+trix vanishes. Since the fermion density matrix satisﬁes the usual convolution relation
+
+12
+
+Carlo Pierleoni and David M. Ceperley
+
+[21]
+
+ρF (R, R′, t) =
+
+dR′′ρF (R, R′′, τ )ρF (R′′, R′, t
+
+τ )
+
+−
+
+τ
+∀
+
+∈
+
+[0, t]
+
+(42)
+
+Z
+
+the conﬁgurations R′′ belonging to the nodal surface of the initial point R at the
+arbitrary time τ will not contribute to the integral and therefore to the density matrix
+at any future time t. Therefore in constructing the fermion density matrix from R to
+R′ at time t as sum over signed paths, we can safely disregard all those paths which
+have reached the nodal surface at any previous time τ
+t. If we deﬁne the reach
+of R at time t, Υ (R, t), as the set of points that can be reached from R in a time t
+without having crossed the nodal surfaces at previous times, the argument above can
+be formalized in the restricted paths identity4
+
+≤
+
+ρF (R, R′, t) =
+
+1
+N !
+
+)P
+
+(
+−
+
+XP
+
+ ZY (0)=R,Y (t)=P R′ D
+
+!Υ (R,t)
+
+Y e−S[Y ]
+
+(43)
+
+where S[Y ] represent the action of the generic path Y (see eq. (34) for its discretized
+form). Let us now consider the generating function Z(t) of eq. (19). Using the re-
+stricted paths identity we obtain
+
+Z(t) =
+
+dRdR′ΨT (R)
+
+1
+N !
+
+)P
+
+(
+−
+
+XP
+
+ ZY (0)=R,Y (t)=P R′ D
+
+!Υ (R,t)
+
+Y e−S[Y ]
+
+ΨT (R′)
+
+=
+
+dRdR′′ΨT (R)
+
+=
+
+dRdR′′ΨT (R)
+
+ ZY (0)=R,Y (t)=R′′ D
+
+ ZY (0)=R,Y (t)=R′′ D
+
+Y e−S[Y ]
+
+Y e−S[Y ]
+
+!Υ (R,t)
+
+!Υ (R,t)
+
+1
+N !
+
+(
+−
+
+XP
+
+ΨT (R′′)
+
+)P ΨT (P −1R′′)
+
+(44)
+
+Z
+
+Z
+
+Z
+
+where in the last equality we have used the fact that the trial wave function is anti-
+)P ΨT ( ˆP −1R) = ΨT (R). In this last form
+symmetric under particle permutations: (
+−
+the integrand is always positive since for each R, the functional integral is restricted
+to paths inside its reach so that ΨT (R)ΨT (R′)
+0 (if the nodes of the trial function
+are correct). Therefore using the restricted path identity we have proven that the gen-
+erating function is a positive function at any time t and can be computed considering
+only positive paths which do not cross the nodal surfaces.
+
+≥
+
+The restricted paths identity is by no means the solution of the sign problem
+since in order to know the nodal surfaces we have to know the density matrix itself.
+However rephrasing the problem in terms of spacial boundary conditions can lead
+to interesting approximate schemes. The nodal surface of the fermion density matrix
+for a system of N interacting particles is a highly non-trivial function in 6N dimen-
+sions and not much is known about it [27, 28]. The approximate method, known as
+ﬁxed node in ground state QMC [6] and as restricted paths in PIMC [26], consists in
+
+4 in ref. [27] an alternative proof based on the Bloch equation is provided.
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+13
+
+replacing the nodal surfaces of the exact fermion density matrix with the nodal sur-
+faces of some trial density matrix. In ground state QMC, it is customary to restrict
+the class of possible nodal surfaces to time independent nodes and, within this class,
+the most reasonable choice is to assume the nodes of the trial wave function ΨT . In
+practice, this step requires a very minor modiﬁcation of the algorithm: it is enough
+to ensure that ΨT (Rk−1)ΨT (Rk) > 0 for any time interval along the sampled paths.
+In the continuous limit this restriction will enforce the restricted path identity.
+
+The nodal surfaces of the trial wave function divide the conﬁgurational space in
+disconnected regions. In order to perform the conﬁgurational integral over R and
+R′ in eq. (44) it could appear necessary to sample all nodal regions. However, it
+can be proved that the nodal regions of the ground state of any Hamiltonian with a
+reasonable local potential are all equivalent by symmetry (Tiling theorem) [27]. This
+“tiling” theorem ensures that computing in a single nodal region is equivalent to a
+global calculation.
+
+)
+∞
+
+A further important property of the Fixed node method is the existence of a vari-
+ational theorem: the FN-RQMC energy is an upper bound of the true ground state
+energy ET (
+E0, and the equality holds if the trial nodes coincide with the
+nodes of the exact ground state [6]. Therefore for fermions, even projection meth-
+ods such as RQMC are variational with respect to the nodal positions; the nodes are
+not optimized by the projection mechanism. The ”quality” of the nodal location is
+important to obtain accurate results.
+
+≥
+
+In some cases it is necessary to consider complex trial functions, for instance in
+the presence of a magnetic ﬁeld [29] or in the twist average method to be discussed
+later[30]. In these cases we have to deal with a trial function of the form
+
+ΨT (R) =
+
+eiϕT (R)
+ΨT (R)
+|
+|
+
+(45)
+
+where ϕT (R), a real function, is the conﬁguration dependent phase of the wave func-
+tion. Obviously in VMC no differences arise in the use of complex trial functions
+other than in the estimators for the averages. For instance, the local energy is modi-
+ﬁed (confr. eq. (27)) and contains an imaginary part
+
+EL(R) = V (R)
+
+2
+ΨT |
+λ ∇
+|
+ΨT |
+|
+
+−
+
++ λ (
+
+ϕT )2
+
+∇
+
+−
+
+iλ
+
+2
+(cid:18)
+
+∇
+
+ΨT |
+ϕT ∇|
+ΨT |
+|
+
+2ϕT
+
++
+
+∇
+
+(cid:19)
+
+(46)
+
+Here, we limit the discussion to systems with time-reversal symmetry, i. e. zero mag-
+netic ﬁelds. As ΨT approaches the exact ground state, the local energy approaches a
+real constant equal to the ground state energy while the imaginary part of the local
+energy vanishes. For general complex functions, we can split the time independent
+Schr¨odinger equation into two coupled equations, one for the modulus
+and one
+for the phase ϕ of the wave function
+
+Φ
+|
+|
+
+λ
+
+2 +
+
+−
+∇
+2ϕ + 2
+
+(cid:8)
+∇
+
+(cid:2)
+ϕ
+∇
+
+·
+
+Φ
+∇|
+|
+Φ
+|
+|
+
+V (R) + λ(
+
+ϕ)2
+
+∇
+= 0
+
+(cid:3)(cid:9)
+
+Φ
+|
+|
+
+= E
+
+Φ
+|
+|
+
+(47)
+
+(48)
+
+14
+
+Carlo Pierleoni and David M. Ceperley
+
+It is therefore natural to take the real part of eq. (46) as energy estimator and, in ad-
+dition to the variance, to monitor the deviation of the imaginary part from zero as an
+indicator of the quality of the trial wave function.
+How do we have to modify the RQMC to work with complex wave functions?
+In the “ﬁxed phase” approximation [29, 31] one keeps the phase ϕT (R) ﬁxed to
+some analytic form during the calculation, and solves the imaginary time dependent
+Schr¨odinger equation corresponding to the stationary problem of eq. (47). Even for
+fermions this is a bosonic problem (since the modulus of the wave function must be
+.
+symmetric under particle exchange) with a modiﬁed interaction
+We can still perform the IS transformation and the formalism remains the same if
+(cid:3)
+the local energy is deﬁned as the real part of eq. (46). Note that the ﬁxed node con-
+straint for real trial functions can be recast into the ﬁxed phase algorithm if we write
+|ΨT (R)| )] so that the phase of the trial function changes by π across
+ϕT (R) = π[1
+the nodes at it should. Since the phase is a step function, its gradient is a δ function
+and provides an inﬁnite contribution in the action of paths crossing the nodes, i.e. a
+vanishing probability to cross the nodes.
+
+V (R) + λ(
+
+θ( ΨT (R)
+
+ϕ)2
+
+∇
+
+−
+
+(cid:2)
+
+In this section we have not explicitly indicated the dependence on the ionic state
+S. In the BO approximation, ions play the role of external ﬁelds for the electronic
+system so that their coordinates appear explicitly in the Hamiltonian, in the trial state,
+in the local energy and in drift force for the IS procedure.
+
+2.4 Trial wave functions for hydrogen
+
+In this subsection, we describe some general properties of the trial wave functions
+for electronic systems. We will restrict our discussion to the case of a proton-electron
+system, i. e. hydrogen and refer to the literature for more complex systems (heavier
+elements)[11, 6]. In particular, we will not discuss the use of pseudopotentials in
+QMC and the related trial wave functions which, however, will be an important issue
+in future extensions of CEIMC.
+
+The Pair Product Trial Function
+
+The pair product trial wave function is the simplest extension of the Slater determi-
+nant of single particle orbitals used in mean ﬁeld treatment of electronic systems (HF
+or DFT). This is also the ubiquitous form for trial functions in VMC
+
+ΨSJ (R, Σ
+
+S) = exp
+|
+
+
+
+−
+
+uij(rij )
+
+det[θk(ri, σi|
+
+
+
+S)]
+
+(49)
+
+i<j
+X
+
+{
+
+σ1, . . . , σNe}
+
+
+is the set of spin variables of the electrons, θk(r, σ
+
+
+S) is
+where Σ =
+|
+the kth spin orbital for the given nuclear conﬁguration and θk(ri, σi|
+S) is the Slater
+matrix. The additional term uij(rij ) is the “pseudopotential” or pair correlation fac-
+tor which introduces explicitly the two body correlations into the many body wave
+function. This term is of bosonic nature, i.e. is symmetric under particle exchange,
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+15
+
+while the antisymmetry is ensured by the determinant. Often the general form of
+both θk and uij are derived by some appropriate theory and then used in connection
+with some free variational parameters to be optimized.
+Let us discuss ﬁrst the appropriate form of the “pseudopotential” for Coulomb sys-
+tems. There are important analytical properties for the “pseudopotential” that can be
+easily derived. Consider bringing two particles together and let us examine the dom-
+inant terms in the local energy. In a good trial action, the singularities in the kinetic
+energy must compensate those in the potential energy. The local energy for the two
+particle system is
+
+eL(rij ) = euij ˆhij [e−uij ] = vij(rij ) + λij
+
+2uij −
+∇
+
+(
+∇
+
+uij )2
+
+(50)
+
+(cid:2)
+
+where λij = λi + λj , ˆhij is the two body hamiltonian with the interaction potential
+vij and the trial wave function exp[
+uij]. Spin symmetry has been disregarded as
+well as the trivial term related to the center of mass motion. Therefore the short dis-
+tance behavior of any good form of the pseudopotential should follow the solution
+of the two body Schr¨odinger equation. For the Coulomb potential the “cusp” condi-
+tion derives from this constraint. Indeed substituting vij = e2zizj/r in eq.(50) and
+zeroing the coefﬁcient of the dominant power of r for r
+
+0 provides
+
+−
+
+(cid:3)
+
+It is also important to reproduce the correct behavior at large distances where a
+description in terms of collective coordinates is appropriate. The long-wavelength
+modes are important for the low energy response properties and are also the slowest
+modes to converge in QMC. It is possible to show that, within the Random Phase
+Approximation (RPA), the local energy is minimized by imposing
+
+→
+
+duij
+dr
+
+=
+
+e2zizj
+
+−
+
+λij (D
+
+1)
+
+−
+
+0
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
++ √1 + ak
+
+uee
+k =
+
+1
+2
+
+−
+
+uep
+k = −
+
+ak
+√1 + ak
+
+with ak = 12rs/k4 and the electron sphere radius rs is related to the volume per
+electron by v = 4πr3
+s/3 in atomic units [32]. The obtained form of the “pseudopo-
+tential” is correct at short and long distances but not necessarily in between because
+of the approximation. One can improve slightly the quality of the VMC results con-
+sidering the form
+
+˜uij(r) = uRP A
+
+ij
+
+(r)
+
+αije−r2/w2
+
+ij
+
+−
+
+with the variational parameter αij, wij . The additional term preserves the short and
+long distance behavior of the RPA function. This form of the pair trial function in-
+troduced four variational parameters, namely αee, wee, αep, wep.
+
+We discuss now the choice of the spin orbitals. The spin-orbitals are conceptually
+more important than the pseudopotential because they provide the nodal structure of
+the trial function. With the ﬁxed node approximation, the projected ground state has
+
+(51)
+
+(52)
+
+(53)
+
+(54)
+
+16
+
+Carlo Pierleoni and David M. Ceperley
+
+the same nodal surfaces of the trial function, while the other details of the trial func-
+tion are automatically “optimized” for increasing projection time. It is thus important
+that the nodes provided by given spin-orbitals be accurate. Moreover, the optimiza-
+tion of nodal parameters (see below) is, in general, more difﬁcult and unstable than
+for the pseudopotential parameters [6].
+
+The simplest form of spin-orbitals for a system with translational invariance are
+plane waves (PW) θk(r, σ) = exp[ık
+r]. This form was used in the ﬁrst QMC
+study of metallic hydrogen [33]. It is particularly appealing for its simplicity and
+still qualitatively correct since electron-electron and electron-proton correlations are
+considered through the “pseudopotential”. The plane waves orbitals are expected to
+reasonably describe the nodal structure for metallic atomic hydrogen, but no infor-
+mation about the presence of protons appears in the nodes with PW orbitals.
+
+·
+
+For insulating molecular hydrogen (i.e for rs ≥
+
+1.5), it is preferred to use lo-
+calized gaussian orbitals. There are different possibilities: a single isotropic gaussian
+centered at the middle of the bond was used in the ﬁrst QMC study[33], while a
+single multivariate gaussian was used in the ﬁrst CEIMC attempt[15, 16]. Another
+possibility is to form a molecular orbitals as linear combination of two atomic gaus-
+sians orbitals centered on each proton:
+
+θk(r, sk,1, sk,2) = exp(
+
+c
+
+r
+|
+
+sk,1|
+
+2) + exp(
+
+c
+
+r
+|
+
+sk,2|
+2)
+
+−
+
+−
+where sk,j is the position of the jth proton of the kth molecule. This kind of orbitals
+have a single variational parameter c. At present we are experimenting using a trial
+molecular wave function with these orbitals multiplied by the corrected RPA Jastrow
+within the CEIMC.
+
+−
+
+−
+
+(55)
+
+The trouble with this strategy is that one should know which phase is stable be-
+fore performing the calculation. This is typical of ground state studies. However in
+CEIMC we would rather let the system ﬁnd its own state for given temperature and
+density (or pressure). In particular, this approach is not appropriate to address the
+interesting region of molecular dissociation and metallization. This problem can be
+solved by using orbitals obtained as solution of a single-electron problem as in band
+structure calculations or in self-consistent mean ﬁeld methods. In previous works on
+ground state hydrogen, the single electron orbitals for a given protonic state S, were
+obtained from a DFT-LDA calculation [34, 35, 36]. One of this study [35] estab-
+lished that energies from plane-waves determinants in metallic hydrogen are higher
+than the more accurate estimates from DFT-LDA orbitals by 0.05eV/atom at the
+density at which the transition between molecular and metallic hydrogen is expected
+(rs = 1.31). Obtaining the orbitals from a DFT-LDA calculation has, however, sev-
+eral drawbacks in connection with the CEIMC. While for protons on a lattice we
+can solve the self-consistent theory for a primitive cell only, in a disordered con-
+ﬁguration, we need to consider the entire simulation box. This is very expensive in
+CPU time and memory for large systems. Moreover, combining the LDA orbitals
+with Jastrow to improve the accuracy is not straightforward; substantial modiﬁcation
+of the orbitals might be necessary requiring a reoptimization of the orbitals and the
+correlation factors, in principle, at each new ionic position.
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+17
+
+Beyond the pair product trial action
+
+Over the years there have been important progress in ﬁnding trial functions substan-
+tially more accurate then the pair product form for homogeneous systems [12, 13].
+Within the generalized Feynman-Kac formalism, it is possible to systematically im-
+prove a given trial function[13, 14]. The ﬁrst corrections to the pair product action
+with plane wave orbitals are a three-body correlation term which modiﬁes the corre-
+lation part of the trial function (Jastrow) and a “backﬂow” transformation which
+changes the orbitals and therefore the nodal structure (or the phase) of the trial
+function[14]. The new trial function has the form
+S) = det[θk(xi, σi|
+|
+
+S)]e−U2−U3
+
+ΨT (R, Σ
+
+(56)
+
+i<j ˜uij is the two body “pseudopotential” discussed before, U3 the
+
+where U2 =
+three-body term of the form
+P
+
+Ne
+
+N
+
+U3 =
+
+−
+
+
+
+2
+
+ξij (rij )rij 
+
+
+j=1
+X
+and ﬁnally the “quasiparticle” coordinates appearing in the plane wave orbitals are
+given by
+
+i=1
+X
+
+
+
+xi = ri +
+
+ηij (rij )rij;
+
+(i = 1,
+
+, Ne)
+
+· · ·
+
+N
+
+j=1
+X
+
+The functional form of the three-body term is that of a squared two-body force so its
+evaluation is not slower than a genuine 2-body term. In the homogeneous electron
+system, this term is particularly relevant at low density where correlation effects are
+dominant. On the other hand, the backﬂow transformation is more relevant at high
+density because in this limit the fermionic character of the system dominates. The
+same general framework should hold for hydrogen although a throughout study of
+the relative importance of those effects with density is still missing. The fundamental
+improvement of backﬂow orbitals for metallic hydrogen is that the nodal structure of
+the wave functions depends now on the proton positions. This provides better total
+energies for static protonic conﬁgurations [14] and improved energy differences and
+liquid structure in CEIMC [37, 16]. However it is not clear how appropriate this kind
+of wave function will be when entering in the molecular phase of hydrogen.
+
+The unknown functions, ξij (r), ηij (r) in eqs. (57) and (58) need to be parame-
+terized in some way. In a ﬁrst attempt we have chosen gaussians with variance and
+amplitude as new variational parameters [16]. This form was shown to be suitable for
+homogeneous electron gas [13]. Approximate analytical forms for ξij (r) and ηij(r),
+as well as for the two-body pseudopotential, have been obtained later in the frame-
+work of the Bohm-Pines collective coordinates approach [14]. This form is particu-
+larly suitable for the CEIMC because there are no parameters to be optimized. This
+trial function is faster than the pair product trial function with the LDA orbitals, has
+no problems when protons move around and its nodal structure has the same quality
+
+(57)
+
+(58)
+
+18
+
+Carlo Pierleoni and David M. Ceperley
+
+as the corresponding one for the LDA Slater determinant [14]. We have extensively
+used this form of the trial wave function for CEIMC calculations of metallic atomic
+hydrogen.
+
+Trial function optimization
+
+For metallic hydrogen we have described a parameter-free trial function which does
+not need optimization. However, if we use the pair proton action both for molecular
+or LDA orbitals, we are left with free parameters in the Jastrow factor and with the
+width of the gaussians for molecular orbitals. Optimization of the parameters in a
+trial function is crucial for the success of VMC. Bad upper bounds do not give much
+physical information. Good trial functions will be needed in the Projector Monte
+Carlo method. First, we must decide on what to optimize and then how to perform
+the optimization. There are several possibilities for the quantity to optimize and de-
+pending on the physical system, one or other of the criteria may be best.
+
+•
+
+•
+
+•
+
+Ψ
+
+−
+
+|H
+
+2
+|
+
+E2
+
+The variational energy: EV . If the object of the calculation is to ﬁnd the least up-
+per bound one should minimize EV . There is a general argument suggesting that
+the trial function with the lowest variational energy will maximize the efﬁciency
+of Projector Monte Carlo [38].
+The variance of the local energy: σ2 =
+V . If we assume that every
+step on a QMC calculation is statistically uncorrelated with the others, then the
+R
+variance of the average energy will equal σ2/p where p is the number of steps.
+The minimization of σ2 is statistically more robust than the variational energy
+because it is a positive deﬁnite quantity with zero as minimum value. One can
+also minimize a linear combination of the variance and the variational energy.
+The overlap with the exact wave function:
+Ψ φ. If we maximize the overlap,
+we ﬁnd the trial function closest to the exact wave function in the least squares
+sense. This is the preferred quantity to optimize if you want to calculate corre-
+lation functions, not just ground state energies since, then, the VMC correlation
+functions will be closest to the true correlation functions. Optimization of the
+overlap will involve a Projector Monte Carlo calculation to determine the change
+of the overlap with respect to the trial function so it is more complicated and
+rarely used.
+
+R
+
+The most direct optimization method consists of running independent VMC calcula-
+tions using different set of numerical values for the variational parameters. One can
+ﬁt the energies to a polynomial, performing more calculations near the predicted min-
+imum and iterating until convergence in parameter space is attained. The difﬁculty
+with this direct approach is that close to the minimum, the independent statistical
+errors will mask the variation with respect to the trial function parameters. This is
+because the derivative of the energy with respect to trial function parameters is very
+poorly calculated. Also, it is difﬁcult to optimize, in this way, functions involving
+more than 3 variational parameters because so many independent runs are needed to
+cover the parameter space.
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+19
+
+A correlated sampling method, known as reweighting [39, 40] is much more efﬁcient.
+One samples a set of conﬁgurations
+(usually several thousand points at least)
+Rj}
+according to some distribution function, usually taken to be the square of the wave-
+2. Then, the variational energy
+function for some initial trial function:
+}0)
+α
+ΨT (R;
+|
+|
+(or the variance) for trial function nearby in parameter space can be calculated by
+using the same set of points:
+
+{
+
+{
+
+Ev(a) =
+
+j w(Rj ,
+
+{
+
+α
+}
+j w(Rj ,
+
+)EL(Rj,
+)
+α
+}
+
+{
+
+)
+
+α
+}
+
+{
+
+,
+
+P
+
+(59)
+
+P
+ΨT (R;
+|
+
+2, takes into account
+where the weight factor, w(R) =
+}0)
+α
+|
+that the distribution function changes as the variational parameters change. One then
+can use a minimizer to ﬁnd the lowest variational energy or variance as a function of
+keeping the conﬁgurations ﬁxed. However, there is an instability: if the param-
+{
+eters move too far away, the weights span too large of a range and the error bars of
+the energy become large. The number of effective points of a weighted sum is:
+
+)/ΨT (R;
+
+α
+}
+
+α
+}
+
+{
+
+{
+
+Nef f = (
+
+wj)2/
+
+w2
+j .
+
+(60)
+
+If this becomes much smaller than the number of points, one must resample and gen-
+erate some new points. When minimizing the variance, one can also simply neglect
+the weight factors. Using the reweighting method one can ﬁnd the optimal value of
+wavefunction containing tens of parameters.
+
+X
+
+X
+
+2.5 Twist Average Boundary Conditions
+
+Almost all QMC calculations in periodic boundary conditions have assumed that the
+phase of the wave function returns to the same value if a particle goes around the pe-
+riodic boundaries and returns to its original position. However, with these boundary
+conditions, delocalized fermion systems converge slowly to the thermodynamic limit
+because of shell effects in the ﬁlling of single particle states. Indeed, with periodic
+boundary conditions the Fermi surface of a metal will be reduced to a discrete set
+of points in k-space. The number of k-points is equal to the number of electrons of
+same spin and therefore it is quite limited.
+One can allow particles to pick up a phase when they wrap around the periodic
+boundaries,
+
+) = eiθ
+
+).
+
+· · ·
+
+· · ·
+
+Ψθ(r1, r2,
+
+Ψθ(r1 + Ln, r2,
+
+(61)
+where we have assumed a cubic box of size L and n is a vector of integers. The
+boundary condition θ = 0 is periodic boundary conditions (PBC), and the general
+condition with θ
+= 0, twisted boundary conditions (TBC). If the periodic boundaries
+are used in all directions, each dimension can have an independent twist. Hence, in
+three dimension (3D), the twist angle is a three component vector. The free energy
+and therefore all equilibrium properties are periodic in the twist: F (θ+2πn) = F (θ)
+so that each component of the twist can be restricted to be in the range
+π.
+The use of twisted boundary conditions is commonplace for the solution of the band
+
+π < θi ≤
+
+−
+
+6
+20
+
+Carlo Pierleoni and David M. Ceperley
+
+structure problem for a periodic solid, particularly for metals. In order to calculate
+properties of an inﬁnite periodic solid, properties must be averaged by integrating
+over the ﬁrst Brillouin zone.
+
+For a degenerate Fermi liquid, ﬁnite-size shell effects are much reduced if the
+twist angle is averaged over: twist averaged boundary conditions (TABC)[30]. For
+any given property ˆA the TABC is deﬁned as
+
+< ˆA >=
+
+π
+
+dθ
+(2π)d < Ψθ
+
+ˆA
+Ψθ >
+|
+|
+
+−π
+
+Z
+
+(62)
+
+TABC is particularly important in computing properties that are sensitive to the sin-
+gle particle energies such as the kinetic energy and the magnetic susceptibility. By
+reducing shell effects, accurate estimations of the thermodynamic limit for these
+properties can be obtained already with a limited number of electrons. What makes
+this very important is that the most accurate quantum methods have computational
+demands which increase rapidly with the number of fermions. Examples of such
+methods are exact diagonalization (exponential increase in CPU time with N), vari-
+ational Monte Carlo (VMC) with wave functions having backﬂow and three-body
+terms [13] (increases as N 4), and transient-estimate and released-node Diffusion
+Monte Carlo methods [41] (exponential increase with N). Moreover, size extrapo-
+lation is impractical within CEIMC since it would have to be performed for any
+proposed ionic move prior to the acceptance test. Methods which can extrapolate
+more rapidly to the thermodynamic limit are crucial in obtaining high accuracy.
+
+Twist averaging is especially advantageous in combination with stochastic meth-
+ods (i.e. QMC) because the twist averaging does not necessarily slow down the
+evaluation of averages, except for the necessity of doing complex rather than real
+arithmetic. In a metallic system, such as hydrogen at very high pressure, results in
+the thermodynamic limit require careful integration near the Fermi surface because
+the occupation of states becomes discontinuous. Within LDA this requires “k–point”
+integration, which slows down the calculation linearly in the number of k-points re-
+quired. Within QMC such k-point integration takes the form of an average over the
+(phase) twist of the boundary condition and can be done in parallel with the aver-
+age over electronic conﬁgurations without signiﬁcantly adding to the computational
+effort.
+
+In CEIMC we can take advantage of the twist averaging to reduce the noise in
+the energy difference for the acceptance test of the penalty method (see below). In
+the electron gas, typically 1000 different twist angles are required to achieve conver-
+gence [30]. We have used the same number of twist angles in CEIMC calculations of
+metallic hydrogen. Different strategies can be used to implement the TABC [30]. We
+have used a ﬁxed 3D grid in the twist angle space, at each grid point run independent
+QMC calculations and then averaged the resulting properties. This procedure can be
+easily and efﬁciently implemented on a parallel computer. Recently, we have devised
+a sampling procedure to randomize the grid points at each ionic step. We have lim-
+ited experience, but, so far, we have evidence that good convergence in the electronic
+and ionic properties can already be reached for a number of twist angles as low as 30
+[42].
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+21
+
+2.6 Sampling electronic states: the “bounce” algorithm
+
+In this section we describe the way we have implemented electronic move in the
+CEIMC method. In particular we present an original algorithm for RQMC, particu-
+larly suitable for CEIMC, called the “bounce” algorithm.
+
+First, how do the particles move in VMC? In the continuum it is usually more
+efﬁcient to move the particles one at a time by adding a random vector to a parti-
+cle’s coordinate, where the vector is either uniform inside of a cube, or is a normally
+distributed random vector centered around the old position. Unfortunately, this pro-
+cedure cannot be used with backﬂow orbitals. This is because the backﬂow trans-
+formation couples all the electronic coordinates in the orbitals so that once a single
+electron move is attempted the entire Slater determinant needs to be recomputed, an
+O(N 3) operation. It is much more efﬁcient to move all electrons at once, although
+global moves could become inefﬁcient for large systems.
+
+Next we describe the electronic sampling within RQMC. In the original work on
+RQMC [18], the electronic path space was sampled by a simple reptation algorithm,
+an algorithm introduced to sample the conﬁgurational space of linear polymer chains
+[43]. Remember that in RQMC the electronic conﬁgurational space is the space of
+3Ne-dimensional random paths of length “t”. In practice, the imaginary time is dis-
+cretized in M time slices τ = t/M and the paths become discrete linear chains
+of M + 1 beads. Let us indicate with Q the entire set of 3N (M + 1) coordinates
+Q =
+
+. According to eqs. (33), (34) and (36), the path distribution is
+
+R0, . . . , RM }
+
+{
+
+(cid:3)
+
+M
+
+k=1
+
+Ls(Rk−1,Rk,τ )e−τ
+
+EL (R0)
+
+2 +
+
+M −1
+k=1
+
+EL(Rk)+
+
+EL (RM )
+2
+
+Π(Q) =
+
+e−
+ΨT (R0)ΨT (RM )
+|
+|
+
+(cid:2)
+
+P
+
+P
+
+(63)
+Given a path conﬁguration Q, a move is done in two stages. First one of the two ends
+(either R0 or RM ) is sampled with probability 1/2 to be the growth end Rg. Then a
+new point near the growth end is sampled from a Gaussian distribution with center
+at Rg + 2λτeF (Rg). In order to keep the number of links on the path constant, the
+old tail position is discarded in the trial move. The move is accepted or rejected with
+the Metropolis formula based on the probability of a reverse move. For use in the
+following, let us deﬁne the direction variable d as d = +1 for a head move (Rg =
+1 for a tail move (Rg = R0). In standard reptation, the direction d
+RM ), and d =
+Q′)
+is chosen randomly at each attempted step. The transition probability P (Q
+Q′) and an acceptance probability
+is the product of an attempt probability Td(Q
+→
+Q′). The paths distribution Π(Q) does not depend on the direction d in
+ad(Q
+which it was constructed. In the Metropolis algorithm, the acceptance probability for
+the attempted move is
+
+→
+
+→
+
+−
+
+ad(Q
+
+→
+
+Q′) = min
+
+1,
+
+Π(Q′)T−d(Q′
+Π(Q)Td(Q
+
+→
+
+Q)
+Q′)
+
+→
+
+(cid:21)
+
+(cid:20)
+
+which ensures that the transition probability Pd(Q
+
+Q′) satisﬁes detailed balance
+
+→
+
+Π(Q)Pd(Q
+
+Q′) = Π(Q′)P−d(Q′
+
+→
+
+Q)
+
+→
+
+(64)
+
+(65)
+
+22
+
+Carlo Pierleoni and David M. Ceperley
+
+The autocorrelation time of this algorithm, that is the number of MC steps be-
+tween two uncorrelated conﬁgurations, scales as [M 2/A], where A is the acceptance
+rate of path moves, an unfavorable scaling for large M (i.e. large projection time
+t). Moreover the occasional appearance of persistent conﬁgurations bouncing back
+and forth without really sampling the conﬁguration space has been previously ob-
+served [44]. These are two very unfavorable features, particularly in CEIMC, where
+we need to perform many different electronic calculations. There is a premium for a
+reliable, efﬁcient and robust algorithm.
+
+We have found that a minimal modiﬁcation of the reptation algorithm solves
+both of these problems. The idea is to chose randomly the growth direction at the
+beginning of the Markov chain, and reverse the direction upon rejection only, the
+“bounce” algorithm.
+
+→
+
+What follows is the proof that the bounce algorithm samples the correct prob-
+ability distribution Π(Q). The variable d is no longer randomly sampled, but,
+as before, the appropriate move is sampled from the same Gaussian distribution
+Q′) and accepted according to the Eq. (64). In order to use the techniques
+Td(Q
+of Markov chains, we need to enlarge the state space with the direction variable d.
+In the enlarged conﬁguration space
+, let us deﬁne the transition probability
+Q, d
+}
+Q′, d′) of the Markov chain. The algorithm is a Markov process in the
+P (Q, d
+extended path space, and assuming it is ergodic, it must converge to a unique station-
+ary state, Υ (Q, d) satisfying the eigenvalue equation:
+
+→
+
+{
+
+Υ (Q, d) P (Q, d
+
+Q′, d′) = Υ (Q′, d′).
+
+(66)
+
+XQ,d
+
+→
+
+We show that our desired probability Π(Q) is solution of this equation. Within the
+= 0 for d = d′
+imposed rule, not all transitions are allowed, but P (Q, d
+d and Q = Q′ (rejected move) only. Without
+and Q
+−
+loss of generality let us assume d′ = +1 since we have symmetry between
+1. Eq.
+(66) with Υ (Q, d) replaced by Π(Q) is
+
+= Q′ (accepted move), or d′ =
+
+Q′, d′)
+
+→
+
+±
+
+Π(Q′)P (Q′,
+
+1
+
+Q′, 1) +
+
+Π(Q)P (Q, 1
+
+Q′, 1) = Π(Q′).
+
+(67)
+
+−
+
+→
+
+XQ6=Q′
+
+→
+
+Because of detailed balance Eq.(65), we have
+
+Π(Q)P (Q, 1
+
+Q′, 1) = Π(Q′)P (Q′,
+
+1
+
+−
+
+→
+
+Q,
+
+1)
+
+−
+
+→
+
+which, when substituted in this equation gives
+
+Π(Q′)
+
+P (Q′,
+
+1
+
+Q′, 1) +
+
+P (Q′,
+
+1
+
+= Π(Q′).
+
+(68)
+
+
+
+
+
+−
+
+→
+
+XQ
+
+−
+
+→
+
+Q,
+
+1)
+
+−
+
+
+
+
+
+Note that we have completed the sum over Q with the term Q = Q′ because its
+probability vanishes. The term in the bracket exhausts all possibilities for a move
+from the state (Q′,
+1), thus it adds to one. Hence Π(Q) is a solution of eq. (66)
+and by the theory of Markov chains, it is the probability distribution of the stationary
+state.
+
+−
+
+6
+6
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+23
+
+3 Sampling ionic states: The penalty method
+
+In Metropolis Monte Carlo a Markov chain of ionic states S is generated accord-
+e−βEBO(S) where EBO(S) is the Born-
+ing to the Boltzmann distribution P (S)
+∝
+Oppenheimer energy for the ionic conﬁguration S and β the inverse temperature.
+From the state S a trial state S′ is proposed with probability T (S
+S′) and the
+detailed balance condition is imposed by accepting the move with probability
+
+→
+
+A(S
+
+S′) = min
+
+1,
+
+→
+
+T (S′
+T (S
+
+→
+→
+
+′
+
+)
+
+S)e−βEBO (S
+S′)e−βEBO (S)
+
+#
+
+"
+
+(69)
+
+→
+
+Under quite general conditions on the system and on the a-priori transition proba-
+S′), after a ﬁnite number of MC steps the Markov chain so generated
+bility T (S
+will visit the states of the conﬁgurational space with a frequency proportional to their
+Boltzmann’s weight [43].
+In CEIMC estimate of EBO(S) is affected by statistical noise. If we ignore the pres-
+ence of noise and we use the standard Metropolis algorithm, the results will be bi-
+ased, the amount of bias increasing for increasing noise level. A possible solution
+would be to run very long QMC calculations in order to get a negligibly small noise
+level resulting in a negligible bias. However, the noise level decreases as the number
+of independent samples to the power 1/2, that is to decrease the noise level by one
+order of magnitude we should run 100 times longer, an unfavorable scaling if we re-
+alize that we have to repeat such calculation for any attempted move of the ions. The
+less obvious but far more efﬁcient solution is to generalize the Metropolis algorithm
+to noisy energies. This is done by the Penalty Method[45]. The idea is to require the
+detailed balance to hold on average and not for any single energy calculation.
+
+Let us consider two ionic states (S, S′) and call δ(S, S′) the “instantaneous” en-
+ergy difference times the inverse temperature. Let us further assume that the average
+and the variance of δ(S, S′) over the noise distribution P (δ
+
+S′) exhist
+
+S
+|
+
+→
+
+∆(S, S′) = β ]EBO(S′)
+σ2(S, S′) = < (δ(S, S′)
+
+EBO(S)] =< δ(S, S′) >
+∆(S, S′))2 >
+
+(70)
+(71)
+
+−
+−
+
+We introduce the “instantaneous” acceptance probability, a(δ
+detailed balance to hold for the average of a(δ
+noise
+
+S, S′) and impose the
+|
+S, S′) over the distribution of the
+|
+)A(S′
+
+(72)
+
+S)
+
+′
+
+A(S
+
+S′) = e−Γ (S,S
+
+→
+
+→
+
+where
+
+and we have deﬁned
+
+A(S
+
+S′) =
+
+→
+
+dδP (δ
+
+S
+|
+
+→
+
+S′)a(δ
+
+S, S′)
+|
+
+∞
+
+−∞
+
+Z
+
+(73)
+
+(74)
+
+Γ (S, S′) = ∆(S, S′)
+
+ln
+
+−
+
+T (S′
+T (S
+
+S)
+S′)
+
+→
+→
+
+(cid:21)
+
+(cid:20)
+
+24
+
+Carlo Pierleoni and David M. Ceperley
+
+If we assume the quite general conditions a(δ
+P (
+
+S) to hold, the detailed balance can be written
+
+S, S′) = a(δ) and P (δ
+|
+
+δ
+
+S
+|
+
+→
+
+S′) =
+
+S′
+|
+
+→
+
+−
+
+∞
+
+−∞
+
+Z
+
+dδP (δ
+
+S
+|
+
+→
+
+S′)
+
+a(δ)
+
+e−Γ a(
+
+δ)
+
+= 0
+
+−
+
+−
+
+(cid:2)
+
+(cid:3)
+
+(75)
+
+which, supplemented by the condition a(δ)
+0, is the equation to solve in order to
+obtain the acceptance probability a(δ). The difﬁculty is that during the MC calcula-
+tion we do not know either P (δ
+In order to make progress let us assume, as it happens in many interesting cases, that
+the noise of the energy difference is normally distributed so that
+
+≥
+S′) nor ∆(S, S′).
+
+S
+|
+
+→
+
+P (δ
+
+S
+|
+
+→
+
+S′) = (2πσ2)−1/2 exp
+
+(δ
+
+−
+
+−
+
+∆)2/2σ2
+
+(76)
+
+Let us, moreover, assume that we know the value of the variance σ. It is not difﬁcult
+to check that the solution of eq. (75) is
+
+(cid:2)
+
+(cid:3)
+
+T (S′
+T (S
+
+S)
+S′)
+
+1,
+
+an(δ
+
+σ) = min
+|
+
+→
+→
+The uncertainty in the energy difference just causes a reduction in the acceptance
+probability by an amount exp(
+σ) over
+|
+the guassian measure provides
+
+σ2/2. The integral of an(δ
+
+σ2/2) for δ >
+
+exp
+
+(cid:19)(cid:21)
+
+−
+
+−
+
+−
+
+−
+
+(cid:18)
+
+(77)
+
+(cid:20)
+
+δ
+
+A(S
+
+→
+
+S′) = 1
+
+2 erfc
+
+σ2/2 + Γ (S
+
+S′)
+
+/(√2σ)
+
++
+
+1
+2 erfc
+
+σ2/2
+
+Γ (S
+
+−
+
+n(cid:2)
+
+n(cid:2)
+
+→
+
+→
+
+(cid:3)
+S′)
+
+/(√2σ)
+
+e−Γ (S→S
+
+′
+
+)
+
+(78)
+
+(cid:3)
+Γ (S
+
+S′). Note that eq. (77)
+
+which satisﬁes eq. (72) since Γ (S′
+reduces to the standard Metropolis form for vanishing σ [43].
+
+S) =
+
+→
+
+→
+
+−
+
+An important issue is to verify that the energy differences are normally dis-
+tributed. Recall that if the moments of the energy difference are bounded, the central
+limit theorem implies that given enough samples, the distribution of the mean value
+will be Gaussian. Careful attention to the trial function to ensure that the local ener-
+gies are well behaved may be needed.
+
+In practice not only the energy difference ∆ but also the variance σ is unknown
+and must be estimated from the data. Let us assume that, for a given pair of ionic
+states (S, S′), we generate n statistically uncorrelated estimates of the energy dif-
+ference
+each normally distributed with their ﬁrst and second moments
+deﬁned in the usual way
+
+y1, . . . , yn}
+
+{
+
+σ2
+2
+
+o
+
+o
+
+∆ = < yi >
+σ2 = < (yi −
+
+∆)2 >
+
+(79)
+(80)
+
+Unbiased estimates of ∆ and σ2 are
+
+(81)
+
+(82)
+
+(83)
+
+(84)
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+25
+
+δ =
+
+1
+n
+
+χ2 =
+
+n
+
+yi
+
+i=1
+X
+1
+
+n
+
+δ)2
+
+(yi −
+
+n(n
+
+1)
+
+−
+
+i=1
+X
+
+An extension of the derivation above provides [45]
+
+where
+
+a(δ, χ2, n) = min
+
+1,
+
+T (S′
+T (S
+
+S)
+S′)
+
+→
+→
+
+(cid:20)
+
+exp(
+
+δ
+
+−
+
+−
+
+uB)
+(cid:21)
+
+uB =
+
++
+
+χ2
+2
+
+χ4
+4(n + 1)
+
++
+
+χ6
+3(n + 1)(n + 3)
+
++
+
+· · ·
+
+The ﬁrst term in eq. (84) is the penalty in the case we know the variance. The error
+of the noise causes extra penalty which decreases as the number of independent sam-
+ples n grows. In the limit of large n the ﬁrst term dominates and we recover eq. (77).
+Eq. (84) must be supplemented by the condition χ2/n
+1/4 for the asymptotic ex-
+pansion (84) to converge and the instantaneous acceptance probability to be positive
+[45].
+
+≤
+
+The noise level of a system can be characterized by the relative noise parameter,
+f = (βσ)2t/t0, where t is the computer time spent reducing the noise, and t0 is the
+computer time spent on other pursuits, such as optimizing the VMC wave function or
+equilibrating the RQMC runs. A small f means little time is being spent on reducing
+noise, where a large f means much time is being spent reducing noise. For a double
+well potential, the noise level that gives the maximum efﬁciency is around βσ
+≈
+1, with the optimal noise level increasing as the relative noise parameter increases
+[45]. In CEIMC runs for hydrogen the noise level βσ ranges between 0.3 and 3, the
+optimal value being around 1.
+
+3.1 Efﬁcient strategies for electronic energy differences
+
+As explained above, we need to evaluate the energy difference and the noise between
+two protonic conﬁgurations (S, S′). The distance in conﬁgurational space between
+S and S′ in an attempted move is however quite limited since we have to move
+all protons at once. Indeed, each backﬂow orbital depends on the position of all
+protons and single proton moves would require recomputing the entire determinant
+for each attempted move, a O(N 4) operations for a global move. Instead, moving all
+protons together requires a single determinant calculation per ionic move, a O(N 3)
+operation. In this case, performing two independent electronic calculations for S
+and S′ to estimate the energy difference would be very inefﬁcient since ∆EBO <<
+EBO(S) and the noise on the energy difference would just be twice the noise on
+the single energy estimate. The strategy to adopt is to compute the energy difference
+from correlated sampling, i.e. sampling the electronic conﬁgurational space from a
+distribution which depends both on S and S′ and estimating the energy difference
+
+26
+
+Carlo Pierleoni and David M. Ceperley
+
+and the other electronic properties of interest by reweighting the averages [16]. It is
+possible to show that the optimal sampling function, i.e. the sampling distribution
+for which the variance of the energy difference is minimal, takes the form
+
+P (Q
+
+S, S′)
+|
+
+Π(Q
+
+S)(EBO(S)
+|
+
+−
+
+∝ |
+
+< EBO(S) >)
+
+Π(Q
+
+−
+
+S′)(EBO(S′)
+|
+
+−
+
+< EBO(S′) >)
+|
+
+(85)
+where < EBO > is the estimate of the BO energy. In order to use this sampling
+probability we need to estimate the BO energies of the two states before performing
+the sampling. A simpler form which avoid this problem is
+
+P (Q
+
+S, S′)
+|
+
+∝
+
+Π(Q
+
+S) + Π(Q
+|
+
+S′)
+|
+
+(86)
+
+We emphasize that the “reptile” space for the electron paths depends on the proton
+coordinates so that, because of the ﬁxed-node restriction for fermions, legal paths for
+S may or may not be legal for S′ and vice-versa. These two forms of importance
+sampling have the property that they sample regions of both conﬁguration spaces (S
+and S’) and make the energy difference rigorously correct with a bounded variance.
+
+3.2 Pre-rejection
+
+We can use multi–level sampling to make CEIMC more efﬁcient [19]. An empirical
+potential is used to “pre-reject” moves that would cause particles to overlap and
+be rejected anyway. A trial move is proposed and accepted or rejected based on a
+classical potential
+
+A1 = min
+
+1,
+
+T (S
+T (S′
+
+S′)
+S)
+
+→
+→
+
+(cid:20)
+
+exp(
+
+−
+
+β∆Vcl)
+(cid:21)
+
+(87)
+
+where ∆Vcl = Vcl(S′)
+Vcl(S) and T is the sampling probability for a move. If it
+is accepted at this ﬁrst level, the QMC energy difference is computed and accepted
+with probability
+
+−
+
+A2 = min [1, exp(
+
+β∆EBO −
+where uB is the noise penalty. Compared to the cost of evaluating the QMC energy
+difference, computing the classical energy difference is much less expensive. Reduc-
+ing the number of QMC energy difference evaluations reduces the overall computer
+time required.
+
+uB) exp(β∆Vcl)]
+
+−
+
+(88)
+
+For metallic hydrogen a single yukawa potential was always found to be suit-
+able for pre-rejection. For molecular hydrogen we use instead a Silvera-Goldman
+potential [46] riparametrized in such a way to have the center of interaction on any
+single proton in the molecule rather than on the molecular center of mass. In prac-
+tice, we take a single Yukawa potential for intermolecular proton-proton interaction
+and the Kolos-Wolniewski potential [47] for the bonding interaction. The Yukawa
+screening length and the prefactor are optimized to reproduce the results of the
+Silvera-Goldman model. This new potential is suitable for pre-rejecting all types
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+27
+
+of moves that we attempt in the molecular hydrogen, namely molecular rotations,
+bond stretching and molecular translations. The original Silvera-Goldmann potential
+being spherically symmetric around the molecular center is not suitable to pre-reject
+the rotational moves.
+
+4 Quantum protons
+
+By increasing pressure and/or decreasing temperature, ionic quantum effects can be-
+come relevant. Those effects are important for hydrogen at high pressure[7, 48].
+Static properties of quantum systems at ﬁnite temperature can be obtained with the
+Path Integral Monte Carlo method (PIMC) [19]. We need to consider the ionic ther-
+mal density matrix rather than the classical Boltzmann distribution:
+
+ρp(S, S′
+
+e−β( ˆKp+ ˆEBO)
+|
+where ˆKp is the ionic kinetic energy operator and β = (KBT )−1 is the inverse
+physical temperature. Thermal averages of ionic operators ˆAp (diagonal in conﬁgu-
+rational space) are obtained as
+
+β) =< S
+|
+
+S′ >
+|
+
+(89)
+
+Ap(β) =
+
+dSAp(S)ρp(S, S
+
+β)
+|
+
+1
+Z(β)
+
+Z
+
+where Z is the partition function
+
+Z(β) =
+
+dSρp(S, S
+
+β) = e−βF
+|
+
+Z
+
+and F is the Helmholtz free energy of the system. As before, the thermal density
+matrix can be computed by a factorization of β in many (P) small intervals (time
+slices τp = β/P ) and by a suitable approximation for the “high temperature” (or
+short time) density matrix. According to the Feynman-Kac formula (see eqs. (24)
+and (35)) the diagonal part of the thermal density matrix is the sum over all closed
+paths, i.e. paths starting at S and returning to S after a “time” β. This is the famous
+“isomorphism” between quantum particles and ring polymers [21, 19]. Considering
+particle statistics in the PIMC is more difﬁcult than in RQMC. The reason is that in
+PIMC the state of the classical system, which has no symmetry built in, plays the
+role of the trial functions in RQMC and permutations need to be sampled explic-
+itly with an additional level of difﬁculty in the method [19, 26]. However, protonic
+statistics become relevant when the quantum dispersion is comparable to the interi-
+. This deﬁne a degeneracy
+onic distances Λp =
+temperature kBTD(np) = 2λpn2/3
+below which quantum statistics need to be con-
+sidered. For hydrogen TD ≃
+s, where rs is the usual ion sphere radius of
+coulomb systems rs = (3/4πnp)1/3. Therefore proton statistics in metallic hydro-
+1.3) becomes relevant below 50K depending on the density, a regime that
+gen (rs ≤
+
+(Np/V )−1/3 = n−1/3
+
+66.2(K)/r2
+
+2λpβ
+
+≈
+p
+
+p
+
+p
+
+(90)
+
+(91)
+
+28
+
+Carlo Pierleoni and David M. Ceperley
+
+we have not investigated yet. Proton statistics in molecular hydrogen is also quite im-
+portant and results in the separation between ortho- and para-hydrogen[49]. Because
+this effect is relevant only at low temperature, we have disregarded it as well.
+
+In order to implement the PIMC we need a suitable approximation for the high
+temperature density matrix ρp(S, S′
+τp). We could use either the primitive approxi-
+|
+mation or the importance sampling approximation described earlier. However a bet-
+ter approximation, in particular for distinguishable particles, is the pair product ac-
+tion [19] which closely resembles the pair trial function. The idea is to build the
+many body density matrix as the product over all distinct pairs of a two-body density
+matrices obtained numerically for a pair of isolated particles. At high temperature the
+system approaches the classical Boltzmann distribution which is indeed of the pair
+product form. The method is described in detail in ref. [19]. Here we just explain
+how we can take advantage of this methodology within the CEIMC scheme. In order
+to use the method of pair action, we need to have a pair potential between quan-
+tum particles. In CEIMC, however, the interaction among protons is provided by the
+many-body BO energy. Our strategy is to introduce an effective two-body potential
+between protons ˆVe and to recast the ionic density matrix as
+
+ρP (S, S′
+
+τp) =< S
+|
+
+e−τp[ ˆHe+( ˆEBO− ˆVe)]
+|
+e−τp ˆHe
+|
+
+S′ > e−
+|
+
+S′ >
+|
+
+< S
+
+≈
+
+τp
+2 [EBO(S)−Ve(S)]+[EBO(S
+
+′
+
+)−Ve(S
+
+′
+
+)] (92)
+
+where ˆHe = ˆKp + ˆVe and the corrections from the effective potential to the true
+BO energy are treated at the level of the primitive approximation. We can compute
+numerically the matrix elements of the effective pair density matrix ˆρ(2)
+e (τp) as ex-
+plained in ref. [19]. The effective Np-body density matrix is approximated by
+
+< S
+
+e−τp ˆHe
+|
+
+S′ >
+|
+
+≈
+
+< si, sj|
+
+i, s′
+s′
+ˆρ(2)
+e (τp)
+|
+
+j >= ρ0(S, S′
+
+−
+
+τp)e
+|
+
+Np
+
+ij
+Y
+
+where ρ0 is the free particle density matrix and ue(sij , s′
+action. The explicit form for the partition function is then
+
+ij|
+
+ue(sij ,s′
+
+ij |τp)
+
+ij
+
+P
+
+(93)
+τp) is the effective pair
+
+P
+
+Yk=1
+
+exp
+
+−
+
+
+
+
+P
+
+
+τp
+
+Z(β) =
+
+dS1 . . . dSP
+
+exp
+
+Z
+
+(Sk −
+
+Sk+1)2
+
+4λpτp
+
+−
+
+ue(sk
+
+ij , sk+1
+
+ij
+
+τp)
+|
+
+
+
+
+ij
+X
+
+(−
+
+[EBO(Sk)
+
+Ve(Sk)]
+
+−
+
+)
+
+
+(94)
+
+Xk=1
+with the boundary condition: SP +1 = S1. As for the pre-rejection step in the pro-
+ton moves, we have used different effective potentials according to the system un-
+der consideration. In metallic hydrogen (a plasma) we have used a smooth screened
+coulomb form and found that it provides a fast convergence in τp. Convergence can
+be assessed by monitoring the various terms in the estimator for the proton kinetic
+energy[19]. A good effective potential should provide uniform convergence of the
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+29
+
+0) for 1/τp ≥
+
+various orders in τp. With this effective potential, we have found convergence to the
+3000K which allows to simulate systems at
+continuum limit (τp →
+1. In molecular hy-
+room temperature with only M
+drogen we need to consider the extra contribution of the bonding potential. We have
+used the Kolos-Wolniewicz bonding potential in connection with the same smooth
+screened coulomb potential for the non bonding interactions. Convergence with τp is
+observed in a similar range.
+
+10 proton slices for rs ≥
+
+≈
+
+k ≈
+
+P σ2
+
+A very nice feature of ionic PIMC in CEIMC is that considering ionic paths rather
+then classical point particles does not add any computational cost to the method. Let
+us suppose we run classical ions with a given level of noise (βσcl)2. Consider now
+representing the ions by P time slices. To have a comparable extra-rejection due to
+(βσcl)2/P which
+the noise we need a noise level per slice given by: (τpσk)2
+provides σ2
+cl. We can allow a noise per time slice P times larger which means
+considering P times less independent estimates of the energy difference per slice.
+However we need to run P different calculations, one for each different time slice, so
+that the amount of computing for a ﬁxed global noise level is the same as for classical
+ions. In practice, however, because our orbitals depend on all proton positions, we
+are forced to move the proton positions at given imaginary time all together with a
+local (in imaginary time) update scheme. It is well known that the autocorrelation
+time of schemes with local updates rapidly increases with the chain length and this
+is the ultimate bottleneck of our present algorithm [19]. It is therefore essential to
+adopt the best factorization in order to minimize the number of time slices P needed
+and therefore the efﬁciency of the method.
+
+≈
+
+When using TABC with quantum ions, for any proton time slice we should, in
+principle, perform a separate evaluation of the BO energy difference averaged over
+all twist angles. Instead at each protonic step, we randomly assign a subset of twist
+phases at each time slice and we compute the energy difference for that phase only.
+The TABC is then performed by adding up all the contributions from the different
+time slices. We have checked in few cases that this simpliﬁed procedure does not
+give detectable biases in the averages.
+
+In practice we move all slices of all protons at the same time by a simple random
+
+move in a box and we pre-reject the moves with the effective pair action.
+
+5 Summary of results on high pressure hydrogen
+
+In this section we brieﬂy summarize some of the CEIMC results we have obtained for
+high pressure hydrogen. Figure 1 shows what is known and what has been predicted
+about the hydrogen phase diagram in a wide range of pressures and temperatures. The
+rectangular region in the right upper corner is the region where R-PIMC method can
+make reliable predictions [50, 51, 52]. There have been many studies of the ground
+state of hydrogen (T=0) including some QMC investigations [33, 34, 35, 36]. They
+have predicted a metallization density corresponding at rs = 1.31 accompanied by
+a transition from a molecular m-hcp structure to a diamond lattice of protons. At
+intermediate temperatures a number of ab-initio Molecular Dynamics studies have
+
+30
+
+Carlo Pierleoni and David M. Ceperley
+
+-1
+
+10
+
+0
+
+10
+
+1
+
+10
+
+2
+
+10
+
+3
+
+10
+
+4
+
+10
+
+5
+
+10
+
+6
+
+10
+
+7
+
+10
+
+8
+
+10
+
+4
+
+10
+
+3
+
+10
+
+)
+
+K
+
+(
+ 
+T
+
+2
+
+10
+
+planets adiabats
+
+gas H2
+
+l i q u i d   H 2
+
+PIMC
+
+H2
+
+I
+
+H
+
+C
+
+E I M
+
+C
+
+3
+
+10
+
+4
+
+10
+
+2
+
+10
+
+fcc H2
+
+II III
+
+d
+n
+o
+m
+a
+d
+
+i
+
+c
+c
+b
+
+-1
+
+10
+
+0
+
+10
+
+1
+
+10
+
+2
+
+10
+
+5
+
+10
+
+6
+
+10
+
+7
+
+10
+
+8
+
+10
+
+4
+
+3
+
+10
+
+10
+P (bar)
+
+Fig. 1. Hydrogen phase diagram. Continuous transition lines are experimental results, dashed
+lines are theoretical prediction from various methods. Squares and right-triangle are ab-initio
+MD predictions of molecular melting [57] and molecular dissociation in the liquid phase [56].
+The diamonds are shock-waves experimental data through the liquid metalization [58]. The
+triangles are earlier CEIMC data for the insulating molecular state [15, 16] while the green
+domain on the extreme right indicates the CEIMC prediction for the melting [17]. Red lines
+are model adiabats for the interior of the giant planets of the solar system [59].
+
+been performed in the molecular and in the metallic phases, both in the crystal and
+in the liquid state [53, 54, 55, 56, 57].
+
+Metallic hydrogen
+
+We ﬁrst focus on the metallic system for pressure beyond the molecular dissociation
+threshold. In this region, hydrogen is a system of protons and delocalized electrons.
+At low enough temperature the protons order in a crystalline lattice which melts upon
+increasing temperature. The low temperature stable structure as a function of density
+is still under debate. The most accurate ground state QMC calculation [35], indicates
+that hydrogen at the edge of molecular dissociation will order in a diamond struc-
+ture, and upon increasing density will undergo various structural transformations
+ultimately transforming to the bcc structure. However, these prediction are extrapo-
+lated from a single calculation at rs = 1.31 and temperature effects are absent. With
+[0.8, 1.2] and the temperature
+CEIMC we have investigated the density range rs ∈
+[300K, 5000K] across the melting transition of the proton lattice and
+range T
+
+∈
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+31
+
+up to the lower limit of applicability of RPIMC. We limited the study to systems of
+Np = 32 and Np = 54 which, for cubic simulation boxes, form fcc and bcc lattices,
+respectively. We have observed the melting and refreezing of the protons and made
+a qualitative location of the melting line versus the density [16, 17] as shown by the
+green contour lines in ﬁgure 1.
+
+0
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10
+
+1
+
+2
+
+-0.05
+
+T
+kB
+/
+E
+∆
+
+-0.1
+
+-0.6
+
+1
+-
+
+m
+o
+t
+a
+ 
+H
+
+ 
+/
+
+ 
+
+ET
+
+-0.602
+
+-0.604
+
+-0.606
+
+-0.608
+
+te
+
+te
+
+a)
+
+b)
+
+te
+
+3BF-A
+LDA-J
+SJ
+
+3
+
+0.03
+
+0.02
+
+0.01
+
+-0.6
+
+σ2
+
+-0.602
+
+-0.604
+
+-0.606
+
+-0.608
+
+c)
+
+d)
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10
+
+0.01
+σ2 
+
+ / H
+
+0.02
+2
+ atom
+
+-1
+
+0.03
+
+Fig. 2. Ne = Np = 16, rs = 1.31. Dependence of total energy, variance and energy differ-
+ence for a pair of proton conﬁgurations (S, S′) on the RQMC projection time. The study is
+performed for τe = 0.02H −1. Dotted lines represent the variational estimates with their error
+bars. In panel b) and c) the lines are exponential ﬁts to data and in panel d) the continuous
+line is a linear ﬁt in the region σ2 ≤ 0.005. Black circles (3BF-A) are results obtained with
+the analitical three-body and backﬂow trial wave functions discussed earlier, the red triangle
+is a variational result with a Slater-Jastrow trial function with simple plane wave orbitals and
+the blue squares are results from a trial function with LDA orbitals and an optmized two-body
+Jastrow.
+
+A number of interesting question about the convergence and the efﬁciency of
+the CEIMC algorithm need to be answered before starting a systematic study. An
+important one is: how large must the electronic projection time be in order to get
+convergence in the energy difference to the ground state value and therefore obtain
+unbiased sampling in CEIMC? In order to answer such a question we have selected
+a pair of protonic conﬁguration (S, S′) at given density and computed the energy
+difference, together with total energy and variance, versus the electronic projection
+time. The results reported in the ﬁgure 2 correspond to a system of Ne = Np = 16
+at rs = 1.31 with the twist phase θ = (0.4, 0.5, 0.6)π. Results are obtained for an
+electronic time step τe = 0.02H −1, a compromise between accuracy and efﬁciency.
+In panel a) we report the energy difference versus the projection time t to show
+
+32
+
+Carlo Pierleoni and David M. Ceperley
+
+that it does not depend on the projection time when using the accurate trial func-
+tion with 3-body terms and backﬂow orbitals (3BF-A, black dots) discussed above.
+This suggests that the proton conﬁguration space can be sampled using VMC for the
+electrons which is faster and more stable than RQMC. On the same panel we have
+reported the VMC estimate obtained with a trial function with a Slater determinant
+of simple plane waves and a two-body RPA Jastrow (SJ, red triangle) and a RQMC
+result obtained for a trial function with a 2-body RPA-Jastrow and a Slater determi-
+nant of self consistent LDA orbitals (LDA-J, blue squares). The simple SJ function
+at the variational level has a much larger energy difference (in absolute value) and
+therefore will provide a biased sampling of protonic conﬁgurations. It is not clear
+whether the RQMC projection with such trial function will recover the correct en-
+ergy difference (remember that the two kind of trial functions have different nodal
+structure). On the other hand, no difference is detected between the RQMC results
+from the 3BF-A and the LDA-J trial functions at the same projection time. This
+gives an indication of the quality of the 3BF-A nodal surfaces. The total energy and
+
+1
+
+2
+
+3
+
+4
+
+5
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+0
+
+1.5
+
+0.5
+
+1
+
+0
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+ gpp(r)
+
+ gee(r)
+
+ gep(r)
+
+3
+
+2
+
+1
+
+1
+
+ gee(r)
+
+0.8
+
+0.6
+
+0
+
+0
+
+1
+
+3
+2
+ r (a.u.)
+
+4
+
+5
+
+0
+
+1
+
+4
+
+5
+
+3
+2
+ r (a.u.)
+
+Fig. 3. Ne = Np = 54, rs = 1.2, T = 5000K, Γ point. Comparison of VMC (black)
+and RQMC (red) data for the pair correlation functions. The projection time in RQMC is
+te = 0.68H −1 with an electronic time step of τe = 0.01H −1. Protons are considered as
+classical point particles.
+
+the variance of conﬁguration S versus t are reported in panels b) and c), respec-
+tively. The two panels nicely illustrate the limiting process toward the ﬁxed-node
+ground state operated by the projection (see eq.(11) ). Within the 3BF-A trial func-
+tion we observe a large gain in energy with the projection time, the difference being
+E(0) = 5.7mH/at = 1810K/at. In both panels the results of the SJ trial
+E(
+function are off scale, while we have reported the result of the LDA-J wave function.
+
+)
+∞
+
+−
+
+3
+
+2
+
+1
+
+0
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+0
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+33
+
+According to the total energy, the quality of LDA-J function is superior to the one
+of 3BF-A function for this conﬁguration. The same quality was instead detected for
+the bcc lattice conﬁguration [14]. Finally, panel d) we report the total energy versus
+the variance of the 3BF-A trial function to show that both quantities go linearly with
+the error in the wave function when we are close enough to the ground state (the
+ﬁxed-node one) [13]. In order to check that we can indeed sample the proton space
+
+0
+
+1
+
+2
+
+3
+
+0
+
+1
+
+2
+
+3
+
+4
+
+4
+
+a)
+
+ VMC
+ RQMC
+
+b)
+
+1.5
+
+2.5
+
+2
+
+1
+
+1
+
+0.8
+
+0.6
+
+c)
+
+d)
+
+1
+
+2
+
+3
+
+4
+
+0
+
+1
+
+2
+
+3
+
+4
+
+Fig. 4. Ne = Np = 54, rs = 1.0, T = 1000K, Γ point. Comparison of VMC (black) and
+RQMC (red) data for the pair correlation functions. The projection time in RQMC is te =
+1.0H −1 with an electronic time step of τe = 0.02H −1. Protons are considered as classical
+point particles. The proton-proton pair correlation functions exhibits a structure reminiscent
+of the bcc crystal structure. RQMC data for gep(r) and g↑↓
+ee (r) show a ﬁnite time step errors
+at short distances which however do not contribute signiﬁcantly to the energy.
+
+with VMC energy differences, we have performed two test runs for the systems of
+Np = Ne = 54 at the Γ point (zero twist angle), one at rs = 1.2 and T = 5000K
+and the other at rs = 1 and T = 1000K. The comparison for the pair correlation
+functions are shown in ﬁgures 3 and 4 respectively.
+
+It is interesting to compare the predictions of CEIMC with other methods. In
+refs. [16, 17] we have compared with Restricted Path Integral Monte Carlo data and
+with Car-Parrinello Molecular Dynamics data with LDA forces (CPMD-LDA) [54].
+In ﬁgure 5 we compare CEIMC and CPMD-LDA gpp(r)’s for classical protons at
+rs = 1 and various temperatures. Both calculations are done with PBC (zero twist
+angle) and CEIMC uses 54 protons while CPMD-LDA used 162 protons (both are
+closed shells in the reciprocal space, so that the electronic ground state is not de-
+
+34
+
+Carlo Pierleoni and David M. Ceperley
+
+CPMD T=0.5
+CEIMC T=1.0
+
+CPMD T=1.0
+CEIMC T=2.0
+
+3
+
+2
+
+1
+
+2
+
+1
+
+2
+
+1
+
+0
+
+1
+
+CPMD T=2.0
+CEIMC T=4.0
+
+1.5
+
+2
+
+2.5
+
+3
+
+3.5
+
+4
+
+Fig. 5. Proton-proton pair correlation functions for classical protons at rs = 1 and various
+temperatures. Comparison between CEIMC and CPMD-LDA data.
+
+generate). We see that in a wide range of temperatures, CPMD-LDA and CEIMC
+are off by a factor of 2 in temperature. CPMD-LDA predicts a less structured ﬂuid
+350K [54]. With CEIMC instead
+and locates the melting transition at roughly Tm ≃
+more structure is found and the melting is located between 1000K and 1500K [17].
+Though several reasons could be at the origin of such unexpected discrepancy, we
+believe that the probelm arises from a too smooth BO energy surface as provided
+by LDA. Evidences of this fact are also provided by previous ground state calcula-
+tions for hydrogen crystal structures [35] which similarly found energy differences
+between various structures from LDA to be roughly half of the corresponding one
+from DMC. This will explaine the factor of 2 in the temperature scale observed in
+ﬁgure 5.
+
+In ref. [17] we have reported data for the equation of state of metallic hydrogen.
+Proton quantum effects are quite important at such high density and need to be con-
+sidered carefully to get accurate prediction of the equation of state. The importance
+of proton quantum effect is partially reported in ref. [60]. Also we have shown that
+electronic VMC with 3BF-A trial function is accurate enough to sample the proton
+conﬁguration space. However RQMC should be used in order to obtain accurate re-
+sults for the energy and the pressure. A good strategy is to run CEIMC with VMC to
+sample efﬁciently the proton conﬁgurations and then run RQMC on ﬁxed statistical
+independent protonic conﬁgurations previously generated.
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+35
+
+Insulating Molecular Hydrogen
+
+In this section we report very preliminary results in the insulating molecular liquid
+phase. We have investigated the state point at rs = 2.1 and T = 4530K because
+at this point, and other scattered points around it, experimental data for the equation
+of state are available from Gas-gun techiniques [61]. Also the ﬁrst CEIMC attempt
+
+5
+
+4
+
+3
+
+2
+
+1
+
+1
+
+0.5
+
+0
+
+0
+
+VMC
+RQMC
+
+ gpp(r)
+
+ gep(r)
+
+ gee(r)
+
+ gee(r)
+
+10
+
+1
+
+2
+
+1.6
+
+1.2
+
+0.8
+
+2
+
+4
+ r (a.u.)
+
+6
+
+0
+
+2
+
+4
+ r (a.u.)
+
+6
+
+Fig. 6. Comparison between VMC and RQMC computed pair correlation functions for insu-
+lating molecular hydrogen at rs = 2.1, T = 4530K. Np = Ne = 54.
+
+[15, 16] focus on the same point although using quite a different trial functions. We
+used a pair product trial function with modiﬁed RPA Jastrows (electron-electron and
+electron-proton) and Slater determinants built with the molecular orbitals of eq. (55).
+At variance with the metallic trial function, we have now 5 variational parameters to
+be optimized, 4 in the Jastrow factor and a single one in the orbitals. In particu-
+lar, the nodal structure of the wave function will be affected by the width of the
+gaussian orbitals used to build the molecular orbitals. In the ﬁrst CEIMC attempt
+[15, 16], a single multivariate gaussian, centered at the molecular center of mass and
+with a width different for each molecule was used. Thus the number of variational
+parameter was equal to three time the number of molecules. Also, the entire opti-
+mization procedure for each attempted protonic conﬁguration was performed prior
+the Metropolis test. Clearly, the optimization step was a bottleneck of that scheme.
+In our present scheme, we have gained evidence that we can optimize the parameters
+on a single protonic conﬁguration (even the parameters optimized on a lattice conﬁg-
+uration are good) and use the same values for simulating the liquid phase. A similar
+conclusion was obtained in the metallic phase with numerically optimized orbitals
+[16]. In this way the optimization step needs to be performed only upon changing
+density and/or number of particles, while we can use the same set of values for the
+
+36
+
+Carlo Pierleoni and David M. Ceperley
+
+variational parameters to span the temperature axis at ﬁxed density and number of
+particles. In ﬁgure 6 we compare the pair correlation functions as obtained by VMC
+and RQMC with τe = 0.01H −1 and te = 1.6H −1 for a system of 27 hydrogen
+molecules. Since the system is insulating we do not average over the twist angle,
+but just use the Γ point. We observe that RQMC enhances slightly the stregth of
+the molecular bond and the electronic correlation inside molecules with respect to
+VMC. Good agreement with the early CEIMC results is observed not only for the
+correlation function, but also for the equation of state. In our present calculation we
+obtain P (RQM C) = 0.224(5)M bars to be compared with the previous estimate
+of 0.225(3)M bars [15, 16] and with the experimental data P = 0.234M bars. The
+deviation from the experimental data is only roughly 5% and it is particularly en-
+couraging if we consider that our data are for classical protons and quantum effects
+are expected to slightly increase the pressure.
+
+6 Conclusions and future developments
+
+In this paper we have described the principles of CEIMC and given some technical
+details on its practical implementation. The results for metallic and molecular hydro-
+gen show that CEIMC is a practical strategy to couple ground state QMC methods
+for the electronic degrees of freedom with a ﬁnite temperature Monte Carlo simula-
+tion of the ionic degrees of freedom. To our knowledge, CEIMC is the only method
+available so far to perform ab-initio simulations based on QMC energies.
+
+In a recent work, Grossman and Mitas have proposed a strategy to correct ab-
+initio Molecular Dynamics energies with QMC [62]. This is however different from
+CEIMC because the nuclear degrees of freedom are still sampled on the basis of DFT
+forces. Therefore, when applied to metallic hydrogen, that method would have found
+the same liquid structure as obtained by CPMD-LDA [54].
+
+Very recently an interesting proposition on how to use noisy forces in ab-initio
+Molecular Dynamics has appeared [63]. The same strategy could be used with noisy
+QMC forces to simulate the dynamics of classical ions. A ﬁrst attempt has already
+shown the feasibilty of this promising method [64] although the results are still very
+preliminary.
+
+A crucial aspect of CEIMC is the choice of the electronic trial wave function.
+The ones we have discussed in this paper are either suitable for the metallic state
+or for the molecular state and their quality in describing the metalization-molecular
+dissociation transition is questionable. A current development within CEIMC is an
+efﬁcient strategy to generate on the ﬂy single electron orbitals depending on the
+instantaneous ionic conﬁguration, in the spirit of the LDA orbitals previously used
+[35]. We have devised an efﬁcient algorithm which is able to provide accurate orbitals
+in a reasonable computer time. We are at present using these orbitals to explore the
+molecular dissociation under pressure in the liquid state [65]. The same strategy
+can be used to obtain accurate prediction for the hydrogen equation of state in the
+temperature range between 50K and 5000K. Also application to helium and helium-
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+37
+
+hydrogen mixtures, very interesting systems for planetary physics, can be envisaged
+with the same methodology.
+
+Tests for non-hydrogenic systems are needed to ﬁnd the performance of the
+method on a broader spectrum of applications. The use of pseudopotentials within
+QMC to treat atoms with inner core is well tested [6]. What is not clear is how much
+time will be needed to generate trial functions, and to reduce the noise level to accept-
+able limits. Clearly, further work is needed to allow this next step in the development
+of microscopic simulation algorithms.
+
+References
+
+1. R. Car, M. Parrinello, Phys. Rev. Letts. 55, 2471 (1985).
+2. M. Bernasconi, G.L. Chiarotti, P. Focher, S. Scandolo, E. Tosatti, M. Parrinello, J. Phys.
+
+3. A. Alavi, J. Kohanoff, M. Parrinello, D. Frenkel, Phys. Rev. Letts. 73, 267 279599-2602
+
+Chem. Solids 56, 501 (1995).
+
+(1994)
+
+4. D. Marx and M. Parrinello: J. Chem. Phys. 104, 4077 (1996)
+5. R.M. Martin, “Electronic Structure. Basic Theory and Practical Methods”, Cambridge
+
+University Press (Cambridge 2004).
+
+6. M.W.C. Foulkes, L. Mitas, R.J. Needs, G. Rajagopal, Rev. Mod. Phys. 73, 33 (2001).
+7. E.G.Maksimov, Yu I.Silov, Physics-Uspekhi 42, 1121 (1999).
+8. M. Stadele, R.M. Martin, Phys. Rev. Lett. 84, 6070-6073 (2000).
+9. K.A.Johnson, N.W.Ashcroft, Nature 403, 632 (2000).
+
+10. D. Alf´e, M. Gillan, M.D. Towler, R.J. Needs, Phys. Rev. B 70, 161101 (2004).
+11. B.L. Hammond, W.A. Lester Jr., P.J. Reynolds “Monte Carlo methods in Ab Initio Quan-
+
+tum Chemistry”, World Scientiﬁc (Singapore 1994).
+12. R. M. Panoff, J. Carlson, Phys. Rev. Letts. 62, 1130 (1989).
+13. Y. Kwon, D.M. Ceperley, R.M. Martin, Phys. Rev. B 50, 1684-1694 (1994).
+14. M. Holzmann, D. M. Ceperley, C. Pierleoni, K. Esler, Phys. Rev. E 68, 046707[1-15]
+
+(2003).
+
+15. M. Dewing, D. M. Ceperley, in Recent Advances in Quantum Monte Carlo Methods II
+
+16. D. M. Ceperley, M. Dewing, C. Pierleoni. Lecture Notes in Physics 605, pg. 473-499
+
+(Ed. S. Rothstein), World Scientiﬁc (2002).
+
+(Springer-Verlag 2002); physics/0207006.
+
+17. C. Pierleoni, D.M. Ceperley, M. Holzmann, Phys. Rev. Lett., 93,146402[1-4] (2004).
+18. S. Baroni, S. Moroni, Phys. Rev. Letts. 82, 4745-4748 (1999); S. Baroni, S. Moroni
+Reptation quantum Monte Carlo in “Quantum Monte Carlo Methods in Physics and
+Chemistry”, eds. M.P. Nightingale and C.J. Umrigar (Kluwer, 1999), p. 313.
+
+19. D. M. Ceperley, Rev. Mod. Phys. 67, 279-355 (1995).
+20. A. Sarsa, K.E. Schmidt, W.R. Magro, J. Chem. Phys. 113, 1366 (2000).
+21. R.P. Feynman: “Statistical Mechanics: a set of lectures”, Westview Press (1998).
+22. K. Huang: “Statistical Mechanics”, John Wiley (1988)
+23. S. Zhang, H. Krakauer, Phys. Rev. Lett. 90, 136401 (2003).
+24. R.W. Hall, J. Chem. Phys. 22, 164112[1-8] (2005).
+25. A.J.W. Thom, A. Alavi, “A combinatorial approach to the electron correlation problem”,
+
+J. Chem. Phys. in print (2005).
+
+38
+
+Carlo Pierleoni and David M. Ceperley
+
+26. D. M. Ceperley: ‘Path integral Monte Carlo methods for fermions’. In Monte Carlo and
+Molecular Dynamics of Condensed Matter Systems, ed. by K. Binder and G. Ciccotti
+(Editrice Compositori, Bologna, Italy, 1996)
+
+27. D.M. Ceperley, J. Stat. Phys. 63, 1237 (1991).
+28. D. Bressanini, D. M. Ceperley, P. Reynolds, “What do we know about wave function
+nodes?”, in Recent Advances in Quantum Monte Carlo Methods II, ed. S. Rothstein,
+World Scientﬁc (2001).
+
+29. G. Ortiz, D.M. Ceperley, R.M. Martin, Phys. Rev. Lett. 71, 2777 (1993).
+30. C. Lin, F. H. Zong, D. M. Ceperley, Phys. Rev. E 64, 016702[1-12] (2001).
+31. G. Ortiz, D. M. Ceperley, Phys. Rev. Lett. 75, 4642 (1995).
+32. V. D. Natoli, A Quantum Monte Carlo study of the high pressure phases of solid hydro-
+
+gen, Ph.D. Theses, University of Illinois at Urbana-Champaign (1994).
+
+33. D. M. Ceperley and B. J. Alder: Phys. Rev. B 36, 2092 (1987).
+34. X.W. Wang, J. Zhu, S.G. Louie, S. Fahy, Phys. Rev. Lett. 65, 2414 (1990).
+35. V. Natoli, R. M. Martin, D. M. Ceperley, Phys. Rev. Lett. 70, 1952 (1993).
+36. V. Natoli, R. M. Martin, D. M. Ceperley, Phys. Rev. Lett., 74, 1601 (1995).
+37. C. Pierleoni, D.M. Ceperley, CHEMPHYSCHEM 6, 1872 (2005).
+38. D. Ceperley, J. Stat. Phys. 43, 815 (1986).
+39. D. M. Ceperley, M. H. Kalos, Monte Carlo Methods in Statistical Physics, ed. K. Binder,
+
+Springer-Verlag (1979).
+
+40. D. M. Ceperley, G. V. Chester, M. H. Kalos, Phys. Rev. B 16, 3081 (1977).
+41. D. M. Ceperley and B. J. Alder: J. Chem. Phys. 81, 5833 (1984)
+42. C. Pierleoni, K. Delaney, D.M. Ceperley, to be published.
+43. D. Frenkel, B. Smit, Understanding Molecular Simulations: From Algorithms to Appli-
+
+cations, 2nd Ed., Academic Press (San Diego, 2002).
+
+44. S. Moroni, private communication.
+45. D. M. Ceperley and M. Dewing, J. Chem. Phys. 110, 9812 (1999).
+46. I. F. Silvera and V. V. Goldman, J. Chem. Phys. 69, 4209 (1978).
+47. W. Kolos and L. Wolniewicz, J. Chem. Phys. 41, 3674 (1964).
+48. E. Babaev, A. Sudbo, N.W. Ashcroft, Nature, 431, 666 (2004).
+49. I.F. Silvera, Rev. Mod. Phys. 52, 393 (1980).
+50. C. Pierleoni, D. M. Ceperley, B. Bernu, W. R. Magro, Phys. Rev. Lett. 73, 2145 (1994);
+W. R. Magro, D. M. Ceperley, C. Pierleoni, B. Bernu, Phys. Rev. Lett. 76, 1240 (1996).
+
+51. B. Militzer and D. M. Ceperley, Phys. Rev. Lett. 85, 1890 (2000).
+52. B. Militzer and D. M. Ceperley, Phys. Rev. E 63, 066404 (2001).
+53. D. Hohl, V. Natoli, D. M. Ceperley, R. M. Martin, Phys. Rev. Lett. 71, 541 (1993).
+54. J.Kohanoff, J.P.Hansen, Phys. Rev. Lett. 74, 626-629 (1995); Phys. Rev. E 54, 768-781
+
+(1996).
+
+55. J. Kohanoff, S. Scandolo, G. L. Chiarotti, E. Tosatti, Phys. Rev. Lett. 78, 2783 (1997).
+56. S. Scandolo, PNAS 100, 3051 (2003).
+57. S.A. Bonev, E. Schwegler, T. Ogitsu, G. Galli, Nature 431, 669 (2004).
+58. S. T. Weir, A. C. Mitchell, and W. J. Nellis, Phys. Rev. Lett. 76, 1860 (1996).
+59. T. Guillot, G. Chabrier, P. Morel, D. Gautier, Icarus 112, 354 (1994); T. Guillot, P. Morel,
+
+Astron. & Astrophys. Suppl. 109, 109 (1995).
+
+60. M. Holzmann, C. Pierleoni, D.M. Ceperley, Comput. Physics Commun. 169, 421 (2005).
+61. N. C. Holmes, M. Ross, and W. J. Nellis: Phys. Rev. B 52, 15835 (1995).
+62. J.C. Grossman, L. Mitas, Phys. Rev. Lett. 94, 056403 (2005).
+63. F. Krajewski, M. Parrinello Phys. Rev. B 71, 233105 (2005); F. Krajewski, M. Parrinello,
+Linear scaling electronic structure calculations and accurate sampling with noisy forces,
+cond-mat/0508420.
+
+THE COUPLED ELECTRON-ION MONTE CARLO METHOD
+
+39
+
+64. C. Attaccalite, RVB phase of hydrogen at high pressure:towards the ﬁrst ab-initio Molec-
+
+ular Dynamics by Quantum Monte Carlo, Ph.D. theses, SISSA-Trieste (2005).
+
+65. K. Delaney, D.M. Ceperley, C. Pierleoni, to be published.
+
+

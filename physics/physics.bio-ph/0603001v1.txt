@@ -1,0 +1,496 @@
+6
+0
+0
+2
+ 
+b
+e
+F
+ 
+8
+2
+ 
+ 
+]
+h
+p
+-
+o
+i
+b
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+1
+0
+0
+3
+0
+6
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Fine-grained Delaunay triangulation in a
+simulation of tumor spheroid growth
+
+Alessio Del Fabbro a Roberto Chignola b Edoardo Milotti a,∗
+aDipartimento di Fisica, Universit`a di Trieste and I.N.F.N. – Sezione di Trieste
+Via Valerio, 2 – I-34127 Trieste, Italy
+bDipartimento Scientiﬁco e Tecnologico, Facolt`a di Scienze MM.FF.NN.
+Universit`a di Verona and I.N.F.N. – Sezione di Trieste
+Strada Le Grazie, 15 - CV1 – I-37134 Verona, Italy
+
+Abstract
+
+The simulation of many-particle systems often requires the detailed knowledge of
+proximity relations to reduce computational complexity and to provide a basis for
+speciﬁc calculations. Here we describe the basic scheme of a simulator of tumor
+spheroid growth: the calculation of mechanical interactions between cells and of
+the concentrations of diﬀusing chemicals requires a backbone provided by the De-
+launay triangulation and the volumes of the associated Voronoi regions. Thus the
+Delaunay triangulation provides both the proximity relations needed to reduce the
+computational complexity and the basic structures that are needed to carry out the
+calculation of the biochemical interactions between cells and with the enviroment.
+A 3D version of the simulator uses the CGAL library as an essential component for
+the eﬃcient computation of the Delaunay triangulation and of the Voronoi regions.
+
+Key words: Tumor growth, Biophysics, Computational biology
+PACS: 87.17.Ee, 87.18.Bb, 87.18.Ed, 87.19.Xx
+
+1 Introduction
+
+A good understanding of the growth kinetics of tumors is essential to devise
+better and more eﬀective therapeutic strategies [1]. Direct observation in vivo
+∗
+
+Corresponding author
+Email addresses: delfabbro@ts.infn.it (Alessio Del Fabbro),
+
+roberto.chignola@univr.it (Roberto Chignola), milotti@ts.infn.it
+(Edoardo Milotti).
+
+Preprint submitted to Elsevier Science
+
+2 February 2008
+
+of the growth kinetics is not always possible, and a particularly useful in
+vitro technique uses multicell spheroids. Experimental multicell spheroids have
+volumes that range from about 10−4 mm3 to about 1 mm3 and contain as many
+as 106 cells; they have a complexity which is intermediate between 2D cultures
+and tumors in vivo and display a growth kinetics that is very close to tumors
+in vivo [2,3].
+
+Since there is no angiogenesis and thus no point transport of nutrients and
+oxygen, the local environment plays a very important role in the growth of
+tumor spheroids; experimental observations show that:
+
+• spheroids are layered, and are characterized by an external layer of prolif-
+erating cells, by a buried layer of quiescent cells, and by a necrotic core,
+which is made up of cells either starved or asphyxiated;
+• there are strong, measurable oxygen and glucose gradients;
+• the structure is not ﬁxed but behaves like a high-viscosity ﬂuid, with a
+
+convective transport of cells from the outer layers to the core [4];
+
+• the shape is mostly ball-like, but some spheroids develop fractal-like struc-
+
+tures, like dendritic structures on the surface or holes in the bulk.
+
+Multicells tumor spheroids thus act as a clean experimental setup that repro-
+duces many microscopic features of tumors in vivo, and captures most of the
+complex non-linear interactions among cells and with the environment. Unfor-
+tunately, accurate measurements on tumor spheroids last at least a couple of
+months, and environmental conditions are neither very well controllable nor
+reproducible, and for this reason we are now developing a novel simulator of
+tumor spheroid growth. Our ﬁnal aim is a full-ﬂedged in silico simulator of
+the growth and proliferation of tumor cells, a sort of virtual laboratory where
+we may experiment at will and have access to all growth variables. Here we
+describe one important feature of this simulator, the inclusion of CGAL to
+compute the basic structures that we need to calculate the diﬀusion of nutri-
+ents, oxygen and other chemicals in the multicell cluster, and that are used to
+speed up the mechanical evolution of the cluster.
+
+2 Simulator structure and role of diﬀusion in cell clusters
+
+The simulator structure has already been described in [6] and is shown schemat-
+ically in ﬁgure 1. The main loop of the simulator includes the following steps:
+
+• Metabolic step. As they absorb nutrients from the environment, cells grow
+and proliferate: this step advances a kind of internal cell clock according to
+a rather detailed model of cell metabolism [5]. Cells also divide and generate
+new individuals: as a consequence this step redeﬁnes the cluster structure,
+
+2
+
+Fig. 1. Conceptual scheme of the simulator. An initialization step, which includes
+a deﬁnition of the parameters of the simulated experiment, is followed by a loop
+with ﬁxed time steps. At each time step the cells consume nutrients and oxygen,
+grow and proliferate. Cells interact with neighboring cells, both mechanically and
+biochemically, and this step requires a detailed knowledge of the proximity relations
+which is provided by the Delaunay triangulation module. The Delaunay triangula-
+tion also provides the backbone for the calculation of Fickian diﬀusion of oxygen
+and other substances. Finally, a mechanical evolution step, computes the new posi-
+tions of the cells after the internal stresses (due to growth) and the external forces
+have been accounted for; this step also needs the proximity relations to reduce the
+computational complexity.
+
+and together with the mechanical evolution step it sets the need for a new
+triangulation: the loop starts again until a stop condition is reached.
+
+• Triangulation. This step establishes the proximity relations among cells and
+
+is essential to reduce the computational complexity to O(N).
+
+• Diﬀusion. The Delaunay triangulation performed in the previous step is
+used as a backbone for diﬀusion; the dual Voronoi construct is also needed.
+This step is discussed at length in the following sections.
+
+• Mechanical evolution. The cell cluster is held together by cellular adhesion
+forces and is subject to mechanical stress due to volume changes of indi-
+vidual cells as they grow and proliferate, or just shrink and dissolve after
+necrosis or apoptosis.
+
+Here we see that the evolution of the cell cluster as a whole is indeed a very
+complex nonlinear process: growth is inﬂuenced by diﬀusion, growth changes
+the cluster structure and in turn this changes the way chemicals diﬀuse in the
+cluster. The diﬀerent nutrients interact in the metabolic step and change ab-
+sorption and consumption and this determines both cell growth and diﬀusion
+
+3
+
+to neighboring cells [5]. One additional detail – included in the metabolic step
+– conjures to make diﬀusion even more nonlinear than it might appear at ﬁrst
+sight: while in most physical contexts one may safely assume the validity of
+Fick’s law
+
+J = −D∇ρ
+
+where J is the diﬀusion current, ρ is the concentration and D is the diﬀusion
+coeﬃcient, this is not true for the great majority of molecules in cell biology.
+Indeed diﬀusion is in most cases a complex process, mediated by transporters,
+specialized proteins that act as carriers across the cell membrane and the
+diﬀusion current is described by a Michaelis-Menten equation
+
+(1)
+
+(2)
+
+J (out,in) =
+
+Jmaxρ(in,out)
+Km + ρ(in,out)
+
+where Jout,in is the diﬀusion current (either outward or inward), Jmax is the
+maximum diﬀusion current, Km is a speciﬁc constant which depends on the
+transporter, and ρin,out is the concentration (either inside or outside the cell);
+this means that diﬀusion can be described correctly only at cell level, and
+that averaged mathematical descriptions necessarily miss this important point.
+The Michaelis-Menten diﬀusion kinetics is equivalent to Fickian diﬀusion at
+low concentration diﬀerence, but it starkly deviates from the linear behavior
+as it saturates at large concentration diﬀerences. One result of this kind of
+transport is that diﬀusion across a membrane is much slower than diﬀusion in
+the cytoplasm, and this also means that the concentration ρ is nearly uniform
+inside the cell.
+
+3 Solution of the diﬀusion problem in the cell cluster
+
+Diﬀusion in the cluster is usually much faster than the mechanical rearrange-
+ment of single cells, and for this reason the solution of the diﬀusion problem
+can be obtained by balancing the input and output ﬂuxes in the cells. This
+balancing is the working principle of the relaxation method used to solve dif-
+fusion equations on a square or a cubic lattice: the diﬀerence here is that the
+balancing is performed on a disordered graph – the Delaunay triangulation of
+the cells’ centers – rather than on a regular lattice. The Delaunay triangula-
+tion provides a list of neighbors – a cell communicates only with other cells
+in contact with it – while the faces of the Voronoi regions approximate the
+contact surfaces. Thus the total mass change of a given diﬀusing substance in
+
+4
+
+the n-th cell in the time interval ∆t is
+
+∆Mn = X
+
+hneighborsi
+
+(cid:16)J in
+
+j,n
+
+− J out
+
+n,j (cid:17) An,j∆t − λn∆t
+
+(3)
+
+where index j denotes the j-th neighbor, J in
+j,n is the incoming current from the
+j-th neighbor, J out
+is the outgoing current to the j-th neighbor, An,j is the
+n,j
+area of the Voronoi face between cells n and j, and λn is the absorption rate
+of the given substance in the cell (λn can be either positive if the substance is
+consumed in the cell, or negative, if it is produced). When a tumor spheroid
+is grown in vitro, it lives in a nourishing medium where diﬀusion also takes
+place, carrying, e.g. oxygen, from the atmosphere into the aqueous medium
+and then into the cell cluster: this means that the environment must also be
+included, and that the interface with the atmosphere and with the container
+walls sets the boundary conditions. To solve the diﬀusion problem we divide
+the aqueous medium in ﬁctitious cells that we call environmental cells, and
+include them in the triangulation. Eventually we have a homogenous structure
+(cells + environmental cells) for the solution of the diﬀusion problem; environ-
+mental cells lying on the convex hull of the structure have known values of the
+diﬀusing substance and provide the boundary conditions. When the boundary
+conditions are constant in time, a stationary solution of the diﬀusion problem
+is obtained requesting that ∆Mn = 0 for all cells.
+
+4 Complexity of the mechanical evolution problem
+
+Any simulation that involves N elements with pairwise interactions has an
+O(N 2) time-complexity: this means that simulations with large N are dramat-
+ically slowed down and that one must ﬁnd a way to cope with this problem.
+Solutions vary according to the nature of the simulated system, e.g. the N-
+body calculations in astronomy often use a hierarchical scheme that leads to
+an almost linear time-complexity (actually O(N log N)) [7]. In the simulation
+of cell interactions we notice that any mechanical interaction is short-ranged,
+and that only cells that actually touch each other actually exert a direct force.
+We approximate cells with simple spheres with diﬀerent radii, and to deﬁne
+the proximity relations we construct the Delaunay triangulation of cell centers.
+Since each cell has on average 12 neighbors (as in a close-packed cubic lattice),
+there are on average only 12N interacting pairs, and this means that the 3D
+calculation of the Delaunay triangulation (which is an O(N log N) operation)
+and the force calculation has on the whole an O(N log N) time-complexity.
+
+5
+
+Fig. 2. Early phase in the calculation of mechanical relaxation and diﬀusion of a 2D
+system of cells. The cell cluster contains cells with a distribution of cell radii, and is
+surrounded by the environmental cells: in order to obtain a compact structure, cells
+are initially distributed at random in a large disk, and are surrounded by a similar
+distribution of environmental cells. We apply dummy forces that draw all the cells
+towards one another, and the conﬁguration is allowed to relax. At the same time the
+diﬀusion is calculated as described in the text, and the gray levels represent diﬀerent
+concentrations of a diﬀusing substance (here O2; the lower the concentration, the
+darker the disk that represents a cell). When the structure has relaxed to a stable
+position we turn oﬀ the dummy forces and turn on the actual biophysical cell-cell
+interactions. In this example there are 1000 cells and 9000 environmental cells.
+
+5 2D tests
+
+Comparison with experimental data requires a full 3D simulation that includes
+both the metabolic-driven Michaelis-Menten steps and pure Fickian diﬀusion
+on the Delaunay backbone, but we have started with a prototype 2D version
+of the program [6] with a very simple approximation of metabolism and with
+Fickian diﬀusion only. The 2D version is written in C and uses Quickhull [8]
+for triangulations. Some results from this preliminary program are shown in
+ﬁgures 2-4 and 5.
+
+6 3D implementation with CGAL
+
+The 3D program code which is presently under development is written in C++;
+the cells in the simulation program are described by C++ objects and they
+include a set of internal state variables that deﬁne the cell state. Some of the
+
+6
+
+Fig. 3. Intermediate step in the calculation of the mechanical relaxation and diﬀu-
+sion. The ﬁgure represents a later stage in the evolution of the system of cells and
+environmental cells shown in ﬁgure 2. Here it is apparent that the whole system
+has a roughly circular shape, and approximates a cell cluster ﬂoating in a drop of
+nourishing medium. The cells absorb oxygen and thus the oxygen concentration is
+lower inside the cluster, while it is maximum on the convex hull (the environmental
+cells in contact with atmospheric oxygen).
+
+Fig. 4. This ﬁgure shows the relaxed conﬁguration of the system of cells and envi-
+ronmental cells shown in ﬁgure 2. In this simulation there is no proliferation, and
+thus no internal stresses develop and the cluster reaches a stable conﬁguration.
+
+7
+
+Fig. 5. This ﬁgure shows the Delaunay triangulation (background, dark gray), and
+the Voronoi tesselation (light gray for the regions that corresponds to cells in the
+cluster) that correspond to the distribution of cells in ﬁgure 2.
+
+internal state variables are associated to the metabolic state of the cell (this
+includes such parameters as the cell phase and the concentrations of important
+substances such as oxygen and lactic acid), while other variables describe
+the geometric and mechanical properties of the cell (such as cell center, cell
+volume, velocity of cell center, etc.). The geometrical and mechanical variables
+depend on the Delaunay triangulation and the Voronoi tessellation, which are
+basic components of our simulator. As explained above, we need them both to
+deﬁne the proximity relations required by the dynamic evolution, and to carry
+out the calculation of diﬀusion in the cell cluster. The Voronoi tessellation also
+yields a better approximation of the actual cell shapes, as a byproduct.
+
+While several packages exist for 3D Delaunay and Voronoi calculations, not
+all are suitable for inclusion in our simulation program, because we need:
+
+• good computational eﬃciency;
+• robust implementation, free of precision issues;
+• easy access to the geometric structure;
+• dynamic update of existing triangulations;
+• C++ support;
+• good application support;
+
+The CGAL library [9] fulﬁlls all these requirements and is characterized by ease
+of use, generality, eﬃciency and robustness. The CGAL collaboration provides
+a well designed and maintained library which also contains primitives, data
+structures and algorithms that are very useful in the development of our code.
+In the near future, to describe the mechanical aspects of cell proliferation and
+
+8
+
+death we shall need dynamic point insertion and deletion and CGAL is almost
+unique in providing insertion and deletion capabilities.
+
+If we return to equation (3) we see that the calculation of diﬀusion on the back-
+bone provided by the Delaunay triangulation requires the explicit evaluation
+of areas of facets of the Voronoi cells and of their volumes (for the calcula-
+tion of currents and densities), and in turn this needs a proper bookkeeping.
+A triangulation of a set of points in CGAL [10] is represented as a parti-
+tion of the three-dimensional space into tetrahedra with four ﬁnite vertices
+(bounded tetrahedra) and ﬁctitious tetrahedra (unbounded tetrahedra) hav-
+ing three ﬁnite vertices, forming a facet on the convex hull, whose fourth vertex
+is the ﬁctitious inﬁnite-vertex. In the three-dimensional case the inﬁnite-vertex
+forms inﬁnite-cells with the facets of the convex-hull. The inﬁnite-vertex has
+no coordinate representation and cannot be used for geometrical predicates.
+Delaunay triangulations, in three-dimensional space, are tetrahedralizations
+of points sets which fulﬁll the empty sphere property stating that the cir-
+cumsphere of any tetrahedron in the triangulation does not enclose any other
+vertex. Regular triangulations are deﬁned for a set of weighted points where
+the weight corresponds to the square radius of the sphere associated to the
+point. In this data processing one looses the identity of the cells and hence, to
+obtain a mapping between the ﬁnite vertices and our cells, it is necessary to
+label the vertices, for example using the STL-container map. The data struc-
+ture of CGAL returns the incidence relations between vertices, and thus it is
+possible, by means of an iterator, to ﬁnd all the neighbors to a ﬁnite vertex.
+In this way we obtain the list of the cells adjacent to a given cell. When the
+ﬁnite-vertex is adjacent to the inﬁnite-vertex the vertex is on the convex hull.
+One should have to pay attention to the degenerate cases in which diﬀerent
+tetrahedrons have the same circumcenter, however we are interested in the
+non-degenerate cases of random conﬁgurations of points.
+
+CGAL provides for the three-dimensional triangulations iterators to visit all
+the cells, facets, edges and vertices and circulators necessary to iterate on the
+cells, facets and edges incident to a given vertex. Using these iterators and
+circulators we can to compute the dual diagram, i.e., the Voronoi tesselation
+associated to the Delaunay triangulation. To construct the Voronoi diagram
+one may take the iterator over all the ﬁnite cells incident a given edge in the
+triangulation. Then, taking for every cell the dual, i.e. the center of the circum-
+sphere of the four vertices, we obtain all the faces in the Voronoi tesselation.
+In this way, for every cell we ﬁnd the set of neighboring cells, the distances of
+their centers from the cell center and the set of Voronoi points that deﬁne the
+cell boundary. We can thus calculate the quantities needed by equation (3),
+or, alternately by the Michaelis-Menten processes with transport equations
+like (2).
+
+Cells in the cluster are subject to pressure and adhesion to neighboring cells
+
+9
+
+Fig. 6. This ﬁgure shows the result obtained in a test run with 2000 simulated
+cells in 3D (1000 cells + 1000 environmental cells). The Delaunay triangulation is
+calculated with CGAL, and we use the iterators and circulators provided by CGAL
+to construct the Voronoi tessellation. The open Voronoi regions, which correspond
+to cell centers on the convex hull of the cell clusters, have been removed because
+they are not useful for the calculation of diﬀusion: the cells on the convex hull are
+environmental cells and the concentration of oxygen and nutrients in these cells is
+a ﬁxed function of time (this is the boundary condition for the discrete diﬀusion
+equation (3)).
+
+as well as to gravity, and they are also subject to random forces associated
+to Brownian motion and to ﬂuctuations in adhesion forces. These forces are
+usually minute, but they are still able to bring about a slow mechanical re-
+laxation of the cell positions, and they continuously reshape the cell cluster.
+For this reason neighboring time frames are expected to produce very simi-
+lar triangulations and we plan to use the dynamical updating capabilities of
+CGAL to speed up the calculation of triangulations and tessellations. Cells
+proliferate as well and the process of mitosis also contributes to the cluster
+rearrangement: mitosis also increases the number of cells, and when we in-
+clude cell death (and ﬁnally cell dissolution) we see that the CGAL ability of
+dynamical center insertion and deletion may also speed up program operation
+and increase eﬃciency.
+
+10
+
+The program for the simulation of tumor spheroids described in the previous
+sections has heavy and complex computational requirements. The inclusion of
+CGAL in the program framework has proved invaluable for the geometric part.
+The simulation program is quite complex and is still being developed, mainly
+in directions that do not involve computational geometry objects but rather
+the metabolic and proliferative description of cells [5,11]. In the future we
+shall proﬁt greatly from some features that are unique to CGAL, like dynamic
+triangulation updates and point insertion and deletion capabilities.
+
+7 Conclusion
+
+References
+
+[1] L. Norton, Kinetic concepts in the systemic drug therapy of breast cancer,
+
+Semin. Oncol. 26 (1999) 11.
+
+[2] R. M. Sutherland, Cell and Environment Interactions in Tumor Microregions:
+
+The Multicell Spheroid Model, Science 240 (1988) 177.
+
+[3] R. Chignola et al., Forecasting the growth of multicell tumour spheroids:
+implications for the dynamic growth of solid tumours, Cell Prolif. 33 (2000)
+219.
+
+[4] D. L. McElwain and G. J. Pettet, Cell migration in multicell spheroids:
+
+swimming against the tide, Bull. Math Biol. 55 (1993) 655.
+
+[5] R. Chignola and E. Milotti, A phenomenological approach to the simulation
+of metabolism and proliferation of large tumour cell populations, Phys. Bio. 2
+(2005) 8.
+
+[6] R. Chignola and E. Milotti, Numerical simulation of tumor spheroid dynamics,
+
+Physica A338 (2004) 261.
+
+Nature 324 (1986) 446.
+
+[7] J. Barnes and P. Hut, A hierarchical O(N log N ) force-calculation algorithm,
+
+[8] C. B. Barber, D. P. Dobkin, and H. T. Huhdanpaa, The Quickhull Algorithm
+
+for Convex Hulls, ACM Trans. Math. Software, 22 (1996), 469.
+
+[9] Full online documentation is available at http://www.cgal.org.
+
+[10] J.-D. Boissonnat, O. Devillers, S. Pion, M. Teillaud, and M. Yvinec,
+
+Triangulations in CGAL, Computational Geometry 22 (2002) 5.
+
+[11] R. Chignola, C. Della Pellegrina, A. Del Fabbro, and E. Milotti, Thresholds,
+long delays and stability from generalized allosteric eﬀect in protein networks,
+submitted (preprint: arXiv:q-bio/0601045).
+
+11
+
+

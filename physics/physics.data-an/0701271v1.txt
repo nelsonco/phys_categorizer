@@ -1,0 +1,1919 @@
+7
+0
+0
+2
+ 
+n
+a
+J
+ 
+3
+2
+ 
+ 
+]
+n
+a
+-
+a
+t
+a
+d
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+1
+7
+2
+1
+0
+7
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Improvement of the Kalman Filter Fit of
+the ZEUS experiment
+
+06–10
+ZEUS
+January 19, 2014
+
+Vincent Roberfroid∗
+DESY
+
+Abstract
+
+At the center of the ZEUS detector situated on the collider HERA at DESY in
+Hamburg, a Micro Vertex Detector has been installed in 2000/01. Situated close
+to the beam line, this subdetector is designed to measure precisely the tracks near
+the interaction point (the vertex).
+
+A package called KFFIT is designated to perform the track ﬁt of the Micro
+
+Vertex Detector hits using a Kalman Filter.
+
+This paper is a report of all improvements done in this package. After a brief
+description of the algorithm, the improvements of KFFIT will be presented compar-
+ing the last version (v10 released in December 2006) to the initial one (v1 released
+in December 2005 (=v2005a.1)).
+
+1 Introduction
+
+Before the luminosity upgrade of HERA in 2000/01, the tracking system was made of
+the Central, the Forward and the Rear Tracking Detector (CTD, FTD and RTD) and
+the Transition Radiation Detector (TRD). During the upgrade of HERA, a micro-vertex
+detector (MVD) and a straw tube tracker (STT), which replaced the TRD, have been
+introduced in the ZEUS detector and added to the tracking system. The ZEUS tracking
+algorithms had in consequence to be enhanced to include the additional information.
+In particular, a new package called KFFIT has been written for adding the MVD hit
+positions into the track ﬁt. This algorithm is extensively described in reference [1]. In
+2005, a complete description of the MVD geometry has been included in KFFIT allowing a
+proper calculation of the covariance matrices. Nevertheless, new ideas have been proposed
+to improve substantially the momentum resolution. These ideas consisted essentially in
+using proper input tracks for KFFIT. During the modiﬁcation of the algorithm it has
+
+∗E-mail: vincent.roberfroid@desy.de
+
+1
+
+been found that other modiﬁcations could improve further the momentum resolution, the
+computing time and the calculation of the covariance matrices.
+
+All these modiﬁcations will be described in this note. But, to be able to understand
+the improvements realized, a brief description of the tracking chain and a short description
+of the algorithm itself will be done. Then a section describing the new modiﬁcations will
+be followed by a comparison of the various resolutions obtained with the latest version
+of the algorithm (v10 : released in December 2006) and the initial one (v1 : released in
+December 2005).
+
+2 KFFIT and the tracking chain
+
+2.1 The tracking reconstruction chain
+
+The tracking reconstruction chain is composed of diﬀerent steps displayed on ﬁgure 1 :
+
+•
+
+•
+
+•
+
+•
+
+•
+
+The coordinates of the hits in the CTD, MVD and STT detectors are reconstructed.
+
+The pattern recognition combines hits together to construct the ZTPRHL tracks
+(in the VCRECON package [2]).
+
+The CTD hits are globally ﬁtted by an helix and the output tracks can be stored in
+the ZTPRHL table with the call of the subroutine VCGTRGASIS (not by default).
+
+The MVD hits are added to the ﬁt by the use of a Kalman Filter (KFFIT) [1].
+
+Finally the vertices are identiﬁed and ﬁtted (either by KFVTX, second part of the
+KFRECON package, or by the new package: DAF).
+
+Figure 1: The track reconstruction chain, the 2 separated ﬁtting packages and the avail-
+able output ADAMO tables.
+
+The VCTRHL and ZTPRHL tracks are computed by the package VCRECON [2].
+
+2
+
+The ZTPRHL ADAMO tables contain output tracks from the pattern recognition.
+Each row in this table contains a link to the MVD and the STT hits (MVRECC) associ-
+ated to the track. The track parameters and covariance matrices stored in the ZTPRHL
+table have been obtained using CTD+MVD+STT hits with material corrections applied
+until the interaction point. However they don’t come from a rigorous track ﬁt and are
+thus not as precise as the ZTTRHL tracks.
+
+The VCTRHL ADAMO tables are ﬁlled by two distinct routines : VCGETREG
+which ﬁlls ZTPRHL tracks which are associated to a vertex (these tracks are also called
+REGULAR tracks) and VCGTRGASIS which ﬁlls the ﬁtted CTD only tracks (we will
+call these tracks VCTRHL CTD-only tracks). These VCTRHL CTD-only tracks are
+obtained from a rigorous global ﬁt of all the CTD hits with material corrections until the
+interaction point1.
+
+The ZTTRHL tracks are computed by KFFIT, the ﬁrst part of the KFRECON pack-
+
+age which will be described here below2.
+
+2.2 The initial form of the KFFIT algorithm
+
+KFFIT is a Kalman Filter which adds step by step the MVD hits to a track from the
+inner wall of the CTD to the interaction point through the three cylinder of the MVD
+and calculate for each step the parameters ~a and the covariance matrix C.
+
+2.2.1 Parameters and covariance matrix
+
+In KFFIT, the 5 parameters which deﬁne a track are :
+
+~a = (Q/R, cot(θdip), φ0, D0, Z0)
+
+(1)
+
+All these parameters are explained graphically in ﬁgure 2.
+
+Figure 2: Track in an homogeneous magnetic ﬁeld projected on the xy and the z planes.
+The track parameters Q/R, cot(θdip), φ0, D0 and Z0 used in KFFIT are shown.
+
+1The material correction between the CTD inner wall and the interaction point is however done with
+
+inappropriate geometry assumptions in VCRECON.
+
+2The ZTTRHL table is extensively describes in Annexe 1 at the end of this note.
+
+3
+
+Q is 1 if the bend of the track is anticlockwise and -1 if the bend of the track is
+clockwise in the xy plane. R is the radius of the helix. θdip = 90
+θ0 where θ0 is the
+angle of the track with respect to the z axis at the point of closest approach to the origin.
+φ0 is the angle of the track tangent at the point of closest approach with respect to the
+x axis. D0 is the length of the vector ~D0, the point of closest approach and Z0 is its z
+coordinate.
+Moreover a 5x5 covariance matrix C is associated to these parameters giving as diagonal
+elements the variance of each parameters.
+
+−
+
+In the three following paragraphs, the Kalman Filter procedure used to calculate the
+
+parameters and the covariance matrix is described.
+
+2.2.2
+
+Initialisation of the Filter
+
+In version v1 (v2005a.1), the input track parameters ~a0 and covariance matrix C 0 used
+in KFFIT was extracted from the ZTPRHL table. These tracks contain already the
+STT+CTD+MVD hits. So using these tracks as input for KFFIT leads to the problem
+that the MVD hits are double counted. That forces the tracks to pass through the MVD
+hits and so can modify their bending and in consequence the estimated momenta.
+
+Moreover, these tracks were not obtained from a rigorous ﬁt and the associated co-
+variance matrices are not consistent as they depend on the method used to perform the
+pattern recognition (3 diﬀerent methods are envisaged for each tracks [2]).
+
+In consequence, the initial track parameters and covariance matrices used as input of
+
+KFFIT have been modiﬁed as described in section 3.1.1.
+
+2.2.3 Energy loss and multiple scattering
+
+At each step k of the Kalman Filter, the multiple scattering eﬀects in the dead material
+crossed by the particle between the step k
+1 and the current step k is calculated and
+added to the covariance matrix C k :
+
+−
+
+C′
+
+k = Ck + M k
+
+(2)
+
+M k is a 5x5 matrix obtained by calculating the contribution of the angular uncertainty
+induced by the multiple scattering on all the track parameters. This matrix depends on
+the radiation length of the scattering medium [3].
+Then the energy loss and its impact on the track parameters is then calculated with the
+following procedure :
+
+•
+
+The transverse momentum pT is calculated converting the curvature (Q/R) using
+the magnetic ﬁeld calculated at the origin (0,0,0) and so assuming that the magnetic
+ﬁeld is constant in all the MVD.
+
+•
+
+The momentum loss in dead material between the step k
+is
+calculated using the Bethe-Bloch formula assuming that all particles are pions
+
+1 and k, ∆pT ,
+
+−
+
+4
+
+(mass=0.1396 GeV/c2). Moreover, since information on materials in KFFIT does
+not include the densities and the atomic numbers, but only the radiation thickness,
+it has been necessary to assume that all material is composed of Silicon (Z=14,
+ρ = 2.33 g/cm3) only.
+
+The new curvature is calculated : W ′ = W
+
+pT /(pT + ∆pT ) where W = Q/R.
+
+∗
+
+The average position ~r in the dead material is calculated.
+
+The new track is calculated assuming that this track must have the same direction
+than the initial track at ~r but with a curvature W ′.
+
+•
+
+•
+
+•
+
+So, in contrast to a global ﬁt, the track parameters and the covariance matrices depend
+on the position in the MVD. Using a Kalman Filter, KFFIT does not assume that the
+track follows a single helix, but a succession of helix.
+
+2.2.4 Addition of an MVD hit
+
+All the MVD hits coming from the pattern recognition (MVRECC hits linked to the
+ZTPRHL track) are added to the track, starting from the outer to the inner cylinder of
+the MVD. Each time a MVD hit is added to the track at a given step k, the parameters
+and the covariance matrix are updated by the following equations [3] :
+
+Ck = C′
+k−1~gk−1C′
+k−1(1 + ~gT
+~ak = ~ak−1 + Ck~gk−1σk∆x
+
+k−1σk)−1
+
+where ~g is the ”derivative vector” :
+
+~gk−1 =
+
+∂f (~ak−1)
+∂~a
+
+→
+
+R is a function giving the expected local position on the sensor perpen-
+
+where f : R5
+dicularly to the strips.
+∆x is the diﬀerence between the MVD hit position and the intersection position of the
+extrapolated track with the sensor. σk is the resolution of the k th MVD hit. This reso-
+lution depends on the angle of the track with respect to the normal of the sensor. A track
+crossing a sensor with larger angle induces charges on more strips and so a larger cluster
+size. The parametrization used in KFFIT is the same as the one used in the Monte Carlo
+reconstruction and has been determined using an electron test beam at DESY [1] :
+
+where θ is the angle (in radian) of the track with respect to the normal of the sensor.
+σ′
+k is the resolution of the MVD hit (in microns) for real data in which a contribution of
+40 µm has been added to take into account misalignment of the MVD.
+
+σk = 10.13 + 22
+
+θ2 +
+
+∗
+
+1
+cos(θ)
+
+′
+σ
+k =
+
+σ2
+k + 402
+
+q
+
+5
+
+(3)
+
+(4)
+
+(5)
+
+(6)
+
+(7)
+
+3 Improvement of KFFIT
+
+3.1
+
+Input track
+
+3.1.1 ADAMO table to be used
+
+The ideal initial track parameters ~a0 and covariance matrices C 0 would be those obtained
+using only the CTD hits with material correction done only until the outer radius of the
+MVD. But unfortunately, an ADAMO table containing such information does not exist.
+However, it is possible to calculated those tracks using the VCTRHL CTD-only tracks
+(see paragraph 2.1). Unfortunately these tracks are computed at the vertex and not at
+the outer radius of the MVD. So, the covariance matrices associated with these tracks
+contain already multiple scattering eﬀects between the CTD and the interaction point.
+In consequence, this multiple scattering eﬀect had to be recalculated and removed from
+the VCTRHL CTD-only covariance matrices. A new routine has been written by G.
+Hartner for this purpose (called VCUNDOSCAT3).
+
+The ﬁgure 3 shows the estimated standard deviation σ(φ) of the track parameter φ
+(which is simply the square root of one diagonal element of the covariance matrix) as a
+function of the transverse momentum pT for various possible input tracks. The full pink
+circle corresponds to the ZTPRHL tracks, the blue squares corresponds to the VCTRHL
+tracks without any modiﬁcations, and the red squares corresponds to the VCTRHL after
+removing multiple scattering eﬀect with VCUNDOSCAT. It appears, as expected, that
+
+)
+)
+)
+)
+i
+d
+h
+a
+p
+r
+(
+(
+v
+ 
+)
+o
+φ
+c
+(
+(
+σ
+t
+ 
+r
+ 
+ 
+q
+ 
+ 
+ 
+s
+ 
+ 
+(
+ 
+n
+ 
+ 
+ 
+a
+ 
+ 
+e
+ 
+ 
+ 
+m
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+0.025
+
+0.02
+
+0.015
+
+0.01
+
+0.005
+
+ 
+
+ZTPRHL
+
+VCTRHL uncorrected
+
+VCTRHL after VCUNDOSCAT
+
+1
+
+ 
+
+10
+ (GeV)
+
+p
+T
+
+Figure 3: Estimated error of the track parameter φ, σ(φ) when using diﬀerent input
+tracks : ZTPRHL, VCTRHL (ctd only) uncorrected, VCTRHL (ctd only) after VCUN-
+DOSCAT.
+
+the predicted φ resolutions is more depent on the momentum for the ZTPRHL and for the
+
+3This subroutine is now integrated in KFRECON. It is written in fortran and does basically the
+same job as the subroutine VCSCAT from VCRECON, but removing scattering eﬀects instead of adding
+them.
+
+6
+
+VCTRHL uncorrected tracks since they include material correction up to the interaction.
+This dependency on the transverse momentum has been considerably reduced thanks to
+VCUNDOSCAT. A small dependency remains due to the multiple scattering in the CTD
+and due to the approximations of the momentum used as input of VCUNDOSCAT as
+explained here below.
+
+3.1.2
+
+Input momentum correction for VCUNDOSCAT
+
+The variables used as input for VCUNDOSCAT are the track parameters ~a0 , the covari-
+ance matrix C 0 and the momentum p. This last variable should be exactly the same as
+the value used initially by the CTD ﬁt package (VCRECON) producing the VCTRHL
+tracks. Unfortunately this variable is not stored in an ADAMO table making a rigor-
+ous solution impossible. So, to a good approximation, the momentum used instead was
+the momentum stored in the VCTRHL table. However, in some cases, this VCTRHL
+momentum can be smaller than the momentum initially used in VCRECON resulting
+in an over-estimation of the multiple scattering matrix M . So substracting M from
+the covariance matrix C0 can give a non-positive and/or non invertible input covariance
+matrix for KFFIT. To solve this problem an iterative procedure was needed as presented
+on the diagram in the ﬁgure 4.
+
+Figure 4: Algorithm diagram to produce input tracks for KFFIT.
+
+At each iteration, the momentum used as input of VCUNDOSCAT was increased by a
+value ∆p equal to the estimated energy loss between the CTD and the interaction point.
+The loop stops when the output matrix C′
+M is positive or when the number
+of iteration is larger than 6. In this last case, the covariance matrix used as input of
+KFFIT is the uncorrected VCTRHL covariance matrix. The ﬁgure 5 shows the number
+of iterations needed to provide positive covariance matrix using this algorithm. In most
+of the cases, no iterations are needed indicating that the the VCTRHL momentum is a
+good approximation. It can be seen also that only a few covariance matrices cannot be
+computed by VCUNDOSCAT within 6 iterations.
+
+0 = C0
+
+−
+
+7
+
+1200
+
+1000
+
+800
+
+600
+
+400
+
+200
+
+0
+0
+
+ 
+
+1
+
+2
+
+3
+ 
+
+4
+
+5
+
+6
+Number of iteration
+
+Figure 5: Number of iterations needed to produce positive scattering matrix.
+
+3.1.3 Rescaling of the covariance matrix
+
+An interesting variable to be studied is the pull of the parameters. The pull of a parameter
+a is deﬁned by:
+
+Reconstructed parameter
+
+T rue parameter
+
+pull =
+
+Estimated error
+
+−
+
+=
+
+∆ai
+σai
+
+(8)
+
+The estimated error σai is the square root of the associated diagonal element in the
+covariance matrix.
+With this deﬁnition, the standard deviation of the pull σ(pull) should be equal to 1 if
+the estimated error is consistent with the Monte Carlo simulation. However it has been
+found that the pull of all the input track parameters after VCUNDOSCAT, were always
+below 1 at high momentum and around 0.75.
+
+The fact that the pull was below 1 at high momentum cannot come from a wrong
+estimation of the multiple scattering as at high momentum where multiple scattering is
+negligible. Instead, the eﬀect can be attributed to the fact that the CTD hit resolutions
+have been over-estimated in VCRECON. This eﬀect is well known and has been used for
+an optimization of the track-ﬁnding eﬃciency in the pattern recognition. In consequence,
+the covariance matrices have been rescaled to take into account this eﬀect (as seen on
+the diagram Fig. 4).
+
+3.2 Magnetic ﬁeld
+
+As described in paragraph 2.2.3, the magnetic ﬁeld is used to convert the curvature to
+the momentum. This momentum is used in turn to calculate the energy loss and the
+multiple scattering correction. In the initial version of KFFIT the magnetic ﬁeld used
+was a constant value corresponding to the magnetic ﬁeld at the origin (0,0,0) which is not
+appropriate since the ﬁeld is not perfectly homogeneous. This behaviour was changed
+such that the magnetic ﬁeld is calculated at the position where the conversion curvature
+
+8
+
+to radius is needed4.
+This modiﬁcation corrects the ﬁnal momentum estimation by a factor 0.1 to 0.2 %. This
+is relatively small, but not negligible as we will see in the next section.
+
+3.3 Momentum bias
+
+Some physics analyses, which reconstruct mass distributions of particles, have observed
+shifts of some MeV in the mean value of the distribution with respect to the tabulated
+value. This shift was coming from a momentum bias in KFFIT. To illustrate this, the
+mean diﬀerence between the reconstructed momentum and the true value (FMCkin)
+has been plotted as a function of the true transverse momentum in ﬁgure 6. This plot
+
+]
+ 
+p
+
+ 
+/
+ 
+
+p
+
+ 
+
+[
+ 
+n
+a
+e
+m
+
+0.002
+
+0
+
+-0.002
+
+-0.004
+
+-0.006
+
+1
+
+10
+ (GeV)
+p
+T
+
+Figure 6: Mean value of the relative momentum diﬀerence (reconstructed minus true) as
+a function of the transverse true momentum.
+
+shows that the reconstructed momentum is under-estimated at low momentum and over-
+estimated at high momentum. Two eﬀects can be the cause of such behavior :
+
+1. The initial curvature comes from a global ﬁt of all the CTD hits assuming that the
+tracks follow a helix. This condition is only satisﬁed if the magnetic ﬁeld is constant
+in all the CTD and if the particles does not loss any energy in the CTD. Since this
+is not completely the case, the curvature used as initial value of KFFIT is not the
+curvature at the inner wall of the CTD as it should be. This bias is transmitted in
+KFFIT to the ﬁnal value. If we neglect energy loss in the CTD, this bias should be
+constant with momentum. This bias on the initial curvature is responsible for the
+bias at high momentum.
+
+4Using the standard routine GUFLD
+
+9
+
+D
+2. At low momentum, the bias increases when the momentum decreases. This indi-
+cates an under-estimation of the energy loss. This under-estimation can come from
+the approximations in the application of the Bethe Bloch formula (all materials are
+assumed to be Silicon and all particles are supposed to be pions) or can come from
+some dead material not taken into account in the code. So a simple factor 1.5 has
+been used ﬁrstly to multiply the Bethe Bloch formula. But it has been found next
+that the beam pipe was never taken into account in the algorithm (as seen in the
+next section). After correction of this bug, a factor 1.2 or 1.3 multiplying the Bethe
+Bloch formula had to be kept to correct the momentum bias.
+
+It must be noted however that these corrections have been tuned on Monte Carlo
+samples. It has been shown, by Hartmut Stadie and Vladimir Aushev[5], that a remaining
+momentum shift was still there on real data with a value around 0.4%. This eﬀect is
+interpreted as the consequence of a slight mismatch between the magnetic ﬁeld values
+used in the Monte Carlo reconstruction and the real one. The ﬁnal momentum is thus
+multiplied by a factor 1.0039 at the end of KFFIT before ﬁlling the ZTTRHL adamo
+tables.
+
+3.4 Correction for the material of the beam pipe
+
+In the release v1 and in all the previous releases, the beam pipe was represented by three
+ellipsoids with diﬀerent thickness. But this beam pipe had never been eﬀective due to a
+missing parenthesis in the legacy KFFIT code.
+
+The following condition had been used in the code to check whether the origin of the
+
+track is not included in the ellipsoid :
+
+if
+
+!
+
+ 
+
+ (cid:18)
+
+2x
+w
+
+2
+
++
+
+2
+
+2y
+h
+
+(cid:19)
+
+(cid:18)
+
+(cid:19)
+
+1
+
+! ≤
+
+!
+
+where (x, y) is the axial position of the point of closest approach in the reference frame
+of the ellipsoid (where the center of the ellipsoid is the origin) and w and h are the width
+and the height of the ellipsoid. If this condition is satisﬁed, the track does not cross the
+beam pipe. So the calculation of multiple scattering or energy loss is not done. But note
+that the exclamation mark (!), which in C means a reverse of the boolean value (true
+becomes false and vice versa), aﬀects only the ﬁrst term of the inequality and not the
+entire inequality. In consequence, the compiler converts the term after the exclamation
+point to boolean. And then it converts this boolean into an integer to calculate the
+inequality. This integer is either 0 or 1. But whatever the result, the condition will
+always be satisﬁed, meaning that the track does not cross the beam pipe.
+So the condition has been simply corrected to :
+
+(9)
+
+(10)
+
+if
+
+!
+
+2
+
++
+
+2x
+w
+
+2
+
+2y
+h
+
+ 
+
+  (cid:18)
+
+(cid:19)
+
+(cid:18)
+
+(cid:19)
+
+1
+
+! ≤
+
+!!
+
+10
+
+After this correction, other bugs appeared in some parts of the code that had appar-
+
+ently never been tested before. All these problems have been corrected.
+
+The consequences of the correction of this bug aﬀects primarily the curvature. The
+parameter used to correct the momentum bias (see previous section) could be reduced
+from 1.5 to 1.3. Moreover the inclusion of the beam pipe aﬀects the calculation of the
+covariance matrices because of multiple scattering. This increases the covariance matrices
+by a factor around 1.2 which is consistent with the estimation of the pulls as shown in
+section 4.3.
+
+3.5 Algorithmic optimization and computing time
+
+Parts of the code have been re-written to optimize the computing time. KFFIT was
+indeed one of the largest contributions to the total latency of the data reprocessing. Here
+is a list of some improvements done amongst other things :
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+The geometry of the MVD had been loaded at each track. Since this is very time
+consuming, the MVD geometry is now loaded only once during the initialisation of
+KFFIT5.
+
+All the MVD clusters was loaded at each events. Now, only the needed MVD
+clusters (linked to a ZTPRHL track) are loaded.
+
+The simple methods, such as method returning a value, have now been inlined, so
+the compiler will replace the method call with a copy of the method body.
+
+All object arguments are now passed by constant references (const type&) instead
+of objects.
+
+The operators designed for aﬀectation (operator=) return now references instead
+of objects.
+
+Complex member objects of some classes were returned by some methods with-
+out being modiﬁed afterwards. As much as possible a constant reference is now
+returned.
+
+Some variables were calculated but used only for the pattern recognition mode
+of KFFIT which is not used in normal reconstruction. These variables are now
+calculated only if this special mode is required.
+
+The ﬁgure 7 shows the processing time per event on an AMD opteron processor 252
+(2.5 GHz), in black before the improvements (release v1) and in red after (release v10).
+The new KFFIT is 8.25 times faster than the old one.
+
+5That means that in the new version (v10) the alignment is not allowed to change within the same
+
+job!
+
+11
+
+New KFFIT - mean=0.0836 sec/event
+
+Old KFFIT - mean=0.6582 sec/event
+
+4500
+
+4000
+
+3500
+
+3000
+
+2500
+
+2000
+
+1500
+
+1000
+
+500
+
+0
+0
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1
+
+1.2
+
+2
+Computing time/event (sec)
+
+1.6
+
+1.8
+
+1.4
+
+Figure 7: Mean processing time on an AMD opteron processor 252 (2.5 GHz).
+
+An important structural improvement of the code is the use of standard C header
+ﬁles. KFFIT uses C structures describing ADAMO tables extensively. In the old versions
+of KFFIT, local fortran headers were used and converted into C using cfortran.h. This
+involved the tedious task of maintaining these local header ﬁles updated. With transition
+to the centrally provided C headers, this maintenance is not needed anymore since the
+standard C headers are updated automatically for each releases.
+
+To test the new KFFIT, a sample of 100000 dijet MC events has been used. The following
+track selection has been applied :
+
+4 Performance
+
+4.1 Sample used
+
+pT > 0.2 GeV
+
+η
+
+< 1.0
+
+• |
+
+|
+
+outer Super Layer
+
+5
+
+≥
+
+No forward MVD hits
+
+•
+
+•
+
+•
+
+The reconstructed tracks have been matched to the true tracks using the standard routine
+VMCU from the VCRECON package.
+
+4.2 Relative momentum resolution
+
+The various modiﬁcations of KFFIT improve primarily the curvature and thus the mo-
+mentum resolution without aﬀecting the other track parameters. The ﬁgure 8 shows the
+relative momentum resolution for pions in the dijet sample. The black histogram corre-
+sponds to the resolution of the old version of KFFIT (release v1) and the red histograms
+corresponds to the new KFFIT (release v10). An improvement of the width by a factor
+
+12
+
+Dijet 
+
+OLD KFFIT
+
+Mean=−0.0021
+
+Sigma=0.016
+
+45000
+
+40000
+
+35000
+
+30000
+
+25000
+
+20000
+
+15000
+
+10000
+
+5000
+
+NEW KFFIT
+
+Mean=0.00095
+Sigma=0.011
+
+0
+−0.08
+
+−0.06
+
+−0.04
+
+−0.02
+
+0
+
+0.02
+
+0.04
+
+0.06
+
+0.08
+
+ p / p (GeV)
+
+Figure 8: Relative momentum resolution for pions in a dijet sample. In black with the
+use of the old KFFIT (v1) and in red using the new release (v10).
+
+around 1.4 is observed.
+The ﬁgure 9 has been obtained, using pions in the dijet sample, ﬁtting vertical slices of
+
+Dijet
+
+]
+ 
+p
+
+ 
+/
+ 
+
+p
+
+ 
+
+[
+ 
+
+0.022
+
+0.02
+
+0.018
+
+0.016
+
+0.014
+
+0.012
+
+0.01
+
+0.008
+
+0.006
+
+2
+
+4
+
+6
+
+8
+
+10
+TP
+
+ (GeV)
+
+Figure 9: Relative momentum resolution as a function of the true tranverse momentum.
+The black points corresponds to the old KFFIT (v1) and the red points to the new
+KFFIT (v10). The black curve corresponds to the resolution obtained by Maddox [1]
+and the blue curve corresponds to the CTD resolution for HERA 1 [4]
+
+∆pT /pT by Gaussians and plotting the sigmas as a function of the transverse momentum.
+The black points corresponds to the old KFFIT (v1) and the red points to the new KF-
+FIT. The comparison of these two distributions shows that the modiﬁcations of KFFIT
+improves the momentum in all the momentum ranges. In addition, two curves have been
+added in the ﬁgure for a rough comparison. The black curve comes from an expectation
+of the KFFIT momentum resolution obtained by E. Maddox in his thesis [1], using a MC
+single muon sample which does not include any pattern recognition eﬀects :
+
+σpT /pT = 0.0026pT
+
+0.0104
+
+0.0019/pT
+
+⊕
+
+⊕
+
+(11)
+
+This equation predicts a better momentum resolution than version v1 of KFFIT. This
+is because the samples used are diﬀerent. In the dijet sample, the pattern recognition
+
+13
+
+D
+D
+s
+can fail for busy events associating wrong hits to track. Moreover, they are more type of
+particles in the dijet events with masses diﬀerent from the mass of the pion. This causes
+a wrong estimation of the energy loss in KFFIT. For those reasons, the momentum
+resolutions contain long tails in the dijet sample and spreads the Gaussian used to ﬁt
+the distributions. But the new version of KFFIT gives an even better resolution than
+expected by equation 11 even using the dijet sample.
+The blue curve corresponds to the CTD momentum resolution obtained using samples
+of D∗ and semi-leptonic heavy quark decay events simulated in the HERA 1 architecture
+[4] :
+
+σpT /pT = 0.0058pT
+
+0.0065
+
+0.0014/pT
+
+⊕
+
+⊕
+This equation is a parametrisation of the momentum resolution for the CTD-only tracks
+when the MVD was not yet existing. The predicted momentum resolution is very good at
+low momentum mainly because the amount of material was much smaller in the HERA 1
+setup. With the inclusion of the MVD, multiple scattering in additional material causes
+a deterioration of the momentum resolution at low momentum. But it is remarkable to
+see on the Fig. 9 that the improved KFFIT is able to give a similar resolution at low
+momentum.
+
+(12)
+
+At high momentum, the curvatures of the tracks are small and the additional MVD
+hits increase the leverage used to calculate the track radius. In consequence the inclusion
+of the MVD improves considerably the momentum resolution at high momentum.
+It
+must be noted however that the estimation of the momentum resolution presented here
+is always based on Monte Carlo samples assuming that the detector is perfectly aligned.
+
+4.3 Pull
+
+The ﬁgure 10 shows the standard deviation of the pull for the parameters cot(θdip), φ0,
+z0 and D0. It appears that the new pulls are closer to 1 than in the previous version.
+This is essentially due to the introduction of the beam pipe in KFFIT. The beam pipe
+produces a non-negligible multiple scattering which increases the covariance matrix at
+the end of the Kalman Filter. It must be noted nevertheless that the pulls shown on
+the ﬁgure 10 have been obtained using the dijet MC sample without any selection on
+the particle type. In this case, the pull distribution is not Gaussian and contains long
+tails. So the resolution on parameters is slightly worse for other particles than pions. As
+a consequence, the errors are over-estimated for pions and under-estimated for particles
+with mass very far from the mass of the pions. But the average pull, for any samples and
+for all parameters, is in the range 1
+
+0.2.
+
+±
+
+4.4 Momentum bias
+
+The ﬁgure 11 shows the mean diﬀerence of true and reconstructed relative momentum as
+a function of the true transverse momentum. The black points corresponds to the release
+2005 (v1) and the red points corresponds to the latest version of KFFIT (v10). It can be
+
+14
+
+10
+p
+ (GeV)
+T
+
+10
+p
+ (GeV)
+T
+
+]
+
+C
+M
+
+ 
+
+−
+
+ 
+
+[
+ 
+
+]
+
+C
+M
+Z
+−
+Z
+
+ 
+
+ 
+
+[
+ 
+
+1.5
+
+1.4
+
+1.3
+
+1.2
+
+1.1
+
+1
+
+0.9
+
+0.8
+
+1.3
+
+1.2
+
+1.1
+
+1
+
+0.9
+
+0.8
+
+1
+
+1
+
+±
+
+10
+p
+ (GeV)
+T
+
+10
+p
+ (GeV)
+T
+
+Figure 10: Standard deviation of the pull for the parameters cot(θdip), φ0, z0 and D0.
+The black points correspond to the version v1 of KFFIT and the red points to the version
+v10.
+
+seen that the new distribution is more ﬂat and in the range
+
+0.2 %. This is essentially due
+
+]
+
+C
+M
+
+ 
+t
+o
+c
+ 
+−
+
+ 
+
+ 
+t
+o
+c
+
+[
+ 
+
+]
+
+C
+M
+D
+−
+D
+
+ 
+
+ 
+
+[
+ 
+
+1.5
+
+1.4
+
+1.3
+
+1.2
+
+1.1
+
+1
+
+0.9
+
+0.8
+
+1.2
+
+1.1
+
+1
+
+0.9
+
+0.8
+
+1
+
+1
+
+]
+ 
+p
+
+ 
+/
+ 
+
+p
+
+ 
+
+[
+ 
+n
+a
+e
+m
+
+0.002
+
+0
+
+−0.002
+
+−0.004
+
+−0.006
+
+−0.008
+
+1
+
+10
+ (GeV)
+p
+T
+
+Figure 11: Mean ∆p/p as a function of the transverse momentum pT .
+
+to the introduction of the beam pipe in KFFIT in combination with the correction of the
+Bethe-Bloch formula. Due to the principal limitation in the KFFIT material model that
+have been outlined before, no perfect compensation has been possible, but the achieved
+level of correction should clearly be good enough for most analyses.
+
+4.5 Test on 2005 data
+
+The new version of KFFIT has been tested on 2005 real data by Vladimir Aushev on the Λ
+and the K 0
+S mass distributions [6] and by Hartmut Stadie on the J/ψ mass distribution
+[7]. As seen on ﬁgure 12, an improvement of about 7 %, 22 % and 45 % have been
+
+15
+
+s
+s
+s
+s
+q
+f
+q
+f
+s
+s
+s
+s
+D
+Figure 12: Mass distributions of the K 0
+(above) and for the new version v10 (below).
+
+S, the Λ and the J/ψ for the version v1 of KFFIT
+
+observed respectively for the Λ, the K 0
+S and the J/ψ mass resolution. It can be seen that
+the mean value of the J/ψ mass distribution is slightly worse for the new KFFIT and
+shifted by around 0.4 MeV. This eﬀect is not seen on the equivalent MC sample. So it
+has been interpreted as a consequence of a slight mismatch of the simulated and the real
+magnetic ﬁeld. As explained in section 3.3 a factor of 1.0039% has been applied to the
+ﬁnal ZTTRHL momentum on real data to take into account this eﬀect.
+
+5 Room for further possible development
+
+•
+
+•
+
+•
+
+To improve further the momentum resolution in KFFIT, the density and atomic
+numbers of dead material in the Bethe-Bloch formula need to be taken into account.
+At present, all materials are assumed to be Silicon.
+
+An other issue, would be to identify the particles (using dE/dx in the CTD or in
+the MVD) before entering in KFFIT and use its proper mass in the Bethe-Bloch
+formula.
+
+The initial parameters used as input for KFFIT come from a global ﬁt of all CTD
+hits assuming that the tracks can be described by one helix in all the CTD. This is
+an approximation. In order to start a proper Kalman Filter in the MVD we would
+
+16
+
+need instead to use the track parameters at the inner wall of the CTD.
+
+•
+
+•
+
+At present tracks having STT hits are not ﬁtted by VCRECON. So KFFIT uses
+ZTPRHL tracks as input which have not the proper parameters and covariance
+matrices to be used as input for the Kalman Filter.
+
+The contribution of the misalignment of the MVD to hit errors has to be determined
+properly. At present, the MVD hit intrinsic resolution σint is increased by an extra
+term of 40 µm : σ = √σint + 402. This is probably over-estimated since the new
+alignment constants have been improved using e-p collisions in addition to the
+cosmic alignment.
+
+•
+
+Finally, the association of MVD hits to tracks during the Kalman Filter could be
+be improved. Indeed, a smoothing step could be added at the end of the Kalman
+Filter to remove MVD hits increasing the χ2 of the ﬁt abnormally (’outliers’).
+
+However, a new package called ’Rigorous Track Fit’ is being written by Alexander
+Spiridinov. In this new algorithm, the Kalman Filter is performed not only on the MVD
+hits, but also on the CTD and on the STT hits. Moreover, the ﬁt takes into account
+the characteristic inhomogeneity of the magnetic ﬁeld in the forward direction. This
+algorithm shows already very promising results and will be used for tracks having STT
+hits for the next re-processing of the 2004 data. So, maybe all the items mentioned above
+should be addressed by this Rigorous Track Fit approach.
+
+I would like to thank R. Mankel, G. Hartner, H. Stadie, V. Aushev and A. Spiridinov for
+useful discussions.
+
+Acknowledgments
+
+References
+
+[1] E. Maddox,
+
+Study
+
+of
+
+heavy
+
+quark
+
+the
+
+detector,
+ing
+http://www-zeus.desy.de/physics/hfla/public/Theses/thesis_maddox.pdf
+
+ZEUS microvertex
+
+2004
+
+production
+Thesis
+
+at
+
+HERA
+
+us-
+(unpublished),
+
+[2] G. Hartner, VCTRK Brieﬁng : Program and Math, ZEUS note 98-058
+
+[3] P. Avery, Applied Fitting Theory V : Track Fitting using the Kalman Filter, CBX
+
+92-39 http://www.phys.ufl.edu/%7Eavery/fitting.html
+
+[4] R. Hall-Wilton, The CTD Tracking Resolution, ZEUS note 99-024
+
+[5] H.
+
+Stadie
+
+and V. Aushev,
+
+private
+https://www-zeus.desy.de/zems/ZEUS\_ONLY/display.php?p\_active=7558
+for version v5 of KFFIT.
+
+communication. Also
+
+shown
+
+at
+
+17
+
+[6] V.
+
+Aushev,
+
+private
+
+communication.
+
+Also
+
+shown
+
+at
+
+https://www-zeus.desy.de/zems/ZEUS\_ONLY/display.php?p\_active=7443
+for version v5 of KFFIT.
+
+[7] H.
+
+Stadie,
+
+private
+
+communication.
+
+Also
+
+shown
+
+at
+
+https://www-zeus.desy.de/zems/ZEUS\_ONLY/display.php?p\_active=7351
+for version v5 of KFFIT.
+
+18
+
+Annex 1 : Preparation of output information
+
+This section describes the KFFIT output table : ZTTRHL. The table 1 summarizes the
+various variables stored in this table.
+
+Name
+hel[5]
+Cov[15]
+Mom
+Chsq
+Code
+
+StCrCsCz
+
+Description
+
+Type
+REAL Helix parameters (φ0, Q/R, QD0, Z0, cot(θdip))
+REAL Covariance matrix
+REAL Momentum
+REAL The total χ2 (CTD+MVD)
+INTE Code of the form NNJJII, where
+
+NN=number of degrees of freedom (CTD+MVD),
+JJ=outer SL, II=inner SL
+INTE aabbccdd: number used of
+
+a=STT,b=CTDrp,c=CTDstereo,d=CTDz
+
+BrBzWuWv INTE aabbccdd; number used of
+
+a=BMVDrp,b=BMVDz,c=FMVDu,d=FMVDv
+
+phiInner
+phiOuter
+mvddedx
+elcorr
+method
+
+REAL Phi innermost
+REAL Phi outermost
+REAL Average of cluster sums (corrected)
+REAL Strength of energy loss correction
+INTE Track ﬁt used (1=kﬃt, 2=rtﬁt)
+
+Table 1: ZTTRHL ADAMO table for version v10 of KFFIT.
+
+Some remarks have to be noticed :
+
+•
+
+•
+
+•
+
+The track parameters, the covariance matrix and the momentum are calculated at
+the point of closest approach to the origin.
+
+The momentum (Mom) is corrected using real data : Mom = Mom
+
+1.0039
+
+∗
+
+The Chsq is calculated as the sum of the CTD and the MVD χ2 plus an additional
+term which takes into account the fact that the inclusion of the MVD hits will also
+change the trajectory within the CTD, which should give rise to an additional χ2
+contribution :
+
+χ2 = χ2
+
+CT D + χ2
+
+M V D + ∆~aT C −1
+
+CT D∆~a
+
+(13)
+
+where ∆~aT = ~aCT D
+~aM V D, the diﬀerence between the CTD track parameters and
+the KFFIT track parameters (~aM V D = hel[5]). CCT D is the covariance matrix of
+the CTD tracks.
+
+−
+
+•
+
+The number of degrees of freedom stored in Code is equal to the number of degree
+of freedom from the CTD input tracks plus the number of MVD hits used in KFFIT.
+
+19
+
+•
+
+•
+
+•
+
+•
+
+•
+
+StCrCsCz does not involve MVD information and is just a copy from the ZTPRHL
+table.
+
+phiInner is the φ angle of the track at the inner most hit. If this hit is in the
+MVD, it is calculated as the φ angle of the track at the intersection point of this
+track with the sensor of this hit.
+
+•
+
+phiOuter is the φ angle of the track at the outer most hit and is calculated from
+the ZTPRHL table :
+
+(14)
+
+(15)
+
+(16)
+
+mvddedx is the average of the corrected cluster sums :
+
+outer = (φztprhl
+sztprhl
+
+outer −
+outer = φzttrhl
+φzttrhl
+0
+
+φztprhl
+0
+
+)/(QR)ztprhl
+(QR)zttrhlszttrhl
+outer
+
+−
+
+N
+
+mvddedx =
+
+Qi cos(θi)
+N
+
+i=0
+X
+where N is the number of MVD hits ﬁtted in KFFIT, Qi is the collected charge for
+the i th hit (from MVRECC signal) and θi is the angle of the track with respect to
+the normal of the sensor of this hit.
+
+•
+
+elcorr is the total momentum loss in the MVD (in GeV). This value can be used in
+a further analysis to correct any remaining momentum bias due to approximations
+in the Bethe Bloch formula (mass of the particles=mass of the pion, all material is
+Silicon,...).
+
+Annex 2: History of KFFIT
+
+The initial version of KFFIT used in this study was v2005b.1 which diﬀers slightly from
+v2005a.1 because contains some speed-up implemented by Hartmut Stadie.
+
+v1 = v2006a - February 22 2006
+
+Version equivalent than v2005b.1 but with headers modiﬁed to use the standard c
+headers stored in : $ZSYS_ROOT/Released/zeus/ZeusAdamo/$ZEUSRELEASE/inc/windows\_c
+
+call to cfortran.h removed.
+
+v2 - March 13 2006
+
+•
+
+Input tracks are constructed in the class ’Event’ and not anymore in the main class
+’Fit’.
+
+20
+
+v3 - March 17 2006
+
+MVD hits are now attached to input tracks in Event
+
+All material are now deﬁned in kﬁnit and not anymore for each tracks
+
+Various variables calculated under the condition ’if (mycuts.reﬁtPR())’ correspond-
+ing to a special mode of KFRECON : mode Pattern Recognition.
+
+CTD only tracks (obtained from the VCTRHL adamo table ﬁlled by VCGTRGA-
+SIS) are used as input of KFFIT if the number of MVD hits > 0 and if CTDouter
+3.
+
+≥
+
+Subroutine VCUNDOSCAT is used to remove multiple scattering in the CTD only
+input tracks.
+
+New methods created to test the new CTD only input tracks.
+
+Input covariance matrices rescaled to take into account the oversizing of the CTD
+hits in VCRECON.
+
+v4 - June 10 2006
+
+Intersection with sensor not anymore required to accept an MVD hit.
+
+MVD hits sorted in the constructor of the class ’Event’.
+
+∆χ2 cut increased to 1000.
+
+Possibility to use either CTD only tracks as input or ZTPRHL as in version v1
+using the control card : KFFIT-UsePR.
+
+Variable name ThroughMVD replaced by thrMVD.
+
+v5 = v2006a.1 - July 05 2006
+
+MVD hits resolution multiplied by 1.3 (needed to get output pulls close to 1 at high
+momentum).
+
+New method to calculate residuals and error on parameters.
+
+v6 = v2006a.2 = v2006a.2.b - August 31 2006
+
+Energy loss multiplied by 1.5 to correct momentum bias.
+
+New method to calculate energy straggling (in test)
+
+Check on the output covariance matrices : if not positive redo the Kalman Filter
+with ZTPRHL tracks as input.
+
+21
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+v7 - September 21 2006
+
+Test on input CTD only covariance matrices :
+VCUNDOSCAT increasing at each step the initial momentum used.
+
+if not positive start iteration on
+
+Magnetic ﬁeld is now depending on the position and not anymore a constant value.
+This inﬂuence calculation of energy loss in material.
+
+The factor used to multiply energy loss using Bethe Block formula to take into
+account missing material is becoming a new KFFIT card : KFFIT-dEdxCorr
+
+Speed-up of the code : part have been re-written. Important modiﬁcation : All the
+MVD hits are not loaded anymore, but only the one attached to a ZTPRHL track.
+
+v8 - September 29 2006
+
+Bug corrected : the beam pipe was never taken into account.
+
+Default value of dEdxCorr set to 1.2 and not anymore 1.5.
+
+1/R pull corrected by addition of ’error due to energy loss approximation’ and
+energy straggling.
+
+v9 - October 24 2006
+
+Initialisation removed from orangeinit and only done in KFFIT.
+
+Default value of dEdxCorr set to 1.3
+
+Momentum correction at the end of KFFIT for real data : zttrhl .Mom = zt-
+trhl .Mom*1.0039
+
+Fill 2 new variables in ZTTRHL table : method=1 for KFFIT and elcorr=total
+energy loss by a pion in the MVD.
+
+Fill 1 new variable in ztrprm table : Weight=1
+
+v10pre = v2006a.3 - 5 December 2006
+
+Variable zttrhl .StCrCsCz is now just a copy of ZTPRHL
+
+The ﬁt (or calculation of energy loss,...) is not done anymore for CTD standalone
+tracks but the ZTPRHL tracks are simply copied to ZTTRHL.
+
+zttrhl .mvddedx = Average charge sum corrected by cos(θ) where θ is the angle
+of the track direction at the intersection point with respect to the normal to the
+sensor.
+
+zttrhl .elcorr = Sum of the energy loss in all MVD material.
+
+22
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+v10 = v2006a.4 - 11 December 2006
+
+•
+
+•
+
+•
+
+•
+
+The ﬁt is not done anymore for tracks with ztprhl VCTRHL==INULL
+
+zttrhl .phiOuter and zttrhl .phiInner are now correctly ﬁlled
+
+mvd + χ2
+
+χ2 = χ2
+after modifying the tracks in KFFIT.
+
+ctd + f where f is a factor to take into account the increase of χ2
+
+ctd
+
+Ndf = Ndfctd + Ndfmvd where Ndf is the number of degree of freedom stored in
+zttrhl .Code.
+
+23
+
+

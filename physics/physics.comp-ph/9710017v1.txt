@@ -1,0 +1,1819 @@
+FERMILAB-PUB-97/271-T
+
+September 1997
+
+Multidimensional integration in a heterogeneous
+
+network environment
+
+Theory Group, Fermi National Accelerator Laboratory, P.O. Box 500, Batavia, IL 60510
+
+Siniˇsa Veseli
+
+Abstract
+
+We consider several issues related to the multidimensional integration using a
+
+network of heterogeneous computers. Based on these considerations, we develop
+
+a new general purpose scheme which can signiﬁcantly reduce the time needed for
+
+evaluation of integrals with CPU intensive integrands. This scheme is a parallel
+
+version of the well-known adaptive Monte Carlo method (the VEGAS algorithm),
+
+and is incorporated into a new integration package which uses the standard set of
+
+message-passing routines in the PVM software system.
+
+7
+9
+9
+1
+ 
+t
+c
+O
+ 
+7
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+7
+1
+0
+0
+1
+7
+9
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+1 Introduction
+
+Evaluation of complicated multidimensional integrals is a common computational problem
+
+occurring in many areas of science. Calculation of scattering amplitudes in elementary
+
+particle physics using Feynman perturbation theory [1] is a textbook example of integrals
+
+over four or more variables. As dimension of the integration volume increases, the number
+
+of integrand evaluations required by any generalized one-dimensional numerical method
+
+grows exponentially. That is the major obstacle for applying any of those methods in
+
+evaluation of multidimensional integrals. On the other hand, the convergence rate of
+
+all Monte Carlo algorithms is independent of the dimension of the integral [2]-[5]. This
+
+property makes the Monte Carlo approach ideal for integration over many variables.
+
+In most applications where the functions being integrated are not expensive in terms
+
+of the CPU time, and also in those which do not require high statistics, or large number
+
+of function evaluations, various Monte Carlo algorithms usually work quite satisfactory in
+
+the sense that calculations can be done within a reasonable time frame. However, high
+
+statistics integrations of CPU intensive functions may require days, or even weeks of the
+CPU time on fastest workstations presently available.1
+
+In this note we oﬀer a new parallel scheme which may signiﬁcantly reduce the compu-
+
+tational time needed for Monte Carlo evaluation of multidimensional integrals with CPU
+
+expensive integrand functions. Our approach is based on the fact that networks connecting
+
+large numbers of heterogeneous UNIX computers are becoming more and more widespread,
+
+and also on the existence of several message-passing software packages [6, 7, 8], which per-
+
+mit networks to be used as single large parallel computers. Clearly, the basic idea of
+
+performing Monte Carlo integrations using many computers is to devise a scheme of divid-
+
+ing one large calculation into a number of smaller parts, which can be handled separately
+
+and in parallel. Nevertheless, there are many intricacies which have to be taken into ac-
+
+count for an eﬃcient general purpose parallel algorithm, suitable for use in a heterogeneous
+
+network environment. Among the most important issues are:
+
+(i) Implementation of the underlying Monte Carlo algorithm and the random number
+
+generation.
+
+(ii) Flexibility to adapt to a particular network environment and to a speciﬁc function
+
+1Examples of calculations which fall into this category can be easily found in high energy physics.
+
+2
+
+being integrated.
+
+work.
+
+(iii) Robustness with respect to occasional failure of one or more computers in the net-
+
+(iv) Cost of the communication between computers participating in the calculation.
+
+The approach described in this paper addresses all of the above issues, and is incorporated
+
+into a new Advanced Monte Carlo Integration (AMCI) package. The essential ingredients of
+
+the AMCI package are the VEGAS algorithm [9], and the Parallel Virtual Machine (PVM)
+
+software system [7]. Among various Monte Carlo schemes the VEGAS algorithm, developed
+
+by G.P. Lepage [9], has shown to be one of the most eﬃcient ones. This highly successful
+
+general purpose algorithm has become a standard computational tool of elementary particle
+
+physics. On the other hand, the PVM software system [7] provides a uniﬁed framework
+
+within which parallel programs can be developed in an eﬃcient and straightforward manner
+
+using existing computers. Because of its simple but complete programming interface, PVM
+
+has gained widespread acceptance in the high-performance scientiﬁc community.
+
+The rest of the paper is organized as follows:
+
+in Section 2 we brieﬂy describe the
+
+general features of Monte Carlo integration and the VEGAS algorithm. Section 3 contains
+
+the discussion of parallelism issues and the description of the parallel scheme suitable
+
+for use in a heterogeneous network environment. This scheme is incorporated into the
+
+AMCI package, whose most important features are outlined in Section 4. In Section 5 we
+
+investigate the performance of the package in various situations, and compare it to the
+
+performance of the ordinary VEGAS programs. Our conclusions are given in Section 6.
+
+2 Monte Carlo integration and the VEGAS algorithm
+
+Consider the d-dimensional integral of a function f (x), where x = x1, x2, . . . , xd, over a
+rectangular volume V ,
+
+If N points x are randomly selected from V with probability density p(x) (normalized to
+
+unity), then it can be shown that for large N the integral in Eq. (1) is approximated by
+
+(1)
+
+(2)
+
+I =
+
+dx f (x) .
+
+ZV
+
+I ≃ S(1) .
+
+3
+
+Here, S(1) is deﬁned through
+
+S(k) =
+
+1
+N
+
+k
+
+f (x)
+p(x) !
+
+.
+
+x  
+X
+As diﬀerent sets of N points are chosen, the quantity S(1) will ﬂuctuate about the exact
+value of I. The variance of this ﬂuctuation is given by2
+
+(3)
+
+(4)
+
+σ2 ≃
+
+S(2) − (S(1))2
+N − 1
+
+.
+
+The standard deviation σ indicates the accuracy of S(1) as an estimate of the true value of
+
+the integral.
+
+There exist a number of methods which can be used to reduce the variance σ2 for
+
+the ﬁxed N. Two of the most popular techniques are importance sampling and stratiﬁed
+
+sampling. The ﬁrst one concentrates function evaluations where the integrand is largest
+
+in magnitude, while the second one focuses on those regions where the contribution to the
+
+error is largest. However, these and other methods of variance reduction require detailed
+
+knowledge of the integrand’s behavior prior to implementation [2]-[5]. Because of that,
+
+they are not appropriate for a general purpose integration algorithm.
+
+On the other hand, even though the VEGAS algorithm [9] is also primarily based on
+
+importance sampling, the feature that distinguishes it from other Monte Carlo schemes is
+
+that it is adaptive in the sense that it automatically samples the integrand in those regions
+
+where it is largest in magnitude. This property makes it considerably more eﬃcient than
+
+non-adaptive methods in high dimensions, or with non-analytic integrand functions.
+
+Besides importance sampling, VEGAS also employs some stratiﬁed sampling, which
+
+signiﬁcantly improves its eﬃciency in low dimensions. When stratiﬁed sampling is used,
+the algorithm divides integration volume into M = K d subvolumes, where K is the number
+of subdivisions in each of d integration dimensions.3 In all of those subvolumes VEGAS
+
+performs an N-point Monte Carlo integration using importance sampling. Thus, the total
+
+number of function evaluations in one iteration is given by NT = N × M.
+
+2Note that the reliable estimates of σ2 are possible only if the integral
+
+is ﬁnite.
+
+3Stratiﬁed sampling in VEGAS can be disabled.
+
+dx
+
+f 2(x)
+p(x)
+
+V
+Z
+
+4
+
+The basic idea of importance sampling in VEGAS is to construct a multidimensional
+
+probability density function that is separable,
+
+d
+
+p(x) =
+
+pi(xi) ,
+
+Yi=1
+where all pi’s are normalized to unity. The optimal one-dimensional densities for separable
+geometry can be shown to be [2]
+
+pi(xi) ∝
+
+dxj
+pj(xj) 
+
+
+Z
+
+
+
+
+
+
+
+
+
+Yj6=i
+
+1/2
+
+f 2(x)
+
+,
+
+
+
+
+
+which in one dimension reduces to p(x) ∝ |f (x)|. The above expression immediately sug-
+
+in each iteration an N-point Monte Carlo integration
+gests VEGAS’ adaptive strategy:
+is performed in all of K d subvolumes, using a given set of one-dimensional probability
+densities (initially all constant). Besides accumulating S(1) and S(2), which are needed
+
+for estimating the integral and its standard deviation, VEGAS also accumulates K × d
+
+estimators of the right-hand side of Eq. (6). These are then used to determine the im-
+proved one-dimensional densities for the next iteration.4 In this way, an empirical variance
+
+reduction is gradually introduced over several iterations, and the accuracy of integration
+
+is in general enormously enhanced over the non-adaptive Monte Carlo methods.
+
+For each iteration results of M integrations in the diﬀerent subvolumes have to be com-
+bined to give the total integral and its variance. We denote Ii,j and σ2
+i,j as results obtained
+for the j-th subvolume and in the i-th iteration, using Eqs. (2) and (4), respectively. The
+
+ﬁnal iteration answers for the total integral and its variance are calculated by the relations
+
+Because each of m iterations is statistically independent, their separate results can be
+
+combined into a single best answer and its estimated variance through
+
+4For details related to the reﬁnement of the sampling grid the reader is referred to [9].
+
+Ii =
+
+Ii,j ,
+
+σ2
+i =
+
+σ2
+i,j .
+
+M
+
+Xj=1
+M
+
+1
+M
+
+1
+M 2
+
+Xj=1
+
+¯I =
+
+¯σ2 =
+
+m
+i=1 Ii/σ2
+i
+m
+i=1 1/σ2
+i
+−1
+m
+1
+σ2
+
+i !
+
+,
+
+,
+
+P
+
+P
+
+ 
+
+Xi=1
+
+5
+
+(5)
+
+(6)
+
+(7)
+
+(8)
+
+(9)
+
+(10)
+
+with the χ2 per degree of freedom given by
+
+χ2/dof =
+
+1
+m − 1
+
+m
+
+Xi=1
+
+(Ii − ¯I)2
+σ2
+i
+
+.
+
+(11)
+
+When the algorithm is working properly, χ2/dof should not be much greater than one,
+since (Ii − ¯I)2 ∼ O(σ2
+i ). Otherwise, diﬀerent iterations are not consistent with each other.
+
+3 Parallelism considerations
+
+As mentioned earlier, the basic idea of performing multidimensional Monte Carlo integra-
+
+tion using many computers is to ﬁnd a scheme of dividing one large calculation into many
+
+small pieces, which can be handled separately and in parallel. Because of that, the most
+
+natural framework for the problem at hand is the so called master/slave model. In this
+
+model the master program spawns the slave tasks and distributes the diﬀerent parts of the
+
+calculation to the diﬀerent slave processes. These processes do their share of work, and
+
+send the results back to the master program which combines them together.
+
+The most important problem which one has to solve here is how to divide the calculation
+
+between the slave tasks, while making sure that the ﬁnal result returned by the parallel
+
+algorithm does not depend on factors such as the speed of diﬀerent computers in the
+
+network, the number of slave processes used for the calculation, etc.
+
+The essential ingredient of our approach is that all parallel tasks generate the same list
+
+of random numbers. That is not diﬃcult to accomplish because all tasks use the same
+
+random number generator, whose initial state is furnished to them by the master program.
+
+There are several good reasons for using this method:
+
+(i) Reproducibility of the parallel algorithm can be easily achieved, regardless of the
+
+number of parallel processes participating in the calculation.
+
+(ii) Possibility of reproducing any part of the calculation, which is important in case of
+
+possible failures of one or more computers in the network.
+
+(iii) Low master-slave communication cost.
+
+All of the above points will be discussed in more details below.
+
+6
+
+(12)
+
+(13)
+
+3.1 Parallel implementation of the VEGAS algorithm
+
+Since the number of available computers varies from situation to situation, for parallelizing
+
+VEGAS we ﬁnd it convenient to choose one of the integration dimensions. At the beginning
+
+of each iteration, the master program has to divide the integration region in that dimension
+into n parts,5
+
+0 = y0 < y1 < . . . < yn = 1 .
+
+Each subregion ∆yi = yi − yi−1 in the task grid belongs to one parallel process. Note that
+the task grid is diﬀerent from the VEGAS’ sampling grid, which divides the same region
+
+into K subdivisions,
+
+with ∆xk = xk − xk−1.
+
+0 = x0 < x1 < . . . < xK = 1 ,
+
+In cases where only importance sampling is used, the task i has to evaluate the integrand
+
+only if the random point happens to fall within its one-dimensional subregion ∆yi. In this
+way, all tasks accumulate results for the entire integration volume. For stratiﬁed sampling
+
+technique, which involves dividing integration region into M disjoint subvolumes, this
+
+strategy would not be the most eﬃcient one, since it would require keeping track of results
+
+in all subvolumes. For large M this would imply lots of additional storage space in both
+master and slave programs, and also a large overhead in the master-slave communication.6
+
+Therefore, for stratiﬁed sampling it is more eﬃcient to let one task accumulate all results
+
+within a given subvolume. This can be accomplished because all parallel tasks generate the
+
+same list of random numbers. Given its one-dimensional subregion boundaries, once the
+
+task samples the ﬁrst point for integration in one particular subvolume, it decides whether
+
+to accumulate results in that subvolume, or to simply generate N random points without
+
+5In this section x and y are always coordinates along the integration dimension used for parallelizing
+VEGAS. Also note that all coordinates are scaled: if we have zL and zU as the actual lower and upper
+
+boundaries of integration, then the actual integration coordinate z corresponds to x = (z − zL)/(zU − zL),
+
+which ranges from 0 to 1.
+
+6To illustrate that, consider an example of 5-dimensional integration with requested 106 function eval-
+uations per iteration. If stratiﬁed sampling were used, the VEGAS algorithm would divide integration
+volume into approximately 3.7 × 105 subvolumes, and in each of them it would perform a two-point Monte
+Carlo integration. Assuming the double precision arithmetic, storing S(1) and S(2) for each subvolume
+would require about 6 megabytes of data, which would have to be passed by the slave tasks to the master
+
+program in each iteration.
+
+7
+
+doing anything.
+
+In other words, if the ﬁrst point sampled in one particular subvolume
+
+happened to be in the subregion ∆yi of the task grid, then that subvolume belongs to the
+task i. When this strategy is used, the work among the parallel tasks is actually divided
+
+by subvolumes.
+
+In either case, after it samples all of N × M random points in one iteration, the slave
+
+task sends accumulated results to the master program. Once all results arrive, the master
+
+program combines them to obtain the ﬁnal iteration results for the integral and its variance,
+calculates the cumulative results for ¯I and ¯σ2, and reﬁnes the sampling grid. Note that
+one of the advantages of this approach is its minimal communication cost: the slave tasks
+
+receive all necessary data (e.g., the sampling grid) at the beginning of each iteration, and
+
+send the results back after completing their share of work.
+
+3.2 Flexibility issues
+
+Ideally, all tasks running in parallel would complete one particular iteration at the same
+
+time, which would minimize their idle time, as well as the total execution time of the parallel
+
+algorithm. However, in a typical network environment there are many factors which aﬀect
+
+the performance of the program running in parallel. For example, the calculation may be
+
+aﬀected by the diﬀerent computational speed of computers in the network, by the diﬀerent
+
+machine loads, etc. Furthermore, when the function being integrated is concentrated in
+
+one particular region of space, VEGAS quickly adjusts the sampling grid so that most of
+
+integrand evaluations fall into that region. If that region happened to be entirely within
+
+one subdivision ∆yi of the task grid, then the method we described above would give hardly
+any advantage over the standard VEGAS algorithm, since most of the work would have to
+
+be done by one task. Because of these reasons, it is essential that the parallel algorithm
+
+has the ability to adapt to a speciﬁc situation, i.e., to the given network environment and
+
+to the function being integrated.
+
+One possible solution to the above problems would be quite simple:7 assuming that we
+
+have n parallel tasks participating in the calculation, instead of dividing the task grid into
+
+exactly n subregions, we could divide it into m parts, where m ≫ n. After completing
+
+calculations in one particular subdivision of the task grid, the slave task would continue
+
+working on the next available one. In this way, the faster processes would contribute more
+
+7We thank W.B. Kilgore for pointing out this possibility to us.
+
+8
+
+to the calculation than the slower ones, and the optimal work load could be achieved
+
+automatically. However, the problem with this strategy is that it is associated with the
+
+large cost of the communication between the master program and the slave tasks.
+
+Because of that, in order to keep the communication cost low and still achieve an
+
+optimal work distribution, we propose to measure the time required by the diﬀerent tasks
+
+to complete their part of the calculation in a given iteration, and to use that information
+
+to distribute the work load for the next one. In other words, if, for example, the task i
+
+takes longer than others to complete its share of work, its number of integrand evaluations
+
+has to be decreased. This can be done simply by adjusting the width of the subregion ∆yi
+belonging to that task.
+
+Denoting ai as the time needed by the task i for one integrand evaluation, and also
+bi as the overhead time related to other necessary operations (e.g., the random number
+generation), the time required by that task to complete one iteration is given by
+
+ti = aiNi + bi ,
+
+(14)
+
+where Ni is the number of integrand evaluations. Constants ai and bi in Eq. (14) are
+highly dependent on the characteristics of the computer on which the task i is running.
+
+In order to determine them both, we would have to use the information from the two
+
+successive iterations. However, since our goal is to develop a scheme useful for high statistics
+
+integrations of computationally demanding functions, we can safely assume that the parallel
+
+tasks spend most of their time evaluating the integrand. This means that aiNi ≫ bi, and
+hence
+
+Let us also denote t′
+i,
+
+i as what would be the optimal iteration completion time for the task
+
+which is given in terms of the optimal number of function evaluations N ′
+
+i. As mentioned
+earlier, the perfect work load distribution among the parallel tasks would be achieved if all
+
+of them ﬁnished their calculations at the same time. Therefore, in the ideal case we would
+
+have
+
+(15)
+
+(16)
+
+(17)
+
+ti ≃ aiNi .
+
+i ≃ aiN ′
+t′
+i ,
+
+i ≃ ¯t′ ,
+t′
+
+9
+
+where ¯t′ = 1
+i ∝ 1/ai. Using Eq. (15),
+n
+and keeping in mind that the total number of function evaluations in one iteration has to
+
+j. From Eqs. (16) and (17) we see that N ′
+
+n
+j=1 t′
+
+P
+
+be kept constant (NT ), we put
+
+which satisﬁes the requirement
+
+N ′
+
+i = NT
+
+Ni/ti
+n
+j=1 Nj/tj
+
+,
+
+P
+
+n
+
+N ′
+
+i = NT .
+
+Xi=1
+Even though the above derivation was rather heuristic, the ﬁnal expression for N ′
+i is exact.
+It can be obtained in a more rigorous way using the method of Lagrange multipliers, by
+
+minimizing the function
+
+f (N ′
+
+1, N ′
+
+2, . . . , N ′
+
+n) =
+
+(¯t′ − t′
+
+i)2 ,
+
+n
+
+Xi=1
+
+subject to the constraint given in Eq. (19).
+
+Eq. (18) allows the master program to use the information from the previous iteration
+
+to determine the optimal number of integrand evaluations for the task i in the next one.
+
+Since the task work load can be adjusted by changing the width of subdivisions in the
+task grid, we still have to relate N ′
+i to ∆yi. In the VEGAS algorithm, the probability of a
+random point being generated within the k-th subdivision of the sampling grid is given by
+
+[9]
+
+p(x) =
+
+1
+K∆xk
+
+,
+
+for xk−1 ≤ x < xk .
+
+(21)
+
+Using this formula it is not diﬃcult to show that the expected number of integrand evalu-
+ations for an arbitrary region between x and x′ is given by
+
+˜N(x, x′) = NT
+
+dx p(x)
+
+x′
+
+x
+
+Z
+
+NT
+K  
+
+=
+
+k′ − k +
+
+x′ − xk′−1
+xk′ − xk′−1
+
+−
+
+x − xk−1
+xk − xk−1 !
+
+,
+
+where we have assumed xk−1 ≤ x < xk and xk′−1 ≤ x′ < xk′. The above expression can
+be used to ﬁnd the optimal subdivisions yi of the task grid, which are determined by the
+relation
+
+(18)
+
+(19)
+
+(20)
+
+(22)
+
+(23)
+
+N ′
+
+i = ˜N (yi−1, yi) .
+
+10
+
+Given that yi−1 is known (y0 = 0), we can solve this equation for yi,
+
+yi = xk′−1 + (xk′ − xk′−1)
+
+N ′
+
+i + k − k′ +
+
+K
+NT
+
+ 
+
+yi−1 − xk−1
+xk − xk−1 !
+
+,
+
+(24)
+
+and hence obtain the optimal task grid. In Eq. (24) k and k′ are again deﬁned so that
+xk−1 ≤ yi−1 < xk and xk′−1 ≤ yi < xk′.
+
+Since the distribution of the work load among the parallel tasks is one of the most
+
+important ingredient of our approach, we summarize it below:
+
+1. In each iteration the slave tasks keep track of their actual number of integrand eval-
+
+uations, as well as of the time they require to complete the calculation.
+
+2. Using that information, the master program determines from Eq. (18) what would
+
+be the ideal number of function evaluations for each slave task.
+
+3. After computing the new sampling grid for the VEGAS algorithm, the master pro-
+
+gram calculates the new task grid iteratively using Eq. (24). Note that the boundary
+
+conditions y0 = 0 and yn = 1 have to be satisﬁed.
+
+In this way, after each iteration our algorithm adjusts the task work load to achieve the
+
+best possible performance in a given situation, while keeping low cost of the communication
+
+between the master program and the slave tasks.
+
+We should also mention that the above approach can be easily generalized to allow
+
+the possibility of dividing the calculation into m × n parts (m ≥ 2), so that each of n
+
+parallel tasks would work on m subregions in one iteration. Although this would increase
+
+the master-slave communication cost, as well as the overhead time the slave tasks require
+
+in each iteration, it would also shorten the time between the two successive task grid
+
+adjustments, which may be useful in an environment where the diﬀerent machine loads
+
+change rapidly.
+
+3.3 Robustness of the algorithm
+
+Another problem which has to be considered here is a possibility that occasionally one or
+more parallel tasks may fail during the calculation.8 Unless the algorithm has the ability to
+
+8This can happen due to the lost network connection, failure of a particular computer in the network,
+
+etc.
+
+11
+
+detect such an event, and also to recalculate the lost results, the task failure would require
+
+repeating the entire calculation.
+
+In the scheme we are proposing in this paper, after distributing various parts of the
+
+calculation to the parallel processes, the master program waits for all of them to complete
+
+their share of work and send the results back. However, if none of the results arrive after
+
+a certain amount of time, the master program has to verify the current state of all parallel
+
+tasks.
+
+In case that one or more tasks had failed, it has to divide the lost parts of the
+
+calculation among the remaining processes.
+
+Even though the above strategy looks simple, there are many details which have to
+
+be taken care of in case of the task failure during the calculation. Nevertheless, since the
+
+algorithm described in this section is ideally suited for a recursive implementation of the
+
+work distribution, it also allows for an eﬃcient way of dealing with the task loss.
+
+4 The AMCI package
+
+We have incorporated the general scheme described in the previous section into a new
+Advanced Monte Carlo Integration package.9 Besides relying on the VEGAS algorithm
+[9], as well as on the long period (> 2 × 1018) random number generator developed by
+
+P. L’Ecuyer [10], the package also uses the standard set of communication routines in the
+PVM software system [7].10
+
+Since the scheme presented in Section 3 is based on the master/slave model, the AMCI
+
+package has two main parts: the master and the slave subroutines, each accompanied with
+
+functions taking care of the master-slave communication via message-passing. All of the
+
+AMCI functions, except the user-related ones, are placed into several libraries which have
+
+to be linked with the driver program. The package is written in the ANSI C programming
+
+language (with the Fortran interface provided), so that it should compile easily on all
+platforms which are also supported by the PVM software system [7].11
+
+The most important features of the package are as follows:
+
+9The AMCI package can be obtained by sending an e-mail to the author at veseli@fnal.gov.
+10The latest version of the PVM software can be obtained by anonymous ftp to netlib2.cs.utk.edu, or
+
+from WWW by using the address http://www.netlib.org/pvm3/index.html.
+
+11In the near future, we hope to develop the Message Passing Interface (MPI) [8] version of the package.
+
+12
+
+1. Given the same seed for the random number generator, the AMCI master routine
+
+always returns the same answer as the ordinary VEGAS algorithm (with or without
+
+stratiﬁed sampling), regardless of the number of parallel tasks used for the calculation.
+
+2. All of the useful features of the original VEGAS program are also built into the
+
+AMCI package. For example, the master routine can be called again after initial
+
+preconditioning of the sampling grid. There is also a possibility of computing any
+
+number of arbitrary distributions of the sort
+
+with
+
+dI
+dy
+
+ZV
+
+=
+
+dx f (x)δ(y − g(x)) ,
+
+I =
+
+dy
+
+Z
+
+dI
+dy
+
+.
+
+(25)
+
+(26)
+
+3. AMCI is ﬂexible enough to adapt to speciﬁc conditions in the given network environ-
+
+ment, and also to the particular function being integrated. This property signiﬁcantly
+
+increases the eﬃciency of the package. For example, the master routine can be ini-
+
+tially called with only a small number of integrand evaluations in a single iteration.
+
+Even though all results obtained in that call would be discarded, this procedure
+
+would allow AMCI to quickly optimize the task grid for the given conﬁguration of
+
+computers.
+
+4. AMCI has built in means of detecting a possible task failure and reproducing the lost
+
+parts of the calculation in an eﬃcient way. Because of that, the master program is
+
+guaranteed to complete the calculation as long as at least one slave task is running.
+
+5. The package is easy to use, and requires no knowledge of parallel programming tech-
+
+niques.12
+
+area.
+
+The last characteristic of the AMCI package is extremely important, since it allows a
+
+typical user to beneﬁt from distributed computing, without becoming an expert in that
+
+12After the PVM software has been properly installed, using the AMCI master subroutine is no more
+
+diﬃcult than using any of the standard subroutines from [5].
+
+13
+
+5 Examples and performance analysis
+
+For comparison of the AMCI performance to that of the standard VEGAS program, we
+
+considered integration of a spherically symmetric Gaussian placed in the center of the
+integration region,13
+
+Id =
+
+1
+aπ1/2
+
+(cid:18)
+
+d
+
+1
+
+(cid:19)
+
+0
+Z
+
+ddx exp
+
+−
+
+ 
+
+Xi=1
+
+d
+
+2)2
+
+(xi − 1
+a2
+
+,
+
+!
+
+(27)
+
+with a = 0.1. As our PVM conﬁguration we used 25 NeXT workstations in the Fermilab
+
+Theory Group cluster. Most of those machines were equipped with 33 MHz processor, but
+
+some of them had 25 MHz CPU’s. For each integration with n requested parallel tasks
+
+(2 ≤ n ≤ 10), the PVM resource manager would decide which n workstations would be
+
+used for the calculation. In this way, we minimized eﬀects of various factors, such as the
+
+speed of diﬀerent computers, diﬀerent machine loads, etc. In order to further improve our
+
+performance analysis, and to estimate the statistical errors, for each n we performed 10
+
+independent integrations, which means that n parallel tasks were always running on the
+diﬀerent combination of n computers from the PVM conﬁguration. We denote T (n) as
+the average time required by the AMCI master routine to complete the calculation using
+
+n slave tasks. On the other hand, the standard VEGAS program was executed on all
+machines from the PVM conﬁguration, and the shortest execution time, denoted by T (1),
+was used for comparison with T (n). In Figures 1 and 2 we show results for the relative
+execution time T
+, which were obtained
+
+/T (1), and for the relative eﬃciency T (1)/nT
+
+(n)
+
+(n)
+
+in the two tests that were performed.
+
+In both ﬁgures we also show the corresponding
+
+statistical errors.
+
+The test 1 consisted of calculating the above integral in d = 5 dimensions, with about
+105 function evaluations in each of 10 iterations. Even though the integrand was relatively
+
+simple, with three tasks AMCI has reduced the total execution time to about 2/3 of the
+
+time required by the standard VEGAS program (see Figure 1). However, addition of new
+
+tasks after n = 4 did not help signiﬁcantly in terms of improving the performance, which
+
+was still far from the ideal case (shown with the dashed line). The reason for that is the
+
+simplicity of the function being integrated:
+
+in this particular case the execution time of
+
+the ordinary VEGAS program was 400 seconds, out of which about 40% (160 seconds) was
+
+13Note that the same test function was also used in [9].
+
+14
+
+used for the random number generation. Under the circumstances such as those, in which
+
+the condition aiNi ≫ bi is not satisﬁed and Eqs. (15) and (16) are not valid, the parallel
+algorithm gets saturated with a small number of processes. Because of that its eﬃciency
+
+as a function of the number of processors participating in the calculation decreases rapidly,
+
+which is illustrated in Figure 2.
+
+In order to show how the AMCI performance with respect to the standard VEGAS
+
+program improves as calculations become more demanding, for the test 2 we have artiﬁcially
+slowed down the implementation of the integrand function from Eq. (27). As a result, T (1)
+
+has been increased by about a factor of 10, from 400 to 4366 seconds, so that the random
+
+number generation in this case used less than 4% of the total VEGAS execution time. As
+(n)
+/T (1) follow the ideal 1/n curve much more
+
+shown in Figure 1, the test 2 results for T
+
+closely than before, and statistical errors are also reduced. Consequently, the results for
+
+the relative eﬃciency of the parallel algorithm are signiﬁcantly better than those obtained
+in the test 1 (see Figure 2).14
+
+Figures 3, 4 and 5 are meant to illustrate how the algorithm described in this paper
+
+actually works, and how it behaves in various situations. Figure 3 shows the average
+
+test 2 times, together with their respective statistical errors, that were required by AMCI
+
+running with 10 parallel tasks to complete the diﬀerent iterations. The longest time was
+
+needed for the ﬁrst iteration, when all tasks had to perform equal amounts of work. After
+
+the necessary information about the diﬀerent tasks was obtained in the ﬁrst iteration, the
+
+master subroutine quickly optimized the task grid for the given conﬁguration of computers.
+
+We again point out that for high statistics calculations better performance in the ﬁrst
+
+iteration can be achieved if the master subroutine is initially called with a small number
+
+of integrand evaluations in a single iteration. This would allow for the fast optimization of
+
+the task grid, and for the much more eﬃcient subsequent calls with higher statistics.
+
+Figure 4 shows iteration completion times for one of the test 2 runs with three parallel
+
+tasks. As one of the computers used for that particular calculation was slower than the
+
+other two, the task 2 took considerably longer time than tasks 1 and 3 to complete the
+
+ﬁrst iteration. Again, this was accounted for in subsequent iterations by optimizing the
+
+work load for the diﬀerent tasks.
+
+14For the results shown in Figures 1 and 2 one has to bear in mind that the average AMCI execution times
+were compared to the shortest VEGAS execution time for all of the machines from the PVM conﬁguration,
+
+and that not all of these computers were equally fast.
+
+15
+
+Figure 5 illustrates the behavior of the algorithm in cases in which one of the tasks fails
+
+during the calculation. In order to simulate that, we repeated one of the test 2 calculations
+
+by starting with ﬁve parallel tasks, and then removing one of the computers from the PVM
+
+conﬁguration. This caused failure of the task 4 during the 6-th iteration. Because of that,
+
+part of the calculation belonging to the task 4 had to be divided among the remaining
+
+tasks. After iteration 6 was completed, AMCI adjusted to the new situation, and the
+
+remaining tasks were again given the optimal work load. Note that the time required for
+
+completing iteration 6 was only about 15% longer than the time needed for later iterations,
+
+which shows that AMCI deals with task failures in an eﬃcient way.
+
+Finally, we brieﬂy describe one real example from high energy physics where AMCI
+
+would be very useful: theoretical description of the vector boson production at hadronic
+
+colliders. This topic is extremely important in view of the precision measurements of the
+
+W mass, which may constrain parameters of the standard model (e.g., the Higgs mass). At
+
+present, the state of the art of the theory in the description of the vector boson production
+
+is based on the resummation formalism of Collins, Soper, and Sterman [11], which involves
+
+an inverse Fourier transform of the cross section from the impact parameter space to
+
+the transverse momentum space. Because of the oscillatory nature of the integrand in
+
+that Fourier transform, the resummation calculations in the impact parameter space are
+
+enormously diﬃcult and lengthy. For example, the program developed for the description
+
+of the W and Z production [12], which is based on the standard VEGAS algorithm, requires
+
+more than 20 hours on an IBM RS6000 workstation to complete one calculation with a very
+modest statistics of about 105 (total) integrand evaluations in the transverse momentum
+
+range from 0 to 50 GeV. One should note here that the experimental analyses usually
+
+require order(s) of magnitude higher statistics.
+
+To make things even worse, the resummation formalism also involves several unknown
+
+parameters, which have to be extracted from the experimental vector boson transverse
+
+momentum distributions. In order to ﬁnd the best ﬁt to the data, calculations such as the
+
+one mentioned above have to be repeated many times, once for each diﬀerent set of the
+
+non-perturbative parameters.
+
+Even though the above numbers are just rough estimates, they illustrate the fact that
+
+the theoretical description of the vector boson production involves computationally ex-
+
+tremely demanding calculations, which take a very long time with the standard VEGAS
+
+16
+
+program. On the other hand, given n equally fast computers, the AMCI package would re-
+
+duce the VEGAS execution time by almost a factor of 1/n, thus making these calculations
+
+much more accessible.
+
+6 Conclusions
+
+In this paper we have developed a new parallel multidimensional integration scheme, suit-
+
+able for use in a heterogeneous network environment. This scheme, based on the well-known
+
+adaptive Monte Carlo method (the VEGAS algorithm), is incorporated into a new inte-
+
+gration package (AMCI), which employs the standard set of the message-passing routines
+
+in the PVM software system. We have compared the AMCI performance with that of the
+
+ordinary VEGAS program, and found that the new package is signiﬁcantly faster in cases
+
+involving high statistics integrations of computationally demanding functions.
+
+ACKNOWLEDGMENTS
+
+The author owes a great deal of thanks to D. Donjerkovi´c for his comments and suggestions.
+
+He would also like to thank W.B. Kilgore, W.F. Long and T. Stelzer for useful discussions,
+
+and to express gratitude for hospitality extended to him during the visit to UW-Madison
+
+Phenomenology Institute, where part of this work was completed. This work was supported
+
+in part by the U.S. Department of Energy under Contract No. DE-AC02-76CH03000.
+
+17
+
+References
+
+[1] Introduction to Feynman perturbation theory can be found in any textbook on quan-
+
+tum ﬁeld theory or relativistic quantum mechanics. See, for example, F. Gross, Rel-
+
+ativistic Quantum Mechanics and Field Theory, John Wiley and Sons, New York,
+
+1993.
+
+1964.
+
+Cliﬀs, New Jersey, 1971.
+
+York, 1986.
+
+[2] J.M. Hammersley and D.C. Handscomb, Monte Carlo Methods, Methuen, London,
+
+[3] A.H. Stroud, Approximate Calculation of Multiple Integrals, Prentice-Hall, Englewood
+
+[4] M.H. Kalos and P.A. Whitlock, Monte Carlo Methods, John Wiley and Sons, New
+
+[5] W.H. Press, S.A. Teukolsky, W.T. Vetterling, and B.P. Flannery, Numerical Recipes
+
+in C, 2nd ed., Cambridge University Press, Cambridge, Massachusetts, 1992.
+
+[6] R. Butler and E. Lusk, Monitors, messages, and clusters: The p4 parallel programming
+
+system, Technical Report Preprint MCS-P362-0493, Argonne National Laboratory,
+
+Argonne, Illinois, 1993.
+
+[7] G.A. Geist, A.L. Beguelin, J.J. Dongarra, W. Jiang, R.J. Manchek, and V.S. Sun-
+
+deram, PVM: Parallel Virtual Machine – A Users’ Guide and Tutorial for Networked
+
+Parallel Computing, The MIT Press, Cambridge, Massachusetts, 1994.
+
+[8] Message Passing Interface Forum, MPI: A message-passing interface standard, Inter-
+
+national Journal of Supercomputer Applications 8, 157 (1994).
+
+[9] G.P. Lepage, J. Comput. Phys. 27, 192 (1978); G.P. Lepage, VEGAS: An Adap-
+
+tive Multidimensional Integration Program, Cornell University preprint CLNS-80/447
+
+(1980).
+
+[10] P. L’Ecuyer, Communications of the ACM 31, 742 (1988).
+
+[11] J. Collins, D. Soper and G. Sterman, Nucl. Phys. B 250, 199 (1985).
+
+18
+
+[12] R.K. Ellis, D.A. Ross and S. Veseli, Fermilab preprint FERMILAB-PUB-97/082-T,
+
+hep-ph/9704239 (Nucl. Phys. B, in press); R.K. Ellis and S. Veseli, Fermilab preprint
+
+FERMILAB-PUB-97/207-T, hep-ph/9706526 (Nucl. Phys. B, in press).
+
+19
+
+e
+m
+
+i
+t
+ 
+n
+o
+i
+t
+u
+c
+e
+x
+e
+e
+v
+i
+t
+
+ 
+
+l
+
+a
+e
+R
+
+1.2
+
+1.1
+
+1.0
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0.0
+
+Test 1
+
+Test 2
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+Number of tasks
+
+Figure 1: AMCI execution time scaled with respect to the execution time of the standard
+VEGAS program, T (n)/T (1), and shown as the function of the number of parallel tasks used
+for the calculation. The actual VEGAS execution times were 400 and 4366 seconds for tests
+1 and 2, respectively. The dashed line denotes the ideal case, for which T (n)/T (1) = 1/n.
+
+20
+
+y
+c
+n
+e
+c
+i
+f
+f
+
+i
+
+ 
+
+e
+e
+v
+i
+t
+
+l
+
+a
+e
+R
+
+1.2
+
+1.1
+
+1.0
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0.0
+
+Test 2
+
+Test 1
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+Number of tasks
+
+Figure 2: AMCI eﬃciency for tests 1 and 2 scaled with respect to the number of tasks
+participating in the calculation, T (1)/nT (n).
+
+21
+
+]
+s
+[
+ 
+e
+m
+
+i
+t
+ 
+n
+o
+i
+t
+e
+p
+m
+o
+c
+ 
+
+l
+
+n
+o
+
+i
+t
+
+a
+r
+e
+
+t
+I
+
+90
+
+85
+
+80
+
+75
+
+70
+
+65
+
+60
+
+55
+
+50
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+Iteration
+
+Figure 3: The test 2 time required by AMCI running with 10 parallel tasks to complete
+
+the diﬀerent iterations. The full line shows the average iteration completion time. For
+
+comparison, the standard VEGAS program required about 437 seconds for each iteration
+
+on the fastest machine in the PVM conﬁguration.
+
+22
+
+Task 1
+Task 2
+Task 3
+
+]
+s
+[
+ 
+e
+m
+
+l
+
+i
+t
+ 
+n
+o
+i
+t
+e
+p
+m
+o
+c
+ 
+n
+o
+
+i
+t
+
+a
+r
+e
+
+t
+I
+
+240
+
+230
+
+220
+
+210
+
+200
+
+190
+
+180
+
+170
+
+160
+
+150
+
+140
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+Iteration
+
+Figure 4: The time required for the diﬀerent tasks to complete their parts of the calculation
+
+in the diﬀerent iterations. These results correspond to one of the test 2 runs with three
+
+parallel tasks. The full line shows the average iteration completion time. For comparison,
+
+the standard VEGAS program required about 437 seconds for each iteration on the fastest
+
+machine in the PVM conﬁguration.
+
+23
+
+Task 1
+Task 2
+Task 3
+Task 4
+Task 5
+
+]
+s
+[
+ 
+e
+m
+
+l
+
+i
+t
+ 
+n
+o
+i
+t
+e
+p
+m
+o
+c
+ 
+n
+o
+
+i
+t
+
+a
+r
+e
+
+t
+I
+
+180
+
+170
+
+160
+
+150
+
+140
+
+130
+
+120
+
+110
+
+100
+
+90
+
+80
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+Iteration
+
+Figure 5: The time required for the diﬀerent tasks to complete the diﬀerent iterations in
+
+the situation in which one of the tasks had failed. To obtain these results, we repeated
+
+one of the test 2 runs by starting with ﬁve parallel processes, and then removing one of
+
+the computers from the PVM conﬁguration. This caused failure of the task 4 during the
+
+6-th iteration. The average iteration completion time is shown with the full line. For
+
+comparison, the standard VEGAS program required about 437 seconds for each iteration
+
+on the fastest machine in the PVM conﬁguration.
+
+24
+
+

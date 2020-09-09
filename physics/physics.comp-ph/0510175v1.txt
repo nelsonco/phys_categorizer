@@ -1,0 +1,5061 @@
+5
+0
+0
+2
+ 
+t
+c
+O
+ 
+9
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+5
+7
+1
+0
+1
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+A ﬁnite element method for modelling electromechanical
+wave propagation in anisotropic piezoelectric media
+
+S. Rahman1, H. P. Langtangen2 and C. H. W. Barnes3
+
+1 3
+
+2
+
+Cavendish Laboratory, University of Cambridge
+
+Simula Research Laboratory and University of Oslo
+e-mail: 1 sr279@cam.ac.uk
+
+February 20, 2014
+
+Abstract
+
+We describe and evaluate a numerical solution strategy for simulating surface acous-
+tic waves through semiconductor devices with complex geometries. This multi-physics
+problem is of particular relevance to the design of quantum electronic devices. The
+mathematical model consists of two coupled partial diﬀerential equations for the elastic
+wave propagation and the electric ﬁeld, respectively, in anisotropic piezoelectric media.
+These equations are discretized by the ﬁnite element method in space and by a ﬁnite
+diﬀerence method in time. The latter method yields a convenient numerical decoupling
+of the governing equations. We describe how a computer implementation can utilize the
+decoupling and via object-oriented programming techniques reuse independent codes for
+the Poisson equation and the linear time-dependent elasticity equation. First we ap-
+ply the simulator to a simpliﬁed model problem for verifying the implementation, and
+thereafter we show that the methodology is capable of simulating a real-world case from
+nanotechnology, involving surface acoustic waves in a geometrically non-trivial device
+made of Gallium Arsenide.
+
+Keywords : Finite Element Method, Piezoelectric Surface Acoustic Waves, Gallium Ar-
+
+senide.
+
+1 Introduction
+
+In the process of designing quantum electronic devices, based on surface acoustic waves
+traversing piezoelectric media, it is necessary to determine the eﬀect, on these waves, of
+obstacles such as electrical gates on the surface. These gates have in general a non-trivial
+geometry, which calls for numerical simulation tools. Finite elements are well suited to
+handle complex geometries, and the purpose of the paper is to formulate and evaluate a
+ﬁnite element-based solution method for the equations governing a class of surface acoustic
+waves in piezoelectric media.
+
+In piezoelectric materials where atomic displacements induce microscopic electric dipoles,
+which in turn induce an average macroscopic electrical polarization, Hooke’s law does not
+fully describe the material’s response to strains. The direct eﬀect whereby the strain causes
+electrical polarization, is always accompanied by the converse eﬀect where the solid becomes
+strained when placed in an electric ﬁeld. This duality is widely exploited in industry in the
+
+1
+
+conversion of mechanical signals to electrical signals in, for example, microphones and in
+the conversion of electrical signals to mechanical signals in speaker systems. Certain piezo-
+electric materials, such as quartz, are used to provide high precision sensors as mechanical
+deformations on the nano-scale can produce observable electrical signals.
+
+The electrical signals can be of the order of 10mV - suﬃciently small enough even to
+explore low-dimensional quantum mechanical systems. Recently, much experimental work
+has been done in the ﬁeld of acoustic charge transport whereby an induced time varying
+piezoelectric potential is used to capture a single electron and then transport it along a
+one-dimensional quantum wire [14]. This would be useful in developing an accurate current
+standard, but more challenging proposals to use this in the burgeoning ﬁeld of quantum
+information processing have been proposed [2, 5]. The time and resources required to build
+such devices are immense, and therefore the mathematical modelling of these devices before
+the physical construction is advantageous. This approach requires the solution of the contin-
+uum electromechanical equations of motion in a piezoelectric medium. The method of partial
+waves [11] can be used to obtain simple analytical expressions for the waves in the bulk ma-
+terial, but the the solutions say nothing about the eﬀect of gates on the surface. Attempts
+to solve the governing equations analytically for devices which do have surface gates [3, 1, 6]
+involve simpliﬁcations, and the accuracy of these approximations remains uncertain. The
+present paper addresses a general numerical solution method for three-dimensional electro-
+mechanical waves in piezoelectric media which may have a complicated geometry. Such a
+tool can be indispensable in the design of micro- and nano-scale devices. Although our
+applications are speciﬁc to Gallium Arsenide (GaAs), the formulation is general enough to
+allow simulations, with the same code (or with small modiﬁcations), of any crystal structure
+provided the elastic and piezoelectric material parameters are known.
+
+There is a vast amount of literature on numerical methods for elastic waves, especially
+connected to seismic waves (see for example [15]), but these models are purely elastic without
+any coupling to an electric ﬁeld. On the other hand, this coupling is widely exploited in the
+ﬁeld of ultrasonics to provide control systems involving piezoelectric actuators and sensors
+[13], and one can ﬁnd literature on the ﬁnite element modelling of these devices, see for
+example [10]. Contrary to [10], we consider the complete time-dependent mathematical
+model and address issues concerning the quantum electronics regime. To our knowledge no
+successful numerical approach to the 3D time-dependent surface acoustic wave problem with
+full coupling to an electric ﬁeld has yet appeared in the literature.
+
+The paper is organized as follows. In Section 2 we give an overview of the mathematical
+model underlying piezoelectricity and precisely state the coupled partial diﬀerential equations
+we aim to solve. Sections 3 and 4 concern ﬁnite element formulations of these equations and
+an overview of the computational algorithm is described. In section 5 we describe the class
+based simulator approach used in our code design to simplify implementation and increase
+reliability. Section 6 deals with veriﬁcation of the implementation and empirical estimation
+of convergence properties of the numerical solution method. A real-world application of the
+methodology, concerning a SAW problem in nanotechnology is the subject of Section 7, before
+we make some concluding remarks in the ﬁnal section.
+
+2
+
+2 Modelling of piezoelectric materials
+
+For non-piezoelectric materials, Hooke’s law states that the mechanical stress ﬁeld experi-
+enced by a body is proportional to the strain ﬁeld, i.e.,
+
+where σij and εij are the stress and strain tensors, respectively, and cijkl represents the 4th
+rank tensor of elastic parameters. Summation over repeated indices is implied in this section.
+The electric displacement Di for non-piezoelectric materials is given by
+
+where Ej denotes the electric ﬁeld and ǫij is the permittivity tensor.
+
+For piezoelectric materials, the electric displacement depends on both the applied electric
+ﬁeld and mechanical strain, and the stresses depend on both the applied mechanical strain
+and electric ﬁeld. The constitutive relations (1) and (2) then become coupled according to
+
+where eijk is the piezoelectric coupling constant and the superscripts S and E denote that
+the quantities were measured under constant strain and constant electric ﬁeld, respectively.
+As there are no free charges within the material, Gauss’s law requires the divergence of
+
+the electric displacement to vanish:
+
+Combining (3), (4), the symmetry properties of the piezoelectric tensor (eijk = eikj ), the
+relation
+
+−
+between the electric potential φ and the electric ﬁeld Ei, together with the strain-displacement
+relation for small strains,
+
+where ui is the mechanical displacement ﬁeld, we can derive a scalar partial diﬀerential
+equation for φ:
+
+This equation couples the potential φ and the displacements ui in the medium, and can be
+used to compute the electric ﬁeld. Behind (6) lies the quasi-static approximation, which
+assumes that very little energy is carried away by electromagnetic waves.
+
+The displacement ﬁeld in the medium is governed by Newton’s 2nd law of motion com-
+
+bined with the appropriate constitutive law. The former equation reads
+
+σij = cijklεkl,
+
+Di = ǫijEj,
+
+Di = ǫS
+
+ijEj + eijkεjk,
+
+σij =
+
+eijkEk + cE
+
+ijklεkl,
+
+−
+
+D = ̺free = 0 .
+
+∇ ·
+
+Ei =
+
+∂φ
+∂xi
+
+εij =
+
+1
+2
+
+(
+
+∂uj
+∂xi
+
++
+
+∂ui
+∂xj
+
+),
+
+ǫS
+ik
+
+∂2φ
+∂xi∂xk
+
+= eikl
+
+∂2ul
+∂xi∂xk
+
+.
+
+̺¨ui =
+
++ ̺bi,
+
+∂σij
+∂xj
+
+3
+
+(1)
+
+(2)
+
+(3)
+
+(4)
+
+(5)
+
+(6)
+
+(7)
+
+(8)
+
+(9)
+
+where bi denotes body forces, and the double dot in ¨ui denotes a second-order partial deriva-
+tive in time. As (9) stands, it contains no damping term, which is relevant in our application
+setting. The constitutive law (4) relates the stress tensor σij to the strain tensor εij, and (7)
+relates εij to the displacement ﬁeld ui. Combining (4), (7), (9), and the symmetries of the
+elastic tensor,
+
+we arrive at an equation for ui in terms of φ:
+
+ciklm = ckilm = cikml = clmik,
+
+̺¨ui = cE
+
+ijkl
+
+∂2ul
+∂xj ∂xk
+
++ ̺bi + eijk
+
+∂2φ
+∂xj ∂xk
+
+.
+
+From (11) we see how the mechanical motion is aﬀected the electric ﬁeld. In most materials,
+cE
+this coupling is weak, because eijk
+ijkl, and the eﬀect of the piezoelectric potential on
+the mechanical deformation is negligible. On the other hand, the eﬀect of the mechanical
+deformation on the potential is always signiﬁcant according to (8). However, in cases where
+an external electric ﬁeld is applied through surface gates, φ may be suﬃciently large to
+contribute signiﬁcantly to the mechanical motion, and these cases receive the focus of the
+present paper.
+
+≪
+
+To summarize, the equations of motion for a piezoelectric medium are (8) and (11). The
+primary unknowns in these equations are ui and φ, from which all other interesting quantities,
+such as stress, strain, and the electric ﬁeld, can be derived through diﬀerentiation.
+
+Most of the coeﬃcients cE
+
+ijkl and eijk in (8) and (11) are zero. To illustrate the nature
+of these equations we therefore explicitly write out the coupling terms for the piezoelectric
+material GaAs. The elastic parameters of a crystal are usually given in a coordinate system
+with its x, y and z axes parallel to the crystal X, Y and Z axes. For the speciﬁc case of
+interest in this article, we align the positive x axis with the crystal positive [011] axes, and
+the positive z axis with the crystal positive [100] axis. To achieve this we perform a 45 degree
+rotation around the z axis. The only non-zero component of the piezoelectric tensor is then
+e14. Also the non-vanishing components of the permittivity tensor are ǫ11 = ǫ22 = ǫ33 = ǫs,
+and the non-vanishing components of the elastic tensor (not written out above) are cxxxx =
+cyyyy = czzzz, cxxyy = cyyzz =czzxx, and cxyxy= cyzyz= czxzx. All other non-zero components
+of the elastic tensor can be determined from applying the symmetry properties of the tensor
+(discussed later).
+
+Using the assumptions stated in the previous paragraph, and neglecting body forces, we
+
+can write out equations (11) and (8) as
+
+̺¨ux = cE
+
+xjkl
+
++ 2e14
+
+∂2ul
+∂xj∂xk
+
+∂2ul
+
+̺¨uy = cE
+
+yjkl
+
+∂xj∂xk −
+
+2e14
+
+∂2φ
+∂x∂z
+
+,
+
+∂2φ
+∂y∂z
+
+,
+
+̺¨uz = cE
+
+zjkl
+
+∂2ul
+∂xj∂xk
+
++ e14
+
+∂2φ
+∂x2 −
+
+e14
+
+∂2φ
+∂2y
+
+,
+
+(10)
+
+(11)
+
+(12)
+
+(13)
+
+(14)
+
+(15)
+
+2φ = e14
+
+ǫS
+s ∇
+
+∂2uz
+∂x2 −
+
+e14
+
+∂2uz
+∂y2 + 2e14
+
+∂2ux
+∂z∂x −
+
+2e14
+
+∂2uy
+∂z∂y
+
+.
+
+References [1] and [6] obtained analytical solutions of these equations under the assump-
+tion that the φ term in (12)–(14) can be ignored. This means that the mechanical motion
+
+4
+
+is decoupled from the electric ﬁeld, but an electric ﬁeld is induced from the mechanical mo-
+tion. The reliability of such substantial simpliﬁcations is limited to cases where the external
+potential φ is small. Also, the obtained solutions are for two-dimensional cases only and
+are therefore of minor interest when studying the eﬀect of surface gates. Solving the fully
+coupled system of PDEs demands numerical techniques like the one described in the next
+section.
+
+3 Finite element formulation
+
+We shall use the ﬁnite element method in space and the ﬁnite diﬀerence method in time.
+The reasons for applying the ﬁnite element method are the need for handling geometrically
+complicated domains and the fact that the method works very well for elasticity problems
+without coupling to φ as well as for the Poisson equation for φ.
+
+3.1 The Poisson equation with piezoelectric coupling
+
+Before continuing further, it is convenient to introduce a superscript ℓ to denote the time
+level, for example, φℓ is φ at time level ℓ. The electrostatic potential φℓ due to mechanical
+displacements uℓ
+i in the piezoelectric material concerned is given by (15). The ﬁnite element
+formulation of such a Poisson equation is well covered in lots of textbooks (see e.g. [8]). The
+ˆφℓ =
+basic idea is to approximate φℓ by a linear combination of basis functions Ni, φℓ
+j, insert ˆφℓ in the Poisson equation, and demand the residual to be orthogonal to
+
+n
+j=1 Njφℓ
+
+≈
+
+the space spanned by
+P
+
+N1, . . . , Nn
+
+. The Laplace term is integrated by parts.
+
+The only non-trivial aspect of the formulation in the present setting is the right-hand side,
+where the second-order derivatives of the elastic ﬁeld demand integration by parts. The two
+ﬁrst terms on the right-hand side of (15) give rise to an integral, which is straightforwardly
+integrated as
+
+{
+
+}
+
+Ni[
+
+∂2uℓ
+z
+∂x2 −
+
+∂2uℓ
+z
+∂y2 dΩ
+
+− ZΩ
+
+∂Ni
+∂x
+
+∂uℓ
+z
+∂x −
+
+∂Ni
+∂y
+
+∂uℓ
+z
+∂y
+
+dΩ
+
+=
+
+ZΩ
+
+− I∂Ω
+
+Ni[
+
+∂uℓ
+z
+∂x
+
+nx
+
+−
+
+∂uℓ
+z
+∂y
+
+ny]dΓ .
+
+The next two terms in (15), containing mixed derivatives, can be integrated by parts
+
+using a special form of Green’s Theorem,
+
+φ
+
+∂ψ
+∂y
+
+− ZΩ
+
+dxdydz =
+
+ψdxdydz
+
+φψnydΓ .
+
+− I∂Ω
+
+∂φ
+∂y
+
+ZΩ
+
+The two terms give rise to the integrals
+
+Ni[
+
+∂
+∂z
+
+∂uℓ
+x
+∂x −
+
+∂
+∂z
+
+∂uℓ
+y
+∂y
+
+]dΩ
+
+− ZΩ
+
+∂Ni
+∂z
+
+∂uℓ
+x
+∂x −
+
+∂Ni
+∂z
+
+∂uℓ
+y
+∂y
+
+dΩ
+
+=
+
+ZΩ
+
+− I∂Ω
+
+Ni[
+
+∂uℓ
+x
+∂x
+
+nz
+
+−
+
+∂uℓ
+y
+∂y
+
+nz]dΓ .
+
+The ﬁnite element method applied to the equation for φ transforms the PDE problem to
+
+a linear system of equations,
+
+(16)
+
+(17)
+
+(18)
+
+(19)
+
+P φℓ = f ℓ,
+
+5
+
+where the ‘stiﬀness’ matrix P has its (i, j) element given by
+
+Pij = ǫS
+
+∂Ni
+∂y
+The φℓ vector in (19) contains the values of φℓ at the nodal points. The i-th component f ℓ
+i
+of the right-hand side vector f ℓ can be written as
+
+∂Nj
+∂z (cid:21)
+
+∂Nj
+∂x
+
+∂Nj
+∂y
+
+∂Ni
+∂z
+
+∂Ni
+∂x
+
+s ZΩ (cid:20)
+
+dΩ .
+
+(20)
+
++
+
++
+
+f ℓ
+i = ǫS
+
+s I∂Ω
+
+Ni
+
+∂φℓ
+∂n
+
+dΓ
+
+e14
+
+−
+
+I∂Ω
+
+NirdΓ + e14
+
+sdΩ,
+
+ZΩ
+
+(21)
+
+with
+
+r =
+
+s = 2
+
+∂uℓ
+z
+∂x
+
+nx
+
+∂Ni
+∂z
+
+∂uℓ
+z
+∂y
+
+−
+∂uℓ
+x
+∂x −
+
+ny + 2
+
+∂uℓ
+x
+∂x
+
+nz
+
+2
+
+∂Ni
+∂z
+
+∂uℓ
+y
+∂y
+
++
+
+nz,
+
+2
+
+∂uℓ
+y
+∂y
+∂uℓ
+z
+∂x −
+
+−
+∂Ni
+∂x
+
+∂Ni
+∂y
+
+∂uℓ
+z
+∂y
+
+.
+
+When the displacement ﬁeld entering f ℓ
+i
+
+is known, any standard Poisson solver can be
+
+used to compute φl.
+
+3.2 The elasticity problem with electric ﬁeld loading
+
+For the ﬁnite element formulation of (11) it is easier to ﬁrst start with (9) and insert the
+constitutive law (4) and the strain-displacement relation (7) in the ﬁnite element integrals.
+The time derivative in (11) can be approximated by a second-order accurate ﬁnite diﬀerence.
+Sampling (11) at time level ℓ then yields
+
+uℓ−1
+i −
+
+̺
+
+2uℓ
+∆t2
+
+i + uℓ+1
+i
+
+=
+
+∂σℓ
+ij
+∂xj
+
++ ̺bℓ
+i,
+
+(22)
+
+where ∆t is the time step length and quantities with the ℓ superscript are functions of space
+only. This time discretization introduces an operator splitting such that the originally coupled
+governing equations can be solved in sequence. No accuracy is lost by this operator splitting
+beyond that implied by the ﬁnite diﬀerence itself in (22). More precisely, σℓ
+ij contains φℓ,
+which is known, such that we can easily solve for uℓ+1
+using old values of φ. On the next
+time level (ℓ + 1), we can ﬁnd φℓ+1 using the recently computed uℓ+1
+
+.
+
+i
+
+i
+
+The main motivation for the explicit time diﬀerencing in (22) is numerical eﬃciency: (i)
+we decouple the equations, which simpliﬁes the numerics and the implementation, and (ii)
+there is no need to solve large sparse linear systems of equations in the elasticity part of
+the problem (if the mass matrix is lumped). Nevertheless, the time diﬀerence (22) leads to
+a conditionally stable scheme, where ∆t must be of the order of the smallest element size.
+In wave propagation problems, uniform high resolution is frequently needed in space and
+time, typically compatible with the stability restriction, which makes such explicit schemes
+appropriate. On the other hand, in applications where adaptive grids with great variation in
+element size are needed, one may beneﬁt from implicit schemes (e.g. of Newmark type [15]).
+The ﬁnite element formulation of (22) is easiest to express if we switch to a typical “ﬁnite
+element engineering” notation, especially when we deal with anisotropic media. The stress
+and strain tensors are expressed as vectors,
+
+σ = (σxx, σyy, σzz, σyz, σzx, σyx)T ,
+ε = (εxx, εyy, εzz, 2εyz, 2εzx, 2εyx)T .
+
+6
+
+The constitutive law can then be written as
+
+σℓ = Dεℓ + pℓ,
+
+(23)
+
+where the pℓ term represents the loading from the electric ﬁeld, and D is a symmetric 6
+matrix of the elasticity coeﬃcients (previously denoted by cE
+
+6
+
+×
+
+ijkl):
+
+c11
+
+c12
+
+c13
+
+c14
+
+c15
+
+c16
+
+c12
+
+c13
+
+c14
+
+c15
+
+c16
+
+D =
+
+c13
+
+c14
+
+c15
+
+c16
+
+c14
+
+c15
+
+c16
+
+.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+c15
+
+c16
+
+c16
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+uℓ
+i ≈
+
+ˆuℓ =
+
+Njuℓ
+j,
+
+n
+
+Xj=1
+
+The displacement ﬁeld at a time level ℓ is approximated according to
+
+where uℓ
+displacement relation then becomes
+
+j is the value of the displacement ﬁeld at node j at time level ℓ. The strain-
+
+εℓ =
+
+Bjuℓ
+
+j, Bi =
+
+n
+
+Xj=1
+
+
+
+
+
+
+
+
+
+
+
+0
+Ni,y
+0
+
+Ni,x
+0
+0
+0
+Ni,z
+Ni,y Ni,x
+
+0
+0
+Ni,z
+Ni,z Ni,y
+Ni,x
+0
+
+0
+
+
+
+.
+
+
+
+
+
+
+
+
+∂Ni/∂x.
+
+≡
+
+The comma notation here denotes partial derivative: Ni,x
+
+A ﬁnite element formulation of (22) using the aforementioned notation becomes (see [8]
+
+for a detailed derivation without the φ term)
+
+n
+
+Xj=1
+
+̺Ni
+
+Z
+Ω
+
+Nj(uℓ−1
+
+j −
+
+2uℓ
+
+j + uℓ+1
+j
+
+)dΩ + ∆t2
+
+BT
+
+i σℓdΩ =
+
+Z
+Ω
+
+Here, tℓ is the traction on the boundary, arising from integrating the divergence of the stress
+in (22) by parts. Inserting the constitutive law in the term
+
+BT
+
+i σdΩ yields
+
+∆t2
+
+̺bNidΩ + ∆t2
+
+tℓNidΓ .
+
+Z
+Ω
+
+Z
+∂Ω
+
+BT
+
+i DBjdΩ
+
+uℓ
+
+j +
+
+BT
+
+i pℓdΩ .
+
+RΩ
+
+Z
+Ω
+
+n
+
+Xj=1
+
+
+
+
+
+Z
+Ω
+
+
+
+7
+
+(24)
+
+(25)
+
+(26)
+
+The ﬁnal discrete equations arising from the equation of motion can be written as
+
+uℓ+1 = 2uℓ
+
+uℓ−1 + ∆t2 ˜M
+
+Kuℓ + βℓ + Φℓ),
+
+(27)
+
+−
+
+−1
+
+(
+−
+
+−1
+
+−1
+
+is an eﬃcient inverse of the mass matrix M resulting from the
+
+where ˜M
+Ω ̺NiNjdΩ
+R
+integral. We construct ˜M
+as the inverse of the lumped mass matrix. The matrix K stems
+i DBjdΩ representing anisotropic elasticity, βℓ is
+from the standard “stiﬀness” term
+the eﬀect of body forces and surface tractions, and Φℓ is the contribution from the electric
+ﬁeld. The i-th block (arising from node i) in Φℓ takes the form Φℓ
+i pℓ, which from
+(12) to (14) results in
+
+Ω BT
+
+Ω BT
+R
+
+i =
+
+R
+
+Φℓ
+
+i = e14
+
+∂
+∂x
+
+∂φℓ
+∂z dΩ
+
+∂
+∂y
+
+∂φℓ
+∂z dΩ
+
+2
+
+Ω Ni
+R
+2
+
+Ω Ni
+−
+R
+Ω Ni[ ∂2φℓ
+R
+
+∂x∂x −
+
+
+
+
+
+
+
+
+
+
+∂2φℓ
+∂y∂y ]dΩ
+
+
+
+
+
+
+
+
+
+
+= e14
+
+
+
+
+
+
+
+
+
+
+∂Ni
+∂x
+
+−
+
+Ω
+R
+
+∂Ni
+∂x
+
+∂φℓ
+∂z dΩ + 2
+
+∂φℓ
+∂z nxdΓ
+
+2
+
+−
+
+Ω
+R
+
+2
+
+Ω
+R
+∂φℓ
+∂x −
+
+∂Ni
+∂y
+
+∂φℓ
+∂z dΩ
+
+2
+
+−
+
+∂Ni
+∂y
+
+∂φℓ
+∂y dΩ +
+
+∂φℓ
+∂z nydΓ
+
+∂Ω Ni
+R
+∂Ω Ni
+R
+∂Ω Ni[ ∂φℓ
+R
+
+∂x nx
+
+−
+
+∂φℓ
+∂y ny]dΓ
+
+.
+
+
+
+
+
+
+
+
+
+
+Our governing equations require initial conditions. Let us assume that the elastic body is
+at rest such that ∂ui/∂t = 0. The external electric ﬁeld is then turned on. After the initial
+transients the displacement ﬁeld have faded out, and we have a stationary initial state of our
+system, modeled by the equations
+
+P φ0 = f 0(u0),
+Ku0 = β0 + Φ0(φ0) .
+
+(28)
+
+(29)
+
+(30)
+
+These two coupled equations are solved by an iterative Gauss-Seidel-like technique, i.e., the
+equations are solved one at a time, using the most recent approximation of the other ﬁeld in
+the right-hand side term. Each linear system is solved by a MILU preconditioned conjugate
+gradient method [7]. The solution of (29) and (30), along with the assumption of stationarity,
+∂u/∂t = 0, comprise the initial condition.
+
+As boundary conditions, we either have prescribed traction components or prescribed
+displacement components, along with prescribed electric potential or prescribed normal com-
+ponent of the electric ﬁeld. The displacement equation needs three boundary conditions at
+each point at the boundary, while the equation for φ needs one condition at each point.
+
+From ∂u/∂t = 0 at t = 0 it follows by a second-order diﬀerence approximation that
+u1 = u−1. From (27) and (30) it follows that u1 = u0 = u−1. The loads removed at t = 0+
+will ﬁrst come into play at the second time level.
+
+The computational algorithm can now be formulated as follows:
+
+ℓ = 0 (time level counter)
+k = 0 (iteration counter)
+while ε < εcrit
+
+solve (29) w.r.t φ0,k
+
+8
+
+solve (30) w.r.t u0,k
+compute ε =
+k
+
+u0,k
+
+k
+−
+k + 1 end while
+φ1 = φ0, u1 = u0
+for ℓ = 1, 2, 3, . . . until end of simulation
+
+←
+
+k
+
+k
+
+u0,k−1
+
++
+
+φ0,k
+
+φ0,k−1
+
+−
+
+k
+
+solve (27) w.r.t uℓ+1
+solve (19) w.r.t φℓ+1
+
+Comments on Stability. The stability criterion of the explicit ﬁnite diﬀerence scheme in
+2/ωmax, where ωmax is
+time, when decoupled from the electric ﬁeld problem, requires[4] ∆t
+the highest natural frequency of the vibrating system. One may ﬁnd ωmax as the square root
+of the largest eigenvalue of the problem K
+λM = 0. An approximate bound on ωmax can
+be estimated from a relation ωmax = 2c/heﬀ, where c is the speed of elastic waves and heﬀ is
+the smallest eﬀective element length. For waves in an isotropic bar, c = sqrtE/̺, where E
+is Young’s modulus. The stability criterion now reduces to the common CFL condition:
+
+≤
+
+−
+
+∆t
+
+αheﬀ /c .
+
+≤
+
+(31)
+
+Here, α is a factor to be adjusted since the heﬀ parameter is normally roughly computed from
+element sizes or application of Gerschgorin’s theorem applied to the underlying eigenvalue
+problem. For wave problems the CFL condition is frequently not particularly restrictive
+since the length and period of a wave are usually proportional, leading to a natural choice of
+∆t/h = const.
+
+4 An optimised ﬁnite element formulation
+
+We can speed up the numerical computation by replacing the complete assembly of the
+right-hand side vectors in equations (19) and (27) by a matrix-vector product. For example,
+consider the contribution to the vector f in (19) due to the coupling from the mechanical
+motion (omitting the superscript ℓ for the remainder of this section):
+
+2
+
+∂Ni
+∂z
+
+∂ux
+∂x −
+
+2
+
+∂Ni
+∂z
+
+∂uy
+∂y
+
+ZΩ (cid:18)
+
+∂uz
+∂x −
+
+∂Ni
+∂y
+
+∂uz
+∂y (cid:19)
+
+dΩ.
+
+(32)
+
++
+
+∂Ni
+∂x
+j=1 u(x)
+
+n
+
+Inserting the ﬁnite element expansion ux
+uz, the expression (32) results in
+
+≈
+
+P
+
+j Nj, and similar expansions for uy and
+
+n
+
+Xj=1
+
+2
+ZΩ (cid:18)
+
+∂Ni
+∂z
+
+∂Nj
+∂x
+
+u(x)
+j −
+
+2
+
+∂Ni
+∂z
+
+∂Nj
+∂y
+
+u(y)
+j +
+
+∂Ni
+∂x
+
+∂Nj
+∂x
+
+u(z)
+j −
+
+∂Ni
+∂y
+
+∂Nj
+∂y
+
+u(z)
+j (cid:19)
+
+dΩ.
+
+(33)
+
+This expression can be written as a matrix vector product  Lu, where the matrix  L consists
+of n
+1 block
+×
+looks like
+
+3. For the coupling of node i and j, the 3
+
+n blocks, each block of size 1
+
+×
+
+×
+
+∂Ni
+∂z
+
+∂Nj
+∂x
+
+,
+
+2
+(cid:20)
+
+∂Ni
+∂z
+
+∂Nj
+∂y
+
+,
+
+∂Ni
+∂x
+
+∂Nj
+∂x −
+
+∂Ni
+∂y
+
+∂Nj
+∂y (cid:21)
+
+,
+
+2
+
+−
+
+(34)
+
+which is to be multiplied by block j in u: [u(x)
+
+, u(y)
+j
+
+, u(z)
+j
+
+].
+
+j
+
+9
+
+The Poisson equation (19) for φ can now be written as
+
+P φℓ+1 =  Luℓ+1 .
+
+(35)
+
+At each time level we can hence avoid the costly ﬁnite element assembly process, since P
+and  L are constant in time and the right-hand side of the linear system is obtained by an
+eﬃcient matrix-vector product. This may result in a signiﬁcant speed-up of the solver. For
+large number of unknowns, the speed up is experienced only if we use a method of complexity
+or order n, like multigrid, to solve (35).
+
+Equation (27) is already on a favorable matrix-vector algebra form, except for the coupling
+term Φℓ. Examining (28), we realize that this matrix can be written as Φℓ = Qφℓ, where
+1 blocks. The contribution to block i in Φℓ is
+Q is a time-independent n
+n matrix of 3
+made of the coupling Qij between node i and j and the block j in φℓ: Φℓ
+j, where
+
+i = Qij φℓ
+
+×
+
+×
+
+Qij = e14
+
+
+
+
+
+
+
+
+
+
+∂Ni
+∂x
+
+−
+
+Ω
+R
+
+∂Ni
+∂x
+
+∂Nj
+∂z dΩ + 2
+
+∂Nj
+∂z nxdΓ
+
+2
+
+−
+
+Ω
+R
+
+2
+
+Ω
+R
+∂Nj
+∂x −
+
+∂Ni
+∂y
+
+∂Nj
+∂z dΩ
+
+2
+
+−
+
+∂Ni
+∂y
+
+∂Nj
+∂y dΩ +
+
+∂Nj
+∂z nydΓ
+
+∂Ω Ni
+R
+∂Ω Ni
+R
+∂Ω Ni[ ∂Nj
+R
+
+∂x nx
+
+−
+
+∂Nj
+∂y ny]dΓ
+
+.
+
+
+
+
+
+
+
+
+
+
+Now the Φℓ term in (27) can be computed as a matrix-vector product Qφℓ, and no assembly
+In our algorithm we must run
+process is required to construct (27) at each time level.
+−1
+assembly processes at t = 0 to construct the matrices ˜M
+, K, Q,  L, and P .
+
+5 Object-oriented implementation
+
+A signiﬁcant trend in modern software development is to formulate numerical algorithms such
+that reliable and well-tested software components can be combined together to form a new
+simulator. Our numerical approach was in particular inspired by such an approach. With
+the time discretization we were able to split the coupled ui–φ system such that at each time
+level we ﬁrst solve for a new displacement ﬁeld (ui) and then we solve for the corresponding
+electric potential (φ). In each of the two equations, the eﬀect of the other only enters through
+a right-hand side “forcing” term. This allows us, in principle, to reuse a solver for elastic
+vibrations and a Poisson solver, as long as these solvers can implement a new right-hand side
+term that couples to another solver. From a principal point of view, this idea is simple and
+attractive. However, the implementation of the idea in practice may be less feasible if the
+design of the underlying solvers is not suﬃciently ﬂexible.
+
+To allow for building the compound ui–φ solver from separate ui and φ solvers we propose
+to apply principles from object-oriented programming. The time-dependent elasticity solver
+and the Poisson solver are realized as two independent objects, implemented via classes
+in C++. Actually, we have reused the Poisson2 class from [8] as Poisson solver, and the
+ElasticVib1 class from [8] as elastic vibration solver. The latter is a subclass of Elasticity2,
+a pure quasi time-dependent elasticity solver (without the acceleration term in the momentum
+equation). These classes are implemented using building blocks from the Diﬀpack library [8].
+The Poisson2 and ElasticVib1 classes have no knowledge of each other. The only common
+feature is their design. This design is crucial for reuse of the classes to solve the coupled
+problem, but the design approach suggested for Diﬀpack solvers [8, 9, 12] has proven to
+be successful in this respect. Diﬀpack solvers are realized as classes containing objects for
+grids, scalar/vector ﬁelds, linear systems, etc. The coeﬃcients in a PDE are evaluated
+through virtual functions. When the solver is stand-alone, these virtual functions contain
+
+10
+
+mathematical expressions or measured data, but when solvers are combined, the virtual
+functions are reimplemented in subclasses and connected to data in other solvers. This
+principle reﬂects the underlying mathematics: the coeﬃcients in a single PDE are considered
+known, but in a system of PDEs, the coeﬃcients typically couple to unknown quantities
+governed by the PDEs. The present coupled system is an example where the right-hand side
+in the Poisson equation couples to the primary unknown in the elastic vibration solver, while
+a right-hand side term in the elastic vibration solver couples to the primary unknown in the
+Poisson equation. When the solvers are used independently there are no such couplings.
+
+Figure 1 shows an outline of the class design for the compound solver. From class Poisson2
+we derive a subclass Poisson2 glue, which reimplements the virtual function in Poisson2 for
+evaluating the right-hand side in that equation. In this new function we need to compute
+an expression involving the displacement ﬁeld available in the ElasticVib1 class. A manager
+class, simply called Manager, holds pointers to all classes for the individual PDEs in the system
+of PDEs, and each PDE class holds a pointer to the manager class, thus enabling a two-way
+communication. With these pointers, we can connect data from any other solver class to the
+Poisson2 glue class. In the virtual function evaluating the right-hand side we can typically
+call mng->elastic->u to get a vector ﬁeld object for ui that we can evaluate at the current
+integration point. This object has support for evaluating derivatives of the ﬁeld as well.
+
+Similarly, we derive a subclass ElasticVib1 glue of ElasticVib1, add a pointer to the
+manager class, and override the virtual function for evaluating the right-hand side. Now we
+need to compute expressions involving φ, but this is easily accomplished by the pointers, e.g.,
+mng->poisson->u if u is the name of the unknown scalar ﬁeld in the Poisson2 solver.
+
+The “glue” classes Poisson2 glue and ElasticVib1 glue are very small compared to the
+real solver classes they inherit from. A “glue” class typically needs about a page of code
+unless it adds additional computations. The manager class is a bit more comprehensive
+since it implements the overall solution algorithm, i.e., the time stepping and the calls to the
+independent solvers.
+
+The beneﬁt from using object-oriented programming in the way we have outlined is that
+the original well-tested Poisson and elastic vibration solvers can be reused in a system of
+PDEs without any modiﬁcations. The original solver classes reside in separate ﬁles and are
+hence not subject to any side eﬀects from editing the source code. The “glue” class is also
+in a separate ﬁle and enables the original solver to speak to a manager in charge of solving
+a compound system of PDEs. The advantages are clear: reliability is increased by reusing
+well-tested solvers, and the compound solver is modularized. Our experience is that this
+design reduces the development time signiﬁcantly. Especially the debugging phase is greatly
+simpliﬁed. At any time, the underlying solvers can be trivially pulled out of the compound
+system and veriﬁed independently.
+
+6 Veriﬁcation
+
+Before showing numerical results for a physically relevant application, we report on the
+estimated numerical accuracy of the code, thereby establishing evidence for the correctness
+of the implementation. To investigate numerical errors, we compare numerical results with
+an exact solution. The exact solution is based on the assumption of a displacement ﬁeld in
+z direction only, depending on x and t only. Physically, a normal traction is applied at all
+x = const and y = const boundaries to avoid displacements in the x and y directions, but in
+the code we implement this situation by essential boundary conditions ux = uy = 0. We also
+assume that φ = φ(x, t) and that the material is isotropic. The governing equations then
+
+11
+
+Figure 1: Relationships between classes. The base classes, Poisson2 and Elasticity2 perform
+the solution of the standard time-independent Poisson and elasticity equations, respectively.
+ElasticVib1 is derived from Elastcity2 and solves for time-dependant elastic motion. The
+classes Poisson2 glue and ElasticVib1 glue implement the coupling between the electrostatic
+and mechanical equations, and these classes are controlled by the Manager class.
+
+reduce to
+
+̺¨uz = µ
+
+ǫS
+s
+
+∂2φ
+∂x2 = e14
+
+∂2φ
+∂x2 ,
+
+∂2uz
+∂x2 + e14
+∂2uz
+∂x2 .
+
+(36)
+
+(37)
+
+These equations can be scaled to yield
+
+¨uz =
+
+∂2φ
+∂x2 ,
+
+∂2uz
+∂x2 + α
+∂2uz
+∂x2 .
+The constant α is zero or unity corresponding to whether the elasticity problem couples to
+the electric ﬁeld problem or not. (The three coeﬃcients in the original system are scaled
+away by choosing an appropriate time scale, φ scale, and ui scale.) One possible solution of
+(38)–(39) reads
+
+∂2φ
+∂x2 =
+
+(38)
+
+(39)
+
+uz(x, t) = φ(x, t) = cos(k√1 + αt) sin(kx) .
+
+(40)
+
+In our tests we choose Ω as a three-dimensional beam and k = nπ
+and L the length of the beam. The ends of the beam are then ﬁxed.
+
+L , with n being an integer
+
+12
+
+Our veriﬁcation procedure consists in estimating the convergence rate of the numerical
+
+method. A scalar error measure e is expected to behave like
+
+where A and B are constants independent of the element size h and the time step ∆t. From
+the involved approximations, we expect s = 2 and r = 1 + q, where q is the order of the
+polynomials in an element. In particular, for linear or trilinear elements, r = 2, and if h and
+hr. From two successive experiments,
+∆t are chosen such that h/∆t = const, we see that e
+(hi−1, ei−1) and (hi, ei) we may estimate a convergence rate ri from
+
+∼
+
+e = Ahr + B∆ts,
+
+ri =
+
+ln ei/ei−1
+ln hi/hi−1
+
+.
+
+We have investigated three error measures, given as diﬀerent norms of the error ﬁeld
+
+E = uz
+
+ˆuz, where ˆuz is the numerical solution and uz is the exact solution:
+
+−
+
+E
+
+||L1(Ω) =
+
+||
+
+E
+
+dΩ,
+|
+
+ZΩ |
+
+E
+
+||L2(Ω) = (
+
+||
+
+ZΩ
+
+E
+
+, x
+E(x)
+||L∞(Ω) = sup(
+|
+|
+
+||
+
+∈
+
+Ω) .
+
+E2dΩ)
+
+1
+2 ,
+
+Table 1 displays the values of the error norms and the associated estimates of the conver-
+gence rates ri. As the grid spacing h and the time step ∆t are reduced, the numerical solution
+converges to the exact solution with the expected rate of two. This provides evidence for the
+correctness of the implementation and indicates that our overall solution method, including
+the operator splitting, is of second order in time and space. The spatial convergence rate is
+expected to increase with the order of the polynomials used in the elements.
+
+h
+0.05
+0.1
+0.2
+0.25
+0.5
+
+rates
+
+rates
+
+rates
+
+||
+2.440
+·
+9.760
+·
+3.902
+·
+6.096
+·
+2.432
+·
+
+||
+2.710
+·
+1.084
+·
+4.335
+·
+6.771
+·
+2.702
+·
+Table 1: Error norms and estimated convergence rates for waves in a piezoelectric material,
+with h = 10∆t.
+
+||
+3.830
+1.533
+6.130
+9.574
+3.819
+
+2.000
+1.999
+1.999
+1.996
+
+1.999
+1.999
+1.999
+1.996
+
+2.000
+1.999
+1.999
+1.996
+
+·
+·
+·
+·
+·
+
+E
+L∞
+||
+10−7
+10−6
+10−6
+10−6
+10−5
+
+E
+||L2
+10−6
+10−6
+10−5
+10−5
+10−4
+
+E
+||L1
+10−5
+10−5
+10−4
+10−4
+10−3
+
+7 A surface acoustic wave application
+
+In order to show that our suggested numerical model may be applied to real-world phenom-
+ena, we apply it to a problem in quantum electronics, speciﬁcally in acoustic charge transport.
+We simulate a surface acoustic wave propagating through a piece of GaAs. Surface acoustic
+waves are particular solutions of equations (12) - (15) such that they propagate without decay
+on the surface of a material but decay exponentially into the bulk. The solutions typically
+have the form,
+
+ui =
+
+Ui,je
+
+−kqj zei(kx−ωt)
+
+φ =
+
+Φje
+
+−kqj zei(kx−ωt),
+
+Xj
+
+Xj
+
+13
+
+(41)
+
+assuming x is the direction of propagation, z is the direction into the bulk (z
+
+),
+and the decay constants qj, may be complex, allowing for oscillatory decay (in an exponential
+envelope) into the bulk as is observed for GaAs. The Ui,j and Φj are constant amplitudes, and
+k is a wavenumber. It is a straightforward mathematical procedure to determine the decay
+constants and wave velocity (see [11]). However, we are interested in the more complicated
+dynamics taking place when an obstacle in the form of a charged metallic gate is placed on
+the surface.
+
+→ −∞
+
+In acoustic charge transport, the time-varying electric potential accompanying the SAW
+is used to transport electrons which are trapped in the minima of the waves. To perform
+further manipulation on these electrons, for example, to remove some from a minimum,
+external electric ﬁelds must be applied, and this is achieved by applying voltages to metallic
+gates placed on the surface. In general, the gates have diﬀerent electrical and mechanical
+properties to the bulk piezoelectric material and so we may expect to see interesting eﬀects
+if for example a SAW is passed through the compound structure. Here, we perform three
+simulations where we pass a SAW through a piece of GaAs. The ﬁrst will be a bare SAW,
+as a check to see we do excite the required modes. The following two will have a metallic
+gate of contrasting mechanical properties to GaAs with a static voltage applied on it. In
+the ﬁrst of these, we decouple the mechanical motion from the electric ﬁeld (while keeping
+the electric ﬁeld coupled to the mechanical motion). In the second we allow the full mutual
+coupling between the electrical and mechanical ﬁelds to take place. The dimensions of the
+gate are 600nm
+200nm. To magnify the eﬀect of the compound material structure
+we use a ﬁctitious material for the gate, similar in crystal structure to GaAs, but with the
+elastic constants and mass density changed by one order of magnitude. Moreover, we apply
+a relatively large voltage of 1.5V so that the coupling of the mechanical displacement to the
+electric ﬁeld is evident. We also point out that SAW travels along the crystal positive [011]
+axis with the positive z axis aligned with the crystal positive [100] axis.
+
+400nm
+
+×
+
+×
+
+7.1 Experiments with surface acoustic waves
+
+Excitation of surface acoustic waves.
+In order to excite these wave modes, we apply a
+time-dependent Dirichlet boundary condition to the z component of the displacement ﬁeld
+on a small region on the grid. This can be expressed as
+
+ux = uy = 0,
+
+uz = A sin(2πf t),
+
+x0 ≤
+
+x
+
+≤
+
+x1,
+
+z = 0 .
+
+(42)
+
+The frequency f used is 2.7GHz and the amplitude A is chosen so that the SAW amplitude
+is approximately 20mV at a depth of 100nm.
+
+Figure 2 shows the π
+
+2 phase diﬀerence between the x and z components of the displace-
+ment vector, and the larger z amplitude, suggesting elliptical polarization in the sagittal
+plane. Figures 3 and 4 show two-dimensional slices, in perpendicular planes, of the full
+three-dimensional solutions. The ﬁrst shows the non-decaying nature of these waves along
+the propagation direction. The SAW wavelength can be seen to be approximately 1000nm
+20 ms−1, which is in good agreement
+and its velocity is computed to be approximately 2700
+with analytical calculations for the wave velocity. The second ﬁgure shows the surface nature
+of these waves; the greatest amplitude is near the surface and there is no observable decay
+in the direction of propagation but they decay exponentially into the bulk. On the far left of
+each image (where the boundary condition is applied), bulk waves may be observed but as
+the waves propagate towards the right, they dissipate all their energy into the bulk and the
+only remaining waves are the surface waves. Figure 5 shows the SAW amplitude as a function
+of depth. We see that the amplitude undergoes oscillatory (complex exponential) decay into
+
+±
+
+14
+
+the bulk and is negligible a few microns below the surface, again in good agreement with
+analytical expressions derivable from (41).
+
+Figure 2: The relative amplitudes and phases of the displacements ux and uz, parallel and
+perpendicular respectively, to the SAW propagation.
+
+3000
+
+2000
+
+1000
+
+0
+
+12.5
+
+9.91
+
+7.34
+
+4.78
+
+2.22
+
+−0.349
+
+−2.91
+
+−5.48
+
+−8.04
+
+−10.6
+
+−13.2
+
+8.0×103
+
+9.0×103
+
+1.0×104
+
+1.1×104
+
+Figure 3: Plane waves of the electric potential (mV), (x-y plane, z=constant), 100nm below
+the surface, at time 1.6ns. The x and y coordinates are in nm.
+
+15
+
+8000
+
+7000
+
+6000
+
+5000
+
+4000
+
+3000
+
+2000
+
+1000
+
+22.1
+
+17.8
+
+13.5
+
+9.21
+
+4.91
+
+0.621
+
+−3.67
+
+−7.96
+
+−12.3
+
+−16.5
+
+−20.8
+
+16
+
+0
+
+8.0×103
+
+1.0×104
+
+Figure 4: Electric potential (mV), (x-z plane y = const), at time 1.6ns. The x and z
+coordinates are in nm.
+
+ 15
+
+ 10
+
+ 5
+
+ 0
+
+-5
+
+ 0
+
+5000
+
+4000
+
+3000
+
+2000
+
+1000
+
+ 1000
+
+ 2000
+
+ 3000
+
+ 4000
+
+ 5000
+
+ 6000
+
+ 7000
+
+Figure 5: A typical curve of the electric potential (mV) as a function of depth into the bulk.
+This curve was taken at time 0.85ns. The horizontal axis is in nm.
+
+·
+
+103nm, 2.5
+
+The eﬀect of the compound mechanical structure. Figure 6 shows the magnitude
+of the displacement ﬁeld as the SAW moving from the left of the ﬁgure to the right, passes
+through the gate when the mechanical motion is decoupled from the electric ﬁeld. The gate
+103nm). We observe a peak to the left of the gate (due to
+is centered at (8.9
+a reﬂection) and a trough (due to damping of the wave) to the right. We also just barely
+see vibrations moving away from the gate along the y direction. Since in this simulation,
+the mechanical motion is independent of the electric ﬁelds, this damping is due purely to the
+presence of a mechanical structure on the surface. The damping of the mechanical amplitude
+may be large enough to aﬀect the electric potential. In this simulation, the electric potential
+is not aﬀected signiﬁcantly as shown in ﬁgure 7. The central blur is the electric potential due
+to the gate. The SAW peak emerging from the gate has been damped in the central region.
+
+·
+
+0.0139
+
+0.0127
+
+0.0115
+
+0.0103
+
+0.00909
+
+0.0079
+
+0.0067
+
+0.0055
+
+0.0043
+
+0.0031
+
+0.0019
+
+0
+
+7.0×103
+
+9.0×103
+
+1.1×104
+
+Figure 6: The magnitude of the displacement ﬁeld (x-y plane, z=constant), at time 2ns,
+as the SAW moving from left to right, passes through the gate (not visible) centered at
+(8.9
+
+103nm). The mechanical motion is decoupled from the electric ﬁeld.
+
+103nm, 2.5
+
+·
+
+·
+
+The eﬀect of electromechanical coupling. Figure 8 shows the magnitude of the dis-
+placement ﬁeld, at time 2ns, as the SAW passes through the gate, in the case where mutual
+coupling between the electric and mechanical ﬁelds is allowed. As in the decoupled case,
+we observe a peak to the left of the gate (due to reﬂection of the wave) and a trough (due
+to damping of the wave) to the right. Again, we also see vibrations moving away from the
+gate along the y direction. Comparing the ﬁgures 6 and 8, we see that there is additional
+
+17
+
+0
+
+7.0×103
+
+9.0×103
+
+1.1×104
+
+Figure 7: The total electric potential (mV), (x-y plane, z=constant), at time 2ns, as the
+SAW passes through the gate when the mechanical motion is decoupled from the electric
+103nm). The scale has been
+ﬁeld. The gate (not visible) is centered at (8.9
+restricted so that the SAW potential is visible. The central blur, which is due to the large
+external potential has the value of 1.5V at its center.
+
+103nm, 2.5
+
+·
+
+·
+
+mechanical deformation throughout the material due to the presence of a charged metallic
+gate. Also, the scale of ﬁgure 8 is shifted up compared to that of ﬁgure 6. By looking at the
+displacement ﬁeld at time 0 i.e. before the arrival of the SAW, we can see the eﬀect of the
+applied electric ﬁeld. This is shown in ﬁgure 9.
+
+0
+
+7.0×103
+
+9.0×103
+
+1.1×104
+
+Figure 8: The magnitude of the displacement ﬁeld (x-y plane, z=constant), at time 2ns,
+as the SAW moving from left to right, passes through the gate (not visible) centered at
+103nm) when full coupling between electric and mechanical ﬁelds is allowed.
+(8.9
+
+103nm, 2.5
+
+·
+
+·
+
+5000
+
+4000
+
+3000
+
+2000
+
+1000
+
+5000
+
+4000
+
+3000
+
+2000
+
+1000
+
+400
+
+390
+
+381
+
+371
+
+362
+
+352
+
+342
+
+333
+
+323
+
+314
+
+304
+
+0.0148
+
+0.0137
+
+0.0126
+
+0.0115
+
+0.0103
+
+0.00923
+
+0.00811
+
+0.007
+
+0.00589
+
+0.00478
+
+0.00366
+
+18
+
+5000
+
+4000
+
+3000
+
+2000
+
+1000
+
+0.00692
+
+0.00671
+
+0.0065
+
+0.00629
+
+0.00609
+
+0.00588
+
+0.00567
+
+0.00546
+
+0.00525
+
+0.00504
+
+0.00483
+
+0
+
+7.0×103
+
+9.0×103
+
+1.1×104
+
+Figure 9: The magnitude of the displacement ﬁeld (x-y plane, z=constant), at time 0, demon-
+strating the mechanical strains caused purely by the gate (not visible) with a 1.5V applied
+103nm) when full coupling between electric and me-
+voltage centered at (8.9
+chanical ﬁelds are allowed.
+
+103nm, 2.5
+
+·
+
+·
+
+8 Summary and concluding remarks
+
+Our aim with this paper is to suggest a computationally fast method for simulating surface
+acoustic waves in piezoelectric devices where stress, deformation, and a quasi-static electric
+ﬁeld are fully coupled. The basic idea of the numerical scheme is to use a ﬁnite diﬀerence
+approximation in time that decouples the elasticity and the electric ﬁeld problems such that
+these can be solved in sequence at each time level. This decoupling can also be explored in
+computer implementations, because independent solvers for anisotropic elasticity problems
+and Poisson problems can be joined together. We showed in particular how object-oriented
+programming techniques can realize such couplings in a very convenient way.
+
+Through numerical experiments in a physically one-dimensional wave propagation prob-
+lem we have veriﬁed that the three-dimensional code reproduces the expected quadratic con-
+vergence in space and time if linear or trilinear elements are used. Finally, we have applied
+the proposed numerical methodology to real SAW phenomena in a device with complicated
+geometry. The results indicate that the method is capable to predict the expected complex
+elasto-electric dynamics in such a device.
+
+The principal limitation of the equation splitting is a stability criterion on the time step
+length. Implicit methods may remove time step restrictions, but at a cost of the need to
+solve large coupled linear systems at each time level. The computer implementation is also
+more involved and requires a special-purpose solution rather than just joining two well-tested
+equation components. However, for wave propagation problems one usually needs a ﬁne mesh
+and a small time step to resolve the waves, typically leading to h/∆t = const, which is in
+accordance with the stability criterion. Explicit time stepping approaches are therefore highly
+relevant and allows eﬃcient algorithms and implementations.
+
+Forthcoming work will focus on domain decomposition methods for parallelizing the solver
+and thereby enable simulation of large-scale SAW problems. The described time stepping
+approach and associated equation splitting are particularly well suited for parallel computing,
+because the elasticity problem can be made “perfectly parallel”, and very eﬃcient paralleliza-
+tion strategies exist for the Poisson equation.
+
+19
+
+Acknowledgements. We thank Dr. Xinq Cai and Prof. Are Magnus Bruaset of Simula
+Research Laboratory for providing assistance in the programming and debugging of the
+code, and Dr. Masaya Kataoka of the Cavendish Laboratory for useful discussions. We
+also acknowledge the Cambridge-MIT Institute, Darwin College Cambridge, and the Simula
+Research Laboratory for ﬁnancial support.
+
+References
+
+[1] G. R. Aizin and G. Gumbs. Screening of the surface acoustic wave potential by a metal
+gate and the quantization of the acoustoelectric current in a narrow channel. Phys. Rev.
+B, 58:10589–105895, 1998.
+
+[2] C. H. W. Barnes, J. M. Shilton, and A. M. Robinson. Quantum computation using
+
+electrons trapped by surface acoustic waves. Phys. Rev. B, 62:8410, 2000.
+
+[3] J. J. Campbell and W. R. Jones. A method for estimating optimal crystal cuts and
+propagation directions for excitation of piezoelectric surface waves. IEEE Trans. Sonics
+and Ultrasonics, SU15 No. 4:209–217, 1968.
+
+[4] R. D. Cook, D. S. Malkus, and M. E. Plesha. Concepts and Applications of Finite
+
+Element Analysis. Wiley, 3rd edition, 1989.
+
+[5] C. L. Foden, V. I. Talyanskii, G. J. Milburn, M. L. Leadbeater, and M. Pepper. High
+
+frequency acousto-electric single photon source. Phys. Rev. A, 62:11803, 2000.
+
+[6] G. Gumbs and G. R. Aizin. Coulomb interaction of two electrons in the quantum dot
+formed by the surface acoustic wave in a narrow channel. Phys. Rev. B, 60:954–957,
+1999.
+
+[7] H. P. Langtangen. Conjugate gradient methods and ILU preconditioning of non-
+symmetric matrix systems with arbitrary sparsity patterns. International Journal of
+Numerical Methods in Fluids, 10:213–223, 1989.
+
+[8] H. P. Langtangen. Computational Partial Diﬀerential Equations – Numerical Methods
+and Diﬀpack Programming. Text in Computational Science and Engineering, vol 1.
+Springer, 2nd edition, 2003.
+
+[9] H. P. Langtangen and O. Munthe. Solving systems of partial diﬀerential equations using
+object-oriented programming techniques with coupled heat and ﬂuid ﬂow as example.
+ACM Transactions on Mathematical Software, 27(1):1–26, March 2001.
+
+[10] R. Lerch. Simulation of piezoelectric devices by two- and three-dimensional ﬁnite ele-
+ments. IEEE Trans. Ultrasonics, Ferroelectrics and Frequency Control, 37(3):233–247,
+1990.
+
+[11] H. Matthews. Surface Wave Filters. John Wiley, 1st edition, 1977.
+
+[12] O. Munthe and H. P. Langtangen. Finite elements and object-oriented implementation
+techniques in computational ﬂuid dynamics. Computer Methods in Applied Mechanics
+and Engineering, 190:865–888, 2000.
+
+[13] A. Preumont. Vibration Control of Active Structures - An Introduction. Kluwer Aca-
+
+demic Publishers, 1997.
+
+20
+
+[14] J. M. Shilton, V. I. Talyanskii, M.Pepper, J. E. F. Frost, C. J. B. Ford, C. G. Smith,
+and G. A. C. Jones. Acoustoelectric charge transport. J. Phys. Condens. Matter, 8:531,
+1996.
+
+[15] O. Zienkiewicz. The Finite Element Method. McGraw-Hill, 4th edition, 1994.
+
+21
+
+5
+0
+0
+2
+ 
+t
+c
+O
+ 
+9
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+5
+7
+1
+0
+1
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+A ﬁnite element method for modelling electromechanical
+wave propagation in anisotropic piezoelectric media
+
+S. Rahman1, H. P. Langtangen2 and C. H. W. Barnes3
+
+1 3
+
+2
+
+Cavendish Laboratory, University of Cambridge
+
+Simula Research Laboratory and University of Oslo
+e-mail: 1 sr279@cam.ac.uk
+
+February 20, 2014
+
+Abstract
+
+We describe and evaluate a numerical solution strategy for simulating surface acous-
+tic waves through semiconductor devices with complex geometries. This multi-physics
+problem is of particular relevance to the design of quantum electronic devices. The
+mathematical model consists of two coupled partial diﬀerential equations for the elastic
+wave propagation and the electric ﬁeld, respectively, in anisotropic piezoelectric media.
+These equations are discretized by the ﬁnite element method in space and by a ﬁnite
+diﬀerence method in time. The latter method yields a convenient numerical decoupling
+of the governing equations. We describe how a computer implementation can utilize the
+decoupling and via object-oriented programming techniques reuse independent codes for
+the Poisson equation and the linear time-dependent elasticity equation. First we ap-
+ply the simulator to a simpliﬁed model problem for verifying the implementation, and
+thereafter we show that the methodology is capable of simulating a real-world case from
+nanotechnology, involving surface acoustic waves in a geometrically non-trivial device
+made of Gallium Arsenide.
+
+Keywords : Finite Element Method, Piezoelectric Surface Acoustic Waves, Gallium Ar-
+
+senide.
+
+1 Introduction
+
+In the process of designing quantum electronic devices, based on surface acoustic waves
+traversing piezoelectric media, it is necessary to determine the eﬀect, on these waves, of
+obstacles such as electrical gates on the surface. These gates have in general a non-trivial
+geometry, which calls for numerical simulation tools. Finite elements are well suited to
+handle complex geometries, and the purpose of the paper is to formulate and evaluate a
+ﬁnite element-based solution method for the equations governing a class of surface acoustic
+waves in piezoelectric media.
+
+In piezoelectric materials where atomic displacements induce microscopic electric dipoles,
+which in turn induce an average macroscopic electrical polarization, Hooke’s law does not
+fully describe the material’s response to strains. The direct eﬀect whereby the strain causes
+electrical polarization, is always accompanied by the converse eﬀect where the solid becomes
+strained when placed in an electric ﬁeld. This duality is widely exploited in industry in the
+
+1
+
+conversion of mechanical signals to electrical signals in, for example, microphones and in
+the conversion of electrical signals to mechanical signals in speaker systems. Certain piezo-
+electric materials, such as quartz, are used to provide high precision sensors as mechanical
+deformations on the nano-scale can produce observable electrical signals.
+
+The electrical signals can be of the order of 10mV - suﬃciently small enough even to
+explore low-dimensional quantum mechanical systems. Recently, much experimental work
+has been done in the ﬁeld of acoustic charge transport whereby an induced time varying
+piezoelectric potential is used to capture a single electron and then transport it along a
+one-dimensional quantum wire [?]. This would be useful in developing an accurate current
+standard, but more challenging proposals to use this in the burgeoning ﬁeld of quantum
+information processing have been proposed [?, ?]. The time and resources required to build
+such devices are immense, and therefore the mathematical modelling of these devices be-
+fore the physical construction is advantageous. This approach requires the solution of the
+continuum electromechanical equations of motion in a piezoelectric medium. The method of
+partial waves [?] can be used to obtain simple analytical expressions for the waves in the bulk
+material, but the the solutions say nothing about the eﬀect of gates on the surface. Attempts
+to solve the governing equations analytically for devices which do have surface gates [?, ?, ?]
+involve simpliﬁcations, and the accuracy of these approximations remains uncertain. The
+present paper addresses a general numerical solution method for three-dimensional electro-
+mechanical waves in piezoelectric media which may have a complicated geometry. Such a
+tool can be indispensable in the design of micro- and nano-scale devices. Although our
+applications are speciﬁc to Gallium Arsenide (GaAs), the formulation is general enough to
+allow simulations, with the same code (or with small modiﬁcations), of any crystal structure
+provided the elastic and piezoelectric material parameters are known.
+
+There is a vast amount of literature on numerical methods for elastic waves, especially
+connected to seismic waves (see for example [?]), but these models are purely elastic without
+any coupling to an electric ﬁeld. On the other hand, this coupling is widely exploited in the
+ﬁeld of ultrasonics to provide control systems involving piezoelectric actuators and sensors [?],
+and one can ﬁnd literature on the ﬁnite element modelling of these devices, see for example [?].
+Contrary to [?], we consider the complete time-dependent mathematical model and address
+issues concerning the quantum electronics regime. To our knowledge no successful numerical
+approach to the 3D time-dependent surface acoustic wave problem with full coupling to an
+electric ﬁeld has yet appeared in the literature.
+
+The paper is organized as follows. In Section 2 we give an overview of the mathematical
+model underlying piezoelectricity and precisely state the coupled partial diﬀerential equations
+we aim to solve. Sections 3 and 4 concern ﬁnite element formulations of these equations and
+an overview of the computational algorithm is described. In section 5 we describe the class
+based simulator approach used in our code design to simplify implementation and increase
+reliability. Section 6 deals with veriﬁcation of the implementation and empirical estimation
+of convergence properties of the numerical solution method. A real-world application of the
+methodology, concerning a SAW problem in nanotechnology is the subject of Section 7, before
+we make some concluding remarks in the ﬁnal section.
+
+2
+
+2 Modelling of piezoelectric materials
+
+For non-piezoelectric materials, Hooke’s law states that the mechanical stress ﬁeld experi-
+enced by a body is proportional to the strain ﬁeld, i.e.,
+
+where σij and εij are the stress and strain tensors, respectively, and cijkl represents the 4th
+rank tensor of elastic parameters. Summation over repeated indices is implied in this section.
+The electric displacement Di for non-piezoelectric materials is given by
+
+where Ej denotes the electric ﬁeld and ǫij is the permittivity tensor.
+
+For piezoelectric materials, the electric displacement depends on both the applied electric
+ﬁeld and mechanical strain, and the stresses depend on both the applied mechanical strain
+and electric ﬁeld. The constitutive relations (1) and (2) then become coupled according to
+
+where eijk is the piezoelectric coupling constant and the superscripts S and E denote that
+the quantities were measured under constant strain and constant electric ﬁeld, respectively.
+As there are no free charges within the material, Gauss’s law requires the divergence of
+
+the electric displacement to vanish:
+
+Combining (3), (4), the symmetry properties of the piezoelectric tensor (eijk = eikj ), the
+relation
+
+−
+between the electric potential φ and the electric ﬁeld Ei, together with the strain-displacement
+relation for small strains,
+
+where ui is the mechanical displacement ﬁeld, we can derive a scalar partial diﬀerential
+equation for φ:
+
+This equation couples the potential φ and the displacements ui in the medium, and can be
+used to compute the electric ﬁeld. Behind (6) lies the quasi-static approximation, which
+assumes that very little energy is carried away by electromagnetic waves.
+
+The displacement ﬁeld in the medium is governed by Newton’s 2nd law of motion com-
+
+bined with the appropriate constitutive law. The former equation reads
+
+σij = cijklεkl,
+
+Di = ǫijEj,
+
+Di = ǫS
+
+ijEj + eijkεjk,
+
+σij =
+
+eijkEk + cE
+
+ijklεkl,
+
+−
+
+D = ̺free = 0 .
+
+∇ ·
+
+Ei =
+
+∂φ
+∂xi
+
+εij =
+
+1
+2
+
+(
+
+∂uj
+∂xi
+
++
+
+∂ui
+∂xj
+
+),
+
+ǫS
+ik
+
+∂2φ
+∂xi∂xk
+
+= eikl
+
+∂2ul
+∂xi∂xk
+
+.
+
+̺¨ui =
+
++ ̺bi,
+
+∂σij
+∂xj
+
+3
+
+(1)
+
+(2)
+
+(3)
+
+(4)
+
+(5)
+
+(6)
+
+(7)
+
+(8)
+
+(9)
+
+where bi denotes body forces, and the double dot in ¨ui denotes a second-order partial deriva-
+tive in time. As (9) stands, it contains no damping term, which is relevant in our application
+setting. The constitutive law (4) relates the stress tensor σij to the strain tensor εij, and (7)
+relates εij to the displacement ﬁeld ui. Combining (4), (7), (9), and the symmetries of the
+elastic tensor,
+
+we arrive at an equation for ui in terms of φ:
+
+ciklm = ckilm = cikml = clmik,
+
+̺¨ui = cE
+
+ijkl
+
+∂2ul
+∂xj ∂xk
+
++ ̺bi + eijk
+
+∂2φ
+∂xj ∂xk
+
+.
+
+From (11) we see how the mechanical motion is aﬀected the electric ﬁeld. In most materials,
+cE
+this coupling is weak, because eijk
+ijkl, and the eﬀect of the piezoelectric potential on
+the mechanical deformation is negligible. On the other hand, the eﬀect of the mechanical
+deformation on the potential is always signiﬁcant according to (8). However, in cases where
+an external electric ﬁeld is applied through surface gates, φ may be suﬃciently large to
+contribute signiﬁcantly to the mechanical motion, and these cases receive the focus of the
+present paper.
+
+≪
+
+To summarize, the equations of motion for a piezoelectric medium are (8) and (11). The
+primary unknowns in these equations are ui and φ, from which all other interesting quantities,
+such as stress, strain, and the electric ﬁeld, can be derived through diﬀerentiation.
+
+Most of the coeﬃcients cE
+
+ijkl and eijk in (8) and (11) are zero. To illustrate the nature
+of these equations we therefore explicitly write out the coupling terms for the piezoelectric
+material GaAs. The elastic parameters of a crystal are usually given in a coordinate system
+with its x, y and z axes parallel to the crystal X, Y and Z axes. For the speciﬁc case of
+interest in this article, we align the positive x axis with the crystal positive [011] axes, and
+the positive z axis with the crystal positive [100] axis. To achieve this we perform a 45 degree
+rotation around the z axis. The only non-zero component of the piezoelectric tensor is then
+e14. Also the non-vanishing components of the permittivity tensor are ǫ11 = ǫ22 = ǫ33 = ǫs,
+and the non-vanishing components of the elastic tensor (not written out above) are cxxxx =
+cyyyy = czzzz, cxxyy = cyyzz =czzxx, and cxyxy= cyzyz= czxzx. All other non-zero components
+of the elastic tensor can be determined from applying the symmetry properties of the tensor
+(discussed later).
+
+Using the assumptions stated in the previous paragraph, and neglecting body forces, we
+
+can write out equations (11) and (8) as
+
+̺¨ux = cE
+
+xjkl
+
++ 2e14
+
+∂2ul
+∂xj∂xk
+
+∂2ul
+
+̺¨uy = cE
+
+yjkl
+
+∂xj∂xk −
+
+2e14
+
+∂2φ
+∂x∂z
+
+,
+
+∂2φ
+∂y∂z
+
+,
+
+̺¨uz = cE
+
+zjkl
+
+∂2ul
+∂xj∂xk
+
++ e14
+
+∂2φ
+∂x2 −
+
+e14
+
+∂2φ
+∂2y
+
+,
+
+(10)
+
+(11)
+
+(12)
+
+(13)
+
+(14)
+
+(15)
+
+2φ = e14
+
+ǫS
+s ∇
+
+∂2uz
+∂x2 −
+
+e14
+
+∂2uz
+∂y2 + 2e14
+
+∂2ux
+∂z∂x −
+
+2e14
+
+∂2uy
+∂z∂y
+
+.
+
+References [?] and [?] obtained analytical solutions of these equations under the assump-
+tion that the φ term in (12)–(14) can be ignored. This means that the mechanical motion
+
+4
+
+is decoupled from the electric ﬁeld, but an electric ﬁeld is induced from the mechanical mo-
+tion. The reliability of such substantial simpliﬁcations is limited to cases where the external
+potential φ is small. Also, the obtained solutions are for two-dimensional cases only and
+are therefore of minor interest when studying the eﬀect of surface gates. Solving the fully
+coupled system of PDEs demands numerical techniques like the one described in the next
+section.
+
+3 Finite element formulation
+
+We shall use the ﬁnite element method in space and the ﬁnite diﬀerence method in time.
+The reasons for applying the ﬁnite element method are the need for handling geometrically
+complicated domains and the fact that the method works very well for elasticity problems
+without coupling to φ as well as for the Poisson equation for φ.
+
+3.1 The Poisson equation with piezoelectric coupling
+
+Before continuing further, it is convenient to introduce a superscript ℓ to denote the time
+level, for example, φℓ is φ at time level ℓ. The electrostatic potential φℓ due to mechanical
+displacements uℓ
+i in the piezoelectric material concerned is given by (15). The ﬁnite element
+formulation of such a Poisson equation is well covered in lots of textbooks (see e.g. [?]). The
+ˆφℓ =
+basic idea is to approximate φℓ by a linear combination of basis functions Ni, φℓ
+j, insert ˆφℓ in the Poisson equation, and demand the residual to be orthogonal to
+
+n
+j=1 Njφℓ
+
+≈
+
+the space spanned by
+P
+
+N1, . . . , Nn
+
+. The Laplace term is integrated by parts.
+
+The only non-trivial aspect of the formulation in the present setting is the right-hand side,
+where the second-order derivatives of the elastic ﬁeld demand integration by parts. The two
+ﬁrst terms on the right-hand side of (15) give rise to an integral, which is straightforwardly
+integrated as
+
+{
+
+}
+
+Ni[
+
+∂2uℓ
+z
+∂x2 −
+
+∂2uℓ
+z
+∂y2 dΩ
+
+− ZΩ
+
+∂Ni
+∂x
+
+∂uℓ
+z
+∂x −
+
+∂Ni
+∂y
+
+∂uℓ
+z
+∂y
+
+dΩ
+
+=
+
+ZΩ
+
+− I∂Ω
+
+Ni[
+
+∂uℓ
+z
+∂x
+
+nx
+
+−
+
+∂uℓ
+z
+∂y
+
+ny]dΓ .
+
+The next two terms in (15), containing mixed derivatives, can be integrated by parts
+
+using a special form of Green’s Theorem,
+
+φ
+
+∂ψ
+∂y
+
+− ZΩ
+
+dxdydz =
+
+ψdxdydz
+
+φψnydΓ .
+
+− I∂Ω
+
+∂φ
+∂y
+
+ZΩ
+
+The two terms give rise to the integrals
+
+Ni[
+
+∂
+∂z
+
+∂uℓ
+x
+∂x −
+
+∂
+∂z
+
+∂uℓ
+y
+∂y
+
+]dΩ
+
+− ZΩ
+
+∂Ni
+∂z
+
+∂uℓ
+x
+∂x −
+
+∂Ni
+∂z
+
+∂uℓ
+y
+∂y
+
+dΩ
+
+=
+
+ZΩ
+
+− I∂Ω
+
+Ni[
+
+∂uℓ
+x
+∂x
+
+nz
+
+−
+
+∂uℓ
+y
+∂y
+
+nz]dΓ .
+
+The ﬁnite element method applied to the equation for φ transforms the PDE problem to
+
+a linear system of equations,
+
+(16)
+
+(17)
+
+(18)
+
+(19)
+
+P φℓ = f ℓ,
+
+5
+
+where the ‘stiﬀness’ matrix P has its (i, j) element given by
+
+Pij = ǫS
+
+∂Ni
+∂y
+The φℓ vector in (19) contains the values of φℓ at the nodal points. The i-th component f ℓ
+i
+of the right-hand side vector f ℓ can be written as
+
+∂Nj
+∂z (cid:21)
+
+∂Nj
+∂x
+
+∂Nj
+∂y
+
+∂Ni
+∂z
+
+∂Ni
+∂x
+
+s ZΩ (cid:20)
+
+dΩ .
+
+(20)
+
++
+
++
+
+f ℓ
+i = ǫS
+
+s I∂Ω
+
+Ni
+
+∂φℓ
+∂n
+
+dΓ
+
+e14
+
+−
+
+I∂Ω
+
+NirdΓ + e14
+
+sdΩ,
+
+ZΩ
+
+(21)
+
+with
+
+r =
+
+s = 2
+
+∂uℓ
+z
+∂x
+
+nx
+
+∂Ni
+∂z
+
+∂uℓ
+z
+∂y
+
+−
+∂uℓ
+x
+∂x −
+
+ny + 2
+
+∂uℓ
+x
+∂x
+
+nz
+
+2
+
+∂Ni
+∂z
+
+∂uℓ
+y
+∂y
+
++
+
+nz,
+
+2
+
+∂uℓ
+y
+∂y
+∂uℓ
+z
+∂x −
+
+−
+∂Ni
+∂x
+
+∂Ni
+∂y
+
+∂uℓ
+z
+∂y
+
+.
+
+When the displacement ﬁeld entering f ℓ
+i
+
+is known, any standard Poisson solver can be
+
+used to compute φl.
+
+3.2 The elasticity problem with electric ﬁeld loading
+
+For the ﬁnite element formulation of (11) it is easier to ﬁrst start with (9) and insert the
+constitutive law (4) and the strain-displacement relation (7) in the ﬁnite element integrals.
+The time derivative in (11) can be approximated by a second-order accurate ﬁnite diﬀerence.
+Sampling (11) at time level ℓ then yields
+
+uℓ−1
+i −
+
+̺
+
+2uℓ
+∆t2
+
+i + uℓ+1
+i
+
+=
+
+∂σℓ
+ij
+∂xj
+
++ ̺bℓ
+i,
+
+(22)
+
+where ∆t is the time step length and quantities with the ℓ superscript are functions of space
+only. This time discretization introduces an operator splitting such that the originally coupled
+governing equations can be solved in sequence. No accuracy is lost by this operator splitting
+beyond that implied by the ﬁnite diﬀerence itself in (22). More precisely, σℓ
+ij contains φℓ,
+which is known, such that we can easily solve for uℓ+1
+using old values of φ. On the next
+time level (ℓ + 1), we can ﬁnd φℓ+1 using the recently computed uℓ+1
+
+.
+
+i
+
+i
+
+The main motivation for the explicit time diﬀerencing in (22) is numerical eﬃciency: (i)
+we decouple the equations, which simpliﬁes the numerics and the implementation, and (ii)
+there is no need to solve large sparse linear systems of equations in the elasticity part of
+the problem (if the mass matrix is lumped). Nevertheless, the time diﬀerence (22) leads to
+a conditionally stable scheme, where ∆t must be of the order of the smallest element size.
+In wave propagation problems, uniform high resolution is frequently needed in space and
+time, typically compatible with the stability restriction, which makes such explicit schemes
+appropriate. On the other hand, in applications where adaptive grids with great variation in
+element size are needed, one may beneﬁt from implicit schemes (e.g. of Newmark type [?]).
+The ﬁnite element formulation of (22) is easiest to express if we switch to a typical “ﬁnite
+element engineering” notation, especially when we deal with anisotropic media. The stress
+and strain tensors are expressed as vectors,
+
+σ = (σxx, σyy, σzz, σyz, σzx, σyx)T ,
+ε = (εxx, εyy, εzz, 2εyz, 2εzx, 2εyx)T .
+
+6
+
+The constitutive law can then be written as
+
+σℓ = Dεℓ + pℓ,
+
+(23)
+
+where the pℓ term represents the loading from the electric ﬁeld, and D is a symmetric 6
+matrix of the elasticity coeﬃcients (previously denoted by cE
+
+6
+
+×
+
+ijkl):
+
+c11
+
+c12
+
+c13
+
+c14
+
+c15
+
+c16
+
+c12
+
+c13
+
+c14
+
+c15
+
+c16
+
+D =
+
+c13
+
+c14
+
+c15
+
+c16
+
+c14
+
+c15
+
+c16
+
+.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+c15
+
+c16
+
+c16
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+uℓ
+i ≈
+
+ˆuℓ =
+
+Njuℓ
+j,
+
+n
+
+Xj=1
+
+The displacement ﬁeld at a time level ℓ is approximated according to
+
+where uℓ
+displacement relation then becomes
+
+j is the value of the displacement ﬁeld at node j at time level ℓ. The strain-
+
+εℓ =
+
+Bjuℓ
+
+j, Bi =
+
+n
+
+Xj=1
+
+
+
+
+
+
+
+
+
+
+
+0
+Ni,y
+0
+
+Ni,x
+0
+0
+0
+Ni,z
+Ni,y Ni,x
+
+0
+0
+Ni,z
+Ni,z Ni,y
+Ni,x
+0
+
+0
+
+
+
+.
+
+
+
+
+
+
+
+
+∂Ni/∂x.
+
+≡
+
+The comma notation here denotes partial derivative: Ni,x
+
+A ﬁnite element formulation of (22) using the aforementioned notation becomes (see [?]
+
+for a detailed derivation without the φ term)
+
+n
+
+Xj=1
+
+̺Ni
+
+Z
+Ω
+
+Nj(uℓ−1
+
+j −
+
+2uℓ
+
+j + uℓ+1
+j
+
+)dΩ + ∆t2
+
+BT
+
+i σℓdΩ =
+
+Z
+Ω
+
+Here, tℓ is the traction on the boundary, arising from integrating the divergence of the stress
+in (22) by parts. Inserting the constitutive law in the term
+
+BT
+
+i σdΩ yields
+
+∆t2
+
+̺bNidΩ + ∆t2
+
+tℓNidΓ .
+
+Z
+Ω
+
+Z
+∂Ω
+
+BT
+
+i DBjdΩ
+
+uℓ
+
+j +
+
+BT
+
+i pℓdΩ .
+
+RΩ
+
+Z
+Ω
+
+n
+
+Xj=1
+
+
+
+
+
+Z
+Ω
+
+
+
+7
+
+(24)
+
+(25)
+
+(26)
+
+The ﬁnal discrete equations arising from the equation of motion can be written as
+
+uℓ+1 = 2uℓ
+
+uℓ−1 + ∆t2 ˜M
+
+Kuℓ + βℓ + Φℓ),
+
+(27)
+
+−
+
+−1
+
+(
+−
+
+−1
+
+−1
+
+is an eﬃcient inverse of the mass matrix M resulting from the
+
+where ˜M
+Ω ̺NiNjdΩ
+R
+integral. We construct ˜M
+as the inverse of the lumped mass matrix. The matrix K stems
+i DBjdΩ representing anisotropic elasticity, βℓ is
+from the standard “stiﬀness” term
+the eﬀect of body forces and surface tractions, and Φℓ is the contribution from the electric
+ﬁeld. The i-th block (arising from node i) in Φℓ takes the form Φℓ
+i pℓ, which from
+(12) to (14) results in
+
+Ω BT
+
+Ω BT
+R
+
+i =
+
+R
+
+Φℓ
+
+i = e14
+
+∂
+∂x
+
+∂φℓ
+∂z dΩ
+
+∂
+∂y
+
+∂φℓ
+∂z dΩ
+
+2
+
+Ω Ni
+R
+2
+
+Ω Ni
+−
+R
+Ω Ni[ ∂2φℓ
+R
+
+∂x∂x −
+
+
+
+
+
+
+
+
+
+
+∂2φℓ
+∂y∂y ]dΩ
+
+
+
+
+
+
+
+
+
+
+= e14
+
+
+
+
+
+
+
+
+
+
+∂Ni
+∂x
+
+−
+
+Ω
+R
+
+∂Ni
+∂x
+
+∂φℓ
+∂z dΩ + 2
+
+∂φℓ
+∂z nxdΓ
+
+2
+
+−
+
+Ω
+R
+
+2
+
+Ω
+R
+∂φℓ
+∂x −
+
+∂Ni
+∂y
+
+∂φℓ
+∂z dΩ
+
+2
+
+−
+
+∂Ni
+∂y
+
+∂φℓ
+∂y dΩ +
+
+∂φℓ
+∂z nydΓ
+
+∂Ω Ni
+R
+∂Ω Ni
+R
+∂Ω Ni[ ∂φℓ
+R
+
+∂x nx
+
+−
+
+∂φℓ
+∂y ny]dΓ
+
+.
+
+
+
+
+
+
+
+
+
+
+Our governing equations require initial conditions. Let us assume that the elastic body is
+at rest such that ∂ui/∂t = 0. The external electric ﬁeld is then turned on. After the initial
+transients the displacement ﬁeld have faded out, and we have a stationary initial state of our
+system, modeled by the equations
+
+P φ0 = f 0(u0),
+Ku0 = β0 + Φ0(φ0) .
+
+(28)
+
+(29)
+
+(30)
+
+These two coupled equations are solved by an iterative Gauss-Seidel-like technique, i.e., the
+equations are solved one at a time, using the most recent approximation of the other ﬁeld in
+the right-hand side term. Each linear system is solved by a MILU preconditioned conjugate
+gradient method [?]. The solution of (29) and (30), along with the assumption of stationarity,
+∂u/∂t = 0, comprise the initial condition.
+
+As boundary conditions, we either have prescribed traction components or prescribed
+displacement components, along with prescribed electric potential or prescribed normal com-
+ponent of the electric ﬁeld. The displacement equation needs three boundary conditions at
+each point at the boundary, while the equation for φ needs one condition at each point.
+
+From ∂u/∂t = 0 at t = 0 it follows by a second-order diﬀerence approximation that
+u1 = u−1. From (27) and (30) it follows that u1 = u0 = u−1. The loads removed at t = 0+
+will ﬁrst come into play at the second time level.
+
+The computational algorithm can now be formulated as follows:
+
+ℓ = 0 (time level counter)
+k = 0 (iteration counter)
+while ε < εcrit
+
+solve (29) w.r.t φ0,k
+
+8
+
+solve (30) w.r.t u0,k
+compute ε =
+k
+
+u0,k
+
+k
+−
+k + 1 end while
+φ1 = φ0, u1 = u0
+for ℓ = 1, 2, 3, . . . until end of simulation
+
+←
+
+k
+
+k
+
+u0,k−1
+
++
+
+φ0,k
+
+φ0,k−1
+
+−
+
+k
+
+solve (27) w.r.t uℓ+1
+solve (19) w.r.t φℓ+1
+
+Comments on Stability. The stability criterion of the explicit ﬁnite diﬀerence scheme in
+time, when decoupled from the electric ﬁeld problem, requires[?] ∆t
+2/ωmax, where ωmax is
+the highest natural frequency of the vibrating system. One may ﬁnd ωmax as the square root
+of the largest eigenvalue of the problem K
+λM = 0. An approximate bound on ωmax can
+be estimated from a relation ωmax = 2c/heﬀ, where c is the speed of elastic waves and heﬀ is
+the smallest eﬀective element length. For waves in an isotropic bar, c = sqrtE/̺, where E
+is Young’s modulus. The stability criterion now reduces to the common CFL condition:
+
+≤
+
+−
+
+∆t
+
+αheﬀ /c .
+
+≤
+
+(31)
+
+Here, α is a factor to be adjusted since the heﬀ parameter is normally roughly computed from
+element sizes or application of Gerschgorin’s theorem applied to the underlying eigenvalue
+problem. For wave problems the CFL condition is frequently not particularly restrictive
+since the length and period of a wave are usually proportional, leading to a natural choice of
+∆t/h = const.
+
+4 An optimised ﬁnite element formulation
+
+We can speed up the numerical computation by replacing the complete assembly of the
+right-hand side vectors in equations (19) and (27) by a matrix-vector product. For example,
+consider the contribution to the vector f in (19) due to the coupling from the mechanical
+motion (omitting the superscript ℓ for the remainder of this section):
+
+2
+
+∂Ni
+∂z
+
+∂ux
+∂x −
+
+2
+
+∂Ni
+∂z
+
+∂uy
+∂y
+
+ZΩ (cid:18)
+
+∂uz
+∂x −
+
+∂Ni
+∂y
+
+∂uz
+∂y (cid:19)
+
+dΩ.
+
+(32)
+
++
+
+∂Ni
+∂x
+j=1 u(x)
+
+n
+
+Inserting the ﬁnite element expansion ux
+uz, the expression (32) results in
+
+≈
+
+P
+
+j Nj, and similar expansions for uy and
+
+n
+
+Xj=1
+
+2
+ZΩ (cid:18)
+
+∂Ni
+∂z
+
+∂Nj
+∂x
+
+u(x)
+j −
+
+2
+
+∂Ni
+∂z
+
+∂Nj
+∂y
+
+u(y)
+j +
+
+∂Ni
+∂x
+
+∂Nj
+∂x
+
+u(z)
+j −
+
+∂Ni
+∂y
+
+∂Nj
+∂y
+
+u(z)
+j (cid:19)
+
+dΩ.
+
+(33)
+
+This expression can be written as a matrix vector product  Lu, where the matrix  L consists
+of n
+1 block
+×
+looks like
+
+3. For the coupling of node i and j, the 3
+
+n blocks, each block of size 1
+
+×
+
+×
+
+∂Ni
+∂z
+
+∂Nj
+∂x
+
+,
+
+2
+(cid:20)
+
+∂Ni
+∂z
+
+∂Nj
+∂y
+
+,
+
+∂Ni
+∂x
+
+∂Nj
+∂x −
+
+∂Ni
+∂y
+
+∂Nj
+∂y (cid:21)
+
+,
+
+2
+
+−
+
+(34)
+
+which is to be multiplied by block j in u: [u(x)
+
+, u(y)
+j
+
+, u(z)
+j
+
+].
+
+j
+
+9
+
+The Poisson equation (19) for φ can now be written as
+
+P φℓ+1 =  Luℓ+1 .
+
+(35)
+
+At each time level we can hence avoid the costly ﬁnite element assembly process, since P
+and  L are constant in time and the right-hand side of the linear system is obtained by an
+eﬃcient matrix-vector product. This may result in a signiﬁcant speed-up of the solver. For
+large number of unknowns, the speed up is experienced only if we use a method of complexity
+or order n, like multigrid, to solve (35).
+
+Equation (27) is already on a favorable matrix-vector algebra form, except for the coupling
+term Φℓ. Examining (28), we realize that this matrix can be written as Φℓ = Qφℓ, where
+1 blocks. The contribution to block i in Φℓ is
+Q is a time-independent n
+n matrix of 3
+made of the coupling Qij between node i and j and the block j in φℓ: Φℓ
+j, where
+
+i = Qij φℓ
+
+×
+
+×
+
+Qij = e14
+
+
+
+
+
+
+
+
+
+
+∂Ni
+∂x
+
+−
+
+Ω
+R
+
+∂Ni
+∂x
+
+∂Nj
+∂z dΩ + 2
+
+∂Nj
+∂z nxdΓ
+
+2
+
+−
+
+Ω
+R
+
+2
+
+Ω
+R
+∂Nj
+∂x −
+
+∂Ni
+∂y
+
+∂Nj
+∂z dΩ
+
+2
+
+−
+
+∂Ni
+∂y
+
+∂Nj
+∂y dΩ +
+
+∂Nj
+∂z nydΓ
+
+∂Ω Ni
+R
+∂Ω Ni
+R
+∂Ω Ni[ ∂Nj
+R
+
+∂x nx
+
+−
+
+∂Nj
+∂y ny]dΓ
+
+.
+
+
+
+
+
+
+
+
+
+
+Now the Φℓ term in (27) can be computed as a matrix-vector product Qφℓ, and no assembly
+In our algorithm we must run
+process is required to construct (27) at each time level.
+−1
+assembly processes at t = 0 to construct the matrices ˜M
+, K, Q,  L, and P .
+
+5 Object-oriented implementation
+
+A signiﬁcant trend in modern software development is to formulate numerical algorithms such
+that reliable and well-tested software components can be combined together to form a new
+simulator. Our numerical approach was in particular inspired by such an approach. With
+the time discretization we were able to split the coupled ui–φ system such that at each time
+level we ﬁrst solve for a new displacement ﬁeld (ui) and then we solve for the corresponding
+electric potential (φ). In each of the two equations, the eﬀect of the other only enters through
+a right-hand side “forcing” term. This allows us, in principle, to reuse a solver for elastic
+vibrations and a Poisson solver, as long as these solvers can implement a new right-hand side
+term that couples to another solver. From a principal point of view, this idea is simple and
+attractive. However, the implementation of the idea in practice may be less feasible if the
+design of the underlying solvers is not suﬃciently ﬂexible.
+
+To allow for building the compound ui–φ solver from separate ui and φ solvers we propose
+to apply principles from object-oriented programming. The time-dependent elasticity solver
+and the Poisson solver are realized as two independent objects, implemented via classes
+in C++. Actually, we have reused the Poisson2 class from [?] as Poisson solver, and the
+ElasticVib1 class from [?] as elastic vibration solver. The latter is a subclass of Elasticity2,
+a pure quasi time-dependent elasticity solver (without the acceleration term in the momentum
+equation). These classes are implemented using building blocks from the Diﬀpack library [?].
+The Poisson2 and ElasticVib1 classes have no knowledge of each other. The only common
+feature is their design. This design is crucial for reuse of the classes to solve the coupled
+problem, but the design approach suggested for Diﬀpack solvers [?, ?, ?] has proven to
+be successful in this respect. Diﬀpack solvers are realized as classes containing objects for
+grids, scalar/vector ﬁelds, linear systems, etc. The coeﬃcients in a PDE are evaluated
+through virtual functions. When the solver is stand-alone, these virtual functions contain
+
+10
+
+mathematical expressions or measured data, but when solvers are combined, the virtual
+functions are reimplemented in subclasses and connected to data in other solvers. This
+principle reﬂects the underlying mathematics: the coeﬃcients in a single PDE are considered
+known, but in a system of PDEs, the coeﬃcients typically couple to unknown quantities
+governed by the PDEs. The present coupled system is an example where the right-hand side
+in the Poisson equation couples to the primary unknown in the elastic vibration solver, while
+a right-hand side term in the elastic vibration solver couples to the primary unknown in the
+Poisson equation. When the solvers are used independently there are no such couplings.
+
+Figure 1 shows an outline of the class design for the compound solver. From class Poisson2
+we derive a subclass Poisson2 glue, which reimplements the virtual function in Poisson2 for
+evaluating the right-hand side in that equation. In this new function we need to compute
+an expression involving the displacement ﬁeld available in the ElasticVib1 class. A manager
+class, simply called Manager, holds pointers to all classes for the individual PDEs in the system
+of PDEs, and each PDE class holds a pointer to the manager class, thus enabling a two-way
+communication. With these pointers, we can connect data from any other solver class to the
+Poisson2 glue class. In the virtual function evaluating the right-hand side we can typically
+call mng->elastic->u to get a vector ﬁeld object for ui that we can evaluate at the current
+integration point. This object has support for evaluating derivatives of the ﬁeld as well.
+
+Similarly, we derive a subclass ElasticVib1 glue of ElasticVib1, add a pointer to the
+manager class, and override the virtual function for evaluating the right-hand side. Now we
+need to compute expressions involving φ, but this is easily accomplished by the pointers, e.g.,
+mng->poisson->u if u is the name of the unknown scalar ﬁeld in the Poisson2 solver.
+
+The “glue” classes Poisson2 glue and ElasticVib1 glue are very small compared to the
+real solver classes they inherit from. A “glue” class typically needs about a page of code
+unless it adds additional computations. The manager class is a bit more comprehensive
+since it implements the overall solution algorithm, i.e., the time stepping and the calls to the
+independent solvers.
+
+The beneﬁt from using object-oriented programming in the way we have outlined is that
+the original well-tested Poisson and elastic vibration solvers can be reused in a system of
+PDEs without any modiﬁcations. The original solver classes reside in separate ﬁles and are
+hence not subject to any side eﬀects from editing the source code. The “glue” class is also
+in a separate ﬁle and enables the original solver to speak to a manager in charge of solving
+a compound system of PDEs. The advantages are clear: reliability is increased by reusing
+well-tested solvers, and the compound solver is modularized. Our experience is that this
+design reduces the development time signiﬁcantly. Especially the debugging phase is greatly
+simpliﬁed. At any time, the underlying solvers can be trivially pulled out of the compound
+system and veriﬁed independently.
+
+6 Veriﬁcation
+
+Before showing numerical results for a physically relevant application, we report on the
+estimated numerical accuracy of the code, thereby establishing evidence for the correctness
+of the implementation. To investigate numerical errors, we compare numerical results with
+an exact solution. The exact solution is based on the assumption of a displacement ﬁeld in
+z direction only, depending on x and t only. Physically, a normal traction is applied at all
+x = const and y = const boundaries to avoid displacements in the x and y directions, but in
+the code we implement this situation by essential boundary conditions ux = uy = 0. We also
+assume that φ = φ(x, t) and that the material is isotropic. The governing equations then
+
+11
+
+Figure 1: Relationships between classes. The base classes, Poisson2 and Elasticity2 perform
+the solution of the standard time-independent Poisson and elasticity equations, respectively.
+ElasticVib1 is derived from Elastcity2 and solves for time-dependant elastic motion. The
+classes Poisson2 glue and ElasticVib1 glue implement the coupling between the electrostatic
+and mechanical equations, and these classes are controlled by the Manager class.
+
+reduce to
+
+̺¨uz = µ
+
+ǫS
+s
+
+∂2φ
+∂x2 = e14
+
+∂2φ
+∂x2 ,
+
+∂2uz
+∂x2 + e14
+∂2uz
+∂x2 .
+
+(36)
+
+(37)
+
+These equations can be scaled to yield
+
+¨uz =
+
+∂2φ
+∂x2 ,
+
+∂2uz
+∂x2 + α
+∂2uz
+∂x2 .
+The constant α is zero or unity corresponding to whether the elasticity problem couples to
+the electric ﬁeld problem or not. (The three coeﬃcients in the original system are scaled
+away by choosing an appropriate time scale, φ scale, and ui scale.) One possible solution of
+(38)–(39) reads
+
+∂2φ
+∂x2 =
+
+(38)
+
+(39)
+
+uz(x, t) = φ(x, t) = cos(k√1 + αt) sin(kx) .
+
+(40)
+
+In our tests we choose Ω as a three-dimensional beam and k = nπ
+and L the length of the beam. The ends of the beam are then ﬁxed.
+
+L , with n being an integer
+
+12
+
+Our veriﬁcation procedure consists in estimating the convergence rate of the numerical
+
+method. A scalar error measure e is expected to behave like
+
+where A and B are constants independent of the element size h and the time step ∆t. From
+the involved approximations, we expect s = 2 and r = 1 + q, where q is the order of the
+polynomials in an element. In particular, for linear or trilinear elements, r = 2, and if h and
+hr. From two successive experiments,
+∆t are chosen such that h/∆t = const, we see that e
+(hi−1, ei−1) and (hi, ei) we may estimate a convergence rate ri from
+
+∼
+
+e = Ahr + B∆ts,
+
+ri =
+
+ln ei/ei−1
+ln hi/hi−1
+
+.
+
+We have investigated three error measures, given as diﬀerent norms of the error ﬁeld
+
+E = uz
+
+ˆuz, where ˆuz is the numerical solution and uz is the exact solution:
+
+−
+
+E
+
+||L1(Ω) =
+
+||
+
+E
+
+dΩ,
+|
+
+ZΩ |
+
+E
+
+||L2(Ω) = (
+
+||
+
+ZΩ
+
+E
+
+, x
+E(x)
+||L∞(Ω) = sup(
+|
+|
+
+||
+
+∈
+
+Ω) .
+
+E2dΩ)
+
+1
+2 ,
+
+Table 1 displays the values of the error norms and the associated estimates of the conver-
+gence rates ri. As the grid spacing h and the time step ∆t are reduced, the numerical solution
+converges to the exact solution with the expected rate of two. This provides evidence for the
+correctness of the implementation and indicates that our overall solution method, including
+the operator splitting, is of second order in time and space. The spatial convergence rate is
+expected to increase with the order of the polynomials used in the elements.
+
+h
+0.05
+0.1
+0.2
+0.25
+0.5
+
+rates
+
+rates
+
+rates
+
+||
+2.440
+·
+9.760
+·
+3.902
+·
+6.096
+·
+2.432
+·
+
+||
+2.710
+·
+1.084
+·
+4.335
+·
+6.771
+·
+2.702
+·
+Table 1: Error norms and estimated convergence rates for waves in a piezoelectric material,
+with h = 10∆t.
+
+||
+3.830
+1.533
+6.130
+9.574
+3.819
+
+2.000
+1.999
+1.999
+1.996
+
+2.000
+1.999
+1.999
+1.996
+
+1.999
+1.999
+1.999
+1.996
+
+·
+·
+·
+·
+·
+
+E
+L∞
+||
+10−7
+10−6
+10−6
+10−6
+10−5
+
+E
+||L2
+10−6
+10−6
+10−5
+10−5
+10−4
+
+E
+||L1
+10−5
+10−5
+10−4
+10−4
+10−3
+
+7 A surface acoustic wave application
+
+In order to show that our suggested numerical model may be applied to real-world phenom-
+ena, we apply it to a problem in quantum electronics, speciﬁcally in acoustic charge transport.
+We simulate a surface acoustic wave propagating through a piece of GaAs. Surface acoustic
+waves are particular solutions of equations (12) - (15) such that they propagate without decay
+on the surface of a material but decay exponentially into the bulk. The solutions typically
+have the form,
+
+ui =
+
+Ui,je
+
+−kqj zei(kx−ωt)
+
+φ =
+
+Φje
+
+−kqj zei(kx−ωt),
+
+Xj
+
+Xj
+
+13
+
+(41)
+
+assuming x is the direction of propagation, z is the direction into the bulk (z
+
+),
+and the decay constants qj, may be complex, allowing for oscillatory decay (in an exponential
+envelope) into the bulk as is observed for GaAs. The Ui,j and Φj are constant amplitudes, and
+k is a wavenumber. It is a straightforward mathematical procedure to determine the decay
+constants and wave velocity (see [?]). However, we are interested in the more complicated
+dynamics taking place when an obstacle in the form of a charged metallic gate is placed on
+the surface.
+
+→ −∞
+
+In acoustic charge transport, the time-varying electric potential accompanying the SAW
+is used to transport electrons which are trapped in the minima of the waves. To perform
+further manipulation on these electrons, for example, to remove some from a minimum,
+external electric ﬁelds must be applied, and this is achieved by applying voltages to metallic
+gates placed on the surface. In general, the gates have diﬀerent electrical and mechanical
+properties to the bulk piezoelectric material and so we may expect to see interesting eﬀects
+if for example a SAW is passed through the compound structure. Here, we perform three
+simulations where we pass a SAW through a piece of GaAs. The ﬁrst will be a bare SAW,
+as a check to see we do excite the required modes. The following two will have a metallic
+gate of contrasting mechanical properties to GaAs with a static voltage applied on it. In
+the ﬁrst of these, we decouple the mechanical motion from the electric ﬁeld (while keeping
+the electric ﬁeld coupled to the mechanical motion). In the second we allow the full mutual
+coupling between the electrical and mechanical ﬁelds to take place. The dimensions of the
+gate are 600nm
+200nm. To magnify the eﬀect of the compound material structure
+we use a ﬁctitious material for the gate, similar in crystal structure to GaAs, but with the
+elastic constants and mass density changed by one order of magnitude. Moreover, we apply
+a relatively large voltage of 1.5V so that the coupling of the mechanical displacement to the
+electric ﬁeld is evident. We also point out that SAW travels along the crystal positive [011]
+axis with the positive z axis aligned with the crystal positive [100] axis.
+
+400nm
+
+×
+
+×
+
+7.1 Experiments with surface acoustic waves
+
+Excitation of surface acoustic waves.
+In order to excite these wave modes, we apply a
+time-dependent Dirichlet boundary condition to the z component of the displacement ﬁeld
+on a small region on the grid. This can be expressed as
+
+ux = uy = 0,
+
+uz = A sin(2πf t),
+
+x0 ≤
+
+x
+
+≤
+
+x1,
+
+z = 0 .
+
+(42)
+
+The frequency f used is 2.7GHz and the amplitude A is chosen so that the SAW amplitude
+is approximately 20mV at a depth of 100nm.
+
+Figure 2 shows the π
+
+2 phase diﬀerence between the x and z components of the displace-
+ment vector, and the larger z amplitude, suggesting elliptical polarization in the sagittal
+plane. Figures 3 and 4 show two-dimensional slices, in perpendicular planes, of the full
+three-dimensional solutions. The ﬁrst shows the non-decaying nature of these waves along
+the propagation direction. The SAW wavelength can be seen to be approximately 1000nm
+20 ms−1, which is in good agreement
+and its velocity is computed to be approximately 2700
+with analytical calculations for the wave velocity. The second ﬁgure shows the surface nature
+of these waves; the greatest amplitude is near the surface and there is no observable decay
+in the direction of propagation but they decay exponentially into the bulk. On the far left of
+each image (where the boundary condition is applied), bulk waves may be observed but as
+the waves propagate towards the right, they dissipate all their energy into the bulk and the
+only remaining waves are the surface waves. Figure 5 shows the SAW amplitude as a function
+of depth. We see that the amplitude undergoes oscillatory (complex exponential) decay into
+
+±
+
+14
+
+the bulk and is negligible a few microns below the surface, again in good agreement with
+analytical expressions derivable from (41).
+
+Figure 2: The relative amplitudes and phases of the displacements ux and uz, parallel and
+perpendicular respectively, to the SAW propagation.
+
+3000
+
+2000
+
+1000
+
+0
+
+12.5
+
+9.91
+
+7.34
+
+4.78
+
+2.22
+
+−0.349
+
+−2.91
+
+−5.48
+
+−8.04
+
+−10.6
+
+−13.2
+
+8.0×103
+
+9.0×103
+
+1.0×104
+
+1.1×104
+
+Figure 3: Plane waves of the electric potential (mV), (x-y plane, z=constant), 100nm below
+the surface, at time 1.6ns. The x and y coordinates are in nm.
+
+15
+
+8000
+
+7000
+
+6000
+
+5000
+
+4000
+
+3000
+
+2000
+
+1000
+
+22.1
+
+17.8
+
+13.5
+
+9.21
+
+4.91
+
+0.621
+
+−3.67
+
+−7.96
+
+−12.3
+
+−16.5
+
+−20.8
+
+16
+
+0
+
+8.0×103
+
+1.0×104
+
+Figure 4: Electric potential (mV), (x-z plane y = const), at time 1.6ns. The x and z
+coordinates are in nm.
+
+ 15
+
+ 10
+
+ 5
+
+ 0
+
+-5
+
+ 0
+
+5000
+
+4000
+
+3000
+
+2000
+
+1000
+
+ 1000
+
+ 2000
+
+ 3000
+
+ 4000
+
+ 5000
+
+ 6000
+
+ 7000
+
+Figure 5: A typical curve of the electric potential (mV) as a function of depth into the bulk.
+This curve was taken at time 0.85ns. The horizontal axis is in nm.
+
+·
+
+103nm, 2.5
+
+The eﬀect of the compound mechanical structure. Figure 6 shows the magnitude
+of the displacement ﬁeld as the SAW moving from the left of the ﬁgure to the right, passes
+through the gate when the mechanical motion is decoupled from the electric ﬁeld. The gate
+103nm). We observe a peak to the left of the gate (due to
+is centered at (8.9
+a reﬂection) and a trough (due to damping of the wave) to the right. We also just barely
+see vibrations moving away from the gate along the y direction. Since in this simulation,
+the mechanical motion is independent of the electric ﬁelds, this damping is due purely to the
+presence of a mechanical structure on the surface. The damping of the mechanical amplitude
+may be large enough to aﬀect the electric potential. In this simulation, the electric potential
+is not aﬀected signiﬁcantly as shown in ﬁgure 7. The central blur is the electric potential due
+to the gate. The SAW peak emerging from the gate has been damped in the central region.
+
+·
+
+0.0139
+
+0.0127
+
+0.0115
+
+0.0103
+
+0.00909
+
+0.0079
+
+0.0067
+
+0.0055
+
+0.0043
+
+0.0031
+
+0.0019
+
+0
+
+7.0×103
+
+9.0×103
+
+1.1×104
+
+Figure 6: The magnitude of the displacement ﬁeld (x-y plane, z=constant), at time 2ns,
+as the SAW moving from left to right, passes through the gate (not visible) centered at
+(8.9
+
+103nm). The mechanical motion is decoupled from the electric ﬁeld.
+
+103nm, 2.5
+
+·
+
+·
+
+The eﬀect of electromechanical coupling. Figure 8 shows the magnitude of the dis-
+placement ﬁeld, at time 2ns, as the SAW passes through the gate, in the case where mutual
+coupling between the electric and mechanical ﬁelds is allowed. As in the decoupled case,
+we observe a peak to the left of the gate (due to reﬂection of the wave) and a trough (due
+to damping of the wave) to the right. Again, we also see vibrations moving away from the
+gate along the y direction. Comparing the ﬁgures 6 and 8, we see that there is additional
+
+17
+
+0
+
+7.0×103
+
+9.0×103
+
+1.1×104
+
+Figure 7: The total electric potential (mV), (x-y plane, z=constant), at time 2ns, as the
+SAW passes through the gate when the mechanical motion is decoupled from the electric
+103nm). The scale has been
+ﬁeld. The gate (not visible) is centered at (8.9
+restricted so that the SAW potential is visible. The central blur, which is due to the large
+external potential has the value of 1.5V at its center.
+
+103nm, 2.5
+
+·
+
+·
+
+mechanical deformation throughout the material due to the presence of a charged metallic
+gate. Also, the scale of ﬁgure 8 is shifted up compared to that of ﬁgure 6. By looking at the
+displacement ﬁeld at time 0 i.e. before the arrival of the SAW, we can see the eﬀect of the
+applied electric ﬁeld. This is shown in ﬁgure 9.
+
+0
+
+7.0×103
+
+9.0×103
+
+1.1×104
+
+Figure 8: The magnitude of the displacement ﬁeld (x-y plane, z=constant), at time 2ns,
+as the SAW moving from left to right, passes through the gate (not visible) centered at
+103nm) when full coupling between electric and mechanical ﬁelds is allowed.
+(8.9
+
+103nm, 2.5
+
+·
+
+·
+
+5000
+
+4000
+
+3000
+
+2000
+
+1000
+
+5000
+
+4000
+
+3000
+
+2000
+
+1000
+
+400
+
+390
+
+381
+
+371
+
+362
+
+352
+
+342
+
+333
+
+323
+
+314
+
+304
+
+0.0148
+
+0.0137
+
+0.0126
+
+0.0115
+
+0.0103
+
+0.00923
+
+0.00811
+
+0.007
+
+0.00589
+
+0.00478
+
+0.00366
+
+18
+
+5000
+
+4000
+
+3000
+
+2000
+
+1000
+
+0.00692
+
+0.00671
+
+0.0065
+
+0.00629
+
+0.00609
+
+0.00588
+
+0.00567
+
+0.00546
+
+0.00525
+
+0.00504
+
+0.00483
+
+0
+
+7.0×103
+
+9.0×103
+
+1.1×104
+
+Figure 9: The magnitude of the displacement ﬁeld (x-y plane, z=constant), at time 0, demon-
+strating the mechanical strains caused purely by the gate (not visible) with a 1.5V applied
+103nm) when full coupling between electric and me-
+voltage centered at (8.9
+chanical ﬁelds are allowed.
+
+103nm, 2.5
+
+·
+
+·
+
+8 Summary and concluding remarks
+
+Our aim with this paper is to suggest a computationally fast method for simulating surface
+acoustic waves in piezoelectric devices where stress, deformation, and a quasi-static electric
+ﬁeld are fully coupled. The basic idea of the numerical scheme is to use a ﬁnite diﬀerence
+approximation in time that decouples the elasticity and the electric ﬁeld problems such that
+these can be solved in sequence at each time level. This decoupling can also be explored in
+computer implementations, because independent solvers for anisotropic elasticity problems
+and Poisson problems can be joined together. We showed in particular how object-oriented
+programming techniques can realize such couplings in a very convenient way.
+
+Through numerical experiments in a physically one-dimensional wave propagation prob-
+lem we have veriﬁed that the three-dimensional code reproduces the expected quadratic con-
+vergence in space and time if linear or trilinear elements are used. Finally, we have applied
+the proposed numerical methodology to real SAW phenomena in a device with complicated
+geometry. The results indicate that the method is capable to predict the expected complex
+elasto-electric dynamics in such a device.
+
+The principal limitation of the equation splitting is a stability criterion on the time step
+length. Implicit methods may remove time step restrictions, but at a cost of the need to
+solve large coupled linear systems at each time level. The computer implementation is also
+more involved and requires a special-purpose solution rather than just joining two well-tested
+equation components. However, for wave propagation problems one usually needs a ﬁne mesh
+and a small time step to resolve the waves, typically leading to h/∆t = const, which is in
+accordance with the stability criterion. Explicit time stepping approaches are therefore highly
+relevant and allows eﬃcient algorithms and implementations.
+
+Forthcoming work will focus on domain decomposition methods for parallelizing the solver
+and thereby enable simulation of large-scale SAW problems. The described time stepping
+approach and associated equation splitting are particularly well suited for parallel computing,
+because the elasticity problem can be made “perfectly parallel”, and very eﬃcient paralleliza-
+tion strategies exist for the Poisson equation.
+
+19
+
+Acknowledgements. We thank Dr. Xinq Cai and Prof. Are Magnus Bruaset of Simula
+Research Laboratory for providing assistance in the programming and debugging of the
+code, and Dr. Masaya Kataoka of the Cavendish Laboratory for useful discussions. We
+also acknowledge the Cambridge-MIT Institute, Darwin College Cambridge, and the Simula
+Research Laboratory for ﬁnancial support.
+
+20
+
+

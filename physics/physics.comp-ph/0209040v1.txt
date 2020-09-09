@@ -1,0 +1,1534 @@
+2
+0
+0
+2
+ 
+p
+e
+S
+ 
+0
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+0
+4
+0
+9
+0
+2
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Combining multigrid and wavelet ideas to construct more eﬃcient
+multiscale algorithms for the solution of Poisson’s equation
+
+Stefan Goedecker
+
+D´epartement de recherche fondamentale sur la mati`ere condens´ee,
+SP2M/L Sim, CEA-Grenoble, 38054 Grenoble cedex 9, France
+
+1 Abstract
+
+It is shown how various ideas that are well established for the solution of Poisson’s equation
+using plane waves, Fast Multipole and Multigrid methods can be incorporated into the
+wavelet context. The combination of wavelet concepts and multigrid techniques turns
+out to be particularly fruitful. We propose a new multigrid V cycle scheme that is not
+only much simpler, but also more eﬃcient than the standard V cycle. Whereas in the
+traditional V cycle the residue is passed to the coarser grid levels, this new scheme does
+not require the calculation of a residue. Instead it works with copies of the charge density
+on the diﬀerent grid levels that were obtained from the underlying charge density on the
+ﬁnest grid by wavelet transformations. This scheme is not limited to the pure wavelet
+setting, where it is faster than the preconditiooned conjugate gradient method, but equally
+well applicable for ﬁnite diﬀerence discretizations of Poisson’s equation.
+
+2 Introduction
+
+Poisson’s equation
+
+is the basic equation for electrostatic problems. As such it plays an important role in
+a large variety of scientiﬁc and technological problems. The solution of the diﬀerential
+equation Eq. 1 can be written as an integral equation
+
+2V (r) =
+
+4πρ(r)
+
+∇
+
+−
+
+V (r) =
+
+Z
+
+ρ(r′)
+r′
+r
+
+|
+
+−
+
+|
+
+(1)
+
+(2)
+
+Gravitational problems are based on exactly the same equations as the electrostatic prob-
+lem, but we will use in this article the language of electrostatics, i.e. we will refer to ρ(r) as
+a charge density. The most eﬃcient numerical approaches for the solution of electrostatic
+problems are based on Eq /refpoisson rather than Eq. /reﬁnteq. However preconditioning
+steps found in these methods can be considered as approximate solutions of Eq. /reﬁnteq.
+The fact that the Green’s function
+|r−r′| is of long range makes the numerical solution
+of Poisson’s equation diﬃcult, since it implies that a charge density at a point r′ will
+have an non-negligible inﬂuence on the potential V (r) at a point r far away. A naive
+implementation of Eq. 2 would therefore have a quadratic scaling. It comes however to
+our help, that the potential arising from a charge distribution far away is slowly varying
+and does not depend on the details of the charge distribution. All eﬃcient algorithms for
+
+1
+
+1
+
+solving electrostatic problems are therefore based on a hierarchical multiscale treatment.
+On the short length scales the rapid variations of the potential due to the exact charge
+distribution of close by sources of charge are treated, on the large length scales the slow
+variation due to some smoothed charge distribution of far sources is accounted for. Since
+the number of degrees of freedom decreases rapidly with increasing length scales, one can
+obtain algorithms with linear or nearly linear scaling. In the following, we will brieﬂy
+summarize how this hierarchical treatment is implemented in the standard algorithms
+
+•
+
+Fourier Analysis:
+If the charge density is written in its Fourier representation
+
+ρ(r) =
+
+ρKeiKr
+
+XK
+
+the diﬀerent length scales that are in this case given by λ = 2π
+and the Fourier representation of the potential is given by
+
+K decouple entirely
+
+V (r) =
+
+ρK
+
+K 2 eiKr
+
+XK
+
+(3)
+
+The Fourier analysis of the real space charge density necessary to obtain its Fourier
+components ρK and the synthesis of the potential in real space from its Fourier
+components given by Eq. 3 can be done with Fast Fourier methods at a cost of
+N log2(N) where N is the number of grid points.
+
+•
+
+Fast Multipole methods (FMM):
+The Fast Multipole method [1] allows us to calculate the potentials and the forces of
+a discrete system of charged point particles with linear or nearly linear scaling. It can
+thus be considered as the solution of Poisson’s equation for a charge density that is
+a sum of delta functions centered at the positions of the particles. The potential and
+forces have to be evaluated only at the position of the particles. In this method both
+the charge density and the potential are coarse grained and only these coarse grained
+quantities are interacting over long distances. The coarse grained quantities are large
+in spatial extent and have less details, i.e they are smoothed versions of the original
+charge density. The coarse graining is done recursively, leading to a hierarchy of
+coarse grained quantities. The spatial extent of these coarse grained quantities at
+the various levels of the hierarchy and the minimum interaction distance, for which
+this approximate interaction is considered to be exact, are proportional. The coarse
+graining is done by a multipole expansion. The Fast Multipole method can also
+easily be generalized to continuous charge distributions that are sums of Gaussian
+charge distributions [4].
+
+•
+
+Multigrid methods (MG):
+Trying to solve Poisson’s equation by any relaxation or iterative method (such as
+conjugate gradient) on the ﬁne grid on which one ﬁnally wants to have the solution
+leads to a number of iterations that increases strongly with the size of the grid. The
+reason for this is that on a grid with a given spacing h one can eﬃciently treat Fourier
+
+2
+
+components with a wavelength λ = 2π
+K that is comparable to the the grid spacing h,
+but the longer wavelength Fourier components converge very slowly. This increase in
+the number of iterations prevents a straightforward linear scaling solution of Eq. 1.
+In the multigrid method, pioneered by A. Brandt [5], one is therefore introducing a
+hierarchy of grids with a grid spacing that is increasing by a factor of two on each
+hierarchic level. In contrast to the Fourier and FMM methods where the charge and
+the potential are directly decomposed into components characterized by a certain
+length scale, it is the residue that is passed from the ﬁne grids to the coarse grids
+in the MG method. The residue corresponds to the charge that would give rise to
+a potential that is the diﬀerence between the exact potential and the approximate
+potential at the current stage of the iteration.
+
+In the following we will now show that all the three above mentioned approaches ﬁt
+
+quite naturally into the framework of wavelet multiresolution analysis.
+
+Within wavelet theory [18] one has two possible representations of a function f (x), a
+
+scaling function representation
+
+f (x) =
+
+sKmax
+j
+
+φKmax
+
+(x)
+
+j
+
+Xj
+
+and a wavelet representation.
+
+f (x) =
+
+sKmin
+j
+
+φKmin
+j
+
+(x) +
+
+j ψk
+dk
+
+j (x) .
+
+Xj
+
+Kmax
+
+Xk=Kmin Xj
+
+In contrast to the scaling function representation, the wavelet representation is a hierarchic
+representation. The wavelet at the hierarchic level k is related to the mother wavelet ψ
+by
+
+The characteristic length scale of a wavelet at resolution level k is therefore proportional
+to 2−k. A wavelet on a certain level k is a linear combination of scaling functions at the
+higher resolution level k + 1
+
+Scaling functions at adjacent resolution levels are related by a similar reﬁnement relation
+
+and hence also any wavelet at a resolution level k is a linear combination of the highest
+resolution scaling functions. The so-called fast wavelet transform allows us to transform
+back and forth between a scaling function and a wavelet representation.
+
+i (x) = √2
+ψk
+
+ψ(2kx
+
+k
+
+i)
+
+−
+
+ψk
+
+i (x) =
+
+gj φk+1
+
+2i+j(x)
+
+φk
+i (x) =
+
+hj φk+1
+
+2i+j(x)
+
+m
+
+Xj=−m
+
+m
+
+Xj=−m
+
+3
+
+(4)
+
+(5)
+
+(6)
+
+(7)
+
+(8)
+
+(9)
+
+(10)
+
+(11)
+
+Let us now introduce wavelet representations of the potential and the charge density
+
+V (x) =
+
+V Kmin
+
+j
+
+φKmin
+j
+
+(x) +
+
+j ψk
+V k
+
+j (x)
+
+ρ(x) =
+
+ρKmin
+j
+
+φKmin
+j
+
+(x) +
+
+j ψk
+ρk
+
+j (x)
+
+Kmax
+
+Xk=Kmin Xj
+Kmax
+
+Xk=Kmin Xj
+
+Xj
+
+Xj
+
+Diﬀerent levels do not completely decouple, i.e the components on level k, V k
+
+j , of the
+
+exact overall solution do not satisfy the single level Poisson equation
+
+2 
+
+∇
+
+Xj
+
+
+
+j ψk
+V k
+
+j (x)
+
+
+=
+
+4π 
+
+−
+
+j ψk
+ρk
+
+j (x)
+
+
+Xj
+
+
+
+within the chosen discretization scheme. This is due to the fact that the wavelets are not
+perfectly localized in Fourier space, i.e. many frequencies are necessary to synthesize a
+wavelet. However the amplitude of all these frequencies is clearly peaked at a nonzero
+characteristic frequency for any wavelet with at least one vanishing moment. From the
+scaling property (Eq. 6) it follows, that the frequency at which the peak occurs changes
+by a factor of two on neighboring resolution grids. This suggest that the coupling between
+the diﬀerent resolution levels is weak.
+
+In the preeceding paragraph we presented the mathematical framework only for the
+one-dimensional case. The generalization to the 3-dim case is straightforward by using
+tensor products [18]. Also in the rest of the paper only the one-dimensional form of
+the mathematical formulas will presented for reasons of simplicity. It has to be stressed
+however that all the numerical results were obtained for the three-dimensional case.
+
+3 The Fourier approach for wavelets
+
+Preconditioning by the diagonal is the simplest preconditioning method. Unfortunately
+it does not work in most basis sets such as ﬁnite elements. Scaling function basis sets
+are no exception to this rule.
+It can however be applied if the Laplacian is expressed
+in a wavelet basis set [19]. Preconditioned conjugate gradient type methods are then a
+possible method for the solution of Poissons equation expressed in diﬀerential form (Eq.1).
+As discussed above we expect the coupling between diﬀerent resolution levels to be weak.
+Within one resolution level the amplitude of the matrix elements should decay rapidly
+with distance as soon as the wavelet basis functions are not any more overlapping since
+they represent the interaction of a dipole or higher multipole with other multipoles of the
+same type. For overlapping basis functions the oﬀ-diagonal matrix elements within one
+block corresponding to one resolution level are presumably not much smaller than the
+diagonal ones. Nevertheless they are neglected in the current precondition schemes. This
+neglect is probably the main reason for their relatively slow convergence. The multigrid
+methods to be discussed later include also in an approximative way through Gauss-Seidel
+relaxations this oﬀ-diagonal coupling within each block.
+
+4
+
+6
+The matrix elements of the Laplacian in a wavelet basis can be calculated analyti-
+cally [15]. From the scaling relation (Eq. 6) it follows that they increase by a factor of 4
+on each consecutive ﬁner resolution level.
+
+ψk+1
+0
+
+(x)
+
+Z
+
+∂2
+∂x2 ψk+1
+
+0
+
+(x)dx = 2
+
+ψk
+
+0 (2x)
+
+0 (2x)dx
+
+(12)
+
+∂2
+∂x2 ψk
+∂2
+∂x2 ψk
+
+Z
+
+Z
+
+= 4
+
+ψk
+
+j (x)
+
+j (x)dx
+
+Hence the preconditioning step using simply the diagonal is given by
+
+∆V k
+
+j = const 4−k∆ρk
+j
+
+In analogy to Eq. 9,10, the ∆ρk
+j ’s are the wavelet coeﬃcients on the k-th resolution
+2 ˜V (r) + 4πρ(r) transformed into a wavelet representation.
+level of the residue ∆ρ(r) =
+˜V (r) is the approximate solution at a certain iteration of the solution process. The
+preconditioned residue ∆V is then used to update the approximate potential ˜V . In the
+case of a preconditioned steepest descent this update would simply read
+
+∇
+
+(13)
+
+(14)
+
+˜V
+
+˜V + α∆V
+
+←
+
+where α is an appropriate step size.
+
+In the 3-dimensional case, the preconditioning is slightly more complicated than in the
+one dimensional case of Eq. 13. In the 3-dimensional case the diagonal elements of the
+Laplacian are diﬀerent for wavelets that are pure products of one-dimensional wavelets or
+that are products of scaling functions and wavelets. Hence the constant const in Eq. 13,
+that represents the inverse of the diagonal elements of this type of wavelet, is diﬀerent for
+the diﬀerent wavelets that can be formed in the three-dimensional case.
+
+In the following we will present some numerical results for the solution of the 3-
+dimensional Poisson equation in a wavelet basis using the Fourier approach. All the
+methods presented in this paper will have the property that the convergence rate is
+independent of the grid size. We have chosen 643 grids for all the numerical examples.
+The fact that the number of iterations necessary to reach a certain target accuracy is
+independent of the system size together with the fact that a single iteration involves a
+cost that is linear with respect to the number of grid points ensures that the Poisson’s
+equation can be solved with overall linear scaling. Whereas we use here only simple
+equidistant grids, this linear scaling has already been demonstrated with highly adaptive
+grids in problems that involve many diﬀerent length scales [6, 7, 8, 9]
+
+Fig. 1 shows numerical results for several wavelet families. The slow convergence of
+the interpolating wavelets is due to the fact that they have a non-vanishing average and
+therefore a non-vanishing zero Fourier component [7]. Hence they are all localized in
+Fourier space at the origin instead of being localized around a non-zero frequency. This
+deﬁciency can be eliminated by lifting. The Fourier power spectrum of the lifted wavelets
+tends to zero at the origin with zero slope for the family with two vanishing moments
+considered here. The higher 8-th order lifted interpolating wavelet is smoother than its
+6-th order counterpart and hence better localized in the high frequency part. This leads
+to a slightly faster convergence.
+
+5
+
+INTP. WVLT 6
+LFT. INTP. WVLT 6
+LFT. INTP. WVLT 8
+
+e
+u
+d
+s
+e
+r
+
+i
+
+100
+10
+1
+0.1
+0.01
+1e-03
+1e-04
+1e-05
+1e-06
+1e-07
+1e-08
+1e-09
+
+0
+
+20
+
+40
+
+60
+
+80 100 120 140 160 180
+
+iteration
+
+Figure 1: The reduction of the residue during a steepest descent iteration with interpo-
+lating and lifted interpolating wavelets.
+
+Combining the diagonal preconditioning (Eq. 13) with a conjugate gradient minimiza-
+tion instead of a steepest descent minimization gives a signiﬁcantly faster convergence.
+The number of iterations can nearly be cut into half for the cases examined above with
+the steepest descent method.
+
+Up to now we have only considered the case where the elements of the matrix repre-
+senting the Laplacian were calculated within the same wavelet family that was used to
+analyze the residue by wavelet transformations to do the preconditioning step. More gen-
+eral schemes can however be implemented. It is not even necessary that the calculation
+of the Laplacian matrix elements is done in a wavelet basis. One can instead use simple
+second order ﬁnite diﬀerences, which in the one-dimensional case are given by
+
+1
+h2 (
+
+Vi−1 + 2Vi −
+−
+or some higher order ﬁnite diﬀerences for the calculation of the matrix elements. The
+scaling relation Eq. 12 does not any more hold exactly, but it is fulﬁlled approximately
+and the schemes works as well or even better than in the pure wavelet case as is shown
+in Fig. 2.
+
+Vi+1) ,
+
+(15)
+
+4 The FMM approach for wavelets
+
+In the Fourier approach we used an approximate diagonal inverse in the standard rep-
+resentation for preconditioning. We postulated that this is a good approximate inverse
+because the coupling between diﬀerent wavelets and in particular between wavelets on
+diﬀerent resolution levels should be small. There is another operator representation, the
+non-standard form[16, 11], where the coupling between the diﬀerent levels is not contained
+in the operator representation but hidden in the redundant data representation that is
+
+6
+
+FD 2 + LFT. INTP. WVLT 8
+FD 6 + LFT. INTP. WVLT 8
+LFT. INTP. WVLT 8
+
+e
+u
+d
+s
+e
+r
+
+i
+
+100
+10
+1
+0.1
+0.01
+0.001
+0.0001
+1e-05
+1e-06
+1e-07
+1e-08
+1e-09
+
+0
+
+10 20 30 40 50 60 70 80 90 100
+
+iteration
+
+Figure 2: The convergence rate for the case where Poisson’s equation is solved with
+ﬁnite diﬀerences and 8-th order lifted wavelets are used for the preconditioning step. For
+comparison the pure wavelet result for the same wavelet family of Fig 1 is reproduced.
+
+required for its application. This non-standard form might of course also be used to repre-
+sent an approximate inverse for preconditioning purposes. The non-standard form would
+have the advantage that we would get an indirect coupling between diﬀerent levels k even
+though we do not have to include it in the matrix representation for the approximate
+|r−r′| the coupling at one res-
+inverse. Since the inverse represents the Green’s function
+olution level will decay rapidly for the following reasons. On one level k we do not have
+any coupling in the non-standard representation between scaling functions and scaling
+functions, but only between scaling functions with wavelets and wavelets with wavelets.
+The wavelets have in general several vanishing moments, which means that the electro-
+static potentials arising from a wavelet charge distribution decays rapidly (e.g.
+like an
+octopole). Hence the matrix elements in the non-standard representation decay rapidly
+away from the diagonal for each of the 3 non-zero blocks.
+
+1
+
+Let us now point out the similarities between using the non-standard form of the
+Green’s function and the FMM method. Both in the non-standard operator form and
+in the FMM method successively coarse grained quantities of the charge density are cal-
+culated. In the FMM method this is done by calculating multipoles of charge densities
+formed by particles extending over larger and larger regions, in the non-standard oper-
+ator form this is done by applying the fast wavelet transform to obtain the redundant
+representation of the charge density. The representation is redundant since it contains
+at each resolution level both the wavelet and scaling function coeﬃcients. Both in the
+non-standard operator form and the FMM method the interactions are then calculated for
+these redundant quantities. The ﬁnal step in both methods consists then of calculating
+the potential in a non-redundant form. In the non-standard operator form this is again
+done with the help of the fast wavelet transform, in the FMM method again by multipole
+techniques.
+
+The fast decay of the coupling postulated above sets in only if the basis functions enter-
+
+7
+
+1
+
+ing into the integral for the matrix element are non-overlapping. In the three-dimensional
+setting, we are mainly interested in, the number of matrix elements that involve overlap-
+ping basis functions is substantial. This comes from the fact that the Green’s function
+|r−r′| is in contrast to the Laplacian not separable. The number of signiﬁcant matrix
+elements is consequently proportional to a three-dimensional volume of a certain radius
+Rc and not to three times a one-dimensional volume of the same length Rc. For these
+reasons we have not numerically implemented this approach.
+
+5 The MG approach for wavelets
+
+The aim of this part of the article is twofold. One aspect is how to speed up the con-
+vergence of the solution process for Poisson’s equation expressed in a wavelet basis set
+compared to the Fourier approach. The other, and more important, aspect is how to ac-
+celerate multigrid schemes by incorporating wavelet concepts. The part therefore begins
+with a brief review of the multigrid method.
+
+Fig. 3 schematically shows the algorithm of a standard multigrid V cycle [2, 3]. Even
+though the scheme is valid in any dimension, a two dimensional setting is suggested by
+the ﬁgure, since the data are represented as squares. Since less data are available on the
+coarse grids, the squares holding the coarse grid data are increasingly smaller. The upper
+half of the ﬁgure shows the ﬁrst part of the V cycle where one goes from the ﬁnest grid
+to the coarsest grid and the lower half the second part where one goes back to the ﬁnest
+grid.
+
+In the ﬁrst part of the V cycle the potential on all hierarchic grids is improved by
+a standard red-black Gauss-Seidel relaxation denoted by GS. The GS relaxation reduces
+the error of wavelengths λ that are comparable to the grid spacing h very eﬃciently. In
+the 3-dimensional case we are considering here, the smoothing factor is .445 (page 74
+of ref [2]). Since we use 2 GS relaxations roughly one quarter of the error around the
+wavelength h survives the relaxations on each level. As a consequence the residue ∆ρ
+contains mainly longer wavelengths which then in turn are again eﬃciently eliminated
+by the GS relaxations on the coarser grids. Nevertheless, the remaining quarter of the
+shorter wavelengths surviving the relaxations on the ﬁner grid pollutes the residue on the
+coarser grid through aliasing eﬀects. Additional pollution is introduced by the restriction
+operation. Additional means that even if the residue on the ﬁner grid would contain only
+a wavelength h the restricted quantity would not be identically zero.
+
+In the second part of the V cycle the solutions obtained by relaxation on the coarse
+grid are prolongated to the ﬁne grids and added to the existing solutions on each level.
+Aliasing pollution is again present in the prolongation procedure. Due to the accumulated
+aliasing errors 2 GS relaxations are again done on each level before proceeding to the next
+ﬁner level.
+
+To a ﬁrst approximation the diﬀerent representations of ρ at the top of Fig. 3 represent
+Fourier ﬁltered version of the real space data set ρ on the ﬁnest grid. The large data set
+contains all the Fourier components, while the smaller data sets contain only lower and
+lower frequency parts of ρ. Because of the various aliasing errors described above the
+Fourier decomposition is however not perfect. Obviously it would be desirable to make
+
+8
+
+this Fourier decomposition as perfect as possible. Then the GS relaxations would not
+have to deal with any Fourier components arising from aliasing errors.
+
+ρ
+
+∆ ρ
+
+V
+
+(1)
+
+2*GS
+
+(2) R
+(3)
+
+R(4)
+(5)
+
+4*GS
+
+8*GS
+
+R(6)
+
+(7)
+
+16*GS
+
+(16)
+
+2*GS
+
+(13)
+
+4*GS
+
+(10)
+
+8*GS
+
+(14)
+
+P
+
+(12)
+
++
+
+(11)
+
+P
+
+ (8)
+
+P
+
+(9)
+
++
+
+(15)
+
++
+
+Figure 3: Schematic representation of a multigrid V cycle as described in the text. GS
+denotes a red-black Gauss-Seidel relaxation, R restriction, P prolongation and + addition
+of the data sets. The numbering in parentheses gives the ordering of the diﬀerent steps
+of the algorithm.
+
+To establish the relation between multigrid and wavelet theory let us ﬁrst note that
+the injection scheme for the restriction corresponds to a wavelet analysis step (Eq. 26
+of ref. [11]), whereas the standard linear prolongation corresponds to a wavelet synthesis
+step (formula 27 of ref. [11]) where all the detail or diﬀerence coeﬃcients d are set to zero.
+
+For vanishing d coeﬃcients, the wavelet analysis step is given by
+
+and the wavelet synthesis step by
+
+s2h
+i =
+
+˜hjsh
+
+j+2i
+
+m
+
+Xj=−m
+
+sh
+2i =
+
+h2j s2h
+i−j
+
+sh
+2i+1 =
+
+h2j+1 s2h
+
+i−j .
+
+m/2
+
+Xj=−m/2
+m/2
+
+Xj=−m/2
+
+s2h
+i = sh
+2i
+
+9
+
+(16)
+
+(17)
+
+(18)
+
+Using the values of the ﬁlters ˜h and h for interpolating wavelets we obtain
+
+and
+
+2i = s2h
+sh
+i
+1
+2
+
+sh
+2i+1 =
+
+s2h
+i +
+
+s2h
+i+1 .
+
+1
+2
+
+which is the standard injection and interpolation. As a consequence of the fact that it
+can be considered as a wavelet forward and backward transformation, the combination of
+injection and interpolation has the appealing property that applying a restriction onto a
+prolongation gives the identity.
+
+Usually injection is replaced by the full weightening scheme,
+
+s2h
+i =
+
+sh
+2i−1 +
+
+sh
+2i +
+
+sh
+2i+1 .
+
+1
+2
+
+1
+4
+
+1
+4
+
+This scheme has the advantage that it conserves averages. Applying it to a charge density
+thus ensures that the total charge is the same on any grid level. Trying to put the
+full weightening scheme into the wavelet theory framework gives a ﬁlter ˜h with nonzero
+values of ˜h−1 = 1
+4 This ﬁlter ˜h does not satisfy the orthogonality
+relations of wavelet theory (formula 8 of ref. [11]) with the h ﬁlter corresponding to linear
+interpolation. Hence a prolongation followed by a restriction does not give the identity.
+
+4 , ˜h0 = 1
+
+2, ˜h1 = 1
+
+A pair of restriction and prolongation operators that conserve averages can however
+also be derived from wavelet theory. Instead of using interpolating wavelets we have to use
+lifted interpolating wavelets [13, 12]. In this way we can obtain both properties, average
+conservation and the identity for a prolongation restriction sequence. Using the ﬁlters
+derived in ref. [11] we obtain
+
+s2h
+i =
+
+1
+8
+
+−
+
+sh
+2i−2 +
+
+sh
+2i−1 +
+
+sh
+2i +
+
+3
+4
+
+1
+4
+
+sh
+2i+1 −
+
+1
+8
+
+sh
+2i+2
+
+1
+4
+
+(19)
+
+(20)
+
+(21)
+
+(22)
+
+2i = s2h
+sh
+i
+1
+2
+
+sh
+2i+1 =
+
+s2h
+i +
+
+s2h
+i+1 .
+
+1
+2
+
+−
+
+−
+
+The right panel of Fig. 4 shows the convergence rate of a sequence of V cycles for
+the full weightening/interpolation (Eq. 20,19) scheme and various wavelet based schemes,
+namely the scheme obtained from second order lifted wavelets (Eq. 21,22), the corre-
+sponding scheme, but obtained form 6-th order lifted wavelets ( The ﬁlters of Eq. 17 and
+5, ...5) = 3/256, 0, -25/256, 0, 75/128, 1, 75/128, 0, -25/256 0, 3/256
+Eq. 16 are h(
+and ˜h(
+6, ...6) = -3/1024, 0, 11/512, 0, -125/1024, 1/4, 181/256, 1/4, -125/1024, 0,
+11/512, 0, -3/1024 ) and a scheme obtained from twofold lifted 4-th order interpolat-
+3, ...3) = 1/16, 0, 9/16, 1, 9/16, 0, 1/16
+ing wavelets with 3 vanishing moments ( h(
+and ˜h(
+8, ...8) = 9/16384, 0, -35/4096, 9/1024, 189/4096, -59/1024, -477/4096, 153/512,
+5379/8192, 153/512, -477/4096, -59/1024, 189/4096, 9/1024, -35/4096, 0, 9/16384 ). Even
+though these ﬁlters are much longer than the ones used in Eq. 20,19,21,22, the CPU time
+does not increase substantially. This come from the fact that on modern computers the
+transfer of the data into the cache is the most time consuming part. How many numerical
+
+−
+
+−
+
+10
+
+operations are than performed of these data residing in cache has only a minor inﬂuence
+on the timing. The combination injection/interpolation (Eq. 18,19), is not shown since
+it is much worse, requiring at least the double of the number of iterations for the target
+accuracy. Since the convergence rate is slightly faster, the new wavelet based schemes for
+restriction and prolongation are always more eﬃcient than the Full Weightening scheme,
+both for ﬁnite diﬀerence discretizations and scaling function basis sets.
+
+The main justiﬁcation for the relaxations in the upper part of the traditional multigrid
+algorithm shown in Fig. 3 is to eliminate the high frequencies. This can however be done
+directly by fast wavelet transformations based on wavelets that have good localization
+properties in frequency space such as lifted interpolating wavelets. As a consequence the
+traditional multigrid algorithms can be simpliﬁed considerably as shown in Fig. 5. Using
+wavelet based restriction and prolongation operators we can completely eliminate the GS
+relaxation in the ﬁrst part of the V cycle where we go from the ﬁne grid to the coarsest
+grid. We baptize such a simpliﬁed V cycle a halfway V cycle. The numerical results,
+obtained with the halfway V cycle, shown in the right hand plots of Fig. 4, demonstrate
+that the convergence is slightly faster than for the traditional multigrid algorithm based
+on the same restriction and prolongation scheme.
+It is
+not necessary to calculate the residue after the GS relaxations. Otherwise the number
+of GS relaxations and restrictions/prolongations is identical in the full and halfway V
+cycle. On purpose no CPU times are given in this context because optimization of certain
+routines [10] can entirely change these timings. Because the residue is never calculated in
+the halfway V cycle, the memory requirements are also reduced by one third.
+
+In addition one step is faster.
+
+The number of GS relaxations in the halfway V cycle was chosen to be 4 in order to
+allow for a entirely unbiased comparison with the traditional V cycle where also 4 GS
+relaxations were done on the ﬁnest grid level. For optimal overall eﬃciency putting the
+number of GS relaxation to 3 is usually best, with the values of 2 and 4 leading to a
+modest increase in the computing time. The convergence rate of halfway V cycles as
+a function of the number of GS relaxations on the ﬁnest grid level is shown in Fig 6.
+This Figure also shows the inﬂuence if the number of GS iterations is held constant on
+each grid level. The resulting increasing number of iterations is more important than the
+slightly reduced numerical eﬀort per iteration, leading to roughly a 10 percent increase in
+the total CPU time.
+
+6 Conclusions
+
+Our results demonstrate that halfway V cycles with the restriction and prolongation
+steps based on wavelet theory are the most eﬃcient approach for the solution of Poisson’s
+equation. It is most eﬃcient both for ﬁnite diﬀerence discretizations and for the case where
+scaling functions or wavelets are used as basis functions. We expect that the approach
+should also be the most eﬃcient one in connection with ﬁnite elements. It is essential
+that the wavelet family used for the derivation of the restriction and prolongation schemes
+has at least one vanishing moment and conserves thus average quantities on the various
+grid levels. Wavelet families with more vanishing moments lead only to a modest increase
+of the convergence rate compared to the case of one vanishing moment. Orthogonality
+
+11
+
+LFT 2
+LFT 6
+2 LFT 4
+
+LFT 2
+LFT 6
+2 LFT 4
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+iteration
+
+iteration
+
+e
+u
+d
+s
+e
+r
+
+i
+
+e
+u
+d
+s
+e
+r
+
+i
+
+e
+u
+d
+s
+e
+r
+
+i
+
+100
+10
+1
+0.1
+0.01
+1e-03
+1e-04
+1e-05
+1e-06
+1e-07
+1e-08
+1e-09
+
+100
+10
+1
+0.1
+0.01
+1e-03
+1e-04
+1e-05
+1e-06
+1e-07
+1e-08
+1e-09
+
+100
+10
+1
+0.1
+0.01
+1e-03
+1e-04
+1e-05
+1e-06
+1e-07
+1e-08
+1e-09
+
+FW
+LFT 2
+LFT 6
+2 LFT 4
+
+FW
+LFT 2
+LFT 6
+2 LFT 4
+
+e
+u
+d
+s
+e
+r
+
+i
+
+e
+u
+d
+s
+e
+r
+
+i
+
+e
+u
+d
+s
+e
+r
+
+i
+
+100
+10
+1
+0.1
+0.01
+1e-03
+1e-04
+1e-05
+1e-06
+1e-07
+1e-08
+1e-09
+
+100
+10
+1
+0.1
+0.01
+1e-03
+1e-04
+1e-05
+1e-06
+1e-07
+1e-08
+1e-09
+
+100
+10
+1
+0.1
+0.01
+1e-03
+1e-04
+1e-05
+1e-06
+1e-07
+1e-08
+1e-09
+
+0
+
+2
+
+4
+
+8
+
+10
+
+12
+
+1
+
+2
+
+3
+
+4
+
+6
+
+7
+
+8
+
+9
+
+6
+iteration
+
+FW
+LFT 2
+LFT 6
+2 LFT 4
+
+5
+iteration
+
+LFT 2
+LFT 6
+2 LFT 4
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 12 14 16 18 20
+
+0
+
+2
+
+4
+
+6
+
+10
+
+12
+
+14
+
+16
+
+8
+iteration
+
+iteration
+
+Figure 4: The convergence rate of a sequence of V cycles (left hand side) and halfway
+V cycles (right hand side). In the upper two plots Poisson’s equation was discretized by
+second order ﬁnite diﬀerences, In the middle two plots by 6-th order ﬁnite diﬀerences and
+in the lower two plots by 6-th order interpolating scaling functions. Shown are results for
+the Full Weightening scheme (FW) second order lifted wavelets (LFT 2) 6-th order lifted
+wavelets (LFT 6) and twofold lifted 4-th order wavelets. In the case of ordinary V cycles
+2 GS relaxations were done on the ﬁnest level both when going up and coming back down,
+in the case of the halfway V cycle 4 GS relaxation were done on the ﬁnest level. The
+number of GS relaxations was allowed to increase by a factor of 2 on each consecutive
+coarse grid level.
+
+12
+
+R(1)
+
+(2)
+
+R
+
+(3)
+
+R
+
+(4)
+
+32*GS
+
+(10)
+
+4*GS
+
+(8)
+
+8*GS
+
+(6)
+
+16*GS
+
+(7)
+
+P
+
+P(5)
+
+(9)
+
+P
+
+ρ
+
+V
+
+Figure 5: Schematic representation of a halfway V cycle as described in the text. The
+abbreviations are the same as in Fig. 3.
+
+is not a beneﬁcial feature in this context [17] and therefore interpolating wavelets were
+used instead of Daubechies wavelets. In addition to its increased eﬃciency in terms of the
+CPU time, the proposed halfway V cycle algorithm is also considerably simpler than the
+standard V cycle. This makes not only programming easier, but also reduces the memory
+requirements.
+
+7 Acknowledgments
+
+I thank Achi Brandt for sharing with me his great insight on multigrid methods.
+
+References
+
+265, 909 (1994)
+
+CA, 2001
+
+[1] L. Greengard and V. Rokhlin, J. Comp. Phys., 73, 325 (1987) ; L. Greengard, Science,
+
+[2] U. Trottenberg, C. Oosterlee, A. Sch¨uller, “Multigrid”, Academic Press, San Diego,
+
+[3] W. Hackbusch and U. Trottenberg, “A Multigrid Methods”, Springer, Berlin, 1982 ;
+
+W. L. Briggs, “A Multigrid Tutorial”, SIAM, Philadelphia, PA, 1987
+
+[4] C. White, B. Johnson, P. Gill and M. Head-Gordon, Chem. Phys. Lett. 230, 8 (1994)
+; M. Strain, G. E. Scuseria and M. Frisch, Science 271, 51 (1996) ; Perez-Jorda, J.,
+and W. Yang, J. Chem. Phys. 107, 1218 (1997) K. N. Kudin and G. E. Scuseria, J.
+Chem. Phys. 111, 2351 (1999) ; K. N. Kudin and G. E. Scuseria, Phys. Rev. B 61,
+16440 (2000) ;
+
+[5] A. Brandt, Mathematics of Computation 31, 333 (1977)
+
+13
+
+4 GS
+3 GS
+2 GS
+1 GS
+all 1 GS
+
+e
+u
+d
+s
+e
+r
+
+i
+
+100
+10
+1
+0.1
+0.01
+1e-03
+1e-04
+1e-05
+1e-06
+1e-07
+1e-08
+1e-09
+
+0
+
+5
+
+10
+
+15
+
+20
+
+25
+
+30
+
+iteration
+
+Figure 6: The convergence rate for halfway V cycles with 4, 3, 2 and 1 GS relaxation on
+the ﬁnest grid level where a doubling of the respective number of relaxations is allowed
+on each additional grid level as well as the convergence rate if 1 GS relaxation is done on
+all grid levels.
+
+[6] S. Goedecker, O. Ivanov, Sol. State Comm., 105 665 (1998)
+
+[7] S. Goedecker, O. Ivanov, Comp. in Phys, 12, 548 (Nov/Dec 1998)
+
+[8] R. A. Lippert, T. Arias and A. Edelman, J. Comp. Physics, 140, 278 (1998)
+
+[9] T. A. Arias, Rev. Mod. Phys. 71, 267 (1999)
+
+[10] S. Goedecker, A. Hoisie, Performance Optimization of numerically intensive codes,
+
+SIAM publishing company, Philadelphia, USA 2001 (ISBN 0-89871-484-2)
+
+[11] S. Goedecker: ”Wavelets and their application for the solution of partial diﬀerential
+equations”, Presses Polytechniques Universitaires et Romandes, Lausanne, Switzer-
+land 1998, (ISBN 2-88074-398-2)
+
+[12] R. Schneider: “Multiskalen- und Wavelet-MatrixKompression”, Teubner publishing,
+
+Stuttgart 1998
+
+[13] W. Sweldens, Appl. Comput. Harmon. Anal. 3, 186 (1996).
+
+[14] G. Deslauriers and S. Dubuc, Constr. Approx. 5, 49 (1989).
+
+[15] G. Beylkin, SIAM J. on Numerical Analysis 6, 1716 (1992).
+
+[16] G. Beylkin, R. Coifman and V. Rokhlin, Comm. Pure and Appl. Math.
+
+[17] A.
+
+Brandt,
+
+Multiscale
+
+Computation:
+
+Review
+
+2000,
+
+http://www.wisdom.weizmann.ac.il/
+
+Scientiﬁc
+achi/
+
+∼
+
+14
+
+[18] I. Daubechies, “Ten Lectures on Wavelets”, SIAM, Philadelphia (1992)
+
+[19] Jaﬀard (1992)
+
+15
+
+

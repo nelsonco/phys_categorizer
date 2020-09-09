@@ -1,0 +1,1655 @@
+JCMmode: An Adaptive Finite Element Solver for the
+Computation of Leaky Modes
+
+Lin Zschiedricha, b, Sven Burgera, b, Roland Klosea, Achim Sch¨adlea, and Frank Schmidta, b
+a Zuse Institute Berlin (ZIB), Takustraße 7, D-14195 Berlin, Germany
+b JCMwave GmbH, Haarer Straße 14a, D-85640 Putzbrunn, Germany
+
+ABSTRACT
+
+We present our simulation tool JCMmode for calculating propagating modes of an optical waveguide. As ansatz
+functions we use higher order, vectorial elements (Nedelec elements, edge elements). Further we construct
+transparent boundary conditions to deal with leaky modes even for problems with inhomogeneous exterior
+domains as for integrated hollow core Arrow waveguides. We have implemented an error estimator which steers
+the adaptive mesh reﬁnement. This allows the precise computation of singularities near the metal’s corner of a
+Plasmon-Polariton waveguide even for irregular shaped metal ﬁlms on a standard personal computer.
+
+Keywords: Leaky Modes, Nano-Optics, Plasmon-Polariton Modes, Arrow Waveguide, Finite-Element-Method,
+Pole Condition, PML
+
+1. INTRODUCTION
+
+The computation of propagating modes of an optical waveguide is one of the central tasks in the optical component
+design. In mathematical modeling this corresponds to a quadratic eigenvalue problem in the sought propagation
+constant kz.1 Beyond “true” eigenmodes with ﬁnite energy in the cross section there exist so-called “leaky
+modes” which are solutions to Maxwell’s equations but with typically increasing ﬁeld intensity for a growing
+distance to the waveguide core.2, 3 These leaky modes must satisfy a further asymptotic boundary condition
+for large distances to the waveguide core. Analog to scattering problems, one demands that there is no energy
+transport from inﬁnity within the cross section.4, 5
+To bring this into a mathematical form, we split the
+cross section R2 into a bounded interior domain Ωint and an exterior domain Ωext, that is R2 = Ωint ∪
+Ωext.
+For a homogeneous exterior domain Ωext (with constant permittivity and permeability) the correct asymptotic
+boundary condition is the well known Silver-M¨uller condition.6 Uranus and Hoekstra use a BGT-like transparent
+boundary condition based on this asymptotic boundary condition.3 Besides a poor convergence with the size of
+the computational domain, this asymptotic boundary condition is wrong for inhomogeneous exterior domains.4
+But, many waveguide structures are composed of layers with an immense lateral expansion compared to the
+waveguide core diameter. These structures are best modeled in the way that the layers reach inﬁnity. To
+deal with such inhomogeneous exterior domains in a rigorous manner, Schmidt has proposed the pole condition
+concept for the deﬁnition of asymptotic boundary conditions.4, 5 We brieﬂy introduce this concept in Section 3.
+Further we show the connection of this concept to a modiﬁed PML method proposed by the authors.7
+In the
+Section 5 we explain how to discretize the modiﬁed PML method and how to couple the transparent boundary
+condition with the interior ﬁnite element discretization. In the last section we demonstrate the ability of our
+method for challenging problems in modern optical waveguide design.
+
+Alternatively to the modiﬁed PML method Schmidt has presented a numerical approach which is directly
+
+based on the pole condition. The authors will compare these two methods in a succeeding paper.
+
+Further author information: (Send correspondence to Lin Zschiedrich)
+
+E-mail: zschiedrich@zib.de
+URL: http://www.zib.de/nano-optics/
+
+5
+0
+0
+2
+ 
+r
+p
+A
+ 
+1
+1
+ 
+ 
+]
+s
+c
+i
+t
+p
+o
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+3
+7
+0
+4
+0
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+2. LIGHT PROPAGATION IN A WAVEGUIDE
+
+Starting from Maxwell’s equations in a medium without sources and free currents and assuming time-harmonic
+dependence with angular frequency ω > 0 the electric and magnetic ﬁelds
+
+E(x, y, z, t) =
+
+E(x, y, z)e−iω·t, H(x, y, z, t) =
+
+H(x, y, z)e−iω·t,
+
+must satisfy
+
+e
+
+e
+
+∇ ×
+
+∇ ×
+
+H,
+E,
+iωǫ
+e
+
+E = iωµ
+H =
+e
+e
+
+−
+
+e
+
+ǫ
+
+E = 0,
+µ
+e
+
+H = 0.
+
+∇ ·
+
+∇ ·
+
+e
+
+−1
+
+µ
+
+E
+
+∇ ×
+
+∇ ×
+
+−
+
+ω2ǫE = 0,
+ǫE = 0.
+
+∇ ·
+
+d1µ−1d1e
+
+−
+
+ω2ǫe = 0,
+d2ǫe = 0.
+
+ǫ, µ : Alt1
+
+Alt2.
+
+→
+
+Here ǫ denotes the permittivity tensor and µ denotes the permeability tensor of the materials. In the following we
+H. From the equations above we then may derive (by direct substitution)
+drop the wiggles, so that
+the second order equation for the electric ﬁeld
+
+E,
+
+→
+
+→
+
+H
+
+E
+
+e
+
+e
+
+A similar equation holds true for the magnetic ﬁeld - one only must replace E by H and interchange ǫ and µ.
+Observe that any solution to the ﬁrst equation also meets the divergence condition (second equation). This is
+because
+To recover the underlying structure we rewrite these equations in diﬀerential form,
+
+∇ · ∇×
+
+= 0.
+
+A reader not familiar with this calcalus may replace the exterior derivatives d0, d1, d1 with classical diﬀerential
+. Here, the electric ﬁeld appears as a diﬀerential 1-form, e =
+operators, d0 → ∇
+exdx + eydy + ezdz, whereas the material tensors act – from a more mathematical point of view – as operators
+
+and d2 → ∇·
+
+, d1 → ∇×
+
+In order to derive a weak formulation we deﬁne the following function spaces on the domain Ω = R3
+
+H 1
+
+loc =
+Hloc(curl) =
+
+Hloc(div) =
+
+Alt0
+Alt1
+Alt2
+
+|
+
+|
+
+φ
+
+(cid:8)
+
+e
+
+(cid:8)
+
+d
+
+(cid:8)
+
+∈
+
+∈
+
+∈
+
+φ
+
+(L2
+
+loc)3
+
+| ∇
+∈
+(ex, ey, ez)
+
+(dx, dy, dz)
+
+(cid:9)
+(L2
+(L2
+
+loc)3,
+loc)3,
+
+∈
+
+∈
+
+∇ ×
+
+∇ ·
+
+(ex, ey, ez)T
+(dx, dy, dz)T
+
+loc)3
+
+(L2
+L2
+
+loc
+
+(cid:9)
+
+∈
+
+∈
+
+(cid:9)
+
+The weak form to Equations (1) now reads
+
+for all v
+
+Hloc(curl) and p
+
+H 1
+
+loc with compact support.
+
+∈
+
+∈
+
+An optical waveguide is an invariant structure in one spatial direction which we assume to be the z - direction
+of a cartesian coordinate system. A propagating mode is a solution to the above time-harmonic Maxwell’s
+equations such that the electric ﬁeld E depends harmonically on the spatial coordinate z,
+
+ZR3
+
+µ−1d1e
+(cid:0)
+
+∧
+
+d1v
+
+ω2(ǫe)
+
+−
+
+v
+
+∧
+
+(cid:1)
+
+= 0
+
+(ǫe)
+
+d0p = 0
+
+ZR3
+
+∧
+
+E(x, y, z) =
+
+E(x, y)eikz ·z.
+
+b
+
+(1a)
+
+(1b)
+
+(2a)
+
+(2b)
+
+y
+
+ξ
+
+Q
+
+4
+
+Q 3
+
+Q
+
+5
+
+Ω
+
+ξ= 0.0
+
+B
+
+2Q
+
+Q
+
+6
+
+Q 1
+
+ξ= 1.0
+
+Q
+
+6
+
+Q
+
+5
+Q 4
+Q
+
+3
+
+Q
+
+2
+1Q
+
+η
+
+x
+
+ξ= 0.0
+
+ξ= 1.0
+
+Figure 1. Prismatoidal coordinate system. Each segment Qj is the image of a reference element under a bilinear mapping
+Bloc
+j
+
+. These local mappings are combined to a global mapping B which is continuous in η.
+
+Hence a propagating mode travels along the z-direction. The scalar quantity kz is called propagation con-
+stant. Let us denote by Hloc,kz (curl) the subspace of ﬁelds in Hloc(curl) which depends on z as e(x, y, z) =
+e(x, y, z) exp(ikzz). The spaces H 1
+loc,kz and Hloc,kz(div) are deﬁned accordingly. It is suﬃcient to restrict the
+variational problem (2) on the cross section z = 0. As mentioned in the introduction a propagating mode should
+b
+not only solve Maxwell’s equations but should also transport no energy within the cross section from inﬁnity,
+that is it should be purely outgoing in the cross section. The precise deﬁnition of what purely outgoing means is
+given in the next section. The weak waveguide problem is summarized in the following Problem 1.
+
+Problem 1 (Weak Waveguide Problem). Find kz such that there exists a ﬁeld e
+
+Hloc,kz (curl) which
+
+∈
+
+is purely outgoing in the cross section and which satisﬁes
+
+ZR2
+
+µ−1d1e
+(cid:0)
+
+∧
+
+d1v
+
+ω2(ǫe)
+
+−
+
+v
+
+∧
+
+(cid:1)
+
+= 0
+
+(ǫe)
+
+d0p = 0
+
+ZR2
+
+∧
+
+(3a)
+
+(3b)
+
+for any v
+
+Hloc,kz (curl), p
+
+H 1
+
+loc,kz with compact support in x and y.
+
+∈
+
+∈
+
+3. LEAKY MODES AND OUTGOING BOUNDARY CONDITION
+
+We now address the deﬁnition purely outgoing in Problem 1. From a physical point of view, any propagating
+mode is admissible as long as there is no energy transport in the cross section from inﬁnity. As mentioned in
+the introduction to this paper we want to deﬁne the transparent boundary condition with the help of the pole
+condition concept,4 which we now detail for the one dimensional case.
+Let us assume that the permittivity and permeability are only dependent on x, ǫ = ǫ(x), µ = µ(x) and are
+constant in the right exterior domain I+ = [0, +
+
+). Then a TE mode satisﬁes the Helmholtz equation
+
+with general solution
+
+∂xxEy(x) + k2
+
+ω2µǫEy(x) = 0, x
+
+−
+
+I+
+
+∈
+
+∞
+zEy(x)
+
+−
+
+Ey = Aei√ω2µǫ−k2
+
+zx + Be−i√ω2µǫ−k2
+
+z x.
+
+If we deﬁne the square root so that
+an incoming wave. Therefore, as ”physical” boundary condition we must enforce B = 0.
+
+k2
+z > 0 the ﬁrst part is an outgoing wave and the second part is
+
+ω2µǫ
+
+−
+
+ℜ
+
+p
+
+10
+
+5
+
+0
+
+−5
+
+−10
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+−2
+
+−4
+
+−6
+
+−8
+
+−10
+
+−10
+
+−10
+
+−5
+
+0
+
+5
+
+10
+
+−5
+
+0
+
+5
+
+10
+
+Figure 2. Discretization of the interior domain and rays in the exterior domain (left picture). Geometry with represen-
+tation of the refractive index distribution (right picture). Inﬁnite waveguide: k2 = 1.32, background: k1 = 0.29.
+
+Let us regard the Laplace transform of Ey,
+
+∞
+
+Ey =
+
+L
+
+Z
+0
+
+Ey(x)e
+
+−sxd x =
+
+A
+ω2µǫ
+
++
+
+s + i
+
+k2
+z
+
+−
+
+B
+ω2µǫ
+
+.
+
+k2
+z
+
+−
+
+s
+
+i
+
+−
+
+p
+k2
+z. Hence B = 0 is equivalent to the fact
+We see that the incoming wave produces a pole at s =
+that the Laplace transform of the solution is holomorphic in the lower complex half plane. This is precisely the
+pole condition for the one dimensional case:
+
+ω2µǫ
+
+p
+
+p
+
+−
+
+−
+
+i
+
+A solution to Helmholtz equation (4) is purely outgoing if its Laplace transform is holomorphic in the lower
+
+complex half plane.
+
+To state the pole condition for the two dimensional case we map the exterior domain Ωext ⊂
+
+R2 onto Ωη,ξ as
+depicted in Figure 1. Here we assume that the material properties are constant on each segment Qj but may vary
+from segment to segment. The z - coordinate remains unchanged under the transformation. The transformed
+Maxwell’s equations are exactly of the form (1) but with transformed tensors ǫη,ξ and µη,ξ. With the usual
+notation e∗ for the pulled back diﬀerential form the weak waveguide problem with transformed exterior domain
+now reads
+
+Problem 2 (Weak Waveguide Problem with Transformed Exterior Domain). Find kz such that
+
+there exist ﬁelds e(x, y, z)
+
+HΩint,kz (curl) and e∗(η, ξ, z)
+
+Hloc,kz (curl) such that:
+
+∈
+1. (e∗)∗ = e on the boundary ∂Ω. (Matching Condition)
+
+∈
+
+2.
+
+e∗(η, s) =
+dition)
+b
+
+L
+
+e∗(η, ξ) deﬁnes a holomorphic function on the lower complex half plane (
+
+s
+
+0). (Pole Con-
+
+ℑ
+
+≤
+
+3. The ﬁeld composed of e and e∗
+
+∗ satisﬁes Maxwell’s equations:
+
+−1d1e
+µ
+ZΩint (cid:0)
+
+∧
+
+d1v
+
+−
+
+ω2(ǫe)
+
+v
+
++
+
+∧
+
+(cid:1)
+
+−1
+η,ξd1e∗
+µ
+ZΩη,ξ (cid:16)
+
+∧
+
+d1v∗
+
+ω2(ǫη,ξe∗)
+
+v∗
+
+= 0
+
+−
+
+∧
+
+(cid:17)
+
+(ǫe)
+
+d0p +
+
+ZΩint
+
+∧
+
+ZΩη,ξ
+
+(ǫη,ξe∗
+
+d0p∗) = 0
+
+∧
+
+for any v
+(v∗)∗ = v, (p∗)∗ = p on the boundary ξ = 0.
+
+HΩint,kz (curl), p
+
+∈
+
+∈
+
+H 1
+
+Ωint,kz , and compactly supported v∗
+
+Hloc,kz (curl), p∗
+
+H 1
+
+loc,kz such that
+
+∈
+
+∈
+
+4. TRANSPARENT BOUNDARY CONDITIONS
+
+Problem 2 is still posed on an unbounded domain and therefore numerically not feasible. As mentioned in the
+introduction to this paper the transformed exterior ﬁeld e∗ is typically not decreasing in the exterior domain.
+This rules out a simple truncation of the computational domain. When constructing transparent boundary con-
+ditions the aim is to compute the true solution in the interior domain with a numerical eﬀort proportional to the
+number of unknowns in the interior domain. As shown by Schmidt et al.4, 8 the Laplace transform
+e∗ behaves
+e∗ along the real axis with global functions gives a
+very kindly. As numerically approved, a discretization of
+transparent boundary condition so that the computed interior solution converges exponentially fast to the true
+solution (up to the interior discretization error) with the number of discretization “points” used for
+
+b
+e∗.
+
+b
+
+In this paper we focus on the Perfectly Matched Layer method introduced by Berenger.9–11 To motivate the
+method we go back to the one dimensional Helmholtz equation (4). The general solution in the exterior domain
+I+ is holomorphic in x. We see that along the straight line (1 + iσ) the outgoing part becomes exponentially
+decreasing as far as σ is chosen such that σ
+while the incoming ﬁeld explodes,
+
+ω2µǫ
+
+ω2µǫ
+
+>
+
+b
+
+Ey = A ei√ω2µǫ−k2
+
+Re
+|
+
+p
+z(1+iσ)x
+
+k2
+z|
+
+−
+
++B e
+
+|ℑ
+−i√ω2µǫ−k2
+
+p
+
+−
+
+k2
+z|
+z(1+iσ)x
+
+.
+
+outgoing ∼ evanescent
+{z
+
+}
+
+|
+
+incoming ∼ exploding
+}
+{z
+|
+
+Imposing now a zero Dirichlet boundary condition at x = ρ and assuming that the ﬁeld intensity is equal to one
+for x = 0 yields
+
+ei√ω2µǫ−k2
+z(1+iσ)x + e−i√ω2µǫ−k2
+Therefore, the true boundary condition B = 0 is enforced exponentially fast with the layer thickness ρ.
+
+e−ℜ√ω2µǫ−k2
+
+z(1+iσ)x (cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+ei√ω2µǫ−k2
+
+= (cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+z(1+iσ)x
+
+zσρ.
+
+B
+|
+
+∼
+
+|
+
+In order to switch to the higher dimensional case we assume that e∗(η, ξ) possesses a holomorphic extension
+in ξ. For a homogeneous exterior domain and some special inhomogeneous exterior domains this is proved in
+Hohage et al..7
+It is an aim for the future work of the authors to prove that in general a ﬁeld e∗ satisfying
+the pole condition also has an holomorphic extension in ξ. For γ = 1 + iσ let us denote e∗,B(η, ξ) = e∗(η, γξ),
+ǫη,ξ,B(η, ξ) = ǫη,ξ(η, γξ), and µη,ξ,B(η, ξ) = µη,ξ(η, γξ). The holomorphic extension e∗,B(η, ξ) is called Berenger
+function. One expects that the ﬁeld e∗,B(η, ξ) decays exponentially fast for ξ
+. Again this admits to truncate
+the computational domain to ΩPML = [ηmin, ηmax]
+[0, ρ) and to impose a zero Dirichlet boundary condition at
+ξ = ρ. We are lead to the following PML problem where dk,B denotes the exterior derivative with ∂ξ replaced
+by 1/(1 + iσ)∂ξ
+
+→ ∞
+
+×
+
+Problem 3 (Weak Waveguide Problem with PML). Find kz such that there exist ﬁelds e(x, y, z)
+
+∈
+HΩPML,kz (curl) such that (e∗)∗ = e on the boundary ∂Ω (Matching Condi-
+
+HΩint,kz (curl) and e∗,PML(η, ξ, z)
+tion) and
+
+∈
+
+−1d1e
+µ
+ZΩint (cid:0)
+
+∧
+
+d1v
+
+−
+
+ω2(ǫe)
+
+v
+
++ γ
+
+∧
+
+(cid:1)
+
+ZΩη,ξ,ρ (cid:16)
+
+−1
+
+η,ξ,Bd1,Be∗,PML ∧
+µ
+
+d1v∗
+
+−
+
+ω2(ǫη,ξ,Be∗,PML)
+
+v∗)
+
+∧
+
+(cid:17)
+
+= 0
+
+(ǫe)
+
+d0p + γ
+
+ZΩint
+
+∧
+
+ZΩη,ξ,ρ
+
+(ǫη,ξ,Be∗,PML ∧
+
+d0,Bp∗) = 0
+
+e∗,PML|
+ΩPML,kz such that (v∗)∗ = v, (p∗)∗ = p
+
+ξ=ρ = 0
+
+H 1
+
+HΩint,kz (curl), p
+
+for any v
+∈
+on the boundary ∂Ωint.
+Remark 1. The complex continuation along the straight line γξ yields a jump in the Neumann boundary
+condition at ξ = 0,
+
+HΩPML,kz (curl), p∗
+
+Ωint,kz and v∗
+
+∈
+
+∈
+
+∈
+
+H 1
+
+−1
+
+η,ξ,Bd1,Be∗,B ∧
+µ
+
+v∗ = γ
+
+−1
+η,ξd1e∗
+µ
+
+v∗.
+
+∧
+
+Zξ=0
+
+Zξ=0
+
+0
+10
+
+−1
+
+10
+
+−2
+
+2
+
+10
+
+2
+
+h
+
+|
+|
+
+u
+
+|
+|
+/
+
+|
+|
+
+u
+−
+u
+
+|
+|
+
+−3
+
+10
+
+−4
+
+10
+
+10
+
+−5
+0
+
+linear
+quadratic
+
+1
+
+2
+
+ρ
+
+3
+
+4
+
+5
+
+Figure 3. Relative error ||u − uh||2/||u||2 versus thickness of the PML-layer for linear and quadratic ﬁnite elements in
+the ﬁrst experiment.
+
+η,ξ,ρ in Problem 3 is introduced to incorporate this jump in the variational
+The factor γ left of the integral symbols
+problem as the natural boundary condition on ∂Ωint. This avoids the deﬁnition of further unknowns on the
+R
+boundary (Lagrange parameters).
+
+The PML method is proved to converge exponentially fast to the true solution with an increasing layer
+thickness ρ for a homogeneous exterior domain12, 13 and for some special inhomogeneous exterior domains.7
+To demonstrate the accuracy and the exponential convergence of the method even for rather complex exterior
+domains we want to compute the propagation of a TM polarized fundamental mode,
+
+∆Ez
+
+−
+
+−
+
+k2(x, y)Ez = 0
+
+along a waveguide as depicted in Figure 2, see also Zschiedrich et al.14 The fundamental mode is used as an
+incoming ﬁeld and is only speciﬁed along the left and upper side of the computational domain. Thus this
+example is a non trivial scattering problem - we must recover the propagating mode in the interior domain. The
+exterior domain is non-homogeneous due to the inﬁnite waveguide. Figure 3 shows the relative L2 - error in the
+computational domain. We observe exponential convergence for growing thickness ρ of the PML layer until the
+discretization error of the interior problem dominates the overall error.
+
+To discretize Problem 3 we split the interior ﬁeld
+
+5. FINITE ELEMENT DISCRETIZATION
+
+e = ex(x, y)eikz zdx + ey(x, y)eikz zdy + ez(x, y)eikz zdz
+
+into a transversal part e⊥ = ex(x, y)dx+ey(x, y)dy and a longitudinal part ez = ez(x, y)dz. As usual we discretize
+e⊥ with Nedelec’s edge elements and ez with standard scalar elements. This gives a discrete counterpart to the
+de Rham complex and hence leads to a discrete divergence condition.15 In this way, spurious modes which may
+rise from the kernel of the
+- operator when using an improper discretization scheme are ruled out. The
+variational problem for the interior problem reads in classical notation
+
+∇×
+
+µ−1
+
+(cid:20)
+
+ZR2
+
+∇
+
+Ez
+⊥
+
+∇
+
+−
+×
+
+ikzE⊥
+E⊥
+
+(cid:21) · (cid:20)
+
+∇
+
+v∗
+z −
+⊥
+×
+∇
+
+ikzv∗
+⊥
+v∗
+⊥
+
+ω2ǫ
+
+(cid:21) −
+
+ǫ
+
+(cid:20)
+
+ZR2
+
+E⊥
+Ez (cid:21) · (cid:20)
+
+(cid:20)
+E⊥
+Ez (cid:21) · (cid:20)
+
+v∗
+⊥
+v∗
+z (cid:21)
+v∗
+z
+∇
+ikzv∗
+z (cid:21)
+
+d xd y = 0,
+
+d xd y = 0,
+
+for all v⊥
+
+HΩint (curl) and vz
+
+H 1
+
+Ωint with operators
+
+∈
+
+∈
+
+⊥ : H 1
+
+∇
+
+Ωint →
+φ
+7→
+
+HΩint(curl)
+(∂xφ, ∂yφ),
+
+Air
+
+n = 1.535
+w
+
+d2
+
+a
+
+d1
+
+Substrate
+n = 3.47
+
+Gold layer
+n = 0.55+11.5i
+
+Figure 4. Plasmon-Polariton-Waveguide.
+d2 = 8.01µm.
+
+In the computations we have used a = 10nm, w = 20µm, d1 = 4µm and
+
+and
+
+⊥
+
+∇
+
+×
+
+: HΩint(curl)
+E⊥
+
+HΩint(div)
+(∂xEy
+
+−
+
+→
+
+7→
+
+∂yEx),
+
+⊥
+
+∇
+
+·
+
+: HΩint(div)
+D⊥
+
+→
+
+L2
+(∂xDx + ∂yDy),
+
+7→
+Again one sees that any solution to the ﬁrst equation also solves the second one (divergence condition). Simply
+set v⊥ = 1/(ikz)
+p for any
+× ∇
+p
+Ωint . Within the PML layer we use corresponding ﬁnite elements on quadrilaterals, which are deﬁned on
+a reference quadrilateral via a tensor product ansatz.14 On the whole transformed exterior domain ΩPML we
+use a ﬁxed discretization in ξ - direction. For the interior discretization we have implemented an adaptive grid
+reﬁnement steered by a residual based error estimator as in Heuveline and Rannacher.16
+
+⊥ = 0. For kz = 0 set vz = 0 and v⊥ =
+
+= 0 and recall that
+
+vz for kz
+
+H 1
+
+∇
+
+∇
+
+∇
+
+∈
+
+⊥
+
+6. EXAMPLES
+
+We now demonstrate the ability of our code to cope with challenging problems in the optical waveguide design.
+In the examples, the quadratric eigenvalue problem is solved with the ARPACK package by Sorensen et al.17
+after a reduction to a linear eigenvalue problem. The Arnoldi method is used in the shift-invert mode and we
+rely on Intel’s Math Kernel Library for sparse LU decomposition (PARDISO18).
+
+6.1. Plasmon Polariton Mode
+As shown by Berini et al.19 and Bozhevolnyi20 a very thin metal stripe may serve as a waveguide. In this case
+the propagating mode is localized near the metal stripe. The present geometry is sketched in Figure 4. Since
+the substrate has a relatively high refractive index the modes are typically leaky. Further there are singularities
+near the metal’s corner. This calls for an adaptive grid reﬁnement. The coarse grid consists of 13684 triangles
+and is adaptively reﬁned three times during the program execution. Within the PML layer we have used the
+discretization ξ = [0.0 : 0.1 : 2.0].ˆ3 (in Matlab notation). As the initial guess for kz we have used the result from
+the one dimensional problem which is given by a cut along the symmetry axis of the waveguide. In Table 1 the
+computed eﬀective refractive index for the fundamental mode and the computation eﬀort are given. We observe
+convergence up to eight digits after three grid reﬁnement steps. In Figures 5 and 6 one sees isoline-plots for the
+magnetic ﬁeld strength which show that there are no spurious reﬂections from the boundary of the computational
+domain.
+
+6
+            (cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+
+10
+
+5
+
+0
+
+−5
+
+−10
+
+m
+µ
+
+ 
+
+ℜH
+z
+
+0
+µ m
+
+−15
+
+−10
+
+−5
+
+5
+
+10
+
+15
+
+−10
+
+−5
+
+5
+
+10
+
+15
+
+Figure 5. Plasmon-Polariton-Waveguide. Real and imaginary parts of the Hz - component for the fundamental mode.
+
+ℑH
+z
+
+0
+µ m
+
+|H|2
+
+m
+µ
+
+ 
+
+0
+
+−1
+
+−2
+
+−3
+
+−4
+
+−5
+
+−6
+
+−7
+
+−8
+
+−9
+
+−10
+
+−15
+
+m
+µ
+
+ 
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+−2
+
+−4
+
+−6
+
+−8
+
+−10
+
+Figure 6. Plasmon-Polariton-Waveguide. Left: Absolute value of Hz - component for the fundamental mode. There
+appear no spurious reﬂections at the lower boundary. Right: Magnetic ﬁeld intensity. The mode is localized near the
+metal stripe.
+
+−10
+
+−5
+
+5
+
+10
+
+0
+µ m
+
+Step
+0
+1
+2
+3
+
+1.5350262e+00+0.0000981e+00i
+1.5350261e+00+0.0000985e+00i
+1.5350263e+00+0.0000984e+00i
+1.5350263e+00+0.0000984e+00i
+
+nP ML,eﬀ N o DOF total time [min] Memory [GByte]
+0.9
+2.6
+4.8
+9.1
+
+159729
+281151
+527656
+881016
+
+01:57
+03:35
+07:52
+12:16
+
+∼
+∼
+∼
+∼
+
+Table 1. Fundamental mode of the Plasmon Polariton waveguide for a vacuum wavelength of λ0 = 1.55µm. The
+computations were performed on an AMD Opteron Linux-PC.
+
+Figure 7. Fundamental leaky mode of the studied Arrow waveguide: Magnitude of the electric ﬁeld, |E(x, y)| in the
+cross section. The gray colormap in the right part of the ﬁgure is lighted up so that the ﬁeld in the Arrow layers is better
+visible. Recall that the normal component of the electric ﬁeld jumps across material boundaries.
+
+Step
+0
+1
+2
+3
+4
+5
+
+9.9325021e-01+0.0012272e-01i
+9.9322697e-01+0.0017419e-01i
+9.9320708e-01+0.0016724e-01i
+9.9320222e-01+0.0016547e-01i
+9.9320574e-01+0.0016710e-01i
+9.9320580e-01+0.0016820e-01i
+
+nP ML,eﬀ N o DOF
+51111
+92260
+154747
+265375
+478785
+1449444
+
+9.9325021e-01+0.0012272e-01i
+9.9322724e-01+0.0017697e-01i
+9.9320699e-01+0.0017118e-01i
+9.9320499e-01+0.0016816e-01i
+
+nP ML,eﬀ N o DOF
+51111
+135625
+404865
+1344193
+
+Table 2. Fundamental leaky mode of the Arrow waveguide for a vacuum wavelength of λ0 = 785nm. The left part
+corresponds to an adaptive grid reﬁnement, the right part to a uniform grid reﬁnement. The computations were performed
+on an AMD Opteron Linux-PC. Computation time and memory requirements are similar to the previous example for a
+equal number of unknowns. Observe that with an adaptive reﬁnement strategy the memory requirements remain below
+the 32-bit PC limit up to the third adaptive reﬁnement step.
+
+Air
+
+Outer Cladding
+Arrow
+Core
+Lower Arrow Layer
+
+Layer
+
+Upper
+
+Si Substrate
+
+Arrow layer
+
+w2
+w1
+w2
+w1
+w2
+w1
+w2
+
+n2
+n1
+n2
+n1
+n2
+n1
+n2
+
+Figure 8. Hollow core ARROW waveguide. The core width is equal to 12µm and the core height is equal to 3.5µm.
+The Arrow layers are composed of silicon nitride (n1 = 2.1, w1 = 109nm) and silicon oxide (n2 = 1.46, w2 = 184nm) the
+substrate has a refractive index of n = 3.4975.
+
+6.2. Arrow Waveguide
+The present waveguide structure consists of a hollow, rectangular core investigated in Yin et al..21 The ﬁeld is
+conﬁned by antiresonant, reﬂecting optical layers (ARROW). The geometry is sketched in Figure 8. Again as
+an initial guess we have used the results from the corresponding one dimensional problem on the cut along the
+symmetry axis of the waveguide. Interestingly without transparent boundary conditions we were not able to ﬁnd
+the two dimensional fundamental mode with primarily TE-polarization. Figure 7 shows the magnitude of the
+fundamental mode. In Table 2 the computed eﬀective refractive index for the fundamental mode is given. The
+adaptive grid reﬁnement allows to compute the propagation mode with a reasonable accuracy even on a 32-bit
+PC.
+
+ACKNOWLEDGMENTS
+
+We thank P. Deuﬂhard and R. M¨arz for fruitful discussions, and we acknowledge support by the initiative DFG
+Research Center Matheon of the Deutsche Forschungsgemeinschaft, DFG, and by the German Federal Ministry
+of Education and Research, BMBF, under contract no. 13N8252 (HiPhoCs).
+
+REFERENCES
+
+1. J. Jin, The Finite Element Method in Electromagnetics, John Wiley and Sons, Inc, 1993.
+2. J. Petracek and K. Singh, “Determination of Leaky Modes in Planar Mulitlayer Waveguides,” IEEE Pho-
+
+tonics Technology Letters 14(6), pp. 810–812, 2002.
+
+3. H. Uranus and H. Hoekstra, “Modelling if microstructured waveguides using a ﬁnite-element-based vectorial
+
+mode solver with transparent boundary conditions,” Optics Express 12(12), 2004.
+
+4. F. Schmidt, “A New Approach to Coupled Interior-Exterior Helmholtz-Type Problems: Theory and Al-
+gorithms,” habilitation thesis, Konrad-Zuse-Zentrum Berlin, Fachbereich Mathematik und Informatik, FU
+Berlin, 2001.
+
+5. T. Hohage, F. Schmidt, and L. Zschiedrich, “Solving time-harmonic scattering problems based on the pole
+
+condition. I: Theory.,” SIAM J. Math. Anal. 35(1), pp. 183–210, 2003.
+
+6. P. Monk, Finite Elements Methods for Maxwell’s Equations, Oxford University Press, 2003.
+7. T. Hohage, F. Schmidt, and L. Zschiedrich, “Solving time-harmonic scattering problems based on the pole
+
+condition. II: Convergence of the PML method.,” SIAM J. Math. Anal. 35(3), pp. 547–560, 2003.
+
+8. T. Hohage, F. Schmidt, and L. Zschiedrich, “A new method for the solution of scattering problems,” in
+Proceedings of the JEE’02 Symposium, Toulose, B. Michielsen and F. Decavele, eds., pp. 251–256, ONERA,
+2002.
+
+9. J. B´erenger, “A perfectly matched layer for the absorption of electromagnetic waves,” J. Comput. Phys.
+
+114(2), pp. 185–200, 1994.
+
+10. J. B´erenger, “Three-dimensional perfectly matched layer for the absorption of electromagnetic waves,”
+
+Journal of computational physics 127, pp. 363–379, 1995.
+
+11. F. Collino and P. Monk, “The perfectly matched layer in curvilinear coordinates,” SIAM J. Sci. Comput.
+
+19(6), pp. 2061–2090, 1998.
+
+12. M. Lassas and E. Somersalo, “On the existence and convergence of the solution of PML equations.,” Com-
+
+puting No.3, 229-241 60(3), pp. 229–241, 1998.
+
+13. M. Lassas and E. Somersalo, “Analysis of the PML equations in general convex geometry,” in Proc. Roy.
+
+Soc. Edinburgh Sect. A 131, (5), pp. 1183–1207, 2001.
+
+14. L. Zschiedrich, R. Klose, A. Sch¨adle, and F. Schmidt, “A new Finite Element realization of the Perfectly
+Matched Layer Method for Helmholtz scattering problems on polygonal domains in 2D,” tech. rep., ZIB,
+2003.
+
+15. R. Beck and R. Hiptmair, “Multilevel solution of the time-harmonic Maxwell’s equations based on edge
+
+elements,” tech. rep., ZIB, 1996.
+
+16. V. Heuveline and R. Rannacher, “A posteriori error control for ﬁnite element approximations of elliptic
+eigenvalue problems,” Journal on Advances in Computational Mathematics. Special issue ”A Posteriori
+Error Estimation and Adaptive Computational Methods” 15, 2001.
+
+17. R. Lehoucq, D. Sorensen, and C. Yang, ARPACK User’s Guide: Solution of Large Scale Eigenvalue Problems
+
+18. M. Hagemann and O. Schenk, “Pardiso - User Guide Version 1.2.2,” tech. rep., Computer Science Departe-
+
+with Implicitly Restarted Arnoldi Methods.
+
+ment, University of Basel, Switzerland, 2004.
+
+19. P. Berini, “Plasmon-polariton waves guided by thin lossy metal ﬁlms of ﬁnite width: Bound modes of
+
+symmetric structures,” Physical Review B 61(15), pp. 10484–10503, 1999.
+
+20. S. Bozhevolnyi. Private communication.
+21. D. Yin, H. Schmidt, J. Barber, and A. Hawkins, “Integrated ARROW waveguides with hollow cores,” Optics
+
+Express 12(12), 2004.
+
+

@@ -1,0 +1,530 @@
+3
+0
+0
+2
+ 
+n
+u
+J
+ 
+2
+ 
+ 
+]
+n
+a
+-
+a
+t
+a
+d
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+4
+1
+0
+6
+0
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+CHEP03, La Jolla, California, March 24-28, 2003
+
+1
+
+Vertex reconstruction framework and its implementation for CMS
+
+T. Boccali
+CERN, Geneva, Switzerland
+
+R. Fr¨uhwirth, W. Waltenberger∗
+Institut f¨ur Hochenergiephysik der ¨OAW, Vienna, Austria
+
+K. Prokoﬁev, T. Speer
+Physik-Institut der Universit¨at Z¨urich, Switzerland
+
+P. Vanlaer†
+Interuniversity Institute for High Energies, ULB, Belgium
+
+The class framework developed for vertex reconstruction in CMS is described. We emphasize how
+we proceed to develop a ﬂexible, eﬃcient and reliable piece of reconstruction software. We describe
+the decomposition of the algorithms into logical parts, the mathematical toolkit, and the way vertex
+reconstruction integrates into the CMS reconstruction project ORCA. We discuss the tools that we
+have developed for algorithm evaluation and optimization and for code release.
+
+I.
+
+INTRODUCTION
+
+As many reconstruction problems, vertex recon-
+struction can be decomposed into the following steps:
+
+• Pattern recognition, or vertex ﬁnding. This step
+consists in ﬁnding clusters of compatible tracks
+among a set of tracks given on input. The search
+can either be inclusive, like in the search of a
+secondary vertex in a b-jet, or be guided by the
+a-priori knowledge of the decay channel.
+
+• Fitting. This step consists in estimating the
+vertex position most compatible with the set of
+tracks given on input, and constraining the mo-
+mentum vector of the tracks using the vertex
+position.
+
+In high-luminosity experiments, vertex reconstruc-
+tion algorithms must be able to deal with large track
+multiplicities, frequent ambiguities in the separation
+of primary and secondary tracks, and track mis-
+reconstructions leading to biases in the estimated
+track parameters. As an illustration of the diﬃculty
+to separate primary and secondary tracks, the res-
+olution on the transverse impact parameter of the
+CMS tracker ranges from ∼ 100 µm for tracks with
+pT = 1 GeV/c to ∼ 10 µm for tracks with pT ≥
+100 GeV/c [1, 2], while the transverse impact param-
+eter of secondary tracks in 50 GeV b-jets is on average
+much smaller than 1 mm.
+
+∗Supported by the Fonds zur F¨orderung der wissenschaftlichen
+Forschung, Project 15177.
+†Corresponding author. Supported by the Belgian Federal Of-
+ﬁce for Scientiﬁc, Technical and Cultural aﬀairs through the
+Interuniversity Attraction Pole P5/27.
+
+TULT012
+
+Although the algorithmic part of the problem is the
+most diﬃcult to solve, an additional constraint comes
+from the CPU time available online in LHC experi-
+ments. Simulation studies have shown the interest of
+primary vertex ﬁnding for online event ﬁltering [3, 4].
+In addition, b-jet tagging by detecting a secondary ver-
+tex inside the jet cone seems to perfom almost as well
+as impact parameter tagging [5], and to complement
+this method to some extent.
+
+For this to be applicable, the CPU time that vertex
+ﬁnding takes should be small, O(50 ms) on the proces-
+sors expected in 2007. As vertex ﬁnding is often based
+on repeated compatibility checks between tracks and
+ﬁtted vertices, this translates into very strong CPU
+constraints on vertex ﬁtting algorithms as well.
+
+II. MOTIVATION FOR A FRAMEWORK
+
+When developing vertex reconstruction code, physi-
+
+cists face the following issues:
+
+• The algorithmic problem is complex. The opti-
+mal algorithm cannot be guessed from the start,
+and there will probably be no single optimal al-
+gorithm but several, each optimized for a spe-
+ciﬁc task.
+
+• The mathematics involved is complex, but often
+localized in a few places. Development would be
+made easier by providing a toolkit of mathemat-
+ical classes.
+
+• Performance evaluation and comparison be-
+tween algorithms is not trivial. Vertex recon-
+struction uses reconstructed tracks as input, and
+features of the vertexing algorithms must be dis-
+entangled from those of the tracking algorithms.
+Criteria to compare Monte Carlo simulated and
+
+2
+
+CHEP03, La Jolla, California, March 24-28, 2003
+
+reconstructed vertices are ill-deﬁned and need to
+be standardized.
+
+• Finally, the problem is quite generic and decou-
+pled from the detector geometry once tracks are
+given. This makes a good case for providing
+a framework reuseable in other HENP experi-
+ments.
+
+We have thus decided to develop a ﬂexible frame-
+work in order to ease the development and evaluation
+of algorithms. This is realized within the CMS object-
+oriented reconstruction project ORCA [6]. Section III
+describes the vertex ﬁtting framework. Section IV
+deals with the vertex ﬁnding framework, with a fo-
+cus on evaluation and optimization tools. Section V
+explains the use of a simpliﬁed conﬁgurable event gen-
+erator for faster code development and release tests.
+
+III. VERTEX FITTING FRAMEWORK
+
+The ﬁtted parameters are the solution of a mini-
+mization problem involving the residuals between the
+vertex parameters ~x and a transformation f of the
+track parameters ~pi:
+
+M in~x F [~x − f (~pi)];
+
+i ∈ input tracks.
+
+Fitting algorithms may diﬀer by the choice of the track
+parametrization, and by the choice of the function F
+to minimize. Each algorithm is a diﬀerent implemen-
+tation of the abstract VertexFitter class.
+
+A usual choice for F is the sum of the reduced
+residuals squared, this is the well-known Least Sum
+of Squares, or Least Squares, technique. In this case
+the minimum of F can be expressed explicitely as a
+function of the ~pi’s, which is CPU-eﬀective. This re-
+quires however to linearize the transformation f in the
+vicinity of the true vertex position.
+
+A. Linearization
+
+The linearization is performed on demand and
+cached for performance. This is done by instances of
+a concrete class, the LinearizedTrack. Currently we
+use 2 linearizations, corresponding to diﬀerent track
+approximations:
+
+• A straight line approximation, and a constant
+
+track error matrix hypothesis.
+
+• A helix approximation, and a linear error prop-
+agation using the ﬁrst derivatives of f with re-
+spect to the track parameters as Jacobians.
+
+have negligible contributions to the precision of the
+ﬁtted vertex.
+
+The LinearizedTrack is also responsible for pro-
+viding the parametrization required by the algorithm.
+All useful parametrizations are supported. We cur-
+rently use (x, y, z) at the point of closest approach to
+the vertex, together with the straight line approxima-
+tion, and (q/pT , θ, φp, d0, zp) the 5 track parameters
+at the perigee, with the helix approximation.
+
+Linearization around the true vertex position re-
+quires a ﬁrst guess of this position. This is provided by
+LinearizationPointFinder algorithms. These com-
+pute the average of the crossing points of N track
+pairs (N = 5 by default). In order to use tracks of
+best precision, the 2 ∗ N tracks of highest pT are se-
+lected. Two implementations are available, one using
+the arithmetic average of the crossing points, and one
+using a Least Median of Squares (LMS) robust aver-
+aging technique [7, 8].
+
+These algorithms rely on fast computation of the
+points of closest approach of 2 tracks. The system
+of 2 transcendent equations is solved for the running
+coordinates along the tracks using a highly optimized
+Newton iterative method. The maximum CPU time
+required for ﬁnding the linearization point is 0.1 ms
+on 1 GHz processors.
+
+B.
+
+Iterative vertex ﬁtting
+
+Iterations arise naturally when:
+
+• The linearization point is too far from the ﬁtted
+
+vertex.
+
+• The function F has no explicit minimum. This
+is the case in robust ﬁtting techniques. Robust
+estimators can be reformulated as iterative, re-
+weighted Least Squares estimators [7, 8].
+
+• Several vertices are ﬁtted together, account-
+In
+ing for ambiguities in an optimal way [9].
+such a Multi-Vertex Fit, one LinearizedTrack
+can contribute to several vertices with diﬀerent
+weights.
+
+This lead us to the introduction of another con-
+crete component, the VertexTrack.
+It relates a
+LinearizedTrack to a vertex, and stores the weight
+with which the track contributes to the ﬁt. To
+avoid having to care for the ownership of these ob-
+jects, LinearizedTrack and VertexTrack are han-
+dled through reference-counting pointers.
+
+C. Sequential vertex update
+
+Formally the second approximation is much more pre-
+cise, but in the pT range of interest at the LHC, both
+
+Apart from cases where some hits are shared, tracks
+are uncorrelated. This allows sequential update of
+
+TULT012
+
+CHEP03, La Jolla, California, March 24-28, 2003
+
+3
+
+the ﬁtted parameters, by adding one track at a time.
+This procedure is faster than a global ﬁt [10]. The
+VertexUpdator is the component responsible for up-
+dating the ﬁtted parameters with the information of
+1 track.
+
+To compute the χ2 increment, the VertexUpdator
+VertexTrackCompatibilityEstimator.
+uses
+This increment can also be used at vertex ﬁnd-
+the compatibility between a track
+ing to test
+The VertexUpdator and the
+and a vertex.
+VertexTrackCompatibilityEstimator
+ab-
+stract and there are 2 implementations, 1 for each
+parametrization.
+
+the
+
+are
+
+The CPU time for track linearization and vertex
+
+update is < 0.25 ms per track on 1 GHz processors.
+
+D. Constraining the track momentum vectors
+
+The momentum vectors of the tracks can also be im-
+proved using the vertex as a constraint. This is done
+by considering the 3Ntracks momentum components
+as additional parameters in the vertex ﬁt. However
+the calculation of the constrained momenta and their
+correlations is CPU-consuming, and often only the ﬁt-
+ted vertex position is needed.
+
+We could separate this step in a VertexSmoother
+It is run after ﬁtting the vertex co-
+component.
+ordinates, using intermediate results cached into
+the VertexTrack objects. The user conﬁgures the
+VertexFitter so as to use this component or not.
+
+IV. VERTEX FINDING FRAMEWORK
+
+The variety of vertex ﬁnding algorithms that we
+currently explore is large [8], and the decomposition
+of algorithms into components still evolves while new
+common features appear. We will thus not describe
+them, but rather focus on the evaluation and opti-
+mization tools.
+
+A. Evaluation
+
+1. Performance estimation
+
+We wish to compare the performance of the
+algorithms in ﬁnding the primary and secondary
+vertices,
+in producing ghost vertices from random
+track associations, and in assigning the tracks
+to their vertex eﬃciently and with a good pu-
+rity. The ﬁrst 3 ﬁgures concern the vertex ﬁnding
+proper, and are evaluated by implementations of the
+VertexRecoPerformanceEstimator class. The last 2
+ﬁgures concern the assignment of tracks to vertices.
+the
+They are computed by implementations of
+
+TULT012
+
+VertexTrackAssignmentPerformanceEstimator.
+These estimators are updated each event.
+
+2. Vertex selection and association
+
+The user needs to tell to these estimators which
+simulated vertices are important to reconstruct. A
+standard Filter is provided, which keeps only the
+simulated vertices for which at least 2 tracks were
+successfully reconstructed. This allows to study the
+algorithmic eﬃciency of vertex ﬁnding.
+
+The user also tells how to associate a simulated
+vertex to a reconstructed one. This is deﬁned by a
+VertexAssociator. Association can be done by dis-
+tance or by tracks, counting the tracks common to the
+simulated and the reconstructed vertex. In standard
+tests the association is done by tracks. A simulated
+vertex is considered found if there is a reconstructed
+vertex with > 50% of its tracks originating from it.
+The association of the reconstructed and simulated
+tracks is performed by a TrackAssociator provided
+by the ORCA track analysis framework.
+
+B. Optimization
+
+Vertex ﬁnding algorithms have a few parameters
+that need to be tuned in order to get optimal per-
+formance for a given data set. Often, every physicist
+has to write his own code which scans the parameter
+range and ﬁnds the optimum parameter values.
+
+We propose a simple and elegant automatic tun-
+ing framework.
+The components of this frame-
+work are an abstract TunableVertexReconstructor,
+which interacts with a FineTuner object, and a
+special run controller which stops analysing events
+when the desired precision on the tuned parameters
+is reached. The TunableVertexReconstructor pro-
+vides the FineTuner with the initial range of param-
+eter values to be scanned. The FineTuner is an inter-
+face to an optimization engine. It maximises a Score,
+which is a function of the performance estimators con-
+ﬁgurable by the user:
+Score = (Ef f P V )a.(Ef f SV )b.(1 − F akeRate)c...
+
+has
+
+user
+
+the
+The
+to
+only
+TunableVertexReconstructor
+concrete
+algorithm and parameters that are to be tuned.
+Currently the FineTuner implementation available is
+a 1D maximizer, allowing to tune 1 parameter at a
+time.
+
+re-implement
+the
+for
+
+V. TESTS WITH CONTROLLED INPUT
+
+Parts of vertex reconstruction algorithms rely on
+models describing prior information. This informa-
+
+4
+
+CHEP03, La Jolla, California, March 24-28, 2003
+
+tion is for example the event topology (size of beam
+spot, number of vertices,...) or the track parameter
+distributions (Gaussian resolution and pulls, tails...).
+Data often depart from these models, which aﬀects
+the performance of the algorithms.
+
+To disentangle this from more intrinsic features of
+the algorithms, we have developed a simple Monte
+Carlo generator. It allows to simulate data in perfect
+agreement with the prior assumptions, or distorted in
+a controlled way. The number and position of the ver-
+tices, the number and momentum of the decay prongs,
+the track parameter resolutions and tails are deﬁned
+by the user.
+
+This simulation takes O(10) ms per event, more
+than a thousand times faster than full event recon-
+struction. The time needed to perform most of the
+code debugging is reduced by the same factor. An-
+other important advantage is that most of the release
+tests of the vertex reconstruction code can be run in-
+
+dependently of the status of the reconstruction chain
+upstream. The simple Monte Carlo generator is cur-
+rently being interfaced with the CMS fast Monte Carlo
+simulation (FAMOS) [11] to account for track recon-
+struction eﬀects in a more realistic way.
+
+VI. CONCLUSION
+
+We have developed an eﬃcient and ﬂexible class
+framework for the development of vertex ﬁtting algo-
+rithms. It allows the coding of usual least-squares al-
+gorithms as well as robust ones. We provide a friendly
+environment for the evaluation and optimization of
+vertex ﬁnding algorithms. As shown at this confer-
+ence [8], the performance of the vertex ﬁtters and ﬁnd-
+ers tested for the CMS experiment are already close to
+matching the requirements for use online at the LHC.
+
+[1] CMS Collaboration, The Tracker Project - Technical
+
+Design Report, CERN/LHCC 98-6, 1998.
+
+[2] A. Khanov et al., Tracking in CMS: software frame-
+work and tracker performance, Nucl. Instr. and Meth.
+A 478 (2002) 460.
+
+[3] CMS Collaboration, The TriDAS project - Technical
+Design Report, Volume 2: Data acquisition and High
+Level Trigger, CERN/LHCC 02-26, 2002.
+
+[4] D. Kotlinski, A. Nikitenko and R. Kinnunen, Study of
+a Level-3 Tau Trigger with the Pixel Detector, CMS
+Note 2001/017.
+
+[5] G. Segneri, F. Palla, Lifetime based b-tagging with
+
+CMS, CMS Note 2002/046.
+[6] http://cmsdoc.cern.ch/orca/
+[7] R. Fr¨uhwirth et al., New developments in vertex re-
+
+construction for CMS, Nucl. Instr. and Meth. A 502
+(2003) 699.
+
+[8] see W. Waltenberger, Vertex reconstruction algo-
+
+rithms in CMS, these proceedings.
+
+[9] R. Fr¨uhwirth, A. Strandlie, Adaptive multi-track ﬁt-
+ting, Computer Physics Communications 140 (2001)
+18.
+
+[10] R. Fr¨uhwirth et al., Vertex reconstruction and track
+bundling at the LEP collider using robust algorithms,
+Computer Physics Communications 96 (1996) 189.
+[11] S. Wynhoﬀ, Dynamically Conﬁgurable System for
+Fast Simulation and Reconstruction for CMS, these
+proceedings. http://cmsdoc.cern.ch/famos/
+
+TULT012
+
+

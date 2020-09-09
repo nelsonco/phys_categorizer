@@ -1,0 +1,1477 @@
+6
+0
+0
+2
+ 
+n
+a
+J
+ 
+3
+1
+ 
+ 
+]
+h
+p
+-
+o
+i
+b
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+3
+9
+0
+1
+0
+6
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Resolution exchange simulation with incremental
+coarsening
+
+Edward Lyman∗and Daniel M. Zuckerman†
+
+February 20, 2014
+
+Abstract
+
+We previously developed an algorithm, called resolution exchange,
+which improves canonical sampling of atomic resolution models by
+swapping conformations between high- and low-resolution simulations.1
+Here, we demonstrate a generally applicable incremental coarsening
+procedure and apply the algorithm to a larger peptide, met-enkephalin.
+In addition, we demonstrate a combination of resolution and tempera-
+ture exchange, in which the coarser simulations are also at elevated
+temperatures. Both simulations are implemented in a “top-down”
+mode, to allow eﬃcient allocation of CPU time among the diﬀerent
+replicas.
+
+Atomic resolution simulations of proteins are currently limited to short
+durations (less than one µsec)2 or small systems (less than 100 residues).3,4
+Furthermore, accurate calculations involving large conformational changes
+are not possible for any system, as the cost of calculating entropic contri-
+butions is too great.
+Indeed, the cost of such calculations is only going
+to increase, as empirical force ﬁelds are improved by including polarization
+eﬀects, either in a classical way5,6 or in a semiclassical way.7
+
+Thoroughly sampling the space of conformations is essential for a num-
+ber of problems. From a purely biological perspective, there is a grow-
+ing awareness of the importance of protein ﬂuctuations—over and above
+the static picture—in the function of most proteins.8 Allostery and con-
+formational changes dramatic enough to be captured experimentally are
+just two examples of the existence of such ﬂuctuations.9,10 In a computa-
+tional context, careful validation of empirical forceﬁelds requires conﬁdence
+
+∗elyman@ccbb.pitt.edu
+†dmz@ccbb.pitt.edu
+
+1
+
+in the quality of conformational sampling, so that error may be attributed
+to the forceﬁeld rather than undersampling. The calculation of free en-
+ergy diﬀerences—as required for evaluation of binding aﬃnities of small
+molecules,11 or the strength of protein-protein interactions12—also requires
+reliable sampling.13,14
+
+The undersampling (or “quasi-ergodicity”) problem is widely recognized,
+and consequently there have been many attempts to improve upon standard
+simulation protocols. Methods which aim to generate a canonical distri-
+bution of conformations include multiple time-step methods,15,16 nonlinear
+variable transformations,17 J-walking,18 inverse renormalization group ap-
+proaches,19 and adaptive resolution methods.20 The most widely used class
+of methods, however, comprises the generalized ensemble approaches.21–23
+Of the generalized ensemble approaches, perhaps the simplest and most
+popular is parallel tempering, in which a number of copies of the system
+are evolved in parallel at diﬀerent temperatures.24–27 Occasionally, conﬁgu-
+rations are swapped between neighboring replicas, presumably allowing the
+low temperature replica to access more conﬁguration space via high temper-
+ature conformations.
+
+Numerous,28–33 as well as extensive34,35 parallel tempering simulations
+have been published, including some which claim to demonstrate the su-
+perior eﬃciency of the method over standard MD.36–38 Regardless of the
+validity of those claims, there appears to be a limit to the utility of parallel
+tempering for the study of large proteins, nucleic acids, and macromolecular
+complexes: the number of replicas required to bridge a speciﬁed tempera-
+ture gap increases as the square root of the number of degrees of freedom of
+the solution.39,40 In other words, if atomic resolution information is desired,
+then very many atomic resolution simulations are required. However, recent
+work by Berne and coworkers addresses this problem in principle, so that
+the number of replicas scales with the number of degrees of freedom of the
+solute only.41
+
+In this paper, we address the problem of insuﬃcient sampling of implic-
+itly solvated biomolecules using a diﬀerent approach. We recently developed
+an algorithm, called resolution exchange, which uses a distribution generated
+by a coarse-grained model to improve the sampling of a higher-resolution
+simulation.1 The resolution exchange (res-ex) algorithm guarantees canoni-
+cal sampling for each level of resolution, i.e., the coarse-grained simulation
+introduces no bias into the high-resolution simulation. The algorithm is
+similiar in spirit to other exchange simulations, in that conformations are
+swapped between otherwise independent simulations. However, by employ-
+ing replicas of reduced resolution, res-ex has the potential for signiﬁcant
+
+2
+
+eﬃciency gains. A similiar recent algorithm, we note, does not generate
+canonical sampling.42
+
+We have also employed a modiﬁcation of the usual parallel protocol used
+to carry out exchange simulations,1 generalizing the “J-walking” approach
+previously introduced by Frantz et. al.18 The J-walking (or as we call it,
+“top-down” exchange) method allows an unequal distribution of CPU time
+among the various replicas. We emphasize that any exchange simulation
+In contrast with other exchange meth-
+may be run in top-down mode.
+ods, top-down exchange allows very little simulation time to be spent on
+the computationally expensive, high-resolution (or low temperature) repli-
+cas. Substantial improvement in sampling eﬃciency is therefore possible, in
+principle.
+
+Previously, we introduced the resolution exchange algorithm by applying
+it to butane and dileucine peptide.1 Here, we confront issues which arise in
+the study of larger molecules. We show that a molecule may be coarsened
+incrementally, so that the overlap between models of neighboring resolution
+may be adjusted for improved sampling eﬃciency. We also demonstrate
+that resolution and temperature exchange are easily combined in a single
+simulation, so that sampling may be improved by both increasing temper-
+ature and decreasing resolution simultaneously. Using met-enkephalin as a
+test system, we demonstrate successful exchange between an all-atom model
+and a united-atom model, using two diﬀerent exchange ladders: a ladder of
+varying resolution only, and a ladder which combines resolution and tem-
+perature changes.
+
+In the remainder of the paper, we ﬁrst develop the theory and method-
+ology of resolution exchange and top-down simulation. The main result
+for met-enkephalin is a “proof-of-principle” demonstration of the incremen-
+tal coarsening procedure—no eﬃciency results are presented here. We also
+demonstrate a combined temperature/resolution ladder. We will ﬁnish with
+a discussion of the next logical steps toward larger peptides and proteins.
+
+1 Theory and methods
+
+The results presented in this paper concern two distinct, recently introduced
+simulation methods.1 The ﬁrst is resolution exchange, which allows ex-
+change between simulations at diﬀerent resolutions, and preserves canonical
+sampling. The second is top-down exchange, which allows unequal distribu-
+tion of CPU time, maximizing the eﬃciency of an exchange simulation. In
+addition, we describe a general incremental coarsening strategy for building
+
+3
+
+a ladder of models which improves exchange eﬃciency.
+
+1.1 Resolution exchange
+
+Resolution exchange (res-ex) is motivated by the eﬀectiveness of coarse-
+grained models for sampling of protein conformations,43,44 and by the need
+for atomic-level resolution for many calculations. Res-ex uses coarse-grained
+simulation to accelerate basin-hopping in more detailed models. In contrast
+with ad hoc methods, res-ex guarantees canonical sampling of the atomic-
+resolution model.
+
+The basic idea, as in any exchange simulation, is to exchange confor-
+mations between two simulations. How are trial conﬁgurations constructed
+for an exchange between models with diﬀerent numbers of degrees of free-
+dom? Consider a pair of models: a coarse-grained model, a conﬁguration
+of which is described by a set of coordinates Φ, and an atomic resolution
+model described by a larger set, {Φ, x}. Note that the coarse model is
+built from a subset of the coordinates of the detailed model. Before the
+exchange, let the coarse-grained conﬁguration be Φa, and let the atomic-
+resolution coordinates be {Φb, xb}. By swapping only coarse variables, the
+trial conﬁguration for the coarse-grained model is simply Φb, and for the
+atomic-resolution model is {Φa, xb}.
+
+The exchange criterion is derived by considering the two simulations
+to consitute a single system characterized by the combined coordinates
+{Φa, (Φb, xb)}. Because the simulations—aside from the exchanges—run
+independently, the probability distribution of the combined system is the
+simple product of the individual distributions. Let the potential functions
+of the high- (respectively, low-) resolution simulations be UH (Φ, x) (UL(Φ)),
+and denote the Boltzmann factors as πH(Φ, x; βH ) = e−βH UH (Φ,x)/ZH and
+πL(Φ; βL) = e−βLUL(Φ)/ZL, where ZH and ZL are the partition functions.
+Then the exchange is accepted with the Metropolis rate:
+
+min
+
+1,
+
+(cid:20)
+
+πH(Φa, xb; βH )
+πH(Φb, xb; βH )
+
+πL(Φb; βL)
+πL(Φa; βL) (cid:21)
+
+.
+
+(1)
+
+The dependence on inverse temperature (β) is made explicit, as a reminder
+that the method is naturally combined with temperature exchange, though
+this of course extends to any type exchange, such as Hamiltonian exchange.45
+Note that in the case of ordinary (temeprature based) replica exchange,
+in which all the coordinates are swapped, Eq. 1 reduces to the familiar
+expression min[1, exp(−∆β∆U )].
+
+4
+
+In a parallel implementation, eq. 1, together with the protocol for trial
+move construction, ensures that the algorithm satisiﬁes the detailed balance
+condition. To see this, consider “old” (o) and trial/“new” (n) conﬁgurations
+of the combined system. In the construction of any Boltzmann–preserving
+Monte Carlo move, two transition probabilites must be considered: the con-
+ditional probability α(o → n) of generating the move from conﬁguration o
+to n, and the conditional probability w(o → n) of accepting the move.46 De-
+tailed balance insists that p(o)α(o → n)w(o → n) = p(n)α(n → o)w(n → o),
+where p(j) is the equilibrium probability of conﬁguration j. The acceptance
+criterion 1 has the form
+
+w (o → n)
+w (n → o)
+
+=
+
+p (n)
+p (o)
+
+,
+
+(2)
+
+implying that the generating probabilities α are identical. This is indeed the
+case: given a pre-deﬁned division into coarse and detailed coordinates, the
+conditional probability for the move o = {Φa, (Φb, xb)} → n = {Φb, (Φa, xb)},
+and its inverse, are both one. That is, given the old conﬁguration of the
+combined system, there is a unique trial conﬁguration.
+
+Lwin and Luo have constructed a similiar algorithm, except that before
+checking acceptance via eq. 1, the high-resolution trial conﬁguration is mini-
+mized.42 Such minimization (even subject to constraints on the coarse coor-
+dinates Φ, as in ref.42) violates the detailed balance condition by biasing the
+generating probability, α(o → n), without any compensating correction in
+the acceptance criterion. Put more simply, reverse moves into un-minimized
+conﬁgurations are impossible. The consequences of the violation are readily
+seen, as shown in Sec. 2.1.
+
+In ideal circumstances, low-resolution models used in res-ex simulations
+would be speciﬁcally optimized for resolution exchange. They would have
+maximal conformational overlap for the common degrees of freedom. Here
+we work with an “oﬀ the shelf” low resolution model (united atom) which
+leads to some diﬃculties. Consider, for example, a Cα–C′ bond which is pa-
+rameterized in the two models by two slightly diﬀerent natural bond lengths.
+In an exchange attempt, the conﬁgurations are swapped, and in each trial
+conﬁguration the Cα–C′ bond is moved a bit from its preferred length. These
+small contributions add up for every harmonic term in the entire molecule,
+and have a noticeable eﬀect on the acceptance of exchange moves. We have
+solved this problem by simply changing the harmonic parameters of the
+coarse model to match those of the detailed model. This makes the coarse
+model more “exchangeable” with the detailed model. Since the coarse model
+is simply “suggesting” conﬁgurations for the atomic model, and since Eq. 1
+
+5
+
+Figure 1: Two diﬀerent ladders used to exchange all-atom with united-atom
+met-enkephalin. Residues are depicted with ovals—open corresponds to an
+all atom representation, ﬁlled to united atom. The ratios of successful to
+attempted exchanges between each level are indicated by the percentages.
+
+guarantees that no bias is introduced by the coarse model, we need not worry
+that the coarse model parameters are changed from their original values.
+
+1.2
+
+Incremental Coarsening
+
+An important practical issue is raised, however, by the construction of trial
+moves without minimization. The problem is that the degrees of freedom in
+the high resolution simulation {Φ, x} are strongly coupled—think of Φ as
+backbone degrees of freedom (DoF) and x as side chain DoF. Then it is clear
+that construction of trial moves by our method may lead to high rejection
+rates. We have solved this problem by noting that the rejection rate depends
+on the both the number and type of DoF in the set {x}. Employing a ladder
+of incremental models at intermediate resolutions allows the acceptance rates
+to be tuned to reasonable values, as shown in Fig. 1.
+
+A ladder of incrementally coarsened models is straightforward to con-
+struct. Consider coarsening from an all-atom representation of a protein to
+a united-atom representation. In the ﬁrst model above the all-atom level,
+only one residue is described by the united-atom representation—the protein
+is described by a “mixed model”, with one united-atom residue and the rest
+
+6
+
+all-atom. Then, in the next level up, there are two united-atom residues,
+and so on, until the entire protein is described by the united-atom force
+ﬁeld. A similiar procedure may then be used to go beyond the united-atom
+level to a united residue level. Notice that it may be desirable to coarsen
+more than one residue at a time, since some residues have fewer degrees of
+freedom than others.
+
+Of course, implementation of the incremental ladder just described re-
+quires the construction of a potential function which has both united- and
+all-atom groups. In this work, we have built this mixed potential by combin-
+ing the parameters for united and all-atom force ﬁelds into a single ﬁle. In
+other words, we created a larger parameter ﬁle, which contains both all-atom
+and united atom atom types. This ﬁle also includes all of the interactions for
+both united- and all-atom types, with the united-atom interactions modiﬁed
+as described in Sec. 1.1. Adding some parameters (taken from the all-atom
+potential) for the interfaces, where united and all-atom residues link, the
+mixed potential describes the whole molecule. The parameters (formatted
+for use in TINKER) are included as supplementary material.
+
+The incremental coarsening approach just described is rather general
+and not restricted to implementing exchange ladders spanning united- to
+all-atom resolutions. Lower resolution models could also be considered, for
+which it may be desirable to coarsen several residues at once. A ﬁrst quan-
+titative analysis of the incremental coarsening procedure, suggesting how
+eﬃciency can be improved, is given in Sec. 2.2.
+
+1.3 Top-down exchange
+
+In many exchange simulations, whether they are temperature-based,38 Hamiltonian-
+based,45 or use some other extended ensemble,47,48 the goal is to improve
+the sampling of a hard-to-sample model (such as an all-atom protein model
+at native conditions) by sampling a related model, which is presumed easier-
+to-sample (such as the same all-atom model at higher temperature)1. In-
+formation is swapped between the simulations by occasionally exchanging
+conﬁgurations, in a way which preserves canonical sampling of each distribu-
+tion. Usually there is little overlap between the hard-to-sample (henceforth,
+“bottom level”) and the easy-to-sample (henceforth, “top-level”) models,
+and therefore a ladder of intermediate models is required.
+
+A critical observation is that the accuracy which is ultimately attained in
+the hard-to-sample, bottom-level model is eﬀectively limited by that which
+
+1For a discussion of these issues from a statistical perspective, see Neal49
+
+7
+
+Figure 2: Schematic representation of top-down exchange. Thick horizontal
+lines are simulation trajectories (labelled “Mi” for model “i”) and arrows
+represent exchanges. The Mi may be diﬀer in resolution, temperature, or
+both. Notice that the top level simulation may be considerably longer than
+the others.
+
+is obtained in the easy-to-sample, top-level model.18 In many cases, the top-
+level is still quite diﬃcult to sample well, and will require considerable CPU
+time to reach an acceptable accuracy—much more than it would usually be
+allotted in a parallel implementation. It is this observation which motivates
+the top-down method. The top-down algorithm shown schematically in ﬁg.
+2 was developed previously for temperature simulation,18 though was not
+widely recognized as such. The procedure is as follows:
+
+8
+
+(i) Run and store a simulation at the top-level (model MN ) until it is
+judged to be suﬃciently converged. This trajectory is a sample of the
+distribution πN (r) of the top level, where N labels the level and r labels the
+conﬁgurations. In the case of res-ex, r = (Φ, x). Let n be a running index,
+with n = N at this top level.
+(ii) Start a simulation at the n − 1 level—for example, at the next lower
+temperature. Conﬁgurations rn−1 will be sampled according to πn−1 for
+model Mn−1.
+(iii) Whenever an exchange is to be attempted, pull a random trial conﬁg-
+uration rn from the Mn trajectory. In the case of res-ex, one requires only
+the subset Φ.
+(iv) Accept the trial conﬁguration according to
+
+min
+
+1,
+
+(cid:20)
+
+πn−1(rn)
+πn−1(rn−1)
+
+πn(rn−1)
+πn(rn) (cid:21)
+
+,
+
+where πi(r) = e−βiUi(r)/Zi, Zi is the partition function, Ui is the potential
+function, and βi is the inverse temperature. Notice the partition functions
+need not be known, as they cancel between numerator and denominator.
+(v) Continue with steps (iii) and (iv) until the sampling of the n − 1 level is
+judged suﬃcient. Store the n − 1 trajectory.
+(vi) Continue with steps (ii) to (v) for n = N − 2, N − 3, ... until the bottom
+level simulation is complete.
+
+First, note that canonical sampling is maintained by eq. (1.3),18 just as
+in an ordinary parallel exchange simulation. On the other hand, detailed
+balance is not satisﬁed, as the trial conﬁguration for the level n simulation
+(rn−1 above) is discarded—making reverse moves eﬀectively impossible. The
+error is one of practice, not of principle, arising from the fact that the samples
+of πn and πn−1 are ﬁnite, just as in any simulation.
+
+To see intuitively that canonical sampling is maintained by top-down ex-
+change, imagine a pair of simulations undergoing ordinary parallel exchange.
+Unbeknownst to the investigator, however, the top level simulation is run-
+ning on a very fast processor, while the other is running on an old, slow
+processor. Between neighboring exchange points, the trial conformations
+from the fast processor will be far more decorrelated than those of the slow
+simulation—which mimics the eﬀect of the top-down protocol. However,
+these exchanges still satisfy detailed balance. In the limit of an inﬁnitely
+fast top-level simulation, trial conﬁgurations are completely decorrelated,
+and one could equally well choose randomly from πn as in step (iii).
+
+Second, notice that because trial conﬁgurations are pulled at random
+
+9
+
+from the sample of πn in step (iii), transitions which are slow in the actual
+Mn trajectory occur rapidly among the trial conﬁgurations. Maximum ben-
+eﬁt is thus obtained from successful exchanges—in contrast with a parallel
+exchange simulation, where trial conﬁgurations are separated by only a few
+picoseconds, and remain highly correlated.
+
+Third, good results may be obtained expending very little CPU time
+on all levels except the top one. This may be understood from an energy
+landscape perspective. The top level has been used to thoroughly sample
+the space—high barriers are crossed, and major sub-basins equilibrated. At
+lower levels, only local equilibration need occur. For example, let τnonloc
+be the time to cross high barriers, τlocal be the time to equilibrate locally,
+and say that m successful exchanges are needed to sample the space well.
+Then τlocal × m CPU time is needed to sample the lower level. The required
+condition to save time over a parallel simulation is that τlocal << τnonloc.
+The degree to which this condition is satisﬁed will depend on the system
+studied, but the top-down approach allows the ﬂexibility to take advantage
+of a separation in time scales. This idea is reminiscient of the “dragging”
+of fast degrees of freedom, suggested by Neal,50 and the multiple time step
+approaches developed by Berne and coworkers.15,16
+
+Finally, a major advantage of top-down simulation over parallel exchange
+protocols is that exchange attempts are “free”, in the sense that no commu-
+nication is required between processors.18 This means that exchanges may
+be attempted very frequently, and therefore much lower exchange rates may
+be accomodated. In the case of temperature exchange, this allows either for
+the steps in the temperature ladder to be more widely spaced, or for the
+treatment of larger systems with fewer replicas.
+
+1.4 Simulation details
+
+The united atom force ﬁeld was a modiﬁed version of OPLSUA.51 The force
+ﬁeld was modiﬁed so that the bond length and and angle bending parame-
+ters matched those of the all-atom force ﬁeld, which improves exchangeabil-
+ity (or conformational overlap) of the two models. The sample of the top
+level model was constructed from two independent 100 nsec trajectories,
+both started from pdb structure 1plw(1st model), generated by Langevin
+dynamics as implemented in TINKER v. 4.2.52 The friction coeﬃcient was
+5 psec−1, and solvation was modelled with the GB/SA method.53 The ﬁrst
+1 nsec of each trajectory was discarded and frames were stored every 10 psec
+for a total of 19, 800 frames in the sample.
+
+We then ran the next higher resolution simulation, as per the top-down
+
+10
+
+algorithm (see Sec. 1.3). This model was of mixed resolution, with the Tyr1
+residue represented by the OPLSAA all-atom forceﬁeld,54 and the remaining
+residues described by the OPLSUA force ﬁeld. Every 1 psec, a random
+conﬁguration was pulled from the top-level (M5) trajectory, and a resolution
+exchange was attempted, with acceptance governed by Eq. (1). Since the
+acceptance ratio for the M5 to M4 exchanges was approximately 10%, the
+average length of M4 trajectory between exchanges was 10 psec. A total
+of 105 res-ex moves were attempted, for a total M4 trajectory length of 10
+nsec. Frames were stored every 0.1 psec for a sample of 105 frames.
+
+This procedure was then repeated for each level shown in ﬁg. 1, with the
+exception that the attempt frequency of res-ex moves was adjusted for the ac-
+ceptance ratios, so that the segments of the simulations between exchanges
+were kept approximately constant at 10 psec. Also, the total number of
+attempted exchanges was adjusted so that approximately 103 successful ex-
+changes were observed between each level, for a total trajectory length of 10
+nsec at each level. Given that the top level is presumed to be well-sampled,
+103 exchanges should sample a large number of basins.
+
+2 Results
+
+In a previous short paper, we tested the res-ex algorithm on two small
+molecules: butane and dileucine peptide.1 It was shown that the method
+produced results in agreement with those obtained by standard simulation
+methods. For the sake of clarity, here we ﬁrst demonstrate our approach
+on a two-dimensional toy model, consisting of two basins which diﬀer only
+entropically. We also extend the method to a larger peptide, met-enkephalin
+(NH+
+3 -tyr-gly-gly-phe-met-COO−), in order to demonstrate the viability of
+incremental coarsening.
+
+2.1 Results: Two-dimensional model
+
+An important consideration in designing any sampling method is whether it
+will correctly account for entropy diﬀerences. We therefore designed the po-
+tential surface shown in ﬁg. 3 to compare three diﬀerent sampling methods:
+a “standard” Monte Carlo simulation, the same Monte Carlo with resolution
+exchange, and the same Monte Carlo with the “dual REM” method of Lwin
+and Luo.42
+
+11
+
+ 40
+
+ 20
+
+y
+
+ 0
+
+-20
+
+-40
+
+-1
+
+-0.5
+
+ 0.5
+
+ 1
+
+ 0
+x
+
+Figure 3: Contours of the potential surface U (x, y), described by Eq. (3).
+Here we have reduced w to 10 so that both wells are visible in the ﬁgure.
+
+The surface U (x, y) in ﬁg. 3 is described by the function
+
+U (x, y) = Eb
+
+x2 − 1
+(cid:1)
+
+(cid:0)
+
+2
+
++
+
+E0y2
+1 + w (tanh(x/0.1) + 1) /2
+
+,
+
+(3)
+
+where E0 ≡ kBT , Eb = 10 kBT is the barrier height, and w controls the
+width of the right well in the ﬁgure. Notice that the proﬁle of the surface
+at y = 0 is symmetric about x = 0: Ux(x) ≡ U (x, y = 0) = Eb(x2 − 1)2, i.e.,
+the two minima are of equal depth. The parameters were chosen so that the
+equilibrium populations of the two wells diﬀer greatly—we used w = 500,
+so that the right well holds 95% of the population, as measured by standard
+techniques.
+
+For both the res-ex and the dual REM simulations, the “coarse-grained”
+potential was simply the one-dimensional potential Ux, i.e., a symmetric
+double well.
+
+To describe the exchange moves explicitly, we denote 2D conﬁgurations
+by (x, y) and 1D conﬁgurations by ˜x. For both algorithms, an exchange
+move consists of two parts: the construction of a 1D trial conﬁguration
+(˜xnew) from a 2D conﬁguration (xold, yold), and vice versa: the construction
+of a 2D trial conﬁguration (xnew, ynew) from a 1D conﬁguration (˜xold). The
+construction of a 1D conﬁguration in each case is simple–the “extra” (y)
+coordinate is dropped, i.e., ˜xnew = xold.
+
+12
+
+The only diﬀerence between the two simulations is in the construction
+of trial conﬁgurations for the 2D model from the 1D model. In res-ex, the
+trial conﬁguration is the ˜x coordinate from the 1D model, with the (old) y
+coordinate from the 2D model, i.e., xnew = ˜xold and ynew = yold. In dual
+REM, on the other hand, the trial y coordinate is chosen randomly, and
+then minimized. For the potential U (x, y), this means that ynew = 0 always,
+i.e., xnew = ˜xold and ynew = 0.
+
+The res-ex simulation correctly samples the two wells, giving a popula-
+tion in the right well of 96.4± 1.6%. The dual REM simulation, on the other
+hand, yields a population of 51.0 ± 1.6% for the right well. What causes the
+error in the dual REM simulation? The answer is that the construction of
+dual REM trial moves violates detailed balance. More speciﬁcally, the mini-
+mization of the y coordinate means that the diﬀerence in width between the
+two wells is not accounted for correctly, since in dual REM ynew = 0 always.
+Notice that the it is not the random selection of the y coordinate which
+intrinsically violates detailed balance, only the subsequent minimization.
+
+What is the analagous situation in molecular simulations? In this case,
+both res-ex and dual REM construct trial moves in internal coordinates–the
+coarse-grained model is built from a subset of the degrees of freedom of the
+atomic model. For example, the coarse-grained model (the x coordinate
+above) may be the backbone coordinates of a protein, and the remainder
+(the y coordinate above) may be the sidechain degrees of freedom. In dual
+REM construction of trial moves, the sidechains are minimized prior to ex-
+change, and the therefore diﬀerences in entropy between diﬀerent sidechain
+conformations are neglected.
+In res-ex, there is no minimization prior to
+exchange, and canonical sampling is maintained.
+
+2.2 Results: Incremental coarsening of met-enkephalin
+
+Met-enkephalin is a ﬂexible neurotransmitter which participates in immune
+responses and pain inhibition, among other roles.55,56 By virtue of its small
+size and biological interest, it often is used to test new simulation meth-
+ods27,57,58 and compare existing protocols.56,59
+
+Using met-enkephalin, we demonstrate the eﬃcacy of the incremental
+coarsening procedure for a ladder of decreasing resolution at constant tem-
+perature, and for a ladder of simultaneously decreasing resolution and in-
+creasing temperature. We will not present a detailed analysis of sampling
+eﬃciency, for two reasons: (i) This paper is a “proof of principle”, presenting
+the ﬁrst implementation of incremental coarsening, and (ii) quantifying the
+quality of sampling for met-enkephalin is considerably more diﬃcult than
+
+13
+
+is commonly appreciated. More will be said on this second topic in the
+discussion.
+
+We employed the res-ex algorithm in a top-down framework, as sketched
+in ﬁg. 2. First, the top-level simulation (coarsest resolution—here, united-
+atom) was run. We then ran an exchange simulation at the next highest
+resolution—here, one residue was represented at all-atom resolution, and
+the rest of the peptide was united-atom. This procedure was continued,
+coarsening one residue at a time, until the entire peptide was represented at
+the all-atom level. Details are given in Secs. 1.2.
+
+The acceptance ratios vary, in part, according to the number of degrees of
+freedom by which the two levels diﬀer. For comparison, exchanging between
+all-atom and united-atom models of met-enkephalin, with no intermediate
+levels of resolution, results in an acceptance ratio of 0.09%. Four inter-
+mediate simulations boost the acceptance ratios into the 1 to 20% range.
+However, we need to ask whether it really is more eﬃcient to do so.
+
+In fact, it appears to be substantially more eﬃcient to use incremental
+coarsening rather than abrupt coarsening. The cost for a given ladder of N
+levels may be written
+
+total cost = top level cost +
+
+(4)
+
+N −1
+
+Xi=0
+
+mτi
+ri
+
+,
+
+where the cost of the top level is ﬁxed, m is the ﬁxed number of successful
+exchanges which are desired, τi is the simulation cost for an interval between
+two exchange attempts at level i, and ri is the acceptance rate between
+levels i and i + 1. For this semi-quantitative discussion, we assume the τi
+are equal for all levels. We have also assumed that the sampling of level i
+demands a ﬁxed number of successful resolution exchanges, consistent with
+the motivation of the top-down protocol discussed in Sec. 1.3.
+
+For met-enkephalin, the principal results are the acceptance rates shown
+in Fig. 1, which are signiﬁcant for several reasons. First, they demonstrate
+the ﬁrst implementation of the incremental coarsening approach. Second,
+because they are well within the practical range of the top-down protocol—
+see Sec. 1.3 and the Discussion—they indicate that the res-ex algorithm
+could prove important for peptides. Lastly, by comparing the eﬀective ex-
+change rate reﬀ = 5.2% implied by Eq. 4
+
+1/reﬀ = N
+
+1/ri
+
+Xi
+
+(5)
+
+with the rate of 0.09% for direct exchanges between united- and all-atom
+models, one sees that a substantial speedup has been achieved. Of course,
+
+14
+
+the magnitude of the improvement is merely suggestive—without a rigorous
+quantiﬁcation of the sampling quality, there can be no rigorous comparison
+of eﬃciency. Such a quantiﬁcation is beyond the scope of this work, as noted
+in the Discussion.
+
+It is useful to understand the intuitive reason behind the advantage of
+incremental coarsening. If one writes the acceptance criteria (1) and (1.3) in
+the form min[1, e−ǫ], then for exchanges between models of greatly diﬀering
+resolution, one typically ﬁnds the dimensionless “energy” is large, i.e, ǫ ≫ 1.
+It seems to be roughly true that this energy is proportional to the diﬀer-
+ence in the number of degrees of freedom in the models being exchanged.
+However, if the change is made incrementally using many models Mi, then
+i ∆ǫi ∼ ǫ.
+between levels i and i+1 there is a relatively small cost ∆ǫi, with
+It is clear that with enough increments, one can achieve ∆ǫi ≪ 1, and thus
+create a high likelihood for exchange since the corresponding Boltzmann
+factors are much larger: ri ∼ e−∆ǫi ≫ e−ǫ. This is exactly what is embod-
+ied in Eq. (4). The trade-oﬀ is that one pays the cost for simulating the
+additional intermediate levels. However, as has been stressed in Sec. 1.3, the
+intermediate-level simulations are very short compared to the top level. In
+the present context, for instance, the top level trajectory is 198 nsec, while
+all other levels were simulated for only 10 nsec. The net savings can be
+quite substantial, especially considering that good sampling is achieved by
+increasing the number of exchanges.
+
+P
+
+While we cannot yet rigorously measure sampling quality, we can show
+that the results obtained with res-ex are consistent with those obtained by
+standard methods, by comparing Ramachandran histograms (ﬁg. 4) from
+the res-ex simulation, to those obtained by standard simulation (990 nsec of
+simulation with the M0 parameters). Overall, the agreement between the
+res-ex simulation and the 990 nsec simulation without res-ex is quite good.
+However, a careful comparison reveals a region on the Phe4 plot, labelled
+“A”, which is noticeably under-sampled by the res-ex simulation, as com-
+pared to the 990 nsec Langevin dynamics trajectory. The explanation is
+provided by an inspection of the Phe4 histogram of the united-atom simu-
+lation: region “A” was not sampled by the top-level simulation. The failure
+points to a potential weakness of the res-ex (or any exchange) method—
+regions which are not sampled by the top-level will be diﬃcult to sample
+in any of the other levels. This is a speciﬁc instance of a general problem
+that occurs whenever auxiliary distributions are used to enhance sampling
+of some “distribution of interest,” namely the need to balance overlap with
+wider sampling via the auxiliary distribution.49 In other words, it is a failure
+of the top-level simulation rather than the algorithm.
+
+15
+
+180
+
+90
+
+ψ
+
+0
+
+-90
+
+-180
+
+180
+
+90
+
+ψ
+
+0
+
+-90
+
+-180
+
+180
+
+90
+
+ψ
+
+0
+
+-90
+
+-180
+
+180
+
+90
+
+ψ
+
+0
+
+-90
+
+-180
+
+Gly3
+990 ns
+
+B
+
+Phe4
+990 ns
+
+A
+
+Met5
+990 ns
+
+C
+
+0
+φ
+
+0
+φ
+
+0
+φ
+
+0
+φ
+
+-180
+
+-90
+
+90
+
+180
+
+-180
+
+-90
+
+90
+
+180
+
+-180
+
+-90
+
+90
+
+180
+
+Gly2
+990 ns
+
+Gly2
+res-ex
+
+Gly2
+UA model
+
+180
+
+90
+
+ψ
+
+0
+
+-90
+
+-180
+
+180
+
+90
+
+ψ
+
+0
+
+-90
+
+-180
+
+180
+
+90
+
+ψ
+
+0
+
+-90
+
+-180
+
+Gly3
+res-ex
+
+B
+
+Phe4
+res-ex
+
+A
+
+0
+φ
+
+0
+φ
+
+0
+φ
+
+180
+
+90
+
+ψ
+
+0
+
+-90
+
+-180
+
+180
+
+90
+
+ψ
+
+0
+
+-90
+
+-180
+
+180
+
+90
+
+ψ
+
+0
+
+-90
+
+-180
+
+Gly3
+UA model
+
+B
+
+Phe4
+UA model
+
+A
+
+0
+φ
+
+0
+φ
+
+0
+φ
+
+-180
+
+-90
+
+90
+
+180
+
+-180
+
+-90
+
+90
+
+180
+
+-180
+
+-90
+
+90
+
+180
+
+-180
+
+-90
+
+90
+
+180
+
+-180
+
+-90
+
+90
+
+180
+
+-180
+
+-90
+
+90
+
+180
+
+Met5
+res-ex
+
+Met5
+UA model
+
+180
+
+90
+
+ψ
+
+0
+
+-90
+
+-180
+
+C
+
+0
+φ
+
+180
+
+90
+
+ψ
+
+0
+
+-90
+
+-180
+
+C
+
+0
+φ
+
+-180
+
+-90
+
+90
+
+180
+
+-180
+
+-90
+
+90
+
+180
+
+-180
+
+-90
+
+90
+
+180
+
+Figure 4: Ramachandran histograms for met-enkephalin. The left column
+is a 990 nsec Langevin dynamics simulation at all-atom resolution, without
+resolution exchange; the middle column is the all-atom level (M0) from res-
+olution exchange as described in the text; the right column is the top-level
+united-atom simulation (level M5) used for the resolution exchange simula-
+tion shown in the middle column. Note that since the peptide is unblocked,
+there are only 4 pairs of φ − ψ dihedrals. Res-ex fails to “ﬁnd” one region
+(labelled “A”) not present in the top-level simulation, but ﬁnds two others
+(labelled “B” and “C”).
+
+16
+
+Interestingly, Fig. 4 also presents two counterexmples to the forgoing
+discussion. Regions “B” of the Gly3 and “C” of the Met5 plots were both
+well-sampled by the res-ex simulation, despite being infrequently visited by
+the top-level. That is, the res-ex acceptance criterion (1) correctly “re-
+weights” the conformation space of the all-atom model by allowing normal
+dynamics to continue when appropriate. Nevertheless, we are in the process
+of experimenting with other “schedules” (combinations of attempt frequency
+and number of exchange attempts) to balance the normal and the exchange
+dynamics.
+
+Ideally, the coarse model distribution would have better overlap with
+the high-resolution distribution, and the balance could be adjusted to favor
+exchanges over normal dynamics. This would allow the same quality of
+sampling with less simulation at each level below the top. In the long term,
+we hope to design coarse models constructed to not eliminate any regions
+of conﬁguration space in more detailed models.
+
+2.3 Resolution exchange with tempering
+
+We have also explored the possibilty of combining resolution exchange with
+parallel tempering, so that the sampling of the reduced models is improved
+both by the reduction in resolution and by increased temperatures.
+In a
+standard parallel tempering simulation, the temperatures are roughly ex-
+ponentially distributed, in order that the conformational overlap between
+neighboring temperatures is constant over the ladder. However, there is no
+simple relationship between the change in resolution and the acceptance of
+resolution exchanges. Some care must therefore be taken with the assign-
+ment of the temperature ladder.
+
+We began with the ladder of models in ﬁg. 1. The acceptance ratios
+give an idea of the temperature gap which may be tolerated between two
+levels—a higher acceptance ratio will tolerate a larger jump in temperature.
+However, compared to standard parallel tempering simulations,26–35 it may
+seem that the acceptance ratios are already too low to accomodate tem-
+pering in addition to resolution exchange. After all, we may expect that
+any diﬀerence in temperature will lower the acceptance of exchange moves.
+In this regard, the top-down approach has an important advantage over a
+parallel implementation. Since exchange attempts are “free” (no commmu-
+nication between processors is required), they may be attempted much more
+frequently, and lower accptance ratios may be tolerated.18 Indeed, in our
+original study of dileucine peptide with top-down resolution exchange, the
+acceptance ratio was less than 1%.1 See also Sec. 1.3.
+
+17
+
+The ladder combining temperature and resolution is shown in ﬁg. 5. The
+temperature gaps were chosen by trial and error, aiming for an acceptance
+of attempted exchanges of a few percent between neighboring levels. Based
+upon this restriction, the top-level simulation was run at a temperature
+of 700 K, which is comparable to previously published parallel tempering
+studies of met-enkephalin.27,36 We should expect, however, that ﬁxed CPU
+cost sampling should be improved relative to ordinary replica exchange, by
+virtue of the reduction in resolution.
+
+The reduction in resolution confers an additional beneﬁt when combined
+with tempering. Since the overlap between neighboring levels in a paral-
+lel tempering simulation scales like (number of DoF)1/2, reducing resolution
+allows the temperature gaps to increase as the resolution is reduced. The
+overlap between neighboring levels in a combined resolution/tempering lad-
+der is thus controlled both by the change in resolution, and the change in
+temperature, with the two eﬀects compensating one another in an unknown
+way. Indeed, we observed one puzzling case in our search for an appropriate
+resolution/temperature ladder. In one ladder (data not shown), exchange
+between levels M2 and M3 was successful about 7 % of the time when both
+were at 298 K, while exchange occurred approximately 11 % of the time
+when M2 was thermostatted to 305 K, and M3 to 320 K. We have not ex-
+plained this result—though it should be remembered that diﬀerent models
+have diﬀerent landscapes, and therefore temperatures may not be directly
+compared.
+
+3 Concluding Discussion
+
+We have applied our resolution exchange (“res-ex”) method1 to implic-
+itly solvated met-enkephalin, showing that it may be extended to larger
+molecules by an incremental coarsening procedure.
+Incremental coarsen-
+ing allows tuning of the conformational overlap between models of diﬀering
+resolution, and therefore makes practical simulations which would other-
+wise be hampered by poor acceptance of exchange moves. We have also
+demonstrated that resolution exchange is naturally combined with paral-
+lel tempering, so that the reduced resolution models may be aided in their
+sampling of conformations by elevated temperatures.
+
+Ramachandran histograms demonstrate that, for the most part, res-ex
+simulation is consistent with standard simulation techniques. In one case,
+however, they reveal a weakness of our method—a top-level simulation which
+eliminates important regions of conformation space will result in poor sam-
+
+18
+
+pling at the bottom level. This weakness is shared by any simulation which
+relies upon auxiliary ensembles to sample among major sub-basins. In the
+future we hope to eliminate this problem by more careful construction of
+reduced models.
+
+Of course, we hope to treat still larger molecules with the res-ex method.
+Since it is essential that the top-level be well-sampled, the treatment of larger
+molecules will require yet coarser top-level simulation. This will likely re-
+quire incremental coarsening from the united-atom level to a model with
+one or two beads per residue. Suitable models are under development. It
+appears that the res-ex approach cannot be applied easily to explicitly sol-
+vated systems; however, given the diﬃculty and importance of sampling
+implicitly solvated systems, res-ex may prove very valuable for biomolecular
+simulation.
+
+We have also developed an alternative rigorous algorithm which permits
+the use of coarse top-level simulations to generate atomically detailed canoni-
+cal samples. It is essentially a “decorating” procedure, and it eliminates the
+potential issue of correlations between coarse coordinates Φ and detailed
+coordinates x, which could reduce acceptance rates in resolution exchange.
+Speciﬁcally, after generating a low-resolution sample distributed according
+to πL(Φ), one can independently sample detailed coordinates x according
+to an arbitrary distribution πx(x). (For example, πx could be based on har-
+monic terms in the full forceﬁeld.) Full conﬁgurations are thus generated
+according to the simple product πL(Φ)πx(x) and may be re-weighted to gen-
+erate a fully detailed, high-resolution, distribution πH(Φ, x) using standard
+methods.60 In the long term, the decorating approach may prove useful for
+adding explicit solvent.
+
+An “auxiliary” question which remains to be carefully addressed is the
+quantiﬁcation of sampling eﬃciency. There are numerous proposals for judg-
+ing whether a simulation is converged—some are based on principal com-
+ponents,61 others on energy-based ergodic measures,62 and our own work
+in progress uses structural histograms.63 Which one provides an appropri-
+ate measure depends on what properties are of interest. For applications
+which depend on the relative populations of various conformations, such as
+calculation of binding aﬃnities for small molecules, a measure which de-
+pends directly on the conformational distribution is needed. Such a method
+is under development–for now we only mention that structural histograms
+provide a much more sensitive signal of non-convergence than energy-based
+methods.63
+
+Acknowledgements. The authors would like to thank Marty Ytreberg,
+Bruce Berne, Michael Deem, and Angel Garc´ia for interesting discussions
+
+19
+
+and insightful comments. This work was supported by the Department of
+Environmental and Occupational Health and the Department of Compu-
+tational Biology at the University of Pittsburgh, and by the NIH (grants
+ES007318 and GM070987).
+
+20
+
+Figure 5: Ladder combining exchange between all-atom and united-atom
+met-enkephalin with tempering of reduced resolution simulations. Residues
+are depicted with ovals—open corresponds to an all atom representation,
+ﬁlled to united atom. The ratios of successful to attempted exchanges be-
+tween each level are indicated by the percentages. The temperature of each
+level is indicated on the right.
+
+21
+
+4 References
+
+1. Lyman, E.; Ytreberg, F. M.; Zuckerman, D. M. Phys. Rev. Lett., in
+
+press preprint: http://xxx.lanl.gov/abs/q-bio.BM/0502014.
+
+2. Aksimentiev, A.; Balabin, I. A.; Fillingame, R. H.; Schulten, K. Bio-
+
+phys. J. 2004, 86, 1332–1344.
+
+3. Duan, Y.; Kollman, P. A. Science 1998, 282, 740–744.
+
+4. Snow, C. D.; Nguyen, H.; Pande, V. S.; Gruebele, M. Nature 2002,
+
+420, 102–106.
+
+5. Halgren, T. A.; Damm, W. Curr. Op. Struct. Bio. 2001, 11, 236–242.
+
+6. Anisimov, V. M.; Lamoureux, G.; Vorobyov, Igor, V.; Huang, N.;
+Roux, B.; MacKerell Jr., A. D. J. Chem. Theor. Comp. 2005, 1, 153–
+168.
+
+7. Iftimie, R.; Minary, P.; Tuckerman, M. E. Proc. Nat. Acad. Sci. USA
+
+2005, 102, 6654–6659.
+
+8. Huang, Y. J.; Montelione, G. T. Nature 2005, 438, 36–37.
+
+9. McCallum, S. A.; Hitchens, T. K.; Torborg, C.; Rule, G. S. Biochem-
+
+istry 2000, 39, 7343–7356.
+
+10. Volkman, B. F.; Lipson, D.; Wemmer, D. E.; Kern, D. Science 2001,
+
+291, 2429–2433.
+
+11. Shoichet, B. K. Nature 2004, 432, 862–865.
+
+12. Comeau, S.; Vajda, S.; Camacho, C. J. PROTEINS 2005, 60, 239–244.
+
+13. Kollman, P. Chem. Rev. 1993, 93, 2395–2417.
+
+14. Rodinger, T.; Pom`es, R. Curr. Op. Struct. Bio. 2005, 15, 164–170.
+
+15. Humphreys, D. D.; Friesner, R. A.; Berne, B. J. J. Phys. Chem. 1994,
+
+16. Het´enyi, B.; Barnacki, K.; Berne, B. J. J. Chem. Phys. 2002, 117,
+
+98, 6885–6892.
+
+8203–8207.
+
+17. Zhu, Z.; Tuckerman, M. E.; Samuelson, S. O.; Martyna, G. J. Phys.
+
+Rev. Lett. 2002, 88, 100201-1–100201-4.
+
+22
+
+18. Frantz, D. D.; Freeman, D. L.; Doll, J. D. J. Chem. Phys. 1990, 93,
+
+19. Bai, D.; Brandt, A. “NATO science series III”, Technical Report 177,
+
+2768–2783.
+
+2001.
+
+20. Praprotnik, M.;
+
+Site,
+
+L. D.;
+
+Kremer, K. Preprint:
+
+http://xxx.lanl.gov/abs/cond-mat/0510223.
+
+21. Mitsutake, A.; Sugita, Y.; Okamoto, Y. Biopolymers 2001, 60, 96–123.
+
+22. Gnanakaran, S.; Nymeyer, H.; Portman, J.; Sanbonmatsu, K. Y.;
+
+Garc´ia, A. E. Curr. Op. Struct. Bio. 2003, 13, 168–174.
+
+23. Earl, D. J.; Deem, M. W. Phys. Chem. Chem. Phys. 2005, Advance
+
+article.
+
+12782.
+
+24. Swendsen, R. H.; Wang, J.-S. Phys. Rev. Lett. 1986, 57, 2607–2609.
+
+25. Hukushima, K.; Nemoto, K. J. Phys. Soc. Jpn. 1996, 65, 1604.
+
+26. Hansmann, U. H. E. Chem. Phys. Lett. 1997, 281, 140–150.
+
+27. Sugita, Y.; Okamoto, Y. Chem. Phys. Lett. 1999, 314, 141–151.
+
+28. Garc´ia, A. E.; Sanbonmatsu, K. Y. PROTEINS 2001, 42, 345–354.
+
+29. Zhou, R.; Berne, B. J. Proc. Nat. Acad. Sci. USA 2002, 99, 12777–
+
+30. Im, W.; Feig, M.; Brooks, C. L. I. Biophys. J. 2003, 85, 2900–2918.
+
+31. Kokubo, H.; Okamoto, Y. J. Chem. Phys. 2004, 120, 10837–10847.
+
+32. Im, W.; Brooks, C. L. I. J. Mol. Biol. 2004, 337, 513–519.
+
+33. Gnanakaran, S.; Hochstrasser, R. M.; Garc´ia, A. E. Proc. Nat. Acad.
+
+Sci. USA 2004, 101, 9229–9234.
+
+34. Garc´ia, A. E.; Onuchic, J. N. Proc. Nat. Acad. Sci. USA 2003, 100,
+
+35. Paschek, D.; Gnanakaran, S.; Garc´ia, A. E. Proc. Nat. Acad. Sci. USA
+
+13898–13903.
+
+2005, 102, 6765–6770.
+
+36. Sanbonmatsu, K. Y.; Garc´ia, A. E. PROTEINS 2002, 46, 225–234.
+
+23
+
+37. Roe, D. R.; Hornak, V.; Simmerling, C. J. Mol. Biol. 2005, 352, 370–
+
+38. Zhang, W.; Wu, C.; Duan, Y. J. Chem. Phys. 2005, 123, 154105-1–
+
+381.
+
+154105-9.
+
+39. Kofke, D. A. J. Chem. Phys. 2002, 117, 6911–6914.
+
+40. Kone, A.; Kofke, D. A. J. Chem. Phys. 2005, 122, 206101-1–206101-2.
+
+41. Liu, P.; Kim, B.; Friesner, R. A.; Berne, B. J. Proc. Nat. Acad. Sci.
+
+USA 2005, 102, 13749–13754.
+
+42. Lwin, T. Z.; Luo, R. J. Chem. Phys. 2005, 123, 194904-1–194901-9.
+
+43. Levitt, M.; Warshel, A. Nature 1975, 253, 694–698.
+
+44. Bradley, P.; Misura, K. M. S.; Baker, D. Science 2005, 309, 1868–1871.
+
+45. Fukunishi, H.; Watanabe, O.; Takada, S. J. Chem. Phys. 2002, 116,
+
+9058–9067.
+
+Press: San Diego, 1996.
+
+46. Frenkel, D.; Smit, B. Understanding Molecular Simulation; Academic
+
+47. Yan, Q.; de Pablo, J. J. J. Chem. Phys. 2000, 113, 1276–1282.
+
+48. Sugita, Y.; Kitao, A.; Okamoto, Y. J. Chem. Phys. 2000, 113, 6042–
+
+6050.
+
+49. Neal, R. M. 2005, http://xxx.lanl.gov/abs/math.ST/0511216.
+
+50. Neal, R. M. “Taking bigger Metropolis steps by dragging fast variables”,
+Technical report No. 0411, Dept of Statistics, University of Toronto,
+2004 http://xxx.lanl.gov/abs/math.ST/0502099.
+
+51. Jorgensen, W. L.; Madura, J. D.; Swenson, C. J. J. Am. Chem. Soc.
+
+1984, 106, 6638–6646.
+
+52. Ponder, J. W.; Richard, F. M. J. Comput. Chem. 1987, 8, 1016–1024
+
+http://dasher.wustl.edu/tinker/.
+
+53. Still, W. C.; Tempczyk, A.; Hawley, R. C. J. Am. Chem. Soc. 1990,
+
+112, 6127–6129.
+
+24
+
+54. Jorgensen, W. L.; Maxwell, D. S.; Tirado-Rives, J. J. Am. Chem. Soc.
+
+1996, 117, 11225–11236.
+
+55. Plotnikoﬀ, N. P.; Faith, R. E.; Murgo, A. J.; Good, R. A. Enkephalins
+and endorphins: stress and the immune system; Plenum: New York,
+1986.
+
+56. Shen, M.-Y.; Freed, K. F. Biophys. J. 2002, 82, 1791–1808.
+
+57. Mitsutake, A.; Sugita, Y.; Okamoto, Y. J. Chem. Phys. 2003, 118,
+
+6664–6675.
+
+58. Mitsutake, A.; Kinoshita, M.; Okamoto, Y.; Hirata, F. J. Phys. Chem.
+
+B 2004, 108, 19002–19012.
+
+59. Zaman, M. H.; Shen, M.-Y.; Berry, R. S.; Freed, K. F. J. Phys. Chem.
+
+2003, 107, 1686–1691.
+
+60. Ferrenberg, A. M.; Swendsen, R. H. Phys. Rev. Lett. 1988, 61, 2635–
+
+2638.
+
+61. Hess, B. Phys. Rev. 2002, E65, 031910-1–031910-10.
+
+62. Straub, J. E.; Rashkin, A. B.; Thirumalai, D. J. Am. Chem. Soc. 1994,
+
+116, 2049–2063.
+
+63. Lyman, E.; Zuckerman, D. M. Manuscript in preparation.
+
+25
+
+

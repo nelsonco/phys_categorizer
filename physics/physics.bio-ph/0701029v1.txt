@@ -1,0 +1,1665 @@
+7
+0
+0
+2
+ 
+n
+a
+J
+ 
+2
+ 
+ 
+]
+h
+p
+-
+o
+i
+b
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+9
+2
+0
+1
+0
+7
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+MULTISCALE COUPLING OF MOLECULAR DYNAMICS AND
+HYDRODYNAMICS: APPLICATION TO DNA TRANSLOCATION
+THROUGH A NANOPORE
+
+MARIA G. FYTA† ‡, SIMONE MELCHIONNA§, EFTHIMIOS KAXIRAS† ‡ , AND SAURO
+SUCCI¶
+
+Abstract. We present a multiscale approach to the modeling of polymer dynamics in the
+presence of a ﬂuid solvent. The approach combines Langevin Molecular Dynamics (MD) techniques
+with a mesoscopic Lattice-Boltzmann (LB) method for the solvent dynamics. A unique feature of
+the present approach is that hydrodynamic interactions between the solute macromolecule and the
+aqueous solvent are handled explicitly, and yet in a computationally tractable way due to the dual
+particle-ﬁeld nature of the LB solver. The suitability of the present LB-MD multiscale approach is
+demonstrated for the problem of polymer fast translocation through a nanopore. We also provide
+an interpretation of our results in the context of DNA translocation through a nanopore, a problem
+that has attracted much theoretical and experimental attention recently.
+
+Key words. multiscale modeling, lattice-boltzmann method, solvent-solute interactions, poly-
+
+mer translocation, DNA
+
+AMS subject classiﬁcations. 68U20, 92-08, 92C05
+
+1. Introduction. Mathematical modeling and computer simulation of biolog-
+ical systems is in a stage of burgeoning growth. Advances in computer technology
+but also, perhaps more importantly, breakthroughs in simulational methods are help-
+ing to reduce the gap between quantitative models and actual biological behavior.
+The main challenge remains the wide and disparate range of spatio-temporal scales
+involved in the dynamical evolution of complex biological systems.
+In response to
+this challenge, various strategies have been developed recently, which are in general
+referred to as “multiscale modeling”. Some representative examples include hybrid
+continuum-molecular dynamics algorithms [1], heterogeneous multiscale methods [2],
+and the so-called equation-free approach [3]. These methods combine diﬀerent lev-
+els of the statistical description of matter (for instance, continuum and atomistic)
+into a composite computational scheme, in which information is exchanged through
+appropriate hand-shaking regions between the scales. Vital to the success of this
+information exchange procedure is a careful design of proper hand-shaking interfaces.
+Kinetic theory lies naturally between the continuum and atomistic descriptions,
+and should therefore provide an ideal framework for the development of robust multi-
+scale methodologies. However, until recently, this approach has been hindered by the
+fact that the central equation of kinetic theory, that is, the Boltzmann equation, was
+perceived as an equally demanding approach as molecular dynamics from the com-
+putational point of view, and of very limited use for dense ﬂuids due to the lack of
+many-body correlations. As a result, multiscale modeling of nanoﬂows has developed
+mostly in the direction of the continuum/molecular dynamics paradigm [1].
+
+Over the last decade and a half, major developments in lattice kinetic theory [4, 5]
+
+†Department of Physics and Division of Engineering and Applied Sciences, Harvard University,
+
+§INFM-SOFT, Department of Physics, Universit`a di Roma La Sapienza, P.le A. Moro 2, 00185
+
+Cambridge, MA, USA.
+
+Rome, Italy.
+
+¶Istituto Applicazioni Calcolo, CNR, Viale del Policlinico 137, 00161, Roma, Italy.
+‡This work was supported primarily by the Nanoscale Science and Engineering Center, funded
+
+by the National Science Foundation, Award Number PHY-0117795.
+
+1
+
+2
+
+Fyta, Melchionna, Kaxiras, & Succi
+
+are changing the scene. Minimal forms of the Boltzmann equation can be designed
+on the lattice, which quantitatively describe the behavior of ﬂuid ﬂows in a way that
+is often computationally more advantageous than the continuum approach based on
+the Navier-Stokes equations. Moreover, lattice kinetic theory has proven capable of
+dealing with complex ﬂows, such as ﬂows with phase transitions and strong hetero-
+geneities, for which continuum equations are exceedingly diﬃcult to solve, if at all
+known (for a recent review see [6]). These advances have opened the road to devel-
+oping new mesoscopic multiscale solvers [7]. The present work provides a successful
+implementation of such an approach. We will focus on the coupling of a mesoscopic
+ﬂuid solver, the lattice Boltzmann method, with simulations at the atomistic scale
+employing explicit molecular dynamics. A unique feature of our approach is the dual
+nature of the mesoscopic kinetic solver, which propagates coarse-grained informa-
+tion (the single-particle Boltzmann probability distribution), along straight particle
+trajectories. This dual ﬁeld/particle nature greatly facilitates the coupling between
+the mesoscopic ﬂuid and the atomistic levels, both on conceptual and computational
+grounds.
+
+The paper is organized as follows. In Section §2 we present the basic elements
+of the multiscale methodology, namely the Lattice Boltzmann treatment of the ﬂuid
+solvent, and its coupling to a Molecular Dynamics simulation of the solute biopolymer.
+In Section §3, we present an application of this multiscale methodology to the problem
+of long polymer translocation through a nanopore; in particular, we analyze in detail
+the role of hydrodynamics in accelerating the translocation process. In Section §4 we
+elaborate on the relevance of our results to the problem of DNA translocation, which
+has attracted much theoretical and experimental attention recently. We conclude in
+Section §5 with general remarks and outlook for future extensions.
+
+2. Lattice-Boltzmann - Molecular-Dynamics multiscale methodology.
+We consider the generic problem of tracing the dynamic evolution of a polymer
+molecule interacting with a ﬂuid solvent. This involves the simultaneous interaction
+of several physical mechanisms, often acting on widely separate temporal and spatial
+scales. Essentially, these interactions can be classiﬁed in three distinct categories as
+solute-solute, solvent-solvent and solvent-solute. The ﬁrst category includes the con-
+servative many-body interactions among the single monomers in the polymer chain.
+Being atomistic in nature, these interactions usually set the shortest scale in the over-
+all multiscale process. They are typically handled by Molecular Dynamics techniques
+for constrained molecules. The second category, the solvent-solvent interactions, refer
+to the dynamics of the solvent molecules, which are usually dealt with by a continuum
+ﬂuid-mechanics approach; in the present work these will be described by the meso-
+scopic Lattice Boltzmann equation. The second and third category have also been
+handled by simulating the solvent explicitly via molecular dynamics, implicit solvent
+particles via Brownian dynamics including hydrodynamic interactions, or solving the
+corresponding Fokker-Planck equation [8]. Finally, the solvent-solute dynamics will
+be treated by augmenting the molecular dynamics side with dissipative ﬂuid-molecule
+interactions (Langevin picture) and including the corresponding reaction terms in the
+ﬂuid-kinetic equations.
+
+2.1. Atomistic dynamics. We consider a polymer consisting of N monomer
+units (also referred to as beads). The polymer is advanced in time according to the
+following set of Molecular Dynamics-Langevin equations for the bead positions ~rp and
+
+(2.1)
+
+(2.2)
+
+(2.3)
+
+(2.4)
+
+(2.5)
+
+(2.6)
+
+(2.7)
+
+(2.8)
+
+Multiscale coupling of molecular dynamics and hydrodynamics
+
+3
+
+velocities ~vp:
+
+= ~vp
+
+d~rp
+dt
+d~vp
+dt
+
+m
+
+c
+
+= ~Fp
+
++ ~Fp
+
+f
+
+r
+
++ ~Fp
+
++ ~Fp
+
+κ
+
+, p = 1, N
+
+where we distinguish four types of forces:
+
+c
+
+~Fp
+
+= −
+
+∂~rpV (~rp − ~rq)
+
+Xq
+
+f
+
+r
+
+~Fp
+~Fp
+~Fp
+
+κ
+
+= γ(~up − ~vp)
+= m~ξp
+= −λp∂~rpκp
+
+VLJ (r) = 4ǫ[(σ/r)12 − (σ/r)6]
+
+Vang(φ) =
+
+κφ2
+2
+
+The ﬁrst term represents the conservative bead-bead interactions through a potential
+which we will take to have the standard 6 − 12 Lennard-Jones form,
+
+truncated at a distance of r=21/6σ [9]. This was combined with a harmonic part to
+account for the energy cost of distorting the angular degrees of freedom,
+
+with φ the relative angle between two consecutive bonds. Torsional motions will not
+be included in the present model, but can easily be incorporated if needed.
+
+We consider next the solute-solvent interactions. The second term on the right-
+hand-side of Eq.(2.1) represents the mechanical friction between the single bead and
+the surrounding ﬂuid, ~vp being the bead velocity and ~up the ﬂuid velocity evaluated
+at the bead position. In addition to mechanical drag, the polymer feels the eﬀects
+of stochastic ﬂuctuations of the ﬂuid environment, through the random term, ~ξp, a
+Gaussian noise obeying the ﬂuctuation-dissipation relations:
+
+< ~ξp > = 0
+
+< ~ξ(~rp, t)~ξ(~rq, t′) > = γ(kBT /m)V δ(~rp − ~rq)δ(t − t′)
+
+where V is the volume of the cell to which beads p and q belong. Finally, λp∂~rpκp is
+the reaction force resulting from N − 1 holonomic constraints for molecules modelled
+with rigid covalent bonds:
+
+(2.9)
+
+κp ≡ |~rp+1 − ~rp|2 − r2
+
+0 = 0
+
+r0 being the prescribed bond length, and {λp} is the set of N − 1 Lagrange multipli-
+ers conjugated to each constraint. The usage of constraints instead of ﬂexible bond
+lengths makes it possible to eliminate unimportant high-frequency intra-molecular
+motion which would render the underlying LB propagation prone to numerical insta-
+bilities. In this way, the time-step of the Molecular Dynamics part can be increased by
+about one order of magnitude, as much as the overall eﬃciency of the LBMD method,
+as we shall discuss in section §2.5. Finally, in order to avoid spurious dissipation, the
+
+4
+
+Fyta, Melchionna, Kaxiras, & Succi
+
+Fig. 1. The set of discrete speeds in the standard 19-speed 3D lattice for the Lattice-Boltzmann
+
+method.
+
+bead velocities are required to be strictly orthogonal to the relative displacements.
+Given the second order atomistic dynamics, the velocities must obey the independent
+constraints:
+
+(2.10)
+
+= (~rp+1 − ~rp) · (~vp+1 − ~vp) = 0
+
+dκp
+dt
+
+The constraints (2.9), (2.10) are enforced over positions and momenta separately via
+the SHAKE [10] and the RATTLE algorithms [11]. The implementation of these con-
+straints requires the iterative solution of the system of equations (2.9)-(2.10), typically
+accomplished via standard Newton-Raphson techniques.
+
+2.2. Fluctuating Lattice Boltzmann method. The Lattice Boltzmann equa-
+tion is a minimal form of the Boltzmann kinetic equation in which all details of molecu-
+lar motion are removed except those that are strictly needed to recover hydrodynamic
+behavior at the macroscopic scale (mass-momentum and energy conservation). The
+result is an elegant equation for the discrete distribution function fi(~x, t) describing
+the probability to ﬁnd a particle at lattice site ~x at time t with speed ~v = ~ci. More
+speciﬁcally, since we are dealing with nanoscopic ﬂows, in this work we shall consider
+the ﬂuctuating Lattice Boltzmann equation which takes the following form:
+
+(2.11)
+
+fi(~x + ~ci∆t, t + ∆t) = fi(~x, t) − ω∆t(fi − f eq
+
+i )(~x, t) + Fi∆t + Si∆t
+
+where fi(~x, t) represents the probability of ﬁnding a ﬂuid particle at spatial location
+~x and time t with discrete speed ~ci. The particles can only move along the links
+of a regular lattice deﬁned by the discrete speeds, so that the synchronous particle
+displacements ∆~xi = ~ci∆t never take the ﬂuid particles away from the lattice. For
+the present study, the standard three-dimensional 19-speed lattice is used [4] (see
+Figure 1). The right hand side represents the eﬀect of intermolecular solvent-solvent
+collisions, through a relaxation toward local equilibrium, f eq
+, typically a second order
+i
+(low-Mach) expansion in the ﬂuid velocity of a local Maxwellian with speed ~u:
+
+(2.12)
+
+f eq
+i = wiρ{1 + β~u · ~ci +
+
+[~u~u : (~ci~ci − β−1↔
+
+I )]}
+
+β2
+2
+
+where β = mf /kBTf is the inverse ﬂuid temperature (with kB the Boltzmann con-
+stant), wi a set of weights normalized to unity, and I is the unit tensor in conﬁguration
+
+Multiscale coupling of molecular dynamics and hydrodynamics
+
+5
+
+space. The relaxation frequency ω controls the ﬂuid kinematic viscosity ν through
+the relation:
+
+where cs is the sound speed in the solvent [7]. Knowledge of the discrete distributions
+fi allows the calculation of the local density ρ, ﬂow speed ρ~u and momentum-ﬂux
+tensor
+
+↔
+P , by a direct summation upon all discrete distributions:
+
+(2.13)
+
+(2.14)
+
+(2.15)
+
+(2.16)
+
+ν = c2
+
+s(1/ω − ∆t/2)
+
+ρ(~x, t) =
+
+fi(~x, t)
+
+ρ~u(~x, t) =
+
+fi(~x, t)~ci
+
+↔
+P (~x, t) =
+
+fi(~x, t)~ci~ci
+
+Xi
+
+Xi
+
+Xi
+
+The diagonal component of the momentum-ﬂux tensor gives the ﬂuid pressure, while
+the oﬀ-diagonal terms give the shear-stress. Unlike in hydrodynamics, both quantities
+are available locally and at any point in the simulation.
+
+Thermal ﬂuctuations are included through the source term Fi which reads as
+
+follows (index notation)
+
+(2.17)
+
+Fi = wiρ{F (2)
+
+ab (ciacib − β−1δab) + F (3)
+
+abcgiabc}
+
+where F (2) is the ﬂuctuating stress tensor (a 3 × 3 stochastic matrix). Consistency
+with the ﬂuctuation-dissipation theorem at all scales requires the following conditions
+
+(2.18)
+
+hF (2)
+
+ab (~x, t)F (2)
+
+cd (~x′, t′)i =
+
+∆abcdδ(~x − ~x′)δ(t − t′)
+
+γkBT
+m
+
+where ∆abcd is the fourth-order Kronecker symbol [12]. F (3) is related to the ﬂuc-
+tuating heat ﬂux and giabc is the corresponding basis in kinetic space, essentially a
+third-order Hermite polynomial (full details are given in [13]).
+
+The polymer-ﬂuid back reaction is described through the source term Si, which
+represents the momentum input per unit time due to the reaction of the polymer on
+the ﬂuid population fi:
+
+(2.19)
+
+Si(~x, t) = wiβ
+
+[ ~F f
+
+p + ~F r
+
+p ] · ~ci
+
+Xp∈D(x)
+
+where D(x) denotes the mesh cell to which the pth bead belongs. The quantities on
+the left hand side in the above expression have to reside on the lattice nodes, which
+means that the frictional and random forces need to be extrapolated from the particle
+to the grid location.
+
+The use of a LB solver for the ﬂuid solvent is particularly well suited to this
+
+problem because of the following reasons:
+i) Free-streaming proceeds along straight trajectories. This is in stark contrast with
+hydrodynamics, in which ﬂuid momentum is transported by its own space-time vary-
+ing velocity ﬁeld. Besides securing exact conservation of mass and momentum of the
+numerical scheme, this also greatly facilitates the imposition of geometrically complex
+boundary conditions.
+
+6
+
+Fyta, Melchionna, Kaxiras, & Succi
+
+ii) The pressure ﬁeld is available locally, with no need of solving any (computationally
+expensive) Poisson problem for the pressure, like in standard hydrodynamics.
+iii) Unlike hydrodynamics, diﬀusivity is not represented by a second-order diﬀeren-
+tial operator, but it emerges instead from the ﬁrst-order LB relaxation-propagation
+dynamics. The result is that the kinetic scheme can march in time-steps which scale
+linearly, rather than quadratically, with the mesh resolution. This facilitates high-
+resolution down-coupling to atomistic scales.
+iv) Solute-solute interactions preserve their local nature since they are explicitly medi-
+ated by the solvent molecules through direct solvent-solute interactions. As a result,
+the computational cost of hydrodynamic interactions scales only linearly with the
+length of the polymer (no long-range interactions).
+v) Since all interactions are local, the LB scheme is ideally suited to parallel comput-
+ing.
+
+It is worth mentioning that more advanced Lattice Boltzmann models [14, 15]
+
+could equally well be coupled to the atomistic dynamics.
+
+2.3. Time exchange. The Molecular-Langevin-Dynamics solver is marched in
+time with a stochastic integrator (due to extra non-conservative and random terms),
+proceeding at a fraction of the LB time-step,
+
+dt = ∆t/M
+
+The time-step ratio M > 1 controls the scale separation between the solvent and
+solute timescales.
+
+The numerical solution of the stochastic equations is performed by means of a
+modiﬁed version of the Langevin Impulse propagation scheme, derived from the as-
+sumption that the systematic forces are constant between consecutive time steps [16].
+The propagation of the unconstrained dynamics proceeds according to the scheme
+[17]
+
+˜rp = rp(t) +
+
+vp(t)
+
+dt
+2
+
+p(t + dt) = e−γdt
+v⋆
+
+vp(t) +
+
+(2.20)
+
+r⋆
+p(t + dt) = ˜rp +
+
+vp(t + dt)
+
+(cid:26)
+dt
+2
+
+eγdt − 1
+
+(cid:18)
+
+γm (cid:19)
+
+(F (˜rp) + γup) +
+
+eγdt/2 + 1
+
+C(dt)
+
+(cid:16)
+
+(cid:17)
+
+(cid:27)
+
+where C(dt) is an array of 3N gaussian random variables with zero mean and variance
+kB T
+m (e2γdt − 1), and {˜r} represent temporary positions. The propagator (2.20) is
+particularly suitable for our purposes since it is second order accurate in time and
+robust, that is, it reduces to the symplectic Verlet algorithm for γ → 0. Moreover, at
+variance with the original Langevin Impulse scheme, the modiﬁed propagator allows
+for an unambiguous deﬁnition of velocities, which are needed to couple the polymer
+to the hydrodynamic ﬁeld of the surrounding solvent. The particle positions and
+velocities corrected via the SHAKE and RATTLE algorithms read ~r⋆
+p(t + dt) → ~rp(t +
+dt) and ~v⋆
+p(t + dt) → ~vp(t + dt). For consistency, in considering the momentum
+exchange with the solvent the corrected velocities appear in the friction forces. The
+MD cycle is repeated M times, with the hydrodynamic ﬁeld frozen at time tn = n∆t.
+
+2.4. Spatial exchange. The transfer of spatial information from/to grid to/from
+particle locations is performed at each LB time-stamp tn = n∆t. To this purpose,on
+account of its simplicity, a simple nearest grid point (NGP) interpolation scheme is
+
+Multiscale coupling of molecular dynamics and hydrodynamics
+
+7
+
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+
+(a)
+
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+
+(b)
+
+Fig. 2. Transfer of spatial information (a) from grid to particle, and (b) from particle to grid.
+
+Black spheres denote beads, while in white are the lattice sites.
+
+used (see Fig.2). Momentum conservation was checked to hold up to six digits. With
+reference to a time slice tn = n∆t, the pseudo-algorithm performing a single LB
+time-step, reads as follows
+
+1. Interpolation of the velocity: ~u(~x) → ~up
+2. For m = 1, M :
+
+Advance the molecular state from t to t + dt
+
+3. Extrapolation of the forces: ~Fp → ~F (~x)
+4. Advance the Boltzmann populations from t to t + ∆t
+This time-marching can be formally represented by an operator-splitting multi-
+step time procedure for two coupled kinetic equations describing the dynamic evo-
+It is
+lution for the ﬂuid and the polymer distribution functions, respectively [18].
+worth emphasizing that, while LB and MD with Langevin dynamics have been cou-
+pled before, notably in the study of single-polymer dynamics [19], to the best of our
+knowledge, this is the ﬁrst time such that coupling is put in place for long molecules
+of biological interest.
+
+2.5. Eﬃciency considerations. The total cost of the computation scales roughly
+
+like
+
+(2.21)
+
+t ∼ (tLBV + tMDM N )NLB
+
+where tLB is the CPU time required to update a single LB site per timestep and
+tMD is the CPU time to update a single bead per timestep, V is the volume of the
+computational domain in lattice units and N is the number of polymer beads, with
+M the LB-MD time-step ratio. Finally, NLB is the number of LB timesteps. In the
+above equation, tMD includes the overhead of LB-MD coupling. Note that tMD is
+largely independent of N because i) the LB-MD coupling is local, ii) the forces are
+short ranged and iii) the SHAKE/RATTLE algorithms are empirically known to scale
+linearly with the number of constraints.
+
+Regarding the cost of the LB section, this is known to scale linearly with the
+volume occupied by the solvent. For the case where polymer concentration is kept
+constant, the volume needed to accommodate a polymer of N beads should scale
+approximately as N 1.8; however, for translocation studies such as those discussed
+later in this paper, we shall consider a box of given volume, independently on the
+polymer length.
+
+From the above expression it is clear that M should be chosen as small as possible,
+consistent with the requirement of providing a realistic description of the polymer dy-
+namics. In the present simulation we typically choose M between 5 and 20, depending
+
+8
+
+Fyta, Melchionna, Kaxiras, & Succi
+
+on the parameters of the simulation, particularly the temperature. This means that
+we are taking the LB representation close to the molecular scale. We will return to
+this important issue in the quantitative discussion of the physical application.
+
+A tentative estimate of the computational cost proceeds as follows: Assuming
+250 ﬂops/site/LB-step and 2500 ﬂops/bead/MD-step (including the LB-MD coupling
+overhead), and an eﬀective processing speed of 100 Mﬂop/s, the evolution over 30, 000
+LB steps=150, 000 MD steps of a typical 80×40×40 grid and 400 beads set-up, would
+take about:
+
+t = 30, 000 ×
+
+250 × (80 × 40 × 4) + 2500 × 5 × 400
+
+(cid:2)
+
+/108 = (9600 + 1500)sec ∼ 3hrs,
+(cid:3)
+
+which is in reasonable agreement with the simulation time observed with the present
+version of the code (7hrs), including the relative MD/LB cost (≃ 1 : 4).
+
+We wish to emphasize that the key feature of the LB-MD approach, namely
+linear scaling of the CPU cost with the number of beads (at constant volume) is
+indeed observed. In fact, the execution times for 50, 100 and 400 beads are 0.433,
+0.489, and 0.882 sec/step, respectively on a 2GHz AMD Opteron processor. By
+excluding hydrodynamics, these numbers become 0.039, 0.075, and 0.318 sec/step. It
+is worth mentioning that thus far, no eﬀort has been directed to code optimization; it
+is quite possible that careful optimization may lower the execution time by an order
+of magnitude.
+
+2.6. Validation tests. The static and dynamic behavior of the DNA chain
+obtained by our methodology has been compared to the scaling predictions for a single
+i,jheik·(ri−rj )i,
+chain at inﬁnite dilution. Given the structure factor Sf (k) = 1
+N
+standard theory predicts the scaling law Sf (k) = N g(kRg), where g(y) is a universal
+i,jh(ri − rj)2i is the gyration radius. For large k, the
+function and Rg = (1/2N 2)
+structure factor is independent of N , and it follows
+
+P
+
+P
+
+Sf (k) ∝ k−1/µ
+
+where experiments, theory and simulations agree on the scaling exponent value µ ≃
+0.584. The static scaling law is not aﬀected by the presence of hydrodynamics. How-
+ever, veriﬁcation of the scaling law and attainment of the scaling regime for large
+enough chains is a good check for the correctness of our simulation scheme and for
+the subsequent validation of the hydrodynamic behavior.
+
+The dynamic behavior of the chain is deeply aﬀected by the presence of hy-
+drodynamic interactions. The standard picture of polymer dynamics is based on
+the Rouse (no hydrodynamics) or Zimm (hydrodynamic) description in terms of an
+underlying gaussian chain. In this case, the chain intermediate scattering function
+IS(k, t) =
+
+i,jheik·[ri(t)−rj(0)]i should follow the universal behavior
+
+1
+N Sf (k)
+
+P
+
+IS(k, t) = ˜g(Df Rx−2
+
+tkx)
+
+g
+
+where ˜g(y) is another universal function and Df is the center of mass diﬀusion con-
+stant. Having introduced the dynamic scaling exponent µ′ via Df ∼ N µ
+, the expo-
+nent x is found to be x = 2 + µ′/µ. According to Zimm theory, µ′ = µ and x = 3 [19]
+while, according to Molecular Dynamics simulations, it appears that the actual value
+is somehow lower, i.e. x ≃ 2.9 [20].
+
+′
+
+We have considered a chain made of 30 monomers with bead-bead Lennard-Jones
+parameters taken from previous studies of chains simulated via Brownian dynamics
+
+Multiscale coupling of molecular dynamics and hydrodynamics
+
+9
+
+(b)
+
+100
+
+10
+
+)
+k
+(
+
+S
+
+f
+
+1
+
+0
+
+(a)
+
+1e+05
+
+10000
+
+)
+
+S
+
+I
+,
+k
+(
+t
+
+1000
+
+100
+
+10
+
+1
+k
+
+10
+
+1
+
+k
+
+Fig. 3. (a) Log-log plot of the structure factor of a polymer in solution made of 30 monomers.
+The straight line is the power law ﬁt in the range 1 < k < 3 with exponent µ = 0.58. (b) Log-log
+parametric plot of t(IS , k) vs k for IS = 0.3 (circles) and IS = 0.6 (triangles). The lines represent
+the power law ﬁts within the scaling region 1 < k < 3.0 with exponent x = 2.9.
+
+[21] (σ = 0.65, ǫ/kBT = 1.0, bond length r0 = 0.945) in a simulation box of edge
+60. This choice was motivated to verify the range of scaling behavior as compared
+to previous numerical results. We have computed the structure factor, as reported in
+Fig.3(a), and observed that the scaling regime is clearly visible for 1 < k < 3 with
+an exponent equal µ = 0.58 ± 0.1. In the range of k vectors where the static scaling
+holds, the dynamic scaling has been checked by considering, for given values of the
+computed scattering function, the loci of points t(k, IS) = ˜g−1(IS)k−x and by ﬁtting
+via a power law curve (see ref. [20] for details). As illustrated in Fig.3(b), the resulting
+scaling exponent is found to be x = 2.9±0.1, in excellent agreement with the expected
+value and similar to previous simulation results on single polymers surrounded by a
+Lattice Boltzmann ﬂuid [21]. Moreover, by applying a heuristic argument [20], we
+have veriﬁed that within the scaling regime, the ﬁnite size of the periodic box was not
+biasing the data.
+
+3. Application: polymer translocation through nanopore. The scheme
+described above is general and applicable to any situation where a long polymer is
+moving in a solvent. This motion is of great interest for a fundamental understanding
+of polymer dynamics in the presence of the solvent. For example, the translocation of a
+polymer through a pore of very small size (of order the separation between monomers),
+is a process in which the coupling of the molecular motion to the solvent dynamics
+may be of crucial signiﬁcance. In this section, we will therefore provide a detailed
+discussion of the polymer dynamics in the presence of a solvent for the example of
+translocation through a nanopore but without reference to a speciﬁc physical system.
+In the next section we explore the relevance of these results to DNA translocation
+through a nanopore.
+
+3.1. Initial and Boundary conditions. The polymer is initialized via a stan-
+dard self-avoiding random walk algorithm and further relaxed to equilibrium by stan-
+dard Molecular Dynamics. The solvent is initialized with the equilibrium distribution
+corresponding to a constant density ρ0 and zero macroscopic speed ~u = 0.
+
+Boundary conditions for the ﬂuid are periodic at inlet/outlet sections, and zero-
+speed at rigid walls, using the standard bounce-back rule [4]. For the polymer, period-
+icity is again imposed at inlet/outlet, whereas the interaction with rigid walls is han-
+
+10
+
+Fyta, Melchionna, Kaxiras, & Succi
+
+dled by a Lennard-Jones potential with speciﬁc wall-polymer parameters σwall = 1.5
+and ǫwall = 10−3 in LB units. The connection between slip-ﬂow at the wall and
+intermolecular solid-ﬂuid interactions shall be the objects of future research.
+
+3.2. Numerical set-up. We consider a three-dimensional box of size Nxh ×
+Nyh × Nzh lattice units, with h the spacing between lattice points. We will take
+Nx = 2Ny, Ny = Nz; the separating wall is located in the mid-section of the x
+direction, at x = hNx/2 with Nx = 80. At t = 0 the polymer resides entirely in the
+right chamber at x > hNx/2. At the center of the separating wall, a square hole of side
+dhole = 2h is opened, through which the polymer can translocate from one chamber
+to the other. Translocation is induced by a constant electric ﬁeld which acts along
+the x direction, and is conﬁned in a rectangular channel of size 2h × h × h along the
+streamline (x direction) and cross-ﬂow (y, z directions). The spatial coarse-graining
+is such that the presence of the solvent as well as electrostatic forces acting due to
+charges on the polymer are neglected altogether as being of secondary importance
+compared to hydrodynamics.
+
+Here and throughout we work in lattice Boltzmann units, in which length and
+time are measured in units of the lattice spacing h = ∆x and time-step ∆t, respec-
+tively. Mass is deﬁned as m = mLBmsol. The dimensionless mass mLB used in the
+simulations is set to unity, which means that mass is measured in units of the solvent
+mass msol. This choice is not restrictive since the present approach is used to model
+incompressible ﬂows in which density is a parameter which can be rescaled by any
+arbitrary factor. However, it is of some interest to estimate the number of solvent
+molecules represented by a single LB computational molecule, since the inverse of
+this number conveys a measure of the importance of statistical ﬂuctuations at the
+scale of the lattice spacing ∆x. Let SN be this number, which will be deﬁned as
+ρsolh
+, where ρLB is the dimensionless density used in the LB simulations. In order
+ρLB msol
+for the Boltzmann probability distribution to make sense as a statistical observable,
+NLB >> 1. For typical values of ρsol = 1 gr/cm3, msol ∼ 20 amu, ρLB = 1 (which
+correspond to water), and h in the range 1 − 102 nm, this yields SN ∼ 104 − 106.
+This shows that the neglect of many-body ﬂuctuations inherent to the single-particle
+Boltzmann representation is still justiﬁed even at the nanoscopic scale of the lattice
+spacing.
+
+3
+
+We will focus here on the fast translocation regime, in which the translocation
+time tX is much smaller than the Zimm time, tZ, i.e. the typical relaxation time of
+the polymer towards its native (minimum energy, maximum entropy) conﬁguration.
+Under fast-translocation conditions, the many-body aspects of the polymer dynamics
+cannot be ignored because diﬀerent beads along the chain do not move indepen-
+dently. As a result, simple one-dimensional Brownian models do not apply [22]. In
+addition to many-body solute-solute interactions, the present approach also takes full
+account of many-body solute-solvent hydrodynamic interactions. The conditions for
+fast-translocation regime can be appraised as follows. The translocation time is esti-
+mated by equating the driving force, Fpull, to the drag force exerted by a solvent with
+dynamic viscosity η on a polymer with radius of gyration R, Fdrag ∼ 6πηR
+. This
+tX
+. Since the Zimm time is given by tZ ∼ 0.4ηR
+yields tX ∼ 6πηR
+kB T , the fast-translocation
+Fpull
+condition tX ≪ tZ becomes:
+
+3
+
+2
+
+2
+
+(3.1)
+
+FpullR
+kBT
+
+≫
+
+∼ 50
+
+6π
+0.4
+
+Our reference simulation is performed with Fpull/m = 0.02∆x/∆t2 and kBT /m =
+
+Multiscale coupling of molecular dynamics and hydrodynamics
+
+11
+
+10−4∆x2/∆t2, with m the mass of one bead (monomer) of the polymer. The polymer
+length is in the range 20 ≤ N ≤ 400 beads.
+It can be readily checked that by
+assuming R ∼ N 0.6 our set of parameters falls safely within the fast translocation
+regime. However, for kBT /m = 10−3, FpullR/kBT is of the order of 102 − 103 which
+is much closer to breaking the above condition.
+
+The main parameters of the simulation are (in LB units) σ = 1.8 and ǫ = 10−4
+for the Lennard-Jones potential. The bond length among the beads is set at r0 = 1.2.
+2ǫ/m, is of
+According to these values, the Lennard-Jones time-scale, τLJ = σ/
+the order of ∼ 100∆t. Thus, by choosing M = 5 as a time-gap factor, we obtain
+dt ∼ τLJ /500, which is adequate for the resolution of the polymer dynamics. The
+solvent is set at a density ρ = 1, with a kinematic viscosity ν = 0.1∆x2/∆t and a
+damping coeﬃcient γ = 0.1/∆t. The ﬂexional rigidity κ for the angular potential
+between beads will be 10−4/rad.
+In order to resolve the structure of the solvent
+accurately on the atomistic scale [23], we should use a higher resolution of at least 3-4
+orders of magnitude. This means resolving the radial structure of the pore, a task that
+can only be undertaken by resorting to parallel computing. It is nonetheless hoped,
+and veriﬁed a posteriori, that this artiﬁcial magniﬁcation does not aﬀect adversely
+the most signiﬁcant dynamical and statistical properties of the translocation process,
+by which we mean that eventually, the time-scale of the simulated process may not be
+the same as in the physical process of interest, but the simulated dynamics is related
+to the physical dynamics by a simple rescaling of the time variable.
+
+p
+
+3.3. Translocation time. The most immediate quantity of interest in the translo-
+
+cation process is the dependence of the translocation time on the polymer length. This
+is usually expressed by a scaling law of the form
+
+τX (N ) ≡ tx/dt = N α
+
+where t0 is a reference time-scale, formally the translocation time of a single monomer,
+and α a scaling exponent measuring the degree of competition (α > 1) / cooperation
+(α < 1) of the various monomers in the chain.
+
+We ﬁrst turn to the derivation of the scaling behavior of the translocation pro-
+cess in the case where hydrodynamic interactions are included. In order to take into
+account the statistical nature of the phenomenon, simulations of a large number of
+translocation events (100 up to 1000) for each polymer length were carried out. The
+ensemble of simulations is generated by diﬀerent realizations of the initial polymer
+conﬁguration. The duration histograms were constructed by cumulating all events
+for various lengths. Overall, our results are quite similar to the corresponding ex-
+perimental data for DNA translocation through a nanopore [24], which we discuss in
+more detail in the following section.
+
+At a next step, our data were shifted and scaled so that the distribution curve
+starts at zero-time and the total probability is equal to unity. The resulting distri-
+butions are on average not gaussians, but skewed towards long translocation times,
+consistent with experiment [24]. Therefore, the translocation time for each length is
+not assigned to the mean time, but to the most probable time, which is the position of
+the maximum in the histogram. In Fig.4 the distribution of all the events for polymer
+sizes N=50, 100 and 300 are shown. In this ﬁgure, the most probable translocation
+time for each length is denoted by an arrow. From this analysis, a nonlinear relation
+between the most probable translocation time τ0 and the polymer length is obtained
+that follows closely the theoretically expected scaling τX (N ) ∼ N α, with α ∼ 1.29
+(see Fig.4).
+
+12
+
+1.5
+
+2
+
+1
+
+0.5
+
+s
+t
+n
+e
+v
+e
+ 
+f
+o
+ 
+#
+
+(a)
+
+(b)
+
+(c)
+
+Fyta, Melchionna, Kaxiras, & Succi
+
+1.5
+
+2
+
+1
+
+0.5
+
+s
+t
+n
+e
+v
+e
+ 
+f
+o
+ 
+#
+
+1.5
+
+2
+
+1
+
+0.5
+
+s
+t
+n
+e
+v
+e
+ 
+f
+o
+ 
+#
+
+0
+
+0
+
+0.5
+
+1.5
+
+2
+
+1
+time
+
+0
+
+0
+
+0.5
+
+1.5
+
+2
+
+0
+
+0
+
+0.5
+
+1
+time
+
+1
+time
+
+1.5
+
+2
+
+Fig. 4. Probability distributions of the translocation times for various lengths: (a) N =50,
+(b) N=100, and (c) N=300, respectively. Both axes are scaled to produce normalized probability
+distributions. The arrows show the most probable translocation time for each length.
+
+100000
+
+e
+m
+
+i
+t
+ 
+n
+o
+i
+t
+a
+c
+o
+s
+n
+a
+r
+t
+
+l
+
+10000
+
+1000
+
+100
+
+10
+
+100
+number of beads N
+
+1000
+
+Fig. 5. Translocation time as a function of the number of monomers for the case with hydro-
+dynamics. The straight line represents the power law with exponent 1.29. Time is shown in units
+of the LB timestep ∆t.
+
+3.4. Dynamics with and without a solvent. A closer inspection into the
+polymer dynamics reveals some interesting features. The molecule shows a blob-like
+conformation on either side of the membrane as it moves through the hole. It may
+either translocate very fast or move from one chamber to the other intermittently, with
+pauses. Both types of events are present with and without a ﬂuid solvent. In addition,
+a careful analysis of all the translocated chains unravels the diﬀerence between slower
+and faster translocation within the same fast translocation regime. The nature of the
+variations in time is connected to the random ﬂuctuations of the polymer throughout
+its motion, rather than the temperature or its length. These ﬂuctuations are correlated
+to the entropic forces (gradient of the free energy with respect to a conformational
+order parameter, typically the fraction of translocated beads, see r(t) below) acting
+on both translocated and untranslocated parts of the polymer. In fact, when a solvent
+is present, the interplay between these forces and Fdrag, Fpull determines the motion
+and the shape of the chain and thereby the translocation time. At some point part
+of the chain shapes up in an almost linear conformation increasing in this way the
+entropic force acting on it. This eventually leads to deceleration of the whole chain.
+Fig.6 shows an illustration of this argument, where a polymer chain, surrounded by a
+solvent is represented at a time where it starts to slow down. In this ﬁgure, a polymer
+with the same length but diﬀerent initial conﬁguration is also shown at the same time.
+
+Multiscale coupling of molecular dynamics and hydrodynamics
+
+(a)
+
+13
+
+(b)
+
+Fig. 6. Polymer conﬁguration (N = 400) corresponding to (a) fast and (b) slow translocation
+events. Both snapshots are shown at a timestep where the polymer (b) starts to slow down (see
+arrow in Fig.7). Fpull is applied at the hole region towards a direction indicated by the arrow.
+
+It is very instructive to monitor the progress in time of the number of translo-
+cated monomers N (t). Note that r(t) ≡ N (t)/N serves as a reaction-coordinate,
+with the translocation time deﬁned by the condition r(tX ) = 1. The translocated
+monomers for processes with and without hydrodynamics are shown in Fig.7. For the
+former, events related to the polymers of Fig.6 are shown (curves A1, A3), as well
+as that related to the most probable time (A2). The arrow in this ﬁgure indicates
+the timestep corresponding to the snapshots in Fig.6. The translocation for a given
+polymer proceeds along a curve virtually related to its initial conﬁguration and its
+interactions with the ﬂuid. It is clearly visible that there is no general trend. The
+non-hydrodynamic case is in principle diﬀerent, especially in terms of the time range
+which is larger. This reveals the importance of hydrodynamic coherence.
+
+Additional insight into the dynamics is obtained by altering the parameter set.
+This has not yet been extensively explored, but it was found that a choice of kBT =
+10−5, Fpull = 0.01, and ǫ = 0.002 leads to the frequent retraction of the polymer.
+In other words, after having translocated a large fraction of its length, the polymer
+occasionally reverses its motion and anti-translocates away from the hole, never to ﬁnd
+its way back into it. Moreover, we ﬁnd that a polymer that retracted in the presence
+of a solvent, manages to fully translocate if the solvent is absent. It is interesting
+to observe that, in principle, no such type of anti-translocating behavior has been
+observed for short polymers. This indicates that hydrodynamics signiﬁcantly speed-up
+and alter the nature of translocation, especially for long polymers at low temperatures.
+This highly irregular dynamics escapes any scaling or statistical analysis, as well as
+dynamic Monte Carlo simulations [25], and can only be revealed by self-consistent
+many-body hydro-dynamic simulations.
+
+4. DNA translocation through a nanopore. The translocation of biopoly-
+mers, such as DNA and RNA plays a major role in many important biological pro-
+cesses, such as viral infection by phages, inter-bacterial DNA transduction, and gene
+therapy [26]. The importance of this process has spawned a number of in vitro exper-
+iments, aimed at exploring the translocation process through micro-fabricated chan-
+
+14
+
+Fyta, Melchionna, Kaxiras, & Succi
+
+A2
+
+A3
+
+A1
+
+B
+
+)
+t
+(
+r
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+0
+
+0.5
+
+1
+
+1.5
+
+t/t0
+
+Fig. 7. Progress in time of the number of translocated beads for chains with N = 400 monomers.
+Curves A1, A3 correspond to slow and fast translocation events (polymers shown in Fig.5), while
+A2 to an event related to the most probable time. The initial conﬁguration for the polymer in the
+event B is the same as for A2, but in that case no hydrodynamic interactions are included. Time
+is scaled with respect to the value of τ0 in the case with hydrodynamics. The arrow indicates the
+timestep at which the snapshots in Fig.6 are shown.
+
+nels under the eﬀects of an external electric ﬁeld, or through protein channels across
+cellular membranes [27]. In particular, recent experimental work has focused on the
+possibility of fast DNA-sequencing by reading the base sequence as the polymer passes
+through a nanopore. Some universal features of DNA translocation can be analyzed
+by means of suitably simpliﬁed statistical schemes [28] and non-hydrodynamic coarse-
+grained or microscopic models [29, 30]. However, a quantitative description of this
+complex phenomenon calls for state-of-the art modeling of the type described above.
+Accordingly, we explore here to what extent the results discussed above for the generic
+situation of polymer translocation apply to the DNA case.
+
+First, we note that, as already mentioned in the previous section, our results are
+quite similar to the experimental data for DNA translocation through a nanopore
+[24]. Three diﬀerent interpretations of the current model are physically plausible:
+(a) Following the framework used in recent studies of DNA packing in bacteriophages
+[31], one monomer in our simulation can be thought of as representing a DNA segment
+of about 8 base-pairs, that is, each bead has a diameter of 2.5 nm, the hydrated
+diameter of B-DNA in physiological conditions.
+(b) It is also physically plausible to assume that a bead represents a portion of DNA
+equivalent to its persistence length of about 50 nm, which translates into mapping
+one bead to ∼150 base-pairs.
+(c) Alternatively, as is typically done in simulations of the λ-phage DNA in solution
+[32], one bead can be taken to correspond to ∼ 103 base-pairs.
+In all three cases h = ∆x is equal to the bead size, while the pore, having a width of
+2∆x, will be diﬀerent from the pores used experimentally, either smaller or larger. In
+addition, the coarse graining model that handles the DNA molecules indicates that
+the MD timescale is stretched over the physical process. A direct comparison between
+our probability distributions for polymer translocation and the experimental results
+sets a diﬀerent MD timestep for the cases (a), (b), and (c) which is of the order of 3
+
+Multiscale coupling of molecular dynamics and hydrodynamics
+
+15
+
+2
+
+1
+
+0.5
+
+n
+o
+
+i
+t
+
+a
+r
+y
+g
+
+ 
+f
+
+o
+
+i
+
+ 
+s
+u
+d
+a
+r
+
+RE
+
+RT
+
+0
+
+0
+
+(a)
+
+RE
+
+2
+
+1
+
+0.5
+
+o
+
+i
+t
+
+a
+r
+ 
+
+n
+o
+
+i
+t
+
+a
+r
+y
+g
+
+RU
+
+RT
+
+0
+
+0
+
+(b)
+
+RU
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1
+
+time
+
+time
+
+Fig. 8. Translocated (RT ), untranslocated (RU ) and eﬀective (RE ) radii of gyration for the (a)
+non-hydrodynamic and (b) hydrodynamic cases with N = 400. All radii are normalized with respect
+to the initial value RU (t = 0). Time is also scaled with respect to the total translocation time tX
+for each of the events (a) and (b). The dotted lines denote the regions where RE is nearly constant
+(see text).
+
+nsec, 100 nsec and 5 µsec, respectively, leading to a LB timestep ∆t = 5dt of 15 nsec,
+500 nsec, and 25 µsec. It is diﬃcult at this stage to assign a unique interpretation of
+our model in relation to a physical system. A thorough exploration of the parameter
+space is required before such an assignment can be made convincingly. This is beyond
+the scope of the present work but will be reported in future publications.
+
+A second encouraging comparison is that the scaling we found for the translo-
+cation time with polymer length (with exponent α = 1.29) is quite close to the
+experimental measurement for DNA translocation [24] (α = 1.27 ± 0.03). Beyond
+the apparent consistency between experiment and theory, additional insight can be
+gained by analyzing the polymer dynamics during translocation.
+
+A hydrodynamic picture of DNA translocation has been presented in ref.
+[24].
+In this work, the authors assume that the electric ﬁeld drive is in balance with the
+Stokes drag exerted by the solvent on the blob conﬁguration of the polymer, that is
+
+Fpull = 6πρν
+
+dR2
+U
+τ
+
+where ρ is the density, ν the kinematic viscocity, τ the translocation time, and RU
+the translocated part of the radius of gyration. In order for this balance to apply at
+all times, it is clear that R2 must be constant in time, hence it cannot be identiﬁed
+neither with the translocated nor with the untraslocated gyration radius of DNA.
+To this end, in Fig.8 we represent the time-evolution of the radii of gyration for the
+two sections of DNA, RU (t) and RT (t), the untranslocated (U ) [with x > hNx/2]
+and translocated (T ) [with x < hNx/2] parts, respectively.
+In order to identify a
+time-invariant radius, we deﬁne the RI (t) = QN ζ
+I (t), where I = U, T stands for
+the untranslocated and translocated parts and NI (t) is the corresponding number of
+monomers. The exponent ζ ∼ 0.6 is the same as previously noted and Q is a constant
+(for long enough polymers). If translocation could be described by the dynamics of a
+single-blob object, characterized by an eﬀective radius of gyration, deﬁned as
+
+RE(t) = cN ζ(t),
+
+16
+
+(4.1)
+
+Fyta, Melchionna, Kaxiras, & Succi
+
+then this quantity should be constant in time. Since the N = NT (t) + NU (t) holds
+for all t, the above relations lead to
+
+RE(t) = [R1/ζ
+
+T (t) + R1/ζ
+
+U (t)]ζ = const
+
+I
+
+We focus ﬁrst on the case without hydrodynamics, Fig.8(a). For very small chains
+RI (t) does not scale as N 0.6
+and the deﬁnition for RE is not valid at the ﬁrst and
+last ∼ 15 − 20% parts of the event, during which the untranslocated and the translo-
+cated parts, respectively, are small. Outside these limits, RE(t) as obtained from the
+deﬁnition (4.1), with the values of RU (t), RT (t) directly taken from the simulations,
+is indeed approximately constant. In addition, the values RT (t = tX ) and RU (t = 0)
+do not coincide, since the former is lower than the latter. This is also the case when
+a solvent is present, Fig.8(b). Thus, regardless of the dynamic pathway and the dif-
+ferent conformations the chain may possess during translocation, once the event is
+completed the polymer is more compact than at t = 0. Comparison of the cases with
+and without hydrodynamics reveals that in the latter case the polymer becomes up
+to ∼ 7% more conﬁned than when a solvent is added. The untranslocated part of the
+radius of gyration at the end of the process shows an abrupt drop. As a consequence
+the polymer t = tX does not fully recover its initial volume.
+It it plausible, that
+by allowing the polymer to further advance in time, RT (t = tX ) will become similar
+to RU (t = t0), but this remains to be examined. Nevertheless, in this work we have
+been interested mainly on the chain dynamics related to the ﬁrst passage times, which
+correspond to the exact period of time needed until all the beads have translocated.
+
+5. Conclusions. We have presented a multiscale methodology based on the con-
+current coupling of constrained molecular dynamics for the solute biopolymers with a
+lattice Boltzmann treatment of solvent dynamics. Owing to the dual ﬁeld-particle na-
+ture of the Lattice Boltzmann technique, this coupling proceeds seamlessy in time and
+only requires standard interpolation/extrapolation for information-transfer in phys-
+ical space. This multiscale methodology has been applied to the case of polymer
+translocation through a nanopore, with special emphasis on the role of hydrodynamic
+coherence on the dynamic and statistical properties of the translocation process. It is
+found that hydrodynamic interactions play a major role in accelerating the translo-
+cation process, especially for long molecules at low temperature.
+
+An attempt to connect these results to the process of DNA translocation through
+a nanopore revealed certain similarities with experiment, especially in the scaling
+law of the translocation time with polymer length. The presence of hydrodynamic
+interactions lead to a decrease in the translocation times, compared to the cases
+without a ﬂuid solvent. Inspection of the variation of the translocated beads and the
+radii of gyration with time reveals interesting aspects of the DNA dynamics during
+translocation.
+
+Future directions for the simulations include the detailed study of the eﬀects of
+temperature, ﬁnite-length and geometrical details of the nanopore geometry, as well as
+electrostatic interactions of the DNA molecule with the surrounding ﬂuid. To this end,
+resort to parallel computing is mandatory, and we expect the favourable properties of
+LB towards parallel implementations to greatly facilitate the task. Work along these
+lines is currently in progress.
+
+Acknowledgements The authors wish to thank C. Pierleoni for valuable dis-
+
+cussions and help with the validation tests.
+
+Multiscale coupling of molecular dynamics and hydrodynamics
+
+17
+
+REFERENCES
+
+[1] N. G. Hadjiconstantinou and A. T. Patera, Heterogeneous atomistic-continuum represen-
+tations for dense ﬂuid systems, Int. J. Mod. Phys. C, 8 (1997), pp. 967–976; A. Wagner,
+E. Flekkoy, J. Feder, and T. Jossanq, Coupling molecular dynamics and continuum
+dynamics, Comp. Phys. Comm., 147 (2002), pp. 670–673; X. Nie, S. Y. Chen and W. E,
+A continuum and molecular dynamics hybrid method for micro- and nano-ﬂuid ﬂow, J.
+Fluid Mech., 500 (2004), pp. 55–64.
+
+[2] W. E, B. Engquist, Z. Y. Huang, Heterogeneous multiscale method: A general methodology
+
+for multiscale modeling, Phys. Rev. B, 67 (2003), 092101.
+
+[3] C. Theodoropoulos, Y. H. Qian and I. Kevrekidis, ”Coarse” stability and bifurcation anal-
+
+ysis using time-steppers: A reaction-diﬀusion example, PNAS, 97 (2000), pp.9840–9843.
+
+[4] R. Benzi, S. Succi, and M. Vergassola, The lattice Boltzmann-equation - Theory and appli-
+cations, Phys. Rep., 222 (1992), pp. 145–197; D. A. Wolf-Gladrow, Lattice gas cellular
+automata and lattice Boltzmann models, Springer-Verlag, New York 2000; S. Succi, The
+lattice Boltzmann equation, Oxford University Press, Oxford 2001.
+
+[5] G. Mc Namara, G. Zanetti, Use of the Boltzmann-equation to simulate lattice-gas au-
+tomata, Phys. Rev. Lett., 61 (1988), pp. 2332–2335; F. Higuera, S. Succi, and R. Benzi,
+Lattice gas-dynamics with enhanced collisions, Europhys. Lett., 9 (1989), pp. 345–349;
+F. Higuera, J. Jimenez, Boltzmann approach to lattice gas simulations, Europhys. Lett.,
+9 (1989), pp. 663–668; H. Chen, S. Chen, W. Matthaeus, Recovery of the Navier-Stokes
+equations using a lattice-gas Boltzmann method, Phys Rev A, 45 (1992), pp. 5339–5342;
+Y. H. Qian, D. d’Humieres, P. Lallemand, Lattice BGK models for Navier-Stokes equa-
+tion, Europhys. Lett., 17 (1992), pp. 479–484; I.V. Karlin, A. Ferrante, H.C. ¨Ottinger,
+Perfect entropy functions of the Lattice Boltzmann method, Europhys. Lett., 47 (1999), 182.
+[6] Proceedings of Discrete Simulation in Fluid Dynamics 2005, edited by B. Boghosian, special
+
+issue, Physica A, 362 (2006).
+
+[7] S. Succi, O. Filippova, G. Smith and E. Kaxiras, Applying the lattice Boltzmann equation
+to multiscale ﬂuid problems, Computing in Science and Engineering, 3 (2001), pp. 26–37.
+[8] Martin Kr¨oger, Simple models for complex nonequilibrium ﬂuids, Phys. Rep., 390 (2004),
+pp. 453-551; Martin Kr¨oger, A. Alba-P´erez, M. Laso, H. C. ¨Ottinger, Variance
+reduced Brownian simulation of a bead-spring chain under steady shear ﬂow considering
+hydrodynamic interaction eﬀects, J. Chem. Phys., 113 (2000), pp. 4767-4773.
+
+[9] J. D. Weeks, D. Chandler, and H. C. Andersen, Role of Repulsive Forces in Determining
+
+the Equilibrium Structure of Simple Liquids, J. Appl. Phys., 54 (1971), pp. 5237–5247.
+
+[10] J. P. Ryckaert, G. Ciccotti, and H. J. C. Berendsen, Numerical-integration of cartesian
+equations of motion of a system with constraints - Molecular-Dynamics of n-alkanes, J.
+Comp. Phys. 23, (1977), pp.327–341.
+
+[11] H. C. Andersen, Rattle - A velocity version of the SHAKE algorithm for Molecular-Dynamics
+
+calsulations, J. Comput. Phys., 52 (1983), 24–34.
+
+[12] A. J. C. Ladd and R. Verberg, Lattice-Boltzmann simulations of particle-ﬂuid suspensions,
+
+[13] R. Adhikari, K. Stratford, M. E.Cates and A.J. Wagner, Fluctuating Lattice Boltzmann,
+
+J. Stat. Phys., 104 (2001), pp. 1191–1251.
+
+Europhys.Lett., 71 (2005), pp. 473–477.
+
+[14] S. Ansumali, I.V. Karlin and H.C. H¨ottinger, Minimal entropic kinetic models for hydro-
+
+dynamics, Europhys. Lett. 63 (2003), pp.798-804.
+
+[15] S. Ansumali and I.V. Karlin, Consistent Lattice Boltzmann method, Phys. Rev. Lett. 95
+
+(2005), art. no. 260605.
+
+[16] R. D. Skeel and J. A. Izaguirre, An impulse integrator for Langevin dynamics, Mol. Phys.,
+
+100 (2002), pp. 3885–3891.
+[17] S. Melchionna, in preparation.
+[18] M. Tuckerman, and B. Berne, Vibrational-relaxation in simple ﬂuids - Comparison of theory
+
+and simulations, J. Chem. Phys., 98 (1993), pp. 7301–7318.
+
+[19] P. Ahlrichs and B. Duenweg, Lattice-Boltzmann simulation of polymer-solvent systems, Int.
+J. Mod. Phys. C, 9 (1999), pp. 1429–1438; Simulation of a single polymer chain in solution
+by combining lattice Boltzmann and molecular dynamics, J. Chem. Phys., 111, (1999) 8225–
+8239; A. Chatterji, J. Horbach, Combining molecular dynamics with Lattice Boltzmann:
+A hybrid method for the simulation of (charged) colloidal systems, J. Chem. Phys., 122(18),
+(2005), 184903.
+
+[20] M. Doi, S.F. Edwards, The theory of polymer dynamics, Clarendon, Oxford, 1986.
+[21] C. Pierleoni, J.-P. Ryckaert, Molecular dynamics investigation of dynamic scaling for dilute
+polymer solutions in good solvent conditions, J. Chem. Phys., 96 (1992), pp.8539–8551;
+
+18
+
+Fyta, Melchionna, Kaxiras, & Succi
+
+Excluded volume eﬀects on the structure of a linear polymer under shear ﬂow, ibid., 113
+(2000), pp.5545–5558.
+
+[22] Y. Kantor and M. Kardar, Anomalous dynamics of forced translocation, Phys. Rev. E, 69
+
+[23] J. Horbach, S. Succi, Lattice Boltzmann versus Molecular Dynamics simulation of nano-
+
+hydrodynamic ﬂows, Phys. Rev. Lett., 96 (2006), 224503.
+
+[24] A. J. Storm et al, Fast DNA translocation through a solid-state nanopore, Nanolett., 5 (2005),
+
+(2004), 021806.
+
+pp. 1193–1197.
+
+[25] S. S. Chern, A. E. Cadenas and R. D Colson, Three-dimensional dynamic Monte Carlo
+simulations of driven polymer transport through a hole in a wall, J. Chem. Phys., 115
+(2001), pp. 7772–7782.
+
+[26] H. Lodish, D. Baltimore, A. Berk, S. Zipursky, P. Matsudaira, and J. Darnell, Molec-
+
+ular Cell Biology, W.H. Freeman and Company, New York, 1996.
+
+[27] J. J. Kasianowicz, E. Brandin, D. Branton, and D. W. Deamer,Characterization of indi-
+vidual polynucleotide molecules using a membrane channel, PNAS, 93, (1996), pp. 13770–
+13773; A. Meller, L. Nivon, E. Brandin, J. Golovchenko, and D. Branton,
+Rapid nanopore discrimination between single polynucleotide molecules, PNAS, 97 (2000),
+pp. 1079–1084.
+
+[28] W. Sung and P. J. Park, Polymer translocation through a pore in a membrane, Phys. Rev.
+
+Lett., 77 (1996), 783–786.
+
+[29] S. Matysiak, A. Montesi, M. Pasquali, A. B. Kolomeisky, and C. Clementi, Dynamics
+of polymer translocation through nanopores: Theory meets experiment, Phys. Rev. Lett.,
+96 (2006), 118103.
+
+[30] D. K. Lubensky and D. R. Nelson, Driven polymer translocation through a narrow pore,
+
+Biophys. J., 77 (1999), pp. 1824–1838.
+
+[31] A. J. Spakowitz and Z-G Wang, DNA packaging in bacteriophage:
+
+tant?, Biophys. J., 88 (2005), pp. 3912–3923; C. Forrey and M. Muthukumar,
+doi:10.1529/biophysj.105.073429 and references therein.
+
+[32] T. T. Perkins, D. E. Smith, S. Chu, Single polymer dynamics in an elongational ﬂow, Science,
+276 (1997), 2016–2021; J. S. Hur, E. S. G. Shaqfeh, and R. G. Larson, Brownian
+dynamics simulations of single DNA molecules in shear ﬂow, J. Rheol., 44 (2000), pp. 713–
+742; R. M. Jendrejack, J. J. de Pablo, and M. D. Graham, Stochastic simulations of
+DNA in ﬂow: Dynamics and the eﬀects of hydrodynamic interactions, J. Chem. Phys.,
+116 (2002), 7752–7759.
+
+Is twist impor-
+,
+
+

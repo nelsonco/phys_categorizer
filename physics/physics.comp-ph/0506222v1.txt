@@ -1,0 +1,867 @@
+5
+0
+0
+2
+ 
+n
+u
+J
+ 
+9
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+2
+2
+2
+6
+0
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+TaylUR, an arbitrary-order automatic
+diﬀerentiation package for Fortran 95
+
+G.M. von Hippel
+
+Department of Physics, University of Regina, Regina, Saskatchewan, S4S 0A2,
+Canada
+
+Abstract
+
+We present TaylUR, a Fortran 95 module to automatically compute the numerical
+values of a complex-valued function’s derivatives w.r.t. several variables up to an
+arbitrary order in each variable, but excluding mixed derivatives. Arithmetic oper-
+ators and Fortran 95 intrinsics are overloaded to act correctly on objects of deﬁned
+type taylor, which encodes a function along with its ﬁrst few derivatives w.r.t. the
+user-deﬁned independent variables. Derivatives of products and composite functions
+are computed using Leibniz’s rule and Fa`a di Bruno’s formula. TaylUR makes heavy
+use of operator overloading and other object-oriented Fortran 95 features.
+
+Program Summary:
+
+Name of program: TaylUR
+Program obtainable from: http://uregina.ca/~vonhippg/programs.html
+Computer for which the program is designed: Any computer with a conforming
+Fortran 95 compiler
+Programming language used: Fortran 95
+No. of lines in distributed program: 5581
+No. of bytes in distributed program, including test data, etc.: 13659
+Distribution format: tar.gz
+
+Key words: automatic diﬀerentiation, higher derivatives, Fortran 95
+PACS: 02.60.Jh, 02.30.Mv
+1991 MSC: 41-04, 41A58, 65D25
+
+Email address: vonhippg@uregina.ca (G.M. von Hippel).
+URL: http://uregina.ca/~vonhippg/ (G.M. von Hippel).
+
+Preprint submitted to Elsevier Science
+
+20 February 2014
+
+1 Introduction
+
+There has recently been an increased interest in the physics literature in meth-
+ods that allow to automatically compute the numerical values of the deriva-
+tives of a function along with the function itself [1,2,3]. Since the need to do
+this arises in diﬀerent contexts, diﬀerent methods have been proposed and
+implemented. In many cases, such as in diﬀerential equation solvers, only the
+ﬁrst and possibly second derivatives are needed, a task for which a number of
+tools exist [3,4,5]. There are, however, some cases, such as the expansion of
+Feynman diagrams in external momenta or particle masses and other series
+expansions in Quantum Field Theory, where at least some of the higher-order
+derivatives up to some relatively large order are needed, and few tools to deal
+with this situation were available so far. It is thus the purpose of this paper to
+present TaylUR, a Fortran 95 module that addresses this need by providing a
+mechanism to compute the values of the higher derivatives of a function along
+with the function itself.
+
+In the ﬁeld of automatic diﬀerentiation [5], two diﬀerent approaches are gen-
+erally distinguished: Source transformation methods, which take an existing
+code for the computation of a function as their input and produce a code
+that computes its derivatives as output, and operator overloading methods,
+which make use of operator overloading and other object-oriented features of
+a language to encapsulate the task of computing derivatives within an object
+that has the same “user interface” as a real or complex number. While source
+transformation has the advantage of producing faster code, since it can take
+full advantage of a compiler’s optimising features, operator overloading pro-
+vides for an easier and more convenient user interface, in particular since no
+additional step is inserted into the compile-link-run cycle. TaylUR uses an
+operator overloading strategy to provide a new type taylor that acts like a
+complex (or real) number while containing the values of the derivatives of the
+function it represents along with that function’s value.
+
+In order to emulate the behaviour of intrinsic numerical data types as closely
+as possible, TaylUR makes signiﬁcant use of the Fortran 95 features for pure
+and elemental functions. Thus very few, if any, changes to existing user code
+(apart from declaring objects to be of type taylor) will be necessary.
+
+The intended area of application of TaylUR is fairly orthogonal to that of
+other, existing systems like ADF95 [3] or auto deriv [4]: Where the latter are
+aimed primarily at use in implicit diﬀerential equation solvers, where only ﬁrst
+and possibly second order derivatives are needed, but eﬃcient handling of large
+numbers of variables with potentially sparse Jacobian and Hessian matrices is
+a primary goal, TaylUR aims at cases such as Feynman diagram diﬀerentiation,
+where the number of variables is usually limited, but an expansion to higher
+
+2
+
+orders is needed.
+
+It should also be noted that these existing Fortran 95 packages for automatic
+diﬀerentiation using operator overloading have so far been restricted to use
+real-valued functions only. TaylUR overcomes this limitation and provides a
+complex-valued function type.
+
+2 Detailed description of program
+
+2.1 Usage of the program
+
+In order to employ the TaylUR module, the user must include a USE statement
+for TaylUR at the beginning of his program. In addition to this, any variable
+for which the computation of derivatives is desired, as well as all variables
+and user functions which feed into its computation over the course of the user
+program, must be declared to be of TYPE(taylor).
+
+Independent variables are created by the function INDEPENDENT, which takes
+the index of the independent variable and its value as arguments, as in the
+following example:
+
+TYPE(taylor) :: x,y,f
+
+x = independent(1,0.3)
+y = independent(2,2)
+f = y**2 -3*x
+
+which declares x and y to be the independent variables with index 1 and 2,
+respectively, and assigns them the values 0.3 and 2, before computing the
+function f from them. The function value of f will be 3.1, its ﬁrst derivative
+w.r.t. the ﬁrst independent variable will be -3. with all higher derivatives
+w.r.t. this variable vanishing, and its ﬁrst derivative w.r.t. the second inde-
+pendent variable will be 4., the second derivative 2., all higher derivatives
+w.r.t. this variable vanish again, as do any derivatives w.r.t. other variables.
+
+As a slightly more realistic example let us look at the computation of the
+wavefunction renormalisation constant in Euclidean scalar φ3 theory. At the
+one-loop level, we need to compute d2
+|p4=im, where Π(p) is given by the
+dp2
+4
+bubble diagram. A way to code this might be given by
+
+Π(p)
+
+FUNCTION bubble_diagram(k,p_,m_)
+
+USE TaylUR
+
+3
+
+COMPLEX :: p_(4),bubble_diagram
+REAL :: k(4),m_
+
+TYPE(taylor) :: p(4),m,feynman
+INTEGER :: mu
+
+DO mu=1,4
+
+p(mu) = independent(mu,p_(mu))
+
+ENDDO
+m = independent(5,m_)
+
+k(4) = k(4) - 0.5*p(4)
+feynman = 1/(sum(k**2)+m**2)/(sum((k+p)**2)+m**2)
+
+! Shift k_4 countour
+
+bubble_diagram = derivative(feynman,4,2)/(2*Pi)**4
+
+END FUNCTION bubble_diagram
+
+This routine might then be passed to an integration routine which expects a
+function with the given interface and performs an appropriately regularised
+integration.
+
+While in this case the derivative can be easily computed analytically, this is
+no longer the case in e.g. lattice perturbation theory, where (especially for
+improved actions [1]) the Feynman rules quickly become too complex to allow
+analytical calculations to be performed easily. It should also be noted that
+changing just the two last arguments of the DERIVATIVE function call will al-
+low to compute the mass dependence of the mass renormalisation. With an
+appropriately implemented integration method, it is even possible to numeri-
+cally integrate a taylor-valued function for a taylor-valued result.
+
+2.2 Structure and handling of taylor objects
+
+The taylor type is deﬁned internally as
+
+TYPE taylor
+
+END TYPE taylor
+
+COMPLEX(kind=dc_kind) :: drv(1:N_taylor_vars,0:Max_taylor_order)
+
+where dc kind is deﬁned as the kind parameter of a double precision complex.
+The ﬁeld drv(i,n) holds the n-th derivative w.r.t. the i-th independent vari-
+able, where any zeroth derivative is deﬁned as equal to the function value.
+
+4
+
+The maximal order of the Taylor expansion is determined by the module
+parameter Max taylor order, the total number of variables by the module
+parameter N taylor vars. Where needed, these parameters can be changed
+to provide for higher orders or more variables, or to speed up code by reducing
+the numbers.
+
+Where a speciﬁc portion of a program does not need the full Taylor expan-
+sion up to order Max taylor order, it is possible to set the module variable
+Taylor order to a lower value in order to compute only derivatives up to that
+order.
+
+Independent variables are created by the function INDEPENDENT, which takes
+the index of the independent variable and its value as arguments. It is the
+user’s responsibility to make sure that no two taylor objects are declared
+to share the same independent variable index, since it is not possible for the
+TaylUR module to keep track of this.
+
+There are a number of user-deﬁned functions for accessing the value and
+derivatives of the function encoded by a taylor object. VALUE(t) returns
+the value of the taylor t, whereas DERIVATIVE(t,i,n) gives the n-th partial
+derivative of the taylor t w.r.t. the i-th independent variable. The expansion
+(f, ∂xif, ∂2
+xif, . . .) w.r.t. can be obtained as an array by using EXPANSION(t,i).
+
+It is also possible to obtain the vector of ﬁrst partial derivatives as an array
+by using the function GRADIENT(t), and the Laplacian as LAPLACIAN(t).
+
+2.3 Overloaded operations on taylor objects
+
+All standard Fortran 95 arithmetic operators (+,-,*, /,**) have been over-
+loaded to act on taylor objects. Numbers of both double and default preci-
+sion real and complex type as well as integers can be combined with taylors
+by addition, subtraction, multiplication and division in any order, and tay-
+lors can be raised to integer powers. All these operations are deﬁned with the
+elemental attribute and therefore can be used with arrays of taylor objects
+using the usual Fortran 95 array syntax.
+
+All comparison operators have been overloaded to allow comparison of taylor
+objects with both double and default precision reals and integers as well as
+with complex numbers, where this makes sense. The comparison operators
+compare the value of the taylor objects only, neglecting their derivatives.
+In addition to these intrinsic operations, two user-deﬁned comparison opera-
+tors .IDENT. and .NIDENT. exist, which check for identity and non-identity
+of the complete taylor series, as opposed to the comparison of values only
+carried out by the intrinsic operators == and /=. All comparison operators are
+
+5
+
+elemental.
+
+2.4 Overloaded intrinsic functions of taylor objects
+
+All Fortran 95 intrinsics which make sense on a Taylor-expanded quantity and
+which can be fully implemented as user-deﬁned functions, have been over-
+loaded to work correctly on taylor objects. Speciﬁcally, the functions ABS,
+ACOS, AIMAG, ASIN, ATAN, ATAN2, CONJG, COS, COSH, DIM, EXP, LOG, LOG10,
+MOD, MODULO, SIGN, SIN, SINH, SQRT, TAN, TANH accept taylor objects as their
+arguments, and MATMUL and DOT PRODUCT accept arrays of taylor objects as
+their arguments.
+
+In the case of the functions REAL and AIMAG, a conscious decision was made
+to have them behave diﬀerently from their intrinsic counterparts in that they
+do not convert to real type, but return an result of type taylor (with the
+real/imaginary part of each derivative taken) instead. This was done so that
+the mathematical functions
+(imagianry part) are available
+(real part) and
+on taylor objects, and since assignment of a taylor to a real variable will
+convert it to a real anyway, no functionality is lost. In the case where it is
+necessary to assign the value of one taylor to another taylor as a constant,
+or where the value of a taylor has to be passed to an external function that
+accepts only a real argument, the user-deﬁned VALUE function may be used
+instead.
+
+ℜ
+
+ℑ
+
+The following Fortran 95 intrinsics cannot be fully emulated by user-deﬁned
+functions, since they return results of diﬀerent kinds depending on the value
+of an argument, which is impossible to achieve with a function written in For-
+tran 95: AINT, ANINT, CEILING, FLOOR, INT, NINT, REAL. These functions accept
+taylor objects as their arguments only when the optional kind argument is
+absent.
+
+The Fortran 95 intrinsics MAX and MIN that accept arbitrary variable numbers
+of arguments (which a function written in Fortran 95 cannot emulate) accept
+taylor objects as their arguments in their two-argument form only.
+
+The Fortran 95 array reduction intrinsics MAXLOC, MAXVAL, MINLOC, MINVAL,
+PRODUCT and SUM accept arguments of variable rank along with an optional
+argument dim to denote the dimension along which reduction is to be per-
+formed. This behaviour, too, cannot be emulated by a Fortran 95 function;
+these functions accept taylor arrays of rank one only. Otherwise they act
+as their intrinsic counterparts, including the existence of the optional mask
+argument.
+
+6
+
+The taylor functions are elemental where their intrinsic counterparts are. 1
+
+Those functions whose intrinsic counterparts are restricted to real or inte-
+ger arguments (ACOS, AINT, ANINT, ASIN, ATAN, ATAN2, CEILING, DIM, FLOOR,
+INT, LOG10, MAX, MAXLOC, MAXVAL, MIN, MINLOC, MINVAL, MOD, MODULO, NINT,
+SIGN) will take the real part of a taylor object ﬁrst and should be applied
+to real-valued taylor objects only, just like their intrinsic counterparts would
+be applied to reals only. On the other hand, COSH, SINH, TAN and TANH work
+correctly with complex-valued taylor objects, although their intrinsic coun-
+terparts are (somewhat arbitrarily) restricted to reals.
+
+It should be noted that, while TaylUR accepts complex-valued independent
+variables, the CONJG function assumes that all independent variables are real.
+In particular, no attempt is made to implement any features of Wirtinger
+calculus.
+
+In those cases where the derivative of a function becomes undeﬁned at certain
+points (as for ABS, AINT, ANINT, MAX, MIN, MOD, MODULO and SQRT), while the
+value is well deﬁned, the derivative ﬁelds will be ﬁlled with NaN (not a number)
+values by assigning them to be 0./0. Depending on the compiler and system
+settings, this may cause the program to stop.
+
+Examples of the usage of all routines can be found in the test program dis-
+tributed with TaylUR.
+
+2.5 Mathematical details of implementation
+
+The derivatives of products of taylor objects are computed using Leibniz’s
+rule
+
+∂n
+∂xn
+i
+
+(f g) =
+
+n
+
+Xk=0  
+
+n
+k!  
+
+∂kf
+∂xk
+
+i !  
+
+∂n−kg
+∂xn−k
+
+i !
+
+Leibniz’s rule is also employed to compute derivatives of quotients and square
+roots by using the equalities
+
+0 =
+
+(1) =
+
+(f f −1) =
+
+∂n
+∂xn
+i
+
+∂n
+∂xn
+i
+
+n
+
+n
+k!  
+Xk=0  
+
+∂kf
+∂xk
+
+i !  
+
+∂n−kf −1
+∂xn−k
+i
+
+!
+
+1 As a reminder, an elemental function is one which can be called with an array
+instead of a scalar passed as its argument, and will return an array contain the
+result of its application to each element of the passed array in turn.
+
+(1)
+
+(2)
+
+7
+
+(3)
+
+(4)
+
+∂n
+∂xn
+i
+
+f =
+
+(
+
+f)2 =
+
+∂n
+∂xn
+i
+
+q
+
+n
+
+Xk=0  
+
+n
+k!  
+
+∂k√f
+∂xk
+
+i !  
+
+∂n−k√f
+∂xn−k
+i
+
+!
+
+and solving for the n-the derivative of f −1 or √f , respectively.
+
+TaylUR diﬀers signiﬁcantly from similar tools such as auto deriv [4] or
+ADF95 [3] that use hard-coded chain rule expressions for the derivatives of
+intrinsics. Such an approach is obviously unsuitable for the arbitrary-order
+case. TaylUR instead uses Fa`a di Bruno’s formula [6,7] for the n-th derivative
+of a composite function:
+
+∂n
+∂xn
+i
+
+F (y(x)) =
+
+n!
+ν kν!ν!kν
+
+d|k|F
+dy|k|
+
+n
+
+kµ
+
+∂µy
+∂xµ
+
+i !
+
+µ=1  
+Y
+
+X{k}
+
+Q
+
+k
+
+where
+=
+|
+conditions 0
+
+|
+
+µ kµ, and the sum runs over all integer vectors k that satisfy the
+kµ ≤
+
+µ µkµ = n.
+
+n and
+
+P
+≤
+
+P
+
+A subroutine FDB GENERATE that generates and stores the needed vectors k
+µ(y(µ))kµ is called
+along with the precomputed weight of each term F (m)
+from within the INDEPENDENT function. Those functions requiring the com-
+putation of derivatives via Fa`a di Bruno’s formula call another function FDB
+which returns these precomputed values. This separation allows to compute
+the vectors only once and store them for better performance, while maintain-
+ing the elemental status of the overloaded intrinsics (which requires them to
+be pure, prohibiting any side-eﬀects such as manipulating external data or
+save variables).
+
+Q
+
+2.6 Typical running time and memory usage
+
+The runtime memory and CPU requirements of the TaylUR package are de-
+termined by the N taylor vars, Max taylor order parameters and, to some
+extent, the Taylor order variable.
+
+A taylor object requires N taylor vars
+Max taylor order times the mem-
+ory that a complex variable of kind dc kind requires, and this size is ﬁxed at
+compilation time.
+
+×
+
+The time taken to perform operations on taylor objects depends on the
+operation, the compiled value of N taylor vars and the run-time value of
+Taylor order. All operations scale approximately linearly in the number of
+variables, although this partially depends on the CPU and compiler, since the
+
+8
+
+dependence on N taylor vars is through array assignments alone. The run-
+time of linear operations, such as assignment, addition, multiplication with a
+constant or comparison for identity, as well as some of the simpler mathemati-
+cal functions like MOD, will scale approximately linearly with Max taylor order
+(again through array assignment), while being independent of Taylor order.
+Multiplication and division of taylor objects, as well as the SQRT function, will
+have a run-time scaling quadratically with Taylor order, while the run-time
+of the EXP function, logarithms, trigonometric, hyperbolic and inverse trigono-
+metric functions will scale approximately exponentially with Taylor order,
+due to the increase in the number of terms combining diﬀerent lower-order
+derivatives of their arguments that need to be combined.
+
+2.7 Limitations on the complexity of the problem
+
+Besides the limits on the number of variables and maximal expansion order
+that memory and CPU time constraints may impose, there are limits on the
+expansion order that may be achieved due to the ﬁnite precision of ﬂoating-
+point operations taken in conjunction with the large number of potentially
+large terms that need to be added to obtain the value of high-order derivatives.
+
+This becomes a problem in particular when functions whose n-th derivatives
+are large are combined to form a function with a small n-th derivative, or
+when contributions from diﬀerent orders combine in a product of quotient to
+yield a small result for some higher-order derivative of the result. In these
+cases, the resulting value for the derivative can be many orders of magnitude
+less accurate than the value obtained for the function value or lower-order
+derivatives.
+
+In order to avoid a potential total loss of precision, users interested in high-
+order derivatives should monitor the derivatives of intermediate results and
+compare them to the derivatives of the ﬁnal answer. If the derivatives of the
+ﬁnal result become insigniﬁcant when compared to those of the intermediate
+steps that entered its computation, the ﬁnal result is likely to be dominated
+by numerical noise.
+
+2.8 Unusual features of the program
+
+Apart from any language-imposed limitations in the emulation of the be-
+haviour of certain Fortran 95 intrinsics mentioned in section 2.1, TaylUR is
+limited in that it does not attempt to compute any mixed second or higher-
+order derivatives. This limitation is imposed for a number of reasons: Firstly,
+the memory and time needed for the storage and computation of mixed higher-
+
+9
+
+order derivatives gets out of hand very quickly as one goes up to higher orders.
+Secondly, the computation of mixed derivatives of arbitrary order involves a
+programming eﬀort that is rather disproportionate to the use that is likely to
+be made of them in most applications.
+
+We would also like to repeat that TaylUR allows for complex-valued functions
+and variables, while those functions that are only deﬁned for real arguments (in
+particular those that refer to ordering relations) will silently take the real parts
+of their arguments. It also bears repeating that the CONJG function assumes
+that all independent variables are real-valued, and that no attempt is made
+to implement Wirtinger calculus.
+
+2.9 Testing and veriﬁcation
+
+The TaylUR package has been tested on a range of computer systems (Linux/
+Intel, Linux/Alpha and SunOS/Sparc) with a number of diﬀerent compilers
+(Intel, Compaq and Sun).
+
+The test suite used to test TaylUR for potential bugs and errors consists of
+both testing the derivatives computed for a number of functions with known
+derivative expansions against their analytically determined values and of vari-
+ous sanity checks such as that f/f is equal to one with all derivatives vanishing
+to within a reasonable accuracy.
+
+TaylUR has evolved out of similar, more restricted codes used by the author
+in the automatic diﬀerentiation of Feynman diagrams in perturbative lattice
+QCD [1] and chiral perturbation theory on the lattice. These codes had been
+tested and used in practice and have been found to work correctly, giving
+results in agreement with analytical results whenever those were available.
+While TaylUR contains some signiﬁcant extensions compared to these codes,
+in particular the intrinsic functions whose derivative expansion is based of Fa`a
+di Bruno’s formula, these extensions have been well tested and found to be
+stable.
+
+As an example, let us consider the function
+
+f (x) = exp
+
+sin2(5√x)/√x
+
+−
+
+(cid:16)
+
+(cid:17)
+
+(5)
+
+whose derivative expansion involves recourse to Fa`a di Bruno’s formula twice
+at each order, as well as usage of the expansion of the square root, power
+and multiplicative inverse functions. Fig. 1 shows plots of the analytical form
+(as given by a computer algebra program) and numerical evaluations using
+TaylUR of f (x) and it ﬁrst three derivatives. Excellent agreement can be
+
+10
+
+Numerical
+Analytical
+
+Numerical
+Analytical
+
+ 0.1  0.2  0.3  0.4  0.5  0.6  0.7  0.8  0.9  1
+
+ 0.1  0.2  0.3  0.4  0.5  0.6  0.7  0.8  0.9  1
+
+Numerical
+Analytical
+
+Numerical
+Analytical
+
+ 6
+
+ 5
+
+ 4
+
+ 3
+
+ 2
+
+ 1
+
+ 0
+
+-1
+
+-2
+
+-3
+
+ 600
+
+ 400
+
+ 200
+
+ 0
+
+-200
+
+-400
+
+-600
+
+-800
+
+-1000
+
+ 0.1  0.2  0.3  0.4  0.5  0.6  0.7  0.8  0.9  1
+
+ 0.1  0.2  0.3  0.4  0.5  0.6  0.7  0.8  0.9  1
+
+Fig. 1. Analytical (lines) and numerical (boxes) evaluations for the function
+exp
+(top left) and its ﬁrst (top right), second (bottom left)
+and third (bottom right) derivatives.
+
+sin2(5√x)/√x
+
+−
+
+(cid:16)
+
+(cid:17)
+
+ 1
+ 0.9
+ 0.8
+ 0.7
+ 0.6
+ 0.5
+ 0.4
+ 0.3
+ 0.2
+ 0.1
+ 0
+
+ 50
+ 40
+ 30
+ 20
+ 10
+ 0
+-10
+-20
+-30
+-40
+-50
+-60
+
+seen.
+
+3 Summary
+
+TaylUR provides a much needed high-order automatic diﬀerentiation package
+for Fortran 95 that is particularly useful for expansion of Feynman diagrams
+in external momenta or particle masses, but is expected to be applicable to
+other ﬁelds of computational physics as well.
+
+Acknowledgements
+
+The author acknowledges helpful discussions with A.G. Hart and R.K. Lewis.
+This work was supported in part by the Natural Sciences and Engineering
+Research Council of Canada and by the Government of Saskatchewan.
+
+11
+
+A Veriﬁcation data
+
+To verify that the TaylUR package has been installed and compiled correctly,
+the user should build the included veriﬁcation program by performing a make
+verify in the installation directory. When run, ./verify should produce the
+following output:
+
+Taylor eval.
+0.333333333333
+-0.888888888889
+1.185185185185
+-2.370370370370
+6.320987654321
+-21.069958847737
+84.279835390946
+
+Analytic eval.
+0.333333333333
+-0.888888888889
+1.185185185185
+-2.370370370370
+6.320987654321
+-21.069958847737
+84.279835390947
+
+Error
+0.000000000000E+00
+0.000000000000E+00
+0.000000000000E+00
+0.000000000000E+00
+0.000000000000E+00
+0.355271367880E-14
+0.142108547152E-13
+
+The less signiﬁcant digits and errors may depend on the speciﬁc ﬂoating-
+point implementation of the system used, but the two columns headed Taylor
+eval. and Analytic eval. should agree to the accuracy shown (in double
+precision arithmetic).
+
+If this veriﬁcation passes, a number of additional tests can be performed by
+performing make test and running ./test, which should print
+
+All tests passed!
+
+Any other output, in particular complaints about failed tests, is indicative of
+a compilation error or a problem with the ﬂoating-point system used, such as
+a lack of precision in the results of some of the intrinsic functions.
+
+References
+
+[1] A. Hart, G. M. von Hippel, R. R. Horgan, L. C. Storoni, Automatically
+generating Feynman rules for improved lattice ﬁeld theories, J. Comput. Phys.
+209 (2005) 340-353 [arXiv:hep-lat/0411026].
+
+[2] C. J. Morningstar and J. Shigemitsu, One-loop matching of
+
+lattice and
+continuum heavy-light axial vector currents using NRQCD, Phys. Rev. D 57,
+6741 (1998) [arXiv:hep-lat/9712016].
+
+[3] C. W. Straka, ADF95: Tool for automatic diﬀerentiation of a FORTRAN code
+designed for large numbers of independent variables, Comput. Phys. Commun.
+168 (2005) 123-139 [arXiv:cs.MS/0503014].
+
+12
+
+[4] S. Stamatiadis, R. Prosmiti, S. C. Farantos, auto deriv: Tool for automatic
+diﬀerentiation of a FORTRAN code, Comput. Phys. Commun. 127 (2000) 343-
+355.
+
+[5] http://www.autodiﬀ.org/
+
+[6] F. Fa`a di Bruno, Note sur une nouvelle formule du calcul diﬀerentiel,
+
+Quart. J. Math. 1 (1855) 359-360.
+
+[7] W. P. Johnson, The curious history of Faa di Bruno’s formula, Amer. Math.
+
+Monthly 109 (2002) 217-234.
+
+13
+
+

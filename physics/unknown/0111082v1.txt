@@ -1,0 +1,495 @@
+TOWARD A GENERAL THEORY OF CONTROL KNOBS* 
+E. Bjorklund, LANSCE, Los Alamos, NM 87545, USA 
+
+THAP071 
+
+Abstract 
+
+Experience  using  hardware  knobs  as  an  operator 
+interface 
+for  controlling  equipment  has  varied 
+considerably  at  different  facilities.  Reactions  have 
+ranged  from  “indispensable”  at  some  facilities,  to 
+“virtually  useless”  at  others.  In  this  paper,  we  will 
+attempt  to  outline  some basic principles for successful 
+knob implementation. These principles derive from our 
+own  experience  with  control  knobs  at  the  LANSCE 
+Accelerator Complex and our recent effort to adapt our 
+control knobs to EPICS. Topics to be covered include 
+what the operator needs the knob to do, what the knob 
+needs  to  know  about  the  device  it  is  controlling,  and 
+knob  scaling  issues.  Advanced  topics  such  as  closed-
+loop,  PID,  and  aggregate  knobs  are  left  as  topics  for 
+future papers. 
+
+1 INTRODUCTION 
+In  a  sense,  this  paper  had  its  beginnings  in  the 
+workshop on workstations held at the 1989 ICALEPCS 
+in  Vancouver  [1].    During  that  workshop,  the  topic of  
+control knobs became one of the polarizing issues.  We 
+were  surprised  to  discover  that  some  facilities  found 
+knobs to be rather useless, since we have generally had 
+good experience with our own control knobs.  Based on 
+which  facilities  were  reporting  good  knob  experiences 
+and  which  facilities  were  reporting  bad  experiences, 
+and without giving the matter much further thought, we 
+concluded  (wrongly)  that  knobs  were  a  good  operator 
+interface  for  rapidly  cycling  machines  (30  Hz  and 
+above)  and  a  rather  poor  interface  for  slow  cycling 
+machines (1 Hz or less).  In other words, the usefulness 
+of  control  knobs  could  be  judged  from  the  type  of 
+system you had. 
+
+We  now  fast  forward  to  1995  and  our  experience 
+with  integrating  EPICS  into  the  LANSCE    control 
+system [2].  As with any new system, one can expect an 
+initial  adjustment  period  with  lots  of  complaints  and 
+grumbling.  What  was  interesting,  however,  was  how 
+many  of  the  “EPICS  sucks”  comments  we  received 
+from  operations  could  be  traced  back  to  the  fact  that 
+EPICS  devices  did  not  control  very  well  from  our 
+LANSCE  knob  hardware.    In  this  case,  the  usefulness 
+of the control system was being judged by how well it 
+handled  knobs!    Since  we  intended  to  keep  both 
+EPICS,  knobs,  and  our  jobs,  we  decided  to  revisit  the 
+topic  of  what  it  takes  to  make  a  knob  implementation 
+“useful.” 
+
+                                                           
+* Work supported by US Department of Energy 
+
+2 PRINCIPLES 
+Not  surprisingly,  much  of  what  we  learned  about 
+knob  interfaces,  were  general  principles  that  could 
+apply to almost any sort of operator interface.  Many of 
+these  principles,  in  fact,  were  described  at  the  same 
+1989  ICALEPCS  conference  [3,4].    At  the  end,  we 
+found  that  everything  we’d  learned  about  useful  knob 
+interfaces could be distilled into two general principles, 
+which  we  refer  to  as  “The  Principle  of  Instant 
+Gratification” and “The Principle of Total Control.” 
+
+2.1 The Principle of Instant Gratification 
+
+The  Principle  of  Instant  Gratification  states,  “The 
+operator  needs  to  know  that  something  has  happened 
+as soon as the knob is turned.”  The most likely result 
+of  violating  this  principle  will  be  “overshoot.”    If 
+feedback  is  not  instantaneous,  the  operator  is  tempted 
+to  keep  turning  the  knob  until  a  change  is  observed.  
+This  usually  results  in  excess  knob  pulses  moving  the 
+device past its intended setpoint.  
+
+There are several obstacles that can interfere with the 
+Principle of Instant Gratification.  One such obstacle is 
+the  speed  of  the  readback  device.    Some  readback 
+devices, such as DVMs and NMRs, are inherently slow 
+and  may  take  seconds  to  respond.  Another,  more 
+subtle,  obstacle  might  be  a  device  (such  as  a  stepper 
+motor) with a maximum velocity that is slower than the 
+knob  velocity.    In  this  case,  the  operator  may  see  the 
+readback  change  as  soon  as  the  knob  is  turned,  but 
+control  pulses  are  still  being  produced  faster  than  the 
+device  is  consuming  them,  resulting  in  overshoot.  An 
+even  more  subtle  obstacle  to  the  Principle  of  Instant 
+Gratification  occurs  in  “notify-on-change”  systems 
+which 
+limit 
+network traffic.  If the operator makes a “tweak” that is 
+below  the  notification  deadband,  no  change  will  be 
+observed  in  the  readback,  even  though  change  has 
+occurred at the device. 
+
+implement  notification  deadbands 
+
+to 
+
+How  “instant”  does  “instant  gratification”  have  to 
+be?  Our experience has been that 4-5 Hz is generally a 
+pretty good operator response rate.  2 Hz is just at the 
+threshold  of  tolerability.    Other  recommendations  for 
+satisfying the Principle of Instant Gratification are: 
+•  Whenever  possible,  both  the  setpoint  and  readback 
+channels should be displayed.  The operator can then 
+verify  that  at  least  the  setpoint  is  changing,  even  if 
+the readback is slow. 
+
+•  When  it  is  known  that  the  readback  device  will  be 
+slow, the readback value should be flagged as “slow” 
+in the knob display to warn the operator. 
+
+•  To  avoid  overshoot  problems,  the  slew  rate  of  the 
+knob should be limited to the maximum slew rate of 
+the  device.    It  is  also  helpful  if  knob  commands 
+“preempt” rather than accumulate. 
+
+•  If  a  “notify-on-change”  system  uses  notification 
+deadbands, these deadbands should be disabled for a 
+short period of time following a knob command. 
+
+ 2.2  The Principle of Total Control 
+
+The  Principle  of  Total  Control  has  two  parts:  “The 
+operator  must  be  able  to  ‘tweak’  a  device  to  the 
+smallest  level  of  precision  allowed  by  the  hardware,” 
+and  “The  operator  must  be  able  to  slew  a  device 
+throughout its entire range in a ‘reasonable’ amount of 
+time.”    We  abbreviate  these  two  parts  as  the  “tweak” 
+and “slam” rules. 
+
+The  “tweak”  part  of  the  Principle  of  Total  Control 
+implies that, ideally, the knob should have direct access 
+to  the  raw  hardware  units  of  the  controlled  device 
+(DAC  counts,  stepper  motor  pulses,  etc.)    So  the  first 
+obstacle  to  the  “tweak”  rule  is  the  fact  that  many 
+modern control systems do not allow command access 
+at the hardware level, preferring to work exclusively in 
+“physics” (or “engineering”) units.  For that matter, it is 
+not always possible to even obtain hardware units from 
+some of the “smarter” devices on the market.  Lacking 
+access to the hardware units directly, the next best thing 
+is to know what the physics value is that corresponds to 
+a change of one hardware unit (this, of course, assumes 
+that  the  conversion  is  linear).   Another obstacle to the 
+“tweak” rule may come from the knob hardware itself.  
+If the pulse-per-turn ratio is too high, the knob becomes 
+overly sensitive and it will be difficult for the operator 
+to  issue  just  one  pulse.    Some  systems  overcome  this 
+problem  through  scaling.    Others  have  “Single  Step” 
+buttons,  which  guarantee  exactly  one  pulse  per  push.  
+One  final  point  worth  mentioning  is  that  the  readback 
+device must have the same (or greater) precision as the 
+command device.  If not, there is potential for violating 
+the Principle of Instant Gratification. 
+
+The “slam” part of the Principle of Total Control is 
+not hard to satisfy, provided the controlled device does 
+not  have  an  unusually  large  range.    Given  a  typical 
+knob  slew  rate,  a  12-bit  device  can  easily  be  moved 
+through its entire range in a reasonable amount of time 
+and  still  allow  the  fine  control  needed  to  satisfy  the 
+“tweak” rule.  A 16-bit device, however, will probably 
+require  some  form  of  “scaling”  control.    All  this,  of 
+course,  begs  the  question  of  what  we  mean  by  a 
+“reasonable”  amount  of  time.    Our  current  working 
+limit at LANSCE is to say no more then 80 turns to full 
+scale, although this limit may be high. 
+
+ 
+
+3 SCALING 
+Most  knob  implementations  have  some  form  of 
+scaling  control.    This  typically  involves  two  or  three 
+selectable gain levels, with each level altering the gain 
+by  either  a  factor  of  two  or  ten.    Gains  may  be 
+implemented either in software, or directly in the knob 
+hardware.  For most low-resolution devices (twelve bits 
+and  under),  knob  scaling  is  mainly  an  operator 
+convenience,  allowing  them  to  “tweak”  or  “slam”  the 
+controlled device more efficiently.  As the resolution of 
+increases,  however,  scaling 
+the  controlled  device 
+becomes a necessity. 
+
+To  illustrate  this  point,  consider  a  simple  scaling 
+problem in which a 12-bit device is to be controlled by 
+a knob with two gain selections and a basic slew rate of 
+100  pulses  per  turn  (a  number  which  yields  a  fairly 
+acceptable level of fine control).  The device’s range is 
+then 212 = 4096.  If the fine gain is X1 and the coarse 
+gain 
+the  device  can  be  controlled 
+throughout its entire range in about 41 turns at fine gain 
+and  20.5  turns  at  coarse  gain.    We  consider  both 
+numbers acceptable enough to meet the “slam” rule. 
+
+is  X2, 
+
+then 
+
+Now  suppose  we  have  a  16-bit  device  (range  = 
+65,536).  At 100 pulses per turn, a coarse gain of X10 
+pushes  the  limit  a  bit,  but  does  give  us  an  acceptable 
+number  of  turns  to  full  scale  (65.5).  However,  the 
+effective  pulses-per-turn  (1,000)  at  this  gain  would 
+make  fine  control  very  difficult.   A sixteen-bit device, 
+therefore, requires at least two gain settings in order to 
+satisfy both the “tweak” and “slam” rules.  Continuing 
+on  in  this  vein,  we  see  that  a  24-bit  device  requires 
+three gain levels and a 32-bit device requires four.1 
+
+3.1 Proportional Scaling 
+
+The increasing diversity and ranges of the controlled 
+devices makes it attractive to consider dynamic scaling 
+algorithms. 
+to  consider 
+  In  particular,  we  wish 
+“proportional”  scaling  algorithms  that  allow  you  to 
+more  evenly  divide  the  device’s  range  between  the 
+available gain levels. With this in mind, let: 
+
+Range   =  The range of the controlled device,  
+N 
+PPTj 
+
+ =  The number of gain settings on the knob, 
+ =  The number of pulses per turn set by the 
+
+knob hardware for gain j, where j=1 is the 
+finest gain and j=N is the coarsest gain. 
+
+SFj 
+
+=  The computed scale factor for gain j. 
+
+                                                           
+1  We  are  not  presently  aware  of  any  24  or  32  bit  DACs  on  the 
+market.  There are, however, 24 and 32 bit counters, for which one 
+could envision control points requiring an equal amount of precision.  
+We  have  also  seen  controllers  for  tunable  lasers  that  use  quantum 
+effects  to  set  the  laser  frequency  with  eight  or  more  significant 
+digits. 
+
+(1) 
+
+In order to satisfy the “slam” rule, we define NTN to be 
+the  maximum  number  of  turns  it  should  take  to  move 
+the  device  through  its  full  range  at  the  coarsest  gain.  
+Given  NTN  we  can  compute  what  the  scale  factor  for 
+the coarsest gain needs to be: 
+ 
+
+SF
+N
+
+=
+
+Range
+⋅
+NT
+N
+
+PPT
+N
+
+ 
+
+ 
+To compute the scale factor for the next lower gain, we 
+define NTN-1 to be the number of turns at the next lower 
+gain which will produce the same change as one turn at 
+the current gain. Choosing a reasonable value for NTN-1 
+allows  us  to  compute  SFN-1  from  a  relationship  which 
+generalizes as: 
+ 
+
+SF
+
+j
+
+⋅
+
+PPT
+
+j
+
+=
+
+NT
+
+−
+1
+
+j
+
+⋅
+
+SF
+
+−
+1
+
+j
+
+⋅
+
+PPT
+
+ 
+
+−
+1
+
+j
+
+(2) 
+
+ 
+Recursively  applying  equation  (2)  down  to  the  finest 
+gain setting (j=1), and substituting equation (1) for SFN 
+in the final result, we arrive at: 
+ 
+
+N
+
+Range
+
+=
+
+⋅
+
+SF
+1
+
+PPT
+1
+
+∏
+
+jNT
+
+ 
+
+(3) 
+
+j
+
+=
+1
+
+ 
+It is interesting to note in equation (3) how all the PPTj 
+terms,  except  the  last,  have  cancelled  out.      Note  that 
+the  product,  SF1PPT1,  tells  us  whether  or  not  our  NTj 
+choices will allow us to satisfy the “tweak” rule at the 
+finest gain. 
+
+For proportional scaling, we want to set NT1 = NT2  = 
+…  =  NTN  to  insure  that  each  gain  setting  does  its  fair 
+share  of  work  when  spanning  a  large  range.    We  call 
+this  uniform  NT  the  TurnRatio.    By  setting  the  finest 
+scale factor (SF1) to a value consistent with the “tweak” 
+rule (typically SF1=1.0), we can compute the TurnRatio 
+from equation (3): 
+ 
+Range
+Turn
+⋅
+PPT
+ 
+1
+Computed this way, the TurnRatio gives a good idea of 
+how  well  you  will  be  able  to  satisfy  the  “slam”  rule.  
+For example, note that a 32-bit device, on  a 100 pulse 
+per  turn  knob,  with  four  gain  settings,  will  have  a 
+TurnRatio  of  approximately  81  and  a  coarse  scale 
+factor (SF4) of 530,542 (assuming no hardware scaling 
+and the fine scale factor SF1=1.0). 
+
+Ratio
+
+SF
+1
+
+(4) 
+
+=
+
+N
+
+ 
+
+It  is  probably  worth  noting  that  very  large  scale 
+factors  can  lead  to  (very  large)  overshoot  problems, 
+particularly  if  the  scale  factor  is  an  “unusual”  number 
+like  530,542.  This  problem  can  be  mitigated  by 
+adjusting  the  scale  factors  (probably  at  the  expense  of 
+the “slam” rule) such that a single knob pulse scales to 
+a power of ten (in physics units). 
+
+ 
+
+4 CONTROL SYSTEM ASSISTANCE 
+As indicated in the previous sections, the underlying 
+control  system  can  provide  a  lot  of  assistance  (or 
+hindrance)  to  a  successful  knob  implementation.    One 
+important service the control system can provide is the 
+ability  to  abort  or  override  a  command  in  progress.  
+This is particularly important for command devices that 
+“slew” or “ramp” their outputs (either via hardware or 
+software).    Another  important  service  is  providing  a 
+“reference  linkage”  between  command  devices  and 
+their  associated  readback  devices.    Reference  linkage 
+can  be  accomplished  by  naming  conventions,  or 
+through the control system database. 
+
+includes:  1) 
+
+Other  useful  information  the  control  system  can 
+provide 
+the  device  range,  including 
+the 
+minimum  and  maximum  control  values,  2) 
+maximum  slew  rate  for  a  device,  3)  the  device’s 
+minimum  increment  value,  4)  units  and  precision  for 
+readback displays and, 5) some indication of whether a 
+readback device is slow or fast. 
+
+to 
+
+5  CONCLUSIONS 
+Our recent research and past experience with control 
+knobs  at  LANSCE 
+following 
+leads  us 
+conclusions:  1)  Hardware  control  knobs can be a very 
+tool.  2) 
+useful  and 
+Implementing 
+for 
+successful  knobs  is  not  a  trivial  task,  and  3)  The 
+features of the underlying control system can contribute 
+significantly  to  the  success  or  failure  of  a  knob 
+implementation. 
+
+intuitive  operator 
+
+(and  hardware) 
+
+interface 
+
+software 
+
+the 
+
+the 
+
+We hope that this paper can provide a starting point 
+for  new  facilities  thinking  about  incorporating  control 
+knobs  into  their  operator  interface  and  a  springboard 
+for future discussion (and possibly ICALEPCS papers) 
+on control knob issues. 
+
+REFERENCES 
+
+[1]  S.C.Schaller, E.Bjorklund, “Report on the 
+
+Workshop on Workstations for Operator 
+Interfaces”, Los Alamos National Laboratory 
+Unclassified Report LA-UR-89-4247, 1989 
+
+[2]  S.C.Schaller, M.A.Oothoudt, “Generalized Control 
+And Data Access At The LANSCE Accelerator 
+Complex -- Gateways and Migrators”, 
+ICALEPCS’95, Chicago, October 1995 
+
+[3]  M.Clay, “What Makes a Control System Usable? 
+An Operational Viewpoint”, ICALEPCS’89, 
+Vancouver, October 1989. 
+
+[4]  W.P.J.Heubers, R.G.K.Hart, “A Workstation 
+Based Operator Interface to Control MEA”, 
+ICALEPCS’89, Vancouver, October 1989. 
+
+

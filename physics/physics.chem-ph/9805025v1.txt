@@ -1,0 +1,968 @@
+Multigrid High Order Mesh Reﬁnement Techniques
+
+Thomas L. Beck
+Department of Chemistry
+University of Cincinnati
+Cincinnati, OH 45221-0172
+email: becktl@email.uc.edu
+September 23, 2013
+
+Abstract
+
+A method for performing high order mesh reﬁnement multigrid computations is pre-
+sented. The Full Approximation Scheme (FAS) multigrid technique is utilized for a sequence
+of nested patches of increasing resolution. Conservation forms are generated on coarse scales
+by additional defect correction terms which counter the local excess ﬂuxes at the boundaries.
+Formulas are given for arbitrary order, extending the existing technique of Bai and Brandt.
+Test calculations are presented for a singular source in three dimensions which illustrate the
+multigrid convergence properties, numerical accuracy, and correct order of the approach.
+Applications for all electron quantum chemical computations are discussed.
+
+8
+9
+9
+1
+ 
+y
+a
+M
+ 
+9
+1
+ 
+ 
+]
+h
+p
+-
+m
+e
+h
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+5
+2
+0
+5
+0
+8
+9
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+1
+
+1 Introduction
+
+Many if not most computational physics and chemistry problems require consideration of
+a large range of length scales. In protein folding, both short and long ranged interactions
+and competitions between them lead to the ﬁnal conﬁguration of the molecule.[1, 2] For
+the interaction between a protein and a nucleic acid or a charged interface, speciﬁc ionized
+groups may contribute signiﬁcantly to the binding, while distant regions of the molecule
+have less importance.[3] If one studies the electronic structure of large molecules, there is a
+concentration of electron density around the atomic nuclei and between atoms in the chemical
+bonding regions, while often large portions of space exhibit very low and smoothly varying
+density.[4] In numerical simulations of ﬂuid dynamics, there may exist speciﬁed regions which
+require a higher resolution treatment locally.[5]
+
+Multiscale methods provide one approach for tackling computational problems exhibit-
+ing a range of length scales.[6, 7] These methods were developed in order to overcome conver-
+gence problems in iterative solutions to partial diﬀerential equations. By utilizing approx-
+imations from coarser grids, components of the error on a wide range of length scales can
+be decimated, typically leading to linear scaling computing time with system size. The un-
+derlying diﬀerential equations can be represented in various ways including ﬁnite diﬀerences
+and ﬁnite elements. For the present method, high order ﬁnite diﬀerence representations are
+employed.
+
+Based on the physical examples given above and many others requiring variable resolu-
+tion, it is appropriate to develop mesh reﬁnement strategies in which ﬁne gridding is focused
+only in those spatial regions which require it.[8] The goal is to maintain the linear scaling
+property of the multigrid method while minimizing the prefactor in the scaling relation. The
+computational philosophy adopted here is to generate a sequence of nested regular grids;
+this strategy allows one to use the existing multigrid routines over the mesh reﬁnement
+patches with no signiﬁcant changes. It also allows for the implementation of accurate high
+order diﬀerence equations on a composite mesh. This approach is to be contrasted with the
+many curved grid generation techniques[10] which have been widely applied in engineering
+applications.
+
+Bai and Brandt[8] addressed several pivotal issues concerning extension of the FAS
+multigrid technique for locally reﬁned meshes. First, they developed a λ-FMG altorithm in
+order to restore linear scaling behavior which can be lost when many levels of reﬁnements are
+used and thus the coarser global grids are themselves visited in a way which scales linearly
+with the number of levels. The work to accuracy exchange rate λ is the Lagrange multiplier
+for the grid optimization equations. Second, they determined that the same interpolation
+order can be used at the mesh boundaries as is used over the rest of the domain. Third,
+they found that local relaxation sweeps near structural singularities (to be diﬀerentiated
+from source singularities) can restore convergence rates to those observed away from the
+singularities. Finally, a second order conservative diﬀerencing method was developed for
+interior source singularities, when it was found that the only important factor for obtaining
+accurate solutions far from the singularity was to correctly reproduce the source strength
+around that singularity. These mesh reﬁnement techniques were tested on several model two
+dimensional problems.
+
+2
+
+In the present work, the Bai and Brandt conservative diﬀerencing method is extended
+to high orders and three dimensions. The method is then successfully tested on a three
+dimensional source singularity, the Coulomb potential. First, a review of the FAS multigrid
+method is given. Next, a simple approach for generating the high order formulas for the
+Laplacian and the interpolation near the boundaries is reviewed. Then, the conservative
+FAS diﬀerencing forms are derived from general considerations of balancing the ﬂuxes at
+the boundaries. The three dimensional conservative forms are obtained simply by locally
+averaging the one dimensional ﬂuxes over surfaces at the boundaries. With the inclusion
+of the high order ﬂux corrections, the summation of the defect correction over the mesh
+reﬁnement is zero to machine precision. The boundary corrections lead to accuracy within
+the patch which is the same as that for a high order uniform ﬁne mesh covering the whole
+domain; with no corrections, serious errors occur over the whole composite domain. The
+accuracy outside the reﬁnement zone is improved over that for the high order uniform coarse
+mesh over the whole domain. The correct high order behavior is thus obtained over the
+entire composite domain. The only exceptions are the points one grid spacing away from
+the singularity, where high order is not obtained on uniform nor composite meshes.
+
+High orders are often required in order to obtain numerically accurate results on three
+dimensional grids of reasonable size. While the methods derived here are general for elliptic
+problems, part of our motivation stems from the recent development, along with other groups,
+of ab initio multigrid methods for quantum chemistry.[11, 12, 13] In our all electron approach,
+all particles are represented numerically on the grid, including the nuclei. In previous work,
+we have carried out density functional calculations on atoms and small molecules on uniform
+grids, and it is clear that the majority of the numerical errors originate from the regions
+around the nuclei. These errors are due both to the ﬁnite size of the nucleus on the grid and
+to the poor numerical representation of the core electron orbitals. The methods developed in
+this paper will be incorporated in our electronic structure codes both for the Poisson solver
+and for the eigenvalue solver.
+
+2 Full Approximation Scheme Algorithm
+
+The FAS multigrid technique allows for solution of nonlinear problems and is ideally suited
+for the mesh reﬁnement methods presented below.[6, 8, 9] A two dimensional schematic of
+the composite mesh examined here is presented in Figure 1, with two nested patches within a
+full domain. In the test calculations here, four or ﬁve levels were employed with the coarsest
+three covering the entire domain (see Figure 2). The Poisson equation to be solved on the
+ﬁnest patch of the four level problem is written as:
+
+Lh4U h4 = f h4
+(1)
+For this case, Lh4 is the ﬁnite diﬀerence Laplacian on the ﬁnest scale, U h4 is the exact grid
+solution for the potential on that scale, and f h4 is −4π times the charge density for a three
+dimensional problem. The current approximation to the exact solution will be written in
+lower case: for example the approximate h4 solution is uh4. On the next coarser level h3,
+the level h4 patch covers only a portion of the level h3 domain. The equation to be solved
+
+3
+
+on the h3 level is:
+
+where I h3
+scale function, and τ h3 is the level h3 defect correction given by:
+
+h4 is the full restriction operator which performs a weighted local average of the ﬁne
+
+Lh3U h3 = I h3
+
+h4f h4 + τ h3,
+
+The ﬁne scale function can then be corrected as follows:
+
+τ h3 = Lh3I h3
+
+h4uh4 − I h3
+
+h4Lh4uh4.
+
+h3(uh3 − I h3
+
+uh4 ← uh4 + I h4
+and further iterations are subsequently performed on the h4 level. Here I h4
+h3 is the interpo-
+lation operator. One way to understand the function of the defect correction is to observe
+that, if the exact solution U h4 were passed to level h3, no correction would be made. That is,
+the defect correction causes the level h3 equation to ‘optimally mimic’ the level h4 problem.
+Note that τ h3 is only deﬁned over the coarse grid points within the interior region of the h4
+level patch, with zero values outside.
+
+h4uh4)
+
+(4)
+
+When using multiple scales, the defect correction includes an additional contribution
+from the previous scale. Here the example is given of the level h2 defect correction computed
+during the ﬁnal level h4 V cycle:
+
+τ h2 = Lh2I h2
+
+h3uh3 − I h2
+
+h3Lh3uh3 + I h2
+
+h3τ h3.
+
+(5)
+
+By performing these coarse grid correction cycles recursively to coarser and coarser scales,
+errors of all wavelengths can be eﬀectively removed with only several iterations necessary on
+the ﬁne scale.
+
+Before deriving the high order conservative forms for the composite mesh computations,
+a simple general procedure for obtaining the required high order Laplacian and interpolation
+operators is summarized.
+
+3 Direct Method for High Order Formulas
+
+For completeness, a summary is given here of a general method for developing any of the
+formulas required in a high order multigrid method. Hamming[14] outlines a direct method
+for obtaining numerical formulas of arbitrary order. Sample a function at N points. Deﬁne
+the Lagrange sample polynomials:
+
+πi(x) = (x − x1)(x − x2) · · · (x − xi−1)(x − xi+1) · · · (x − xN ),
+
+which are of order N − 1 in x. Then
+
+(2)
+
+(3)
+
+(6)
+
+(7)
+
+and
+
+πi(xj) = 0,
+
+4
+
+A polynomial which passes through the N sample points yi is:
+
+πi(xi) 6= 0.
+
+i
+X
+Expand the sample polynomial as follows:
+
+PN −1(x) =
+
+N
+
+yi
+
+πi(x)
+πi(xi) #
+
+.
+
+"
+
+πi(x) = c1,1 + c1,2x + · · · + ci,N xN −1,
+
+(8)
+
+(9)
+
+(10)
+
+where ci,N = 1. Then it is easy to see that the product of the coeﬃcient matrix and the
+Vandermonde matrix of the sample points (second matrix below) is the matrix [πi(xj)]:
+
+c1,1
+c2,1
+...
+cN,1
+
+c1,2
+c2,2
+...
+cN,2
+
+· · ·
+c1,N
+· · ·
+c2,N
+...
+...
+· · · cN,N
+
+
+
+
+
+
+
+
+
+1
+x1
+x2
+1
+xN −1
+1
+
+1
+x2
+x2
+2
+xN −1
+2
+
+· · ·
+1
+· · ·
+xN
+x2
+· · ·
+N
+· · · xN −1
+
+N
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+= [πi(xj)].
+
+(11)
+
+Thus, except for a normalization factor of πi(xi) for each row of the coeﬃcient matrix, the
+left hand matrix is the inverse of the Vandermonde matrix.
+
+In the direct method, Hamming shows that there is a simple connection between the
+Vandermonde matrix, the desired weights for the approximation, and a vector of ‘moments’:
+
+Xw = m
+
+(12)
+
+These moments result from allowing the operation of interest to act on the sequence of
+functions: 1, x, x2, x3, . . . xN −1. For example, for the second derivative operator centered at
+x = 0, the ﬁrst four elements of the moment vector are 0, 0, 2, 0. Similarly, moments can
+also be obtained for the operations of integration and interpolation. For integration, the
+moments are the integrals of 1, x, x2, . . . over the sampling domain, and for interpolation,
+they are these elementary polynomials themselves.
+
+Since the normalized version of the coeﬃcient matrix in Eqn. 11 is the inverse of
+X, the weights for each of the approximations in the multigrid process can be calculated
+to any desired order by one matrix-vector multiply. The normalized coeﬃcient matrices
+for N sampling points are obtained by expanding the sampling polynomial (Eqn. 10) and
+dividing each row by the normalizing factor πi(xi). They are termed ‘universal matrices’
+by Hamming due to their generality, i.e.
+they depend only on the sampling points, not
+on the formula to be approximated. The matrices are tabulated in Ref. [14] up to seven
+sampling points, which allows for computation up to the 6th order Laplacian. In the present
+work, simple C codes have been written which generate the eight, nine, etc. point matrices
+as well. The weight vectors for the Laplacians through 8th order are given in Table 1.
+The three dimensional versions are generated from the sum of the three orthogonal x, y, z
+axes. We have utilized Laplacians up to 8th order in previous multigrid work on uniform
+domains.[13] The interpolation weight vectors for even numbers of sampling points are listed
+in Table 2 through 8th order. Similary, formulas for any higher orders can be obtained
+
+5
+
+from the universal matrices. The high order interpolation formulas only need be used when
+setting the function values on and outside the reﬁnement boundaries which are ﬁxed during
+iterations over the patch. It is essential that the order of the interpolation match the order
+of the Laplacian at these boundaries. Lower order interpolations are adequate during the
+rest of the multigrid processing.
+
+4 High Order Conservative Forms
+
+When solving for the potential on coarser scales which contain a mesh reﬁnement patch at
+the next ﬁner level, it is clear from Eqn. 2 that, if the sum of τ over the interior domain is not
+zero, additional sources have been introduced. This is in fact the case, which can be shown
+by examination of the τ terms in a one dimensional example; most of the interior terms do
+cancel, but nonzero contributions remain at the patch boundaries. The terms which remain
+are of the form of one dimensional ﬂux operators. Without correcting for these new sources,
+the solution will be polluted over the whole domain. The method of Bai and Brandt corrects
+for these sources by introducing local opposing ﬂuxes at the boundary. In this section, their
+second order method is extended to high orders.
+
+First, the problem is illustrated schematically by using a continuous notation (in the
+grid notation, all integrals go over to sums). The coarse scale is labelled by H and the ﬁne
+by h. It is desired to satisfy:
+
+where the integration is over the whole patch domain D, including the boundaries. However,
+it is true that
+
+This integration is only over the interior region of the patch. Therefore:
+
+τ H dV =
+
+τ H
+intdV +
+
+τ H
+b dV = 0.
+
+ZD
+
+ZS
+
+Here τ H
+is a boundary term designed to oppose locally the additional terms due to non-
+b
+conservation of source and the S integration is over a narrow strip at the surface. This
+implies:
+
+τ H
+b dV = −
+
+τ H
+intdV.
+
+ZS
+
+ZI
+
+The form of τ H
+int is the diﬀerence of the Laplacian acting on the coarse scale function minus a
+local average of the Laplacian acting on the ﬁne scale function, Eqn. 3. Therefore, converting
+a volume integral into a surface integral:
+
+τ H
+b dV = −
+
+[(∇2)H uH − h(∇2)huhi]dV = −
+
+[∇H
+
+b uH − ∇h
+
+b uh]dσ.
+
+(17)
+
+ZS
+
+ZI
+
+ZΩ
+
+(13)
+
+(14)
+
+(15)
+
+(16)
+
+τ H dV = 0.
+
+τ H
+intdV 6= 0.
+
+ZD
+
+ZI
+
+ZI
+
+6
+
+(18)
+
+(19)
+
+(20)
+
+The brackets hi signify a local average (restriction) of the ﬁne scale Laplacian acting on the
+function, and the gradient operators ∇b are obtained by noncancellation of terms near the
+boundary of the volume integral. The ﬁnal expression shows that the boundary τ H
+b generates
+a ﬂux which locally opposes the ﬂux from the additional sources in the interior. Therefore,
+after collecting the correct units from the two scales, it is apparent that the form for τ H
+is:
+b
+
+− τ H
+
+b H 2a = [∇H
+
+b uH − ∇h
+
+b uh],
+
+where H is the coarse grid spacing, a is the numerical prefactor to the Laplacian (see Table
+3), and now the gradients are one dimensional operators directed outward from the surface
+(determined below). Here the gradients simply represent the unitless coeﬃcients since H 2
+and a have been moved to the other side. For example, on a one dimensional domain
+(corresponding to the 2nd order Laplacian):
+
+on the left boundary, and
+
+on the right.
+
+[∇HuH]i = uH
+
+i − uH
+i+1
+
+[∇H uH]j = uH
+
+j − uH
+j−1
+
+Since the process of full restriction is a weighted local average over the ﬁne scale function
+(27 points in three dimensions), the averaging in Eqn. 17 can be viewed as follows. First,
+average over the direction normal to the boundary surface, compute the two gradient terms
+on the rhs of Eqn. 18, and then average over the other two directions. The full restriction
+weights for this process along one ﬁne scale dimension are w = [1/4 1/2 1/4]. There is
+no requirement for high order restriction operators, as long as the same restriction method
+is used consistently. Therefore, the coeﬃcients for the two gradient terms in Eqn. 18 can
+be determined by solving the one dimensional problem. In two dimensions, the ﬁne scale
+gradient operator ∇h
+b is averaged over three points along the boundary line with weights [1/4
+1/2 1/4]. This yields a local average of the ﬁne scale ﬂux through the boundary. A similar
+procedure was followed in the work of Bai and Brandt.[8] In three dimensions, the local ﬂux
+average is over a square centered on the location of the coarse scale gradient. The weights
+are 1/4 for the center, 1/8 for the edges, and 1/16 for the corners.
+
+The one dimensional version of the ﬂux diﬀerence in Eqn. 18 was solved for high orders
+by examination of the cancellation of terms near the boundary. The result for the left hand
+side of the coarse scale gradient on a left boundary is given by:
+
+d−nL+i =
+
+c−nL+j
+
+i = 0, nL − 1,
+
+(21)
+
+where nL is the number of points in the Laplacian to the left of the center and the c−nL+j
+are the Laplacian coeﬃcients from Table 1. The rhs side of the gradient is antisymmetric
+with respect to these coeﬃcients. For a right side boundary, all the signs are reversed.
+The locally averaged (in one dimension) ﬁne scale gradient coeﬃcients are:
+
+i
+
+j=0
+X
+
+7
+
+e−nL+i =
+
+2c−nL+j + c−nL+i
+
+i = 0, nL − 1.
+
+(22)
+
+i−1
+
+j=0
+X
+
+b and ∇h
+
+For the ﬁne scale coeﬃcients, the central term always cancels completely, so both gradient
+operators ∇H
+b are centered about the ﬁne grid location one point inside the patch
+boundary. All of the coeﬃcients up through 8th order are listed in Table 3, and the terms
+for a 6th order left boundary are shown in Fig. 3 to illustrate the locations. Similarly,
+conservative forms can be derived for higher orders if desired.
+
+5 Computational Details and Numerical Results
+
+The computational test case presented here is for the 4th order form. The three coarsest
+scales covered the whole domain, while the ﬁnest one or two were nested patches. On the
+three coarsest (full domain) scales, the boundaries were set by ﬁxing the potential at the
+analytical value for a singular source in three dimensions φ(r) = 1/r. The boundary was
+ﬁxed with one additional term outside the physical boundary since the Laplacian has two
+terms beyond the center in one dimension. Iterations were performed over all the interior
+points of the full domain or patch. The FAS-MG technique was used in the form of the series
+of nested V cycles as shown in Fig. 2. SOR iterations were employed for all relaxation steps,
+with ω = 1.2. The optimal relaxation parameter was determined empirically for the high
+order case. Full weighting restriction and linear interpolation were used, except 4th order
+interpolation was performed over the patch regions, including the required points beyond
+the boundaries. These points were set such that the Laplacian and defect correction were
+deﬁned over the entire interior of the patch. The boundary potential terms for the patches
+were reset during the correction step after each visit to coarser scales.
+
+The code was written in C with double precision arithmetic, utilizing the prescription
+of Ref. [15] for dynamic memory allocation. The test calculations were run on a Pentium 133
+MHz processor laptop with 40Mb of RAM, requiring a total of roughly 15 relaxation sweeps
+on the ﬁne scale and 3 seconds of total processor time for convergence. The ‘exact’ grid
+results were obtained by repeated loops around the ﬁnal V cycle of the FAS procedure, until
+the residuals were on the order of machine precision zero. The coarsest (full domain) scale
+had 5 points on a side, the next two ﬁner scales 9 and 17, and the two nested patches both
+had 9 points on a side. To examine the order of the method, computations were performed on
+a full domain coarse grid corresponding to the that of the composite mesh (level h3), followed
+by one ﬁner full domain grid with the spacing halved. The accuracy of the composite mesh
+method was then determined by comparison with the high order coarse and ﬁne uniform
+grid calculations used in the determination of the order.
+
+The increased accuracy obtained using fourth order equations vs.
+
+second order is
+displayed for uniform domain computations in Figure 4, in which the absolute errors of the
+solution are presented away from the singularity. That the fourth order Laplacian leads
+to fourth order behavior was conﬁrmed in the uniform grid computations described above.
+Except for the set of points one grid spacing away from the singularity, the correct order is
+obtained over the entire domain.
+
+8
+
+Then computations were performed on the four level composite domain with a single
+reﬁnement patch centered at the origin. To test the eﬀect of the boundary correction on
+conservation, the integral of the defect correction over the reﬁnement patch was computed
+with and without the boundary terms. Without the boundary correction, the integral was
+0.8 in magnitude, while with the boundary terms, the integral was zero to double precision
+accuracy. The impact of the conservative boundary correction on the accuracy of the solution
+is apparent in Figure 5; serious errors are incurred over the whole domain in the absence of
+the boundary corrections. The accuracy of the method can be determined by comparison
+with the separate ﬁne and coarse uniform domain results. Figure 6 shows that the accuracy
+within the patch is virtually identical to that for the uniform ﬁne domain results. In Figure 7,
+the errors outside the reﬁnement patch are displayed. The reﬁnement mesh leads to increased
+accuracy outside the reﬁnement on the coarser level in comparison with the uniform coarse
+level results. The numerical results are presented in Table 4. Finally, test computations
+were also successfully performed on a ﬁve level problem with two nested reﬁnement patches.
+The resulting potential is plotted in Figure 8 to illustrate the accuracy of the method in
+relation to the numerical errors. These numerical results thus conﬁrm that the conservative
+mesh reﬁnement technique developed here leads to results of the correct high order within the
+reﬁnement region, while increasing the accuracy on the coarse domain outside the reﬁnement
+zone.
+
+6 Summary
+
+A general technique has been presented for carrying out high order mesh reﬁnement multi-
+grid calculations. The FAS method for composite domains was ﬁrst summarized. Then,
+Hamming’s direct method for generating high order formulas was outlined. Both the high
+order Laplacian and interpolation coeﬃcients were obtained from the universal matrices of
+the direct method. Since the sum of the defect correction over the interior of the patch
+is nonzero, high order conservative forms were derived by analysis of the one dimensional
+problem. The two and three dimensional forms can be obtained by averaging locally over
+three points on a line or nine points on a square, respectively. The new method was success-
+fully tested for the fourth order case on a Poisson problem, the source singularity in three
+dimensions.
+
+The high order mesh reﬁnement methods should allow for accurate computations
+on three dimensional domains which require a range of length scales. We are develop-
+ing a quantum chemical Density Functional Theory (DFT) multigrid method for ab initio
+calculations.[13] So far, our fully numerical three dimensional calculations have been per-
+formed on uniform domains, treating both the electrons and nuclei with the high order grid
+approximations. As a test computation, we examined the CO molecule, and obtained good
+results in all electron computations. However, it is apparent from those results that the crude
+treatment of the nuclei and the core electrons limits the accuracy of the method. We plan to
+incorporate the high order composite mesh techniques into the quantum chemistry method
+to obtain more accurate results in the region of the nuclei, and to investigate the impact
+of those improvements on the eigenfunctions, eigenvalues, and total molecular energies. Be-
+yond the quantum chemical applications, these methods should prove helpful in other large
+
+9
+
+scale electrostatics calculations in biophysics and in multigrid ﬂuid dynamics computations,
+especially for cases where increased resolution is required only over small local regions of
+space.
+
+Acknowledgments
+I thank Achi Brandt, Dov Bai, and Michael Merrick for many helpful discussions. I would
+like to acknowledge the support of NSF grant CHE-9632309.
+I also thank Daan Frenkel
+and Bela Mulder for support during a sabbatical leave at the FOM Institute in Amsterdam
+during the fall of 1996.
+
+10
+
+References
+
+[1] Z. Luthey-Schulten, B. E. Ramirez, and P. G. Wolynes, J. Phys. Chem. 99, 2177 (1995).
+
+[2] K. A. Dill, S. Bromberg, K. Yue, K. M. Fiebig, D. P. Yee, P. D. Thomas, and H. S.
+
+Chan, Protein Sci. 4, 561 (1995).
+
+[3] N. Ben-Tal, B. Honig, C. Miller, and S. McLaughlin, Biophys. J. 73, 1717 (1997).
+
+[4] R. A. Friesner, Ann. Rev. Phys. Chem. 42, 341 (1991).
+
+[5] J. A. Michelsen,
+
+in Multigrid Methods III, eds. W. Hackbusch and U. Trottenberg
+
+(Birkh¨auser, Berlin, 1991), p. 301. See other articles in this collection as well.
+
+[6] A. Brandt, Math. Comp. 31, 333 (1977).
+
+[7] W. L. Briggs, A Multigrid Tutorial, (SIAM, Philadelphia, 1987).
+
+[8] D. Bai and A. Brandt, SIAM J. Sci. Stat. Comput. 8, 109 (1987).
+
+[9] A. Brandt, S. McCormick, and J. Ruge, SIAM J. Sci. Stat. Comput. 4, 244 (1983).
+
+[10] Computational Fluid Dynamics, ed. H. Deconinck (Von Karman Institute for Fluid Dy-
+namics, Rhode-Saint-Genese, Belgium, 1995); Mathematical Aspects of Numerical Grid
+Generation, ed. J. E. Castillo (SIAM, Philadelphia, 1991); Modeling, Mesh Generation,
+and Adaptive Numerical Methods for Partial Diﬀerential Equations, eds. I. Babusa, et
+al. (Springer-Verlag, New York, 1995).
+
+[11] F. Gygi and G. Galli, Phys. Rev. B 52, R2229 (1995).
+
+[12] E. L. Briggs, D. J. Sullivan, and J. Bernholc, Phys. Rev. B 52, R5471 (1995); ibid. 54,
+14362 (1996); J. Bernholc, E. L. Briggs, D. J. Sullivan, C. J. Brabec, M. Buongiorno
+Nardelli, K. Rapcewicz, C. Roland, and M. Wensell, Intl. J. Quant. Chem. 65, 531
+(1997).
+
+[13] M. P. Merrick, K. A. Iyer, and T. L. Beck, J. Phys. Chem. 99, 12478 (1995); K. A. Iyer,
+M. P. Merrick, and T. L. Beck, J. Chem. Phys. 103, 227 (1995); T. L. Beck, K. A. Iyer,
+M. P. Merrick, Intl. J. Quant. Chem. 61, 341 (1997); T. L. Beck, ibid. 65, 477 (1997).
+
+[14] R. W. Hamming, Numerical Methods for Scientists and Engineers (Dover, New York,
+
+1962). Chapters 14 and 15.
+
+[15] W.H. Press, B.P. Flannery, S.A. Teukolsky, and W.T Vetterling, Numerical Recipes in
+C: The Art of Scientiﬁc Computing (Cambridge Univ. Press, Cambridge, 1992).
+
+11
+
+Points Order Prefactor
+1
+2nd
+12
+4th
+180
+6th
+5040
+8th
+
+N=3
+N=5
+N=7
+N=9
+
+Coeﬃcients
+1
+16
+270
+8064
+
+-1
+-27
+-1008
+
+-2
+-30
+-490
+-14350
+
+2
+128
+
+-9
+
+Table 1: Coeﬃcients for the Laplacian. One side plus the central point are shown. Each
+coeﬃcient term should be divided by the prefactor. The Laplacian is symmetric about the
+central point.
+
+Points Order Prefactor
+2
+2nd
+4th
+16
+256
+6th
+2048
+8th
+
+N=2
+N=4
+N=6
+N=8
+
+Coeﬃcients
+
+1
+9
+150
+1225
+
+-1
+-25
+-245
+
+3
+49
+
+-5
+
+Table 2: Coeﬃcients for interpolation. One side of the symmetric weight vector is shown.
+Each coeﬃcient term should be divided by the prefactor.
+
+Level Points Order Prefactor
+1
+
+N=2
+
+2nd
+
+Coeﬃcients
+
+H
+h
+H
+h
+H
+h
+H
+h
+
+N=4
+
+N=6
+
+N=8
+
+4th
+
+6th
+
+8th
+
+1
+1
+15
+14
+245
+220
+7175
+6286
+
+-1
+-1
+-25
+-23
+-889
+-770
+
+12
+
+180
+
+5040
+
+2
+2
+119
+110
+
+-9
+-9
+
+Table 3: Coeﬃcients for conservative forms. One side is shown. Each term on the other half
+of the gradient operator has the opposite sign. The set of coeﬃcients is for a left boundary.
+All the signs are reversed for a right boundary. The locations of the terms for a 6th order
+example are shown in Fig. 3.
+
+12
+
+r Exact
+0.5
+2
+0.25
+4
+0.1¯6
+6
+0.125
+8
+0.08¯3
+12
+0.0625
+16
+0.05
+20
+0.041¯6
+24
+
+Trunc. Err. Fine Trunc. Err. Coarse Trunc. Err.
+Grid Exact
+0.020842737
+0.520842737
+0.007687505
+0.257687505
+0.001326893
+0.167993560
+0.001091267
+0.126091267
+0.0000918866
+0.0834252199
+0.0625022779
+0.0000022779
+0.0499998476 -0.0000001524
+0.0000001258
+0.0416667925
+
+MG Err.
+0.020875723
+0.007726450
+0.001389060
+0.003854094
+0.001232428
+0.0005908833 0.0001265184
+0.0001151041 0.0000094832
+0.0000347405 0.0000016978
+0.0000131217 0.0000007387
+
+0.020888618
+0.007710007
+0.001183652
+0.000232278
+0.0000295553
+0.0000072359
+0.0000023526
+0.0000008825
+
+0.010443407
+
+Table 4: Numerical results for the FAS-MG composite mesh computations at several dis-
+tances from the singular source. The edge of the patch is at r = 8. The last column is for a
+single V cycle MG computation with a total of 16 relaxation sweeps on the ﬁne scale. Notice
+that for the points in the outer regions of the domain, the single cycle MG errors are not
+strictly less than the anomalously small truncation errors for the composite domain; however,
+the errors are considerably smaller than the truncation errors on the uniform coarse scale
+domain (they are of the same magnitude as the uniform ﬁne grid results at those points).
+
+13
+
+

@@ -1,0 +1,5785 @@
+5
+0
+0
+2
+ 
+y
+a
+M
+ 
+5
+2
+ 
+ 
+]
+h
+p
+-
+o
+i
+b
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+9
+7
+1
+5
+0
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+An equation-free computational approach for extracting
+population-level behavior from individual-based models of biological
+dispersal
+
+Radek Erban∗
+
+Ioannis G. Kevrekidis†
+
+Hans G. Othmer‡
+
+December 27, 2013
+
+Abstract: The movement of many organisms can be described as a random walk at either or both the individual and
+population level. The rules for this random walk are based on complex biological processes and it may be diﬃcult to
+develop a tractable, quantitatively-accurate, individual-level model. However, important problems in areas ranging from
+ecology to medicine involve large collections of individuals, and a further intellectual challenge is to model population-
+level behavior based on a detailed individual-level model. Because of the large number of interacting individuals and
+because the individual-level model is complex, classical direct Monte Carlo simulations can be very slow, and often of little
+practical use. In this case, an equation-free approach [24] may provide eﬀective methods for the analysis and simulation of
+individual-based models. In this paper we analyze equation-free coarse projective integration. For analytical purposes, we
+start with known partial diﬀerential equations describing biological random walks and we study the projective integration
+of these equations. In particular, we illustrate how to accelerate explicit numerical methods for solving these equations.
+Then we present illustrative kinetic Monte Carlo simulations of these random walks and show a decrease in computational
+time by as much as a factor of a thousand can be obtained by exploiting the ideas developed by analysis of the closed
+form PDEs. The illustrative biological example here is chemotaxis, but it could be any random walker which biases its
+movement in response to environmental cues.
+
+1
+
+Introduction
+
+In current complex systems modeling practice, we are often presented with a model at a ﬁne level of description
+(atomistic, stochastic, individual-based), while we want to study the behavior at a macroscopic coarse-grained
+(continuum, population) level. This situation frequently arises in the modeling of biological dispersal, where
+signiﬁcant progress is being made in modeling at the individual organism/cell level, while the derivation of
+the corresponding closed, macroscopic population level equations remains very diﬃcult, and lags far behind in
+development. The example here is bacterial chemotaxis, for which much is known about signal transduction and
+motor behavior of individual cells, but only in a limited number of cases can one rigorously derive equations
+describing behavior of bacterial populations [10, 11]. Usually one can develop a suitable cell-based stochastic
+model, and would like to obtain population-level information without having a coarse-grained evolution equation.
+Computational methods for obtaining an approximation to the macroscopic evolution without explicitly obtaining
+equations have been developed [24, 15, 17, 37]. The main idea is to use short bursts of appropriately-initialized
+computations using the detailed, ﬁne-scale model, followed by processing of the results to obtain estimates of
+
+∗School of Mathematics, University of Minnesota, Minneapolis, MN 55455, USA; present address: Mathematical Institute,
+University of Oxford, 24-29 St. Giles’, Oxford, OX1 3LB, United Kingdom, e-mail: erban@maths.ox.ac.uk. Research supported in
+part by NSF grant DMS 0317372 and the Minnesota Supercomputing Institute.
+
+†Princeton University, Department Of Chemical Engineering, PACM & Mathematics, Engineering Quadrangle, Olden Street,
+
+Princeton, NJ 08544, USA; e-mail: yannis@princeton.edu. Research supported in part by an NSF/ITR grant (CTS 0205484).
+
+‡School of Mathematics and Digital Technology Center, University of Minnesota, Minneapolis, MN 55455, USA; e-mail: oth-
+mer@math.umn.edu. Research supported in part by NIH grant GM 29123, NSF grant DMS 0317372, and the Minnesota Supercom-
+puting Institute.
+
+1
+
+the desired macroscopic quantities such as the spatial distribution of the number density, time derivatives, and
+various measures of the sensitivity of the solution with respect to parameters.
+
+The ﬁrst, and probably most important step of this equation-free approach is to determine what are the
+appropriate variables in terms of which one could hope to close macroscopic evolution equations. Typically
+these variables are a few slowly-evolving lower moments of the many-particle distribution function (e.g., cell
+density for chemotactic movement [10], species concentrations for reaction-diﬀusion problems [14], or density and
+momentum ﬁelds, the zeroth and ﬁrst moments of the distribution of molecules in velocity space, for the Navier
+Stokes equations [6, 7]). In most cases, knowledge of the level of closure (the number and identity of variables with
+which one can write a deterministic model for the process) comes from extensive experimental experience and
+observation, long before it is rigorously justiﬁed by theory. In the equation-free approach, the simplest conceptual
+path for selecting the appropriate observables as state variables is to perform a homotopy between conditions at
+which an accurate closed equation is known and validated, and the conditions of interest, when this is possible.
+Model reduction in general is based on the assumption that, after rapid initial transients, higher order moments
+of the evolving distributions can be approximately-represented as functionals of the slow, “master” ones - the ones
+in terms of which we write the closed equations. The closure is thus embodied in a “slow manifold”: a graph of
+a function (in moment space) which, given the values of the few governing lower moments, provides the “slaved”
+higher order moment values. Separation of time scales between the rapid equilibration of the higher, slaved
+moments, and the slow evolution of the “master” ones underpins the derivation of closed, reduced, macroscopic
+equations. The idea then is to design computational experiments with the ﬁne scale simulator that test for this
+separation of time scales, and suggest variables capable of parametrizing the slow manifold [37, 30].
+
+As is discussed in more detail in [37], it is possible, using matrix-free iterative linear algebra methods, to
+estimate, using direct simulation, characteristic relaxation time scales for the problem (at least in the neighborhood
+of a particular equilibrium). These time scales, and the eigendirections corresponding to them, can guide the
+modeler in deciding the number, and even the selection of variables capable of parametrizing (at least locally)
+this slow manifold. In this process, homotopy and knowledge of the appropriate parametrizing variables in some
+region of operating parameter space, gives us a starting point for variable selection. In the more general, and
+much more diﬃcult case in which we begin a completely new problem and have no initial knowledge of what
+might be good “order parameters” in terms of which to attempt to close macroscopic equations, the alternative
+is to use data processing techniques on extensive experimental (or computational experimental) runs, to try and
+develop a reasonable reduction hypothesis. Algorithms for data compression, from the more traditional principal
+component analysis to the more modern sparse kernel and diﬀusion map feature analysis may be useful here
+[38, 30]. This is, however, a separate and active research subject in itself, and we will not pursue here.
+
+In this paper we will assume that we have enough knowledge of the problem to identify a set of variables in
+terms of which to write a closed equation. In that spirit we study the coarse integration of simple models for
+chemotaxis of cells, and we assume that the slow dynamics of the system are parametrized by cellular density. The
+main goal is to illustrate the computational gain of equation-free methods, by which we mean a large speed up of
+the stochastic simulation for a class of biologically-motivated problems involving slow dispersal of organisms/cells.
+
+The paper is organized as follows. In Section 2, we present a brief overview of equation-free methods with
+emphasis on coarse projective integration. We present the main strategy which we will use for the analysis of coarse
+integration – namely the deterministic projective integration of partial diﬀerential equations (PDEs). Moreover,
+we show how the results of this paper can be interpreted in terms of equation-free coarse projective integration for
+kinetic Monte Carlo (kMC) simulations of random walks; and we deﬁne the gain of these methods. In Section 3
+we present partial diﬀerential equations modeling the dispersal of cells, and we provide two biological motivations
+of the chemotaxis system studied later. We also discuss the main mathematical properties of these equations.
+Finally, we introduce a test family of spatial signal proﬁles which are used in the computational examples in
+Sections 3, 4 and 5. In Section 4, we study the eﬃciency of projective integration for diﬀerent discretizations of
+the macroscopic PDE equations. We obtain a measure of eﬃciency (gain) of the method for diﬀerent choices of
+the “inner integrator”. We demonstrate a stable, signal-independent method, i.e., a method which has the same
+gain for all mathematically admissible environmental changes. We also study more accurate inner integrators,
+for which the eﬃciency depends on the size of the environmental signal (concentration gradients). Section 4.5
+contains illustrative numerical results; here we provide computations illustrating the analysis in Section 4 and give
+examples for which the method leads to a signiﬁcant reduction in the computational time required. In Section
+
+2
+
+5 we return to the original random walk problem. We discuss the application of our approach to accelerating
+the Monte Carlo simulations and present a case in which the computational time is reduced by a factor of 103.
+Finally, in Section 6 we summarize the results, and mention signiﬁcant generalizations. We conclude by reiterating
+the main elements of the equation-free approach as a “wrapper” around a usually slow, cell- or organism-based
+stochastic simulator, aimed at assisting in the eﬃcient study of emergent, population-level behavior.
+
+2 Equation free methods - coarse integration
+
+Consider a large collection of randomly-walking individuals for which we have a microscopic model, and suppose
+that we want to know the time evolution of the macroscopic density N of the individuals. One approach is to
+derive partial diﬀerential equation(s) for macroscopic observables, such as the density N , and then compute the
+solution of the PDE(s) using standard numerical methods. This entails a choice of algorithm, a time step ∆t,
+and a routine which computes the density N (t + ∆t) from the density N (t).
+
+If explicit macroscopic equations are not available, we can still compute the density of individuals at time
+t + ∆t from the density of individuals at time t using Monte Carlo simulation of the microscopic model. This can
+be done as follows.
+
+(a) Given the macroscopic initial density N (t), construct consistent microscopic initial conditions (initialize
+each individual so that the density is N (t)).
+
+(b) Evolve the system using the microscopic Monte Carlo simulator for time ∆t.
+
+(c) Compute the density of individuals N (t + ∆t) from the microscopic data at time t + ∆t.
+
+Steps (a) – (c) provide an alternative path to computing N (t + ∆t) from N (t) as illustrated in Figure 1. The main
+
+(b)
+microscopic
+simulator
+
+microscopic
+realisation(t)
+
+(a)
+
+microscopic
+realisation(t+  t)
+   ∆
+
+(c)
+
+density(t)
+
+macroscopic
+PDE model
+
+density(t+  t)
+
+∆
+
+Figure 1: Schematic of microscopic timestepper (a) – (c).
+
+goal is to compute the long time evolution of cellular density N, and to that end we could simply use step (b)
+many times, i.e., we could in principle run the microscopic simulator only. However, since the biological models
+are often complex, step (b) can be very computationally intensive. Thus the key constraint is that we are in fact
+able to run the microscopic simulator only for short times. Since, we seek the long time evolution, we have to
+combine (a) – (c) with another step which can be formulated in many ways, e.g.,
+
+(d) Using the macroscopic data for N computed in (a) – (c), estimate the time derivative ∂N
+∂t (t + ∆t).
+Because of ﬂuctuations due to the stochastic nature of the simulation, we may require several independent
+microscopic realizations of N (t) in part (a) to be able to accurately estimate the expected density N (t+∆t)
+and its time derivative. We then take advantage of the assumed smoothness (in time) of the trajectory of the
+unavailable macroscopic evolution, and take a large projective step by estimating the density N (t + ∆t + T )
+for some T > 0 as
+
+N (t + ∆t + T )
+
+N (t + ∆t) + T
+
+(t + ∆t).
+
+≈
+
+∂N
+∂t
+
+The density N (t + ∆t + T ) is then used as a new initial condition in (a).
+
+The algorithm (a) – (d) is called coarse projective integration, speciﬁcally, coarse projective forward Euler, and
+it can be formulated in many ways [15, 17, 24]. For example we can use diﬀerent methods to estimate the time
+
+3
+
+derivative of N in (d), or we can extrapolate using other macroscopic variables in part (d), e.g., with ﬂux proﬁles
+as opposed to density proﬁles. In any case, the actual projective step is performed on some spatial discretization of
+these macroscopic variable proﬁles e.g., ﬁnite diﬀerence, ﬁnite element, or spectral decompositions of the proﬁles.
+
+The algorithm (a) – (d) can speed up the computations provided that we can safely (in terms of stability and
+∆t and provided that the so called “lift–run-restrict procedure” (a) – (c) does not require
+accuracy) choose T
+excessive computation to estimate the time derivative of N . In particular, the more time is spent in part (a) – (c)
+of the algorithm, the larger T /∆t in part (d) must be chosen to have the potential for computational gain. Since
+of the coarse projective integration method as
+we also study modiﬁcations of (a) – (d), we will deﬁne the gain
+
+≫
+
+G
+
+=
+
+G
+
+time to compute the evolution of the system by running a Monte Carlo simulator only
+time to compute the evolution of the system by coarse projective integration (a) – (d)
+
+.
+
+(2.1)
+
+For example, if we need k realizations of the Monte Carlo evolution in steps (a) – (c) to compute the evolution
+of the system in the interval [t, t + ∆t], and if we assume that the computational time of step (d) is negligible,
+then the gain
+k∆t . On the other hand, one might argue that scaling by k
+may be too severe, since the equation we are evolving is not one for the single ﬂuctuating realization, but for the
+expected density proﬁle estimated, for example, as the average of k copies.
+
+can be simply estimated as
+
+= T +∆t
+
+G
+
+G
+
+As a ﬁrst, illustrative step in the analysis of the gain of coarse integration, we will replace the stochastic part
+(a) – (c) by a deterministic operator as shown in Figure 2. This means that we assume that we do know, at
+
+microscopic
+realisation(t)
+
+(a)
+
+microscopic
+realisation(t+  t)
+   ∆
+
+(c)
+
+(b)
+microscopic
+simulator
+
+macroscopic
+PDE model
+(i)
+
+(d)
+projective
+     step
+(ii)
+
+density(t)
+
+density(t+  t)
+
+    ∆
+
+density(t+  t+T)
+
+    ∆
+
+Figure 2: We ﬁrst analyse (i) – (ii) in parameter regimes where macroscopic equations are available.
+
+least for some parameter regime, a closed macroscopic equation for the expected density proﬁle of the particular
+kinetic Monte Carlo simulation. We then replace steps (a) – (c) by a short deterministic integration (i). We run
+this deterministic integrator only for a short time ∆t, and process its results to obtain an extrapolation in time
+(ii); we then repeat the process. In this deterministic setup, we can more easily study the dependence of the gain
+on the parameters of the model and, in particular, the gap between slow and fast eigenvalues in the spectrum of
+the equation. Assuming that most of the computational time is spent in part (i), we can rewrite the deﬁnition
+(2.1) in the deterministic setting (i) – (ii) as follows
+
+=
+
+G
+
+T + ∆t
+∆t
+
+.
+
+(2.2)
+
+In the following section we introduce biologically-motivated problems for which the corresponding macroscopic
+equations are known for some, or for all, parameter regimes.
+
+Finally, let us mention that step (a) requires that initialization of all system variables be done consistently with
+the density proﬁle N (t). This means that we initialize all individuals in such a way that the macroscopic density
+Ideally, we would like to initialize the remaining
+is equal to N (t). There are many ways to accomplish this.
+macroscopic system observables (e.g. higher moments of the cell distribution function than density, the 0-th
+moment) on a slow manifold parametrized by the density proﬁle N (t) - that is, we would like to initialize them
+“slaved1 to” N (t). One possible procedure (which we use in Section 5) is schematically illustrated in Figure 3.
+Here we make an initial guess for other state variables and we run the Monte Carlo simulator for a short time
+1The underlying idea is that the set of moments of the cell distribution constitutes a singularly perturbed system, characterized
+by time scale separation: higher order moments are assumed to quickly become functionals of the low, slow, governing ones, like
+density (i.e. they quickly approach a slow manifold parametrized by density). The same key assumption also underlies the analytical
+derivation of coarse-grained, macroscopic equations.
+
+4
+
+initialize consistently
+
+with density(t)
+
+m
+e
+t
+s
+y
+s
+ 
+r
+e
+h
+t
+o
+
+s
+e
+l
+b
+a
+i
+r
+a
+v
+
+microscopic
+realisation(t)
+
+(a)
+
+density(t)
+
+initial guess
+short run
+
+reset density
+
+slow manifold
+
+density(t)
+
+Figure 3: Initialization of other state variables in step (a).
+
+only, then we reset the position of each individual to its initial value, keeping all other state variables unchanged.
+Repeating this procedure several times, we can ﬁnd the initial condition close to the slow manifold of the system
+[19, 20].
+
+3 Chemotaxis
+
+Many organisms that move in a random walk respond to environmental signals by biasing their rules of movement.
+If we consider chemical signals in the environment, the corresponding motility behavior is called chemotaxis or
+chemokinesis, depending on whether the organism senses the direction of signal gradients directly, or responds by
+changing its speed or the frequency of turning. We will not distinguish between diﬀerent terminologies, and we will
+call chemotaxis any alteration of behavior caused by the environmental cues; chemotaxis will be the illustrative
+biological example in this paper. At the population level, chemotaxis can lead to aggregation, travelling waves
+and pattern formation (see e.g., [5] for E. coli, [1, 9] for Dictyostelium discoideum) and an important task is to
+explain population-level behavior in terms of individual-based models. To do that, equation free methods may be
+suitable [36]. However our purpose here is to use the strategy for analysis outlined in Figure 2, and to this end we
+choose a chemotactic example for which the macroscopic equations are known. First, in Section 3.1, we describe
+the simpliﬁed model of bacterial chemotaxis for which the macroscopic equations were derived in some parameter
+regimes [10, 11]. Next, in Section 3.2, we present an even simpler random walk, which involves directional sensing,
+and is more suitable for modeling of certain eukaryotic organisms. Here the macroscopic equations can be derived
+for any choice of parameters. These equations have the same structure as in the bacterial case. In Section 4, we
+report the results of projective integration of the chemotaxis equations.
+
+3.1 Bacterial chemotaxis
+
+Flagellated bacteria, the best studied of which is E.coli, have two diﬀerent modes of motile behavior that are
+determined by the rotation of their ﬂagella. When rotated counterclockwise, the ﬂagella coalesce into a propulsive
+bundle that produces a relatively straight “run”. When rotated clockwise they ﬂy apart and the bacterium
+“tumbles” without signiﬁcant translocation. Hence, a bacterium runs at a constant velocity for a random length
+of time, then tumbles for a random length of time, chooses a new direction at random, and repeats the process. In
+order to ﬁnd food or avoid noxious substances, a bacterium increases its runs in favorable directions and decreases
+them when going in an unfavorable direction. The run length is controlled by a complex biochemical network
+[2, 39] that involves signal transduction and alteration of an intracellular protein called CheY that controls the
+direction of rotation of the ﬂagellar motors, and consequently changes the movement of the bacterium.
+
+In the absence of an extracellular signal the duration of both runs and tumbles are exponentially distributed,
+with means of 1 s and 10−1 s, respectively [3], and in a gradient of attractant the cell increases or decreases the
+run time according as it moves in a favorable or unfavorable direction. Since the tumbling time is small compared
+to the typical running time, we can decribe the motion of E. coli as a velocity jump process [31], which means that
+a bacterium runs in some direction and, at random instants of time changes its velocity according to a Poisson
+process with mean turning rate γ. The turning rate is altered by CheY [8], so we can write γ = γ(y1) where y1
+denotes the concentration of the phosphorylated form of CheY.
+
+5
+
+Let y = (y1, y2, . . . , ym)
+
+Rm denote the intracellular variables, which can include the concentration of
+∈
+RM denote the signals in the environment. Then
+proteins, receptors, etc., and let S(x, t) = (S1, S2, . . . , SM )
+existing deterministic models of bacterial signal transduction pathways can be cast in the form of a system of
+ordinary diﬀerential equations that describe the evolution of the intracellular state, forced by the extracellular
+signal. Thus
+
+∈
+
+dy
+dt
+
+= f (y, S)
+
+(3.1)
+
+RM
+
+where f : Rm
+Rm describes the particular model. The equation (3.1) is integrated along the trajectory
+of each cell, and the y1 component of the solution together with γ = γ(y1) deﬁnes the random walk of each
+bacterium.
+
+→
+
+×
+
+As was noted in [10, 11], existing models for signal transduction and models of ﬂagellar motor behavior involve
+tens of chemical species, which makes the problem very complicated for analysis. However, the essential aspects
+of the dynamics can be captured by a much simpler “cartoon” model which involves just two variables. For the
+“cartoon” model, one can derive closed macroscopic equations for some parameter regimes (see [10] in 1D, see
+[11] in 2D/3D). In [10, 11], equation (3.1) and equation for γ(y1) read as follows
+
+dy1
+dt
+
+=
+
+g(S(x, t))
+
+(y1 + y2)
+
+−
+te
+
+,
+
+dy2
+dt
+
+=
+
+g(S(x, t))
+
+y2
+
+,
+
+−
+
+ta
+
+βy1,
+
+γ = γ0 −
+[0,
+
+(3.2)
+
+ta are constants, x is the current position of a cell, S : Rn
+[0,
+
+where te ≪
+the chemoattractant, and g : [0,
+the turning rate if no chemoattractant is present, which is changed by the linear function
+attractant gradients are present.
+
+) is the concentration of
+)
+∞
+) models the ﬁrst step of signal transduction. The constant γ0 > 0 is
+βy1, with β > 0, if
+
+)
+∞
+
+[0,
+
+∞
+
+→
+
+→
+
+∞
+
+−
+
+×
+
+In this paper, we restrict the random walks to movement along the real line, which means that individuals
+move to the left or to the right with constant speed s and, at random instants of time, change their direction
+with turning frequency γ. In this case, using (3.2) in suitable parameter regimes, one can derive a macroscopic
+partial diﬀerential equation for the density of individuals N
+
+N (x, t) of the following form [10].
+
+∂2N
+∂t2 + 2γ0
+
+∂N
+∂t
+
+=
+
+∂
+∂x
+
+s2 ∂N
+(cid:18)
+
+∂x −
+
+′
+
+g
+
+(S(x))
+
+2βs2ta
+(1 + 2γ0ta)(1 + 2γ0te)
+
+′
+
+S
+
+(x)N
+
+(cid:19)
+
+(3.3)
+
+The macroscopic equation (3.3) is valid for shallow gradients of the signal (small S′(x)) and for a suitable order
+of magnitude of the parameters involved (see [10] for details).
+
+≡
+
+Since, bacteria are too small to sense spatial gradients of the chemoattractant over their body lengths, they
+alter their turning rates as described above, to achieve the desired response to changes in chemoattractant
+concentration. On the other hand, eukaryotic unicellular organisms like Dictyostelium discoideum are large enough
+to sense directly the chemical gradients and respond to them appropriately. Motivated by this observation, in
+the following section we present a simple example of a 1D random walk of individuals such that a cell can sense
+directly the gradient of chemoattractant S′(x) and respond with changes of its direction according to the gradient
+seen by the cell.
+
+3.2 Chemotaxis with directional sensing
+
+We consider the random movement of individuals which reduce their probability of changing direction when
+moving in a favorable direction, e.g., in the direction of increasing attractant. We suppose as earlier that a
+particle moves along the x axis at a constant speed s, but that at random instants of time it reverses its direction
+according to a Poisson process with turning frequency
+
+where b is a positive constant and the sign depends on the direction of the particle movement: plus for particles
+moving to the left, and minus for particles moving to the right. Let R(x, t) (resp.L(x, t)) be the density of particles
+at (x, t) which are moving to the right (resp. left): then R(x, t) and L(x, t) satisfy the equations
+
+γ = γ0 ±
+
+′
+
+bS
+
+(x)
+
+(3.4)
+
+(3.5)
+
+∂R
+∂t
+
++ s
+
+∂R
+∂x
+
+=
+
+(γ0 −
+
+−
+
+bS
+
+(x))R + (γ0 + bS
+
+(x))L,
+
+′
+
+′
+
+6
+
+∂L
+∂t −
+
+s
+
+∂L
+∂x
+
+= (γ0 −
+
+′
+
+bS
+
+(x))R
+
+(γ0 + bS
+
+(x))L.
+
+′
+
+−
+
+Equations of this type have been studied by many authors, and for a discussion of previous work see [32, 21].
+
+The density of particles at (x, t) is given by the sum N (x, t) = R(x, t)+L(x, t), and the ﬂux is sR(x, t)
+
+sL(x, t).
+We are primarily interested in the evolution of the macroscopic density N, and therefore we rewrite the equations
+(3.5) and (3.6) as the equations for the variables N and J given by
+
+−
+
+N = R + L,
+
+J = R
+
+L
+
+−
+
+⇔
+
+R =
+
+, L =
+
+N + J
+2
+
+N
+
+J
+
+,
+
+−
+2
+
+where J is a rescaled ﬂux. Then adding and subtracting (3.5) and (3.6), gives
+
+∂N
+∂t
+
++ s
+
+= 0,
+
+∂J
+∂x
+
+∂J
+∂t
+
+∂N
+∂x
+
++ s
+
+=
+
+2γ0J + 2bS
+
+(x)N.
+
+′
+
+−
+
+Thus the random walk can be described by the closed system of two equations (3.8) and (3.9) with given initial
+, 0).
+, 0) and J(
+conditions N (
+·
+·
+
+Finally, assuming suﬃcient smoothness, we can convert (3.8) – (3.9) into a second order damped hyperbolic
+
+equation for N, namely
+
+∂2N
+∂t2 + 2γ0
+
+∂N
+∂t
+
+= s2 ∂2N
+
+∂x2 −
+
+2bs
+
+∂
+∂x
+
+′
+
+(S
+
+(x)N ) .
+
+This is a hyperbolic version of the classical Keller-Segel equation [22, 23]. Note that (3.10) has the same structure
+as (3.3), which can also be written as a system of two equations of the form (3.8) – (3.9). Therefore, the system
+(3.8) – (3.9) can also be viewed as a macroscopic description of bacterial chemotaxis.
+
+3.3 Scaling and mathematical formulation of main problems
+
+If we consider the system (3.8) – (3.9) as a description of the collective movement of bacteria E. coli, then we
+can give biologically realistic values for the parameters s and γ0. The speed of a bacterium is s
+10µm/sec and
+1 sec−1. To nondimensionalize equations (3.8) – (3.9), we choose the characteristic
+the turning frequency is γ0 ≃
+−1
+time scale T0 = γ
+0 , we denote the characteristic space scale as L0, and the characteristic concentration as N0.
+Deﬁne
+
+≃
+
+ˆs =
+
+sT0
+L0
+
+,
+
+′
+
+ˆS
+
+(x) =
+
+bS′(x)T0
+L0
+
+,
+
+ˆN =
+
+N
+N0
+
+,
+
+ˆJ =
+
+J
+N0
+
+,
+
+ˆt =
+
+t
+T0
+
+,
+
+ˆx =
+
+x
+L0
+
+.
+
+Then the nondimensionalized equations (3.8) – (3.9) have the form
+
+∂ ˆN
+∂ˆt
+
++ ˆs
+
+= 0,
+
+∂ ˆJ
+∂ ˆx
+
+∂ ˆJ
+∂ˆt
+
++ ˆs
+
+∂ ˆN
+∂ ˆx
+
+=
+
+−
+
+2 ˆJ + 2 ˆS
+
+(x) ˆN ,
+
+′
+
+and to simplify notation, we drop the hats in (3.12) and obtain the nondimensionalized system
+
+Here we have one dimensionless parameter s and one dimensionless function S′(x), and we estimate the orders
+of them as follows. In a typical macroscopic bacterial experiment the characteristic length scale L0 is 1 cm, and
+10−3. If the characteristic length scale is 10
+since the characteristic time scale is T0 = γ
+
+−1
+0 = 1 sec, we have s
+
++ s
+
+= 0
+
+∂N
+∂t
+
+∂J
+∂t
+
+∂J
+∂x
+
+∂N
+∂x
+
++ s
+
+=
+
+2J + 2S
+
+(x)N
+
+′
+
+−
+
+(NJ) 
+
+
+
+≃
+
+7
+
+(3.6)
+
+(3.7)
+
+(3.8)
+
+(3.9)
+
+(3.10)
+
+(3.11)
+
+(3.12)
+
+(3.13)
+
+(3.14)
+
+(3.15)
+
+(3.16)
+
+(3.18)
+
+(3.19)
+
+cm then s = 10−4, and in either case s is a small parameter. A realistic choice of S′(x) must ensure that the
+turning rate (3.4) is positive, i.e.,
+
+1. Hence, we will assume throughout that
+
+S′(x)
+|
+
+| ≤
+s
+
+1,
+
+≪
+
+′
+
+(x)
+
+S
+|
+
+| ≤
+
+1.
+
+The system (NJ) is a linear hyperbolic system of two equations with nonconstant coeﬃcients, which can be
+rewritten in diagonal form as a system of two equations for the right and left ﬂuxes (cf. (3.5) and (3.6)). Thus,
+(NJ) can be rewritten as
+
+∂R
+∂t
+
++ s
+
+∂R
+∂x
+
+=
+
+[1
+
+−
+
+−
+
+′
+
+S
+
+(x)]R + [1 + S
+
+(x)]L
+
+′
+
+(RL) 
+
+
+We also know that the system (NJ) can be written as a single second order equation for N (compare with (3.10)),
+or as the following system for the variables N and U .
+
+∂L
+∂t −
+
+∂L
+∂x
+
+[1 + S
+
+(3.17)
+
+(x)]R
+
+(x)]L
+
+= [1
+
+−
+
+−
+
+S
+
+s
+
+′
+
+′
+
+= U
+
+∂N
+∂t
+
+∂U
+∂t
+
+(NU) 
+
+
+
+= s2 ∂2N
+
+∂x2 −
+
+∂
+∂x
+
+2s
+
+(S
+
+(x)N )
+
+2U
+
+′
+
+−
+
+In the following sections we study the system (NJ) or its equivalent formulations (RL) and (NU). We will restrict
+our computations to the ﬁnite interval [0, 2] with no ﬂux boundary conditions which, in the formulation (NJ),
+can be written in the form
+
+J(0, t) =
+
+(0, t) = S
+
+(0) = 0,
+
+and J(2, t) =
+
+(2, t) = S
+
+(2) = 0,
+
+∂N
+∂x
+
+′
+
+for t
+
+0.
+
+≥
+
+(3.20)
+
+∂N
+∂x
+
+′
+
+As indicated here we also impose no-ﬂux boundary conditions on the signal.
+
+Finally, let us identify the dimensionless times of interest. The characteristic time scale was set as to the mean
+turning time, i.e., T0 = 1 sec, since that characterizes the microscopic dynamics, but the macroscopic times of
+interest in pattern formation experiments are several hours or days. From the mathematical point of view we are
+interested in the long term dynamics and steady states, and therefore we want to develop methods to compute
+1.
+the density proﬁle N (x, t) for dimensionless times t
+
+≫
+
+3.4 Slow and fast variables and the slow manifold
+
+In this section we consider spatial regions where the signal derivative is either zero or maximal possible (to assure
+a nonnegative turning rate). We show that in such regions the ﬂuxes relax to functionals of the density for large
+times, i.e. the memory of the initial ﬂux decays quickly. Thus the long-term dynamics can be described by a
+single ﬁrst-order in time equation for the density N . Similar conclusions can be also made about systems (RL)
+and (NU). For example, in the case of (RL), we could characterize the long-term dynamics using only the right
+ﬂux R. or only the left ﬂux L, or any linear combination of R and L (e.g., the density N ). Knowing the density
+N , we can compute either (or both of) the right and left ﬂuxes - alternatively, these ﬂuxes quickly evolve to
+functionals of the density ﬁeld; this constitutes our “slow manifold”. The choice of the “right” observables can
+be made by the modeler; for historical (as well as practical) reasons we will use the density N in the following as
+a description of the slow variables.
+
+3.4.1 Special choices of S′(x)
+
+If S′(x) = 0, then system (NJ) can be rewritten as a second order damped wave equation
+
+∂2N
+∂t2 + 2
+
+∂N
+∂t
+
+= s2 ∂2N
+∂x2 .
+
+8
+
+(3.21)
+
+It is well-known [42] that the asymptotic behavior of the solution of (3.21) under the boundary conditions (3.20)
+is given by the corresponding diﬀusion equation
+
+∂N
+∂t
+
+=
+
+s2
+2
+
+∂2N
+∂x2 .
+
+∂N
+∂t
+
++ s
+
+= 0.
+
+∂N
+∂x
+
+(3.22)
+
+(3.23)
+
+(3.24)
+
+(3.25)
+
+(3.26)
+
+Consequently, the long-term, slow dynamics can be described by this ﬁrst order in time equation for density only.
+Next consider a spatial region where the signal gradient is the maximum possible, i.e., S′(x) = 1. If the region
+
+with maximal signal gradient is large enough, then (RL) in this region reduces to
+
+∂R
+∂t
+
+∂R
+∂x
+
++ s
+
+= 2L,
+
+∂L
+∂t −
+
+s
+
+∂L
+∂x
+
+=
+
+2L.
+
+−
+
+Seen the leftward ﬂux L decays exponentially according to the second equation, the long-term behavior (in large
+spatial regions with S′(x) = 1) is given by the rightward ﬂux only. Since, N = R + L and L
+0, the long time
+dynamics is simply described by the ﬁrst order transport equation
+
+→
+
+A similar transport equation holds for the minimal possible signal gradient S′(x) =
+1. Of course the boundary
+conditions (3.20) require that we cannot choose S′(x) = 1 in the whole domain of interest, and consequently,
+(3.24) only gives a good approximation of the behavior of cellular density in large spatial regions with maximal
+signal gradient. On the other hand, if we consider the random walk in a ﬁnite domain and we look for long term
+dynamics/stationary state then the no-ﬂux boundary conditions (3.20) have to be taken into account.
+
+−
+
+3.4.2 (NJ) for general signals
+
+For general signals, the behavior is just a combination of transport and diﬀusion as given by the second order
+equation (3.10). The steady state of (NJ) under no-ﬂux boundary conditions is given by
+s2 ∂2N
+
+(x)N ) = 0,
+
+(S
+
+2s
+
+′
+
+∂x2 −
+
+∂
+∂x
+
+and it follows that
+
+where the constant C is given by the initial condition for N . The interesting question is whether the behavior
+of (NJ) can indeed be described by a single ﬁrst order equation for large times. The simplest choice is to use a
+parabolic counterpart of (3.10), given in dimensionless form as
+
+Ns(x) = C exp
+
+S(x)
+
+2
+s
+
+(cid:18)
+
+(cid:19)
+
+∂N
+∂t
+
+=
+
+s2
+2
+
+∂2N
+∂x2 −
+
+s
+
+∂
+∂x
+
+′
+
+(S
+
+(x)N ) .
+
+Equation (3.26) has the same steady state as (NJ), and moreover it reduces to (3.22) for constant signals. On the
+other hand, if S′(x) = 1, then equation (3.26) diﬀers from (3.24) by the term s2
+∂2N
+∂x2 which adds artiﬁcical diﬀusion
+2
+to the system [40]. Consequently, if we have extended spatial regions where S′(x) = 1, then the equation (3.26)
+gives diﬀerent transient behavior than (NJ) but ﬁnally leads to the same steady state as (NJ). It is important to
+note that a major issue in equation-free computation is how many independent variables are needed in order to
+close with a ﬁrst order in time system, because it may be diﬃcult to initialize microscopic variables consistently
+with given macroscopic observables and their history (e.g. their ﬁrst order time derivatives). In regimes where
+at least a second-order-in-time equation is needed for closure, initializing the density is not enough; the time
+derivative of density must also be prescribed.
+In such a case we would use an alternative initialization for
+equation-free computations: we would prescribe right- and left- going ﬂuxes R and L, which would be suﬃcient
+to start a particle-based simulation, because it is much easier to initialize particles based on more than one
+independent variables rather than based on the “history” of a single variable.2
+
+2In doing projective integration based on simulations over the entire spatial domain, the spatial order of the equation does not
+play a crucial role. If, however, one tries to use equation-free techniques such as the gaptooth scheme and patch dynamics [24, 18, 35],
+
+9
+
+(a)
+
+(b)
+
+(c)
+
+S(x) 
+
+l
+
+a
+n
+g
+s
+
+i
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0
+0
+
+′
+(x) 
+S
+1
+
+e
+v
+i
+t
+a
+v
+i
+r
+e
+d
+ 
+l
+a
+n
+g
+s
+
+i
+
+0.5
+
+0
+
+−0.5
+
+−1
+
+0
+
+6
+′′
+ (x) 
+S
+4
+
+l
+
+i
+
+a
+n
+g
+s
+ 
+f
+o
+ 
+e
+v
+i
+t
+a
+v
+i
+r
+e
+d
+ 
+d
+n
+o
+c
+e
+s
+
+2
+
+0
+
+−2
+
+−4
+
+−6
+0
+
+′
+
+0.5
+
+1
+
+position
+
+1.5
+
+2
+
+0.5
+
+1
+
+position
+
+1.5
+
+2
+
+0.5
+
+1
+position
+
+1.5
+
+2
+
+Figure 4: (a) Graph of “hat-proﬁle” signal function S(x). (b) Graph of S
+
+(x). (c) Graph of S
+
+(x).
+
+′′
+
+3.5 Test family of signal functions
+
+In later sections, several numerical computations are presented. Here we introduce the test family of signal
+functions which we will use in these illustrative examples. In all examples, we consider the problem (NJ) on
+the interval [0,2] with no-ﬂux boundary conditions, where the signal belongs to the one-parameter test family of
+signal functions given by
+
+where S(x) is a ﬁxed signal function and α scales the strength of the signal. The signal function S(x) is chosen
+in the following form (see also Figure 4):
+
+Sα(x) = αS(x),
+
+for α
+
+[0, 1],
+
+∈
+
+(3.27)
+
+interval
+
+S(x)
+′
+
+(x)
+S
+′′
+
+S
+
+(x)
+
+0, 1
+5
+
+(cid:2)
+
+(cid:3)
+
+0
+
+0
+
+0
+
+1
+
+5 , 2
+
+5
+
+2
+
+5 , 3
+
+5
+
+3
+
+5 , 4
+
+5
+
+(cid:2)
+x
+
+(cid:3)
+3
+10
+
+(cid:3)
+
+(cid:2)
+
+4−(5x−4)2
+10
+
+(cid:3)
+(cid:2)
+(5x−1)2
+10
+
+5x
+
+1
+
+−
+5
+
+−
+1
+
+0
+
+4
+
+5x
+
+−
+
+−
+
+5
+
+′
+
+4
+
+5 , 6
+
+5
+
+(cid:2)
+
+(cid:3)
+
+4
+10
+
+0
+
+0
+
+6
+
+5 , 7
+
+5
+
+7
+
+5 , 8
+
+5
+
+(cid:3)
+
+(cid:2)
+
+4−(5x−6)2
+10
+
+(cid:3)
+(cid:2)
+x + 17
+10
+−
+
+6
+
+5x
+
+−
+
+−
+
+5
+
+1
+
+−
+0
+
+8
+
+5 , 9
+
+5
+
+(cid:3)
+(cid:2)
+(5x−9)2
+10
+
+5x
+
+9
+
+−
+5
+
+9
+5 , 2
+
+(cid:2)
+
+(cid:3)
+
+0
+
+0
+
+0
+
+∈
+
+[0, 1], and α = 1 means that the signal derivative S′
+
+(x) is equal to 1, the assumption (3.15) requires that
+Since the maximal absolute value of the derivative S
+α(x) is maximal possible in some subintervals of the
+α
+domain [0, 2]. For the ¯S(x) chosen, the signal gradient S′
+, so
+the behavior will be similar to the diﬀusion equation there (for any α). If α = 1 in (3.27), then the signal derivative
+(cid:2)
+S′
+5 , 3
+1(x) is maximal possible, equal to 1, in the interval
+; consequently, the right moving individuals will never
+5
+turn in this interval and the corresponding coarse equation is a transport equation (3.24) there. Similarly, the
+(cid:2)
+(cid:3)
+5 , 8
+7
+; consequently, the left moving individuals will never
+signal gradient is minimal, equal to - 1, in the interval
+5
+turn in this interval and the corresponding coarse equation is again the transport equation there.
+
+α(x) is zero in the intervals
+
+5 , 6
+
+9
+5 , 2
+
+0, 1
+5
+
+and
+
+(cid:3)
+
+(cid:3)
+
+(cid:3)
+
+(cid:2)
+
+(cid:2)
+
+4
+
+2
+
+5
+
+,
+
+(cid:2)
+
+(cid:3)
+
+4 Projective integration
+
+The next objective is to study the so-called projective integration of the system (NJ), or its equivalent forms (RL)
+and (NU). To that end, we ﬁrst summarize results from [16] about the projective forward Euler method. Suppose
+that we want to solve the initial value problem for the linear system of ordinary diﬀerential equations
+
+dy
+dt
+
+=
+
+y,
+
+L
+
+y(0) = y0,
+
+(4.1)
+
+where y is n
+dimensional vector and
+×
+size δt, the projective forward Euler method (PM
+k ) can be described as follows [16]:
+
+is a n
+
+−
+
+L
+
+n matrix of real numbers. Given constants k and M and step
+
+implementing eﬀective matching conditions between patches becomes important, and that is crucially aﬀected by the spatial order of
+the eﬀective evolution equation. The design of computational experiments to determine the spatial order of an unknown (in closed
+form) equation is an interesting subject, discussed in part in [26].
+
+10
+
+(PM
+
+k -1) Use the forward Euler method3 to integrate the system (4.1) over k time steps
+
+of the length δt to compute y(t + kδt) from y(t);
+
+(PM
+(PM
+
+k -2) perform one more integration step to compute y(t + kδt + δt) from y(t + kδt);
+k -3) perform an extrapolation over M steps, using y(t + kδt + δt) and y(t + kδt) to
+estimate y(t + kδt + δt + M δt) as y(t + kδt + δt + M δt) = (M + 1)y(t + kδt +
+δt)
+
+M y(t + kδt).
+−
+k -1) – (PM
+Thus, the procedure (PM
+we have the following result [16].
+
+k -3) integrates the system over the (k + 1 + M ) steps of the length δt. Next,
+
+Lemma 1 Method (PM
+
+k -1) – (PM
+
+k -3) for solving (4.1) is stable provided that the error ampliﬁcation given by
+
+satisﬁes
+
+σ(λδt)
+|
+
+| ≤
+
+1 for all λ in the spectrum of the matrix
+
+of system (4.1).
+
+h
+
+(1 + λδt)k
+i
+
+−
+
+L
+
+σ(λδt) =
+
+(M + 1)(1 + λδt)
+
+M
+
+(4.2)
+
+Proof: See [16] where a more general linear stability analysis for systems of nonlinear ODEs is done.
+
+σ(λδt)
+|
+|
+
+The absolute stability region in the complex λδt-plane, which is plotted in Figure 5 and Figure 6(a), is the area
+inside the curve
+= 1. We see that the region splits into two parts for large M. Consequently, the constant
+M can be large if the spectrum is concentrated into two widely-separated regions corresponding to the fast and
+slow components. We also see that we increase the part of the stability region corresponding to fast components
+if we increase the number of inner integration steps k. The stability region for k = 1 is given in Figure 6(a), for
+k = 2 in Figure 5(a) and for k = 10 in Figure 5(b).
+
+In the following sections, we discretize the PDEs using the method of lines. Some of the systems we study will
+have a real-valued spectrum for parameter values of interest. Consequently, the interesting part of the stability
+region from Figure 6(a) is its intersection with the real axis. For large M , the real stability region comprises the
+union of two intervals given by Lemma 2 for k = 1, and plotted in Figure 6(b).
+
+(a)
+
+k=2 
+
+(b)
+
+k=10 
+
+t
+
+d
+λ
+ 
+f
+
+o
+
+ 
+t
+r
+a
+p
+
+ 
+y
+r
+a
+n
+g
+a
+m
+
+i
+
+i
+
+M=5 
+M=8 
+
+0.5
+
+0
+
+M=10
+M=20 
+
+−0.5
+
+0
+
+t
+
+d
+λ
+ 
+f
+
+o
+
+ 
+t
+r
+a
+p
+
+ 
+y
+r
+a
+n
+g
+a
+m
+
+i
+
+i
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+−0.2
+
+−0.4
+
+−0.6
+
+M=20 
+M=30 
+
+M=40
+M=60 
+
+0
+
+−1
+
+−0.5
+real part of λdt
+
+−1.5
+
+−1
+
+−0.5
+
+real part of λdt
+
+Figure 5: (a) The regions of absolute stability of PM
+k methods for k = 2 and M = 5 (dot-dashed line), M = 8
+(dotted line), M = 10 (dashed line) and M = 20 (solid line). (b) The regions of absolute stability of PM
+k methods
+for k = 10 and M = 20 (dot-dashed line), M = 30 (dotted line), M = 40 (dashed line) and M = 60 (solid line).
+
+Lemma 2 Suppose that the eigenvalues of the matrix
+k = 1 and M
+
+L
+5 for solving (4.1) is stable provided that
+
+≥
+
+are all real. Then the procedure (PM
+
+k -1) – (PM
+
+k -3) with
+
+(A, 0),
+3In fact any other integration scheme can be used here.
+
+(C, B)
+
+λδt
+
+∩
+
+∈
+
+for all λ in the spectrum of
+
+,
+L
+
+(4.3)
+
+11
+
+(a)
+
+k=1 
+
+t
+
+d
+λ
+ 
+f
+
+o
+
+ 
+t
+r
+a
+p
+
+ 
+y
+r
+a
+n
+g
+a
+m
+
+i
+
+i
+
+C 
+
+B 
+
+A 
+
+(b)
+
+0
+
+i
+
+s
+x
+a
+ 
+l
+a
+e
+r
+ 
+n
+o
+ 
+n
+o
+g
+e
+r
+ 
+y
+t
+i
+l
+i
+
+i
+
+b
+a
+t
+s
+
+−0.2
+
+−0.4
+
+−0.6
+
+−0.8
+
+−1
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+−0.2
+
+−0.4
+
+−0.6
+
+M=2 
+M=3 
+
+M=4 
+M=6 
+
+0
+
+A
+
+B 
+
+C 
+
+30
+
+−1
+
+−0.5
+real part of λdt
+
+10
+
+20
+
+projective jump M
+
+40
+
+50
+
+Figure 6: (a) The regions of absolute stability of PM
+k methods for k = 1 and M = 2 (dot-dashed line), M = 3
+(dotted line), M = 4 (dashed line) and M = 6 (solid line). (b) Intersection of stability region from part (a) with
+real axis plotted as as a function of M. The equations for boundary curves A(M ), B(M ) and C(M ) are given in
+Lemma 2.
+
+where C <
+
+1 < B < A < 0 are given by
+
+−
+
+C =
+
+1
+
+−
+
+−
+
+1
+M + 1
+
+,
+
+B =
+
+−
+
+M + 2 +
+
+(M
+−
+2(M + 1)
+
+p
+
+2)2
+
+8
+
+,
+
+−
+
+and
+
+A =
+
+−
+
+M + 2
+
+(M
+−
+−
+2(M + 1)
+
+p
+
+2)2
+
+8
+
+.
+
+−
+
+(4.4)
+
+Proof: This is an easy consequence of Lemma 1.
+
+Q.E.D.
+
+From Figure 6(b) we see that (in the case of real spectrum) one can choose a large projective jump M provided
+lies in two small intervals, separated by a spectral gap. Later, we will see such linear
+that the spectrum of
+,
+systems arising in our simulations; the natural question then is: if we know (or can estimate) the spectrum of
+L
+what is the maximal possible choice of M such that the PM
+k method is stable? The answer is given in the following
+lemma.
+
+L
+
+Lemma 3 Suppose that eigenvalues of the matrix
+given constants such that
+
+L
+
+are all real. Let
+
+2 < c <
+
+1 < b < a < 0 and δt > 0 be
+
+Then (PM
+
+k -1) – (PM
+
+k -3) is stable for all M satisfying the inequality
+
+λδt
+
+(c, b)
+
+(a, 0),
+
+for all λ in the spectrum of
+
+∈
+
+∩
+
+M
+
+min
+
+≤
+
+1 + (1 + a)k+1
+a(1 + a)k
+
+1 + (1 + b)k+1
+b(1 + b)k
+
+1
+
+(1 + c)k+1
+−
+c(1 + c)k
+
+(cid:26)(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+,
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+.
+
+(cid:12)
+(cid:27)
+(cid:12)
+(cid:12)
+(cid:12)
+
+Proof: The ampliﬁcation factor (4.2) is given by the formula
+
+−
+
+.
+L
+
+−
+
+,
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(4.5)
+
+(4.6)
+
+σ(λδt) = M λδt(1 + λδt)k + (1 + λδt)k+1.
+
+In order to have a stable method, the following three inequalities must be satisﬁed simultaneously:
+
+σ(a)
+
+1,
+
+≥ −
+
+σ(b)
+
+1,
+
+≥ −
+
+and
+
+σ(c)
+
+1.
+
+≤
+
+Solving for M , we obtain (4.6).
+
+Q.E.D.
+
+Finally, let us note that the results of this section could be also viewed as results of linear stability analysis of
+projective integration of general nonlinear systems of ODEs of the form y′ = F (y), y(0) = y0, where y is an
+n
+
+dimensional vector and F : Rn
+
+Rn [16].
+
+−
+
+→
+
+12
+
+4.1 Projective integration of chemotaxis systems (NJ), (RL) and (NU)
+
+Before we implement coarse projective integration, we illustrate the use of projective integration and the factors
+aﬀecting its implementation and eﬀectiveness through the use of discretizations of the chemotaxis equations
+themselves. In this context, it is convenient to think that we only have available as an “inner simulator” a black-
+box dynamic integrator with a small, ﬁxed time step (for example, a forward Euler simulator of a discretization
+of the problem), and that we are attempting to accelerate this black box code.
+
+Given a signal proﬁle S(x), the speed s and initial conditions, we will look for the solution of (NJ) in the
+ﬁnite interval [0, 2] with no ﬂux boundary conditions (3.20). To do that, we will discretize (NJ) and rewrite it
+as a system of ordinary diﬀerential equations of the form (4.1) using the method of lines. The resulting system
+of ODEs is a starting point for our basic projective integration algorithm, which is little diﬀerent than (PM
+k -1)
+– (PM
+It is based on the sketch in Figure 2. Choosing a suitable time step δt, and constants k and M,
+k -1) – (PrM
+the algorithm is given in the following three steps (PrM
+k -2)
+correspond to the step (i) as outlined in Figure 2, and the last step (PrM
+k -3) corresponds to step (ii) in Figure 2.
+k -1) integrate system (NJ) over k time steps of length δt to compute N (t + kδt) and J(t + kδt) from
+
+k -3). Note that the steps (PrM
+
+k -1) – (PrM
+
+k -3).
+
+k -2) perform one more inner integration step to compute N (t + kδt + δt) and J(t + kδt + δt) from
+
+k -3) perform an extrapolation over M steps, using N (t + kδt + δt) and N (t + kδt) to compute N (t +
+
+(PrM
+N (t) and from suitably initialized ﬂux J(t) – see (4.9) and (4.10);
+(PrM
+N (t + kδt) and J(t + kδt);
+(PrM
+kδt + δt + M δt) = (M + 1)N (t + kδt + δt)
+
+M N (t + kδt).
+
+−
+
+Note that we can approximate the time derivative of N in step (PrM
+
+∂N
+∂t
+
+=
+
+N (t + kδt + δt)
+δt
+
+−
+
+k -2) by
+N (t + kδt)
+
+and therefore the step (PrM
+
+k -3) is equivalent to
+
+N (t + kδt + δt + M δt) = N (t + kδt + δt) + M δt
+
+∂N
+∂t
+
+which is the forward Euler projective step. We see that step (PrM
+k -3) is really equivalent to step (ii) in Figure
+2. It is important to notice that integrating the full system (NJ) requires initialization not only of the density N
+(which is prescribed) but also of the ﬂux J, which is not; this will be discussed further below. As we mentioned
+in Section 2, the coarse/projective integration method is eﬃcient provided that we can choose a large projective
+time T in step (d) in Figure 2 relative to the time ∆t of the steps (a) – (c) from Figure 2 and still retain accuracy
+and stability. Using the notation from Section 2, we have
+
+and consequently, the gain
+
+of the method (2.2) can be expressed as
+
+G
+
+∆t = kδt + δt,
+
+T = M δt,
+
+=
+
+G
+
+T + ∆t
+∆t
+
+=
+
+M + k + 1
+k + 1
+
+.
+
+Our goal is to make this gain as large as possible. Moreover, in order to use the scheme (PrM
+k -3), we
+have to specify the spatial discretization of (NJ). We study two options in Section 4.2. Finally, we also have to
+specify how we initialize the ﬂux in step (PrM
+k -1). There are several possibilities for doing this, the easiest of
+which is to use the initial ﬂux J(t) in step (PrM
+k -1) given by
+
+k -1) – (PrM
+
+We can also use as an initial guess the value of the ﬂux computed in the previous step (PrM
+a time M δt ago, i.e., before the projective jump. Thus we could use
+
+k -2) corresponding to
+
+J(t) = “ﬂux J(t
+
+M δt) which was computed in the previous step (PrM
+
+k -2)”
+
+(4.10)
+
+−
+
+A more sophisticated ﬂux initialization is used in Section 5, which deals with Monte Carlo simulations (see also
+Figure 3).
+
+J(t) = 0.
+
+13
+
+(4.7)
+
+(4.8)
+
+(4.9)
+
+4.2 Discretization of (RL) and (NU)
+
+Various possibilities exist for discretizing the system (NJ) in the spatial domain; we start with one which is
+based on the equivalent form (RL) and on upwinding. The advantage of upwinding is that it provides a more
+stable scheme for problems with a signiﬁcant convection component, but it introduces artiﬁcial diﬀusion into the
+problem [40]. Another possibility to spatially discretize (NJ), (RL) or (NU) is to use central diﬀerences, which
+leads to equation (4.16).
+
+First, to solve the system (NJ) numerically, we transform it to the system (RL) of two ﬁrst order equations
+in diagonal form. We want to solve (RL) over the interval [0, 2] with boundary conditions given by (3.20). We
+choose a number n and a mesh size δx = 2/n, and we discretize the interval [0,2] with n + 1 mesh points
+
+xk = k
+
+δx,
+
+for k = 0, . . . , n.
+
+·
+
+(4.11)
+
+Next, we deﬁne
+
+Ri(t) = R(xi, t), Li(t) = L(xi, t),
+
+and S
+
+′
+
+′
+i = S
+
+(xi),
+
+i = 0, . . . , n.
+
+The zero ﬂux boundary conditions (3.20) simply mean that R0 = L0 and Rn = Ln; consequently, we have to
+compute the time evolution of the 2n
+
+dimensional vector
+
+−
+
+w = (R1, R2, . . . Rn−1, Rn, L0, L1, L2, . . . , Ln−1)T .
+
+(4.12)
+
+To discretize spatial derivatives in (RL), we use upwinding, that is,
+
+∂R
+∂x
+
+(xi, t)
+
+≈
+
+Ri(t)
+
+Ri−1(t)
+
+,
+
+−
+δx
+
+∂L
+∂x
+
+(xi, t)
+
+≈
+
+Li+1(t)
+
+Li(t)
+
+.
+
+−
+δx
+
+Then, the solution of (RL) with boundary conditions (3.20) is approximated by the solution of a system of
+ordinary diﬀerential equations
+
+w(0) = w0,
+
+(4.13)
+
+where w0 is a given initial condition and matrix
+
+is deﬁned by
+
+−1 − ε + S′
+1
+ε
+
+0
+−1 − ε + S′
+2
+.
+
+
+
+A =
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+where
+
+.
+
+0
+
+0
+
+0
+
+0
+1 − S′
+1
+0
+.
+
+0
+
+0
+
+0
+
+0
+
+0
+1 − S′
+2
+.
+
+dw
+dt
+
+=
+
+w,
+
+A
+
+A
+
+..
+
+..
+
+..
+
+..
+
+..
+
+..
+
+..
+
+..
+.. −1 − ε + S′
+..
+
+ε
+
+n−1
+
+0
+
+0
+.
+
+0
+
+0
+
+0
+.
+1 − S′
+
+n−1
+
+0
+
+0
+−ε
+0
+0 −ε
+0
+
+0
+
+0
+.
+
+0
+.
+
+ε
+
+ε
+
+0
+.
+
+0
+
+s
+δx
+
+.
+
+ε
+
+≡
+
+1 + S′
+1
+0
+.
+
+0
+1 + S′
+2
+.
+
+0 −1 − ε − S′
+1
+0
+.
+
+0
+.
+
+0
+ε
+−1 − ε − S′
+2
+.
+
+0
+
+0
+ε
+
+0
+
+0
+
+0
+
+0
+
+..
+
+..
+
+..
+
+..
+
+..
+
+..
+
+..
+
+..
+
+0
+.
+1 + S′
+0
+
+n−1
+
+0
+
+0
+
+0
+
+0
+.
+
+..
+.. −1 − ε − S′
+
+n−1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(4.14)
+
+Since we have approximated the original PDE system as a system of ordinary diﬀerential equations of the form
+(4.1), the results in Lemma 1, Lemma 2, and Lemma 3 can be applied. Alternatively, we can discretize the
+chemotaxis system in its equivalent form (NU) using standard central diﬀerences to approximate spatial derivatives
+in (NU). We use n + 1 mesh points (4.11) and we deﬁne
+
+Ni(t) = N (xi, t), Ui(t) = U (xi, t),
+
+and S
+
+′
+
+′
+i = S
+
+(xi),
+
+i = 0, . . . , n,
+
+z = (N0, N1, N2, . . . , Nn−2, Nn−1, Nn, U0, U1, U2, . . . , Un−2, Un−1, Un)T ,
+
+(4.15)
+
+14
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+
+
+−2ε2
+ε2
+0
+
+
+
+2ε2 − εS′
+1
+−2ε2
+ε2 + εS′
+1
+0
+.
+
+0
+ε2 − εS′
+2
+−2ε2
+ε2 + εS′
+2
+.
+
+0
+
+0
+ε2 − εS′
+3
+−2ε2
+.
+
+..
+
+..
+
+..
+
+0
+
+..
+
+0
+.
+
+D =
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+where I is (n + 1)
+conditions (3.20) is approximated by the solution of a system of ordinary diﬀerential equations
+
+0
+.
+−2ε2
+ε2 + εS′
+0
+
+0
+ε2
+n−1 −2ε2
+
+ε2 − εS′
+−2ε2
+2ε2 + εS′
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+, B =
+
+0
+.
+
+0
+.
+
+n−2
+
+n−1
+
+×
+
+..
+
+..
+
+..
+
+..
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+(n + 1) identity matrix and ε is given by (4.14). Then, the solution of (NU) with boundary
+
+I
+0
+D −2I !
+
+,
+
+ 
+
+dz
+dt
+
+=
+
+z,
+
+B
+
+z(0) = z0,
+
+where z0 is a prescribed initial condition.
+
+4.3 Eﬃciency of projective integration
+
+First, suppose that there is no signal gradient in the domain of interest, i.e., we put S′
+matrices
+. Choosing n = 40, the real parts of the eigenvalues of
+in Figures 7(a) and 8(a), respectively. We see that there is a clear spectral gap for small ε. The eigenvalues of
+
+n = 0 in
+as a function of ε are plotted
+
+1 = . . . S′
+
+0 = S′
+
+and
+
+and
+
+A
+
+A
+
+B
+
+B
+
+(a)
+
+α=0,  n=40
+
+(b)
+
+α=1,  n=40
+
+1
+
+0
+
+i
+
+l
+
+s
+e
+u
+a
+v
+n
+e
+g
+e
+ 
+f
+o
+ 
+s
+t
+r
+a
+p
+ 
+l
+a
+e
+r
+
+−1
+
+−2
+
+−3
+
+−4
+
+−5
+0
+
+λ
+1
+λ
+λ
+λ
+
+41
+
+42
+
+80
+
+A
+
+15
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1
+
+1.2
+
+0.2
+
+0.4
+
+0.8
+
+1
+
+1.2
+
+0.6
+
+ε
+
+ε
+
+Figure 7: (a) Graph of real parts of eigenvalues of matrix
+i.e., S′
+n = 0. The eigenvalues are real for ε
+(b) Graph of real parts of eigenvalues of matrix
+
+1 = . . . S′
+
+0 = S′
+
+A
+∈
+
+for n = 40 and no signal gradient in the environment,
+[0, 1] and there is a spectral gap between λ41 and λ42.
+
+for signal given by (3.27) with α = 1 and for n = 40.
+
+are all real for ε
+
+[0, 1] and they satisfy
+
+∈
+
+B
+
+2ε, 0
+
+∈
+
+−
+
+h
+
+i [ (cid:16)
+
+2
+
+2ε,
+
+2
+
+.
+
+−
+
+−
+
+−
+
+(cid:17)
+
+λ
+
+∈
+
+The eigenvalues of
+
+are all real for ε
+
+[0, 0.5] and for no signal in the environment and they satisfy
+
+λ
+
+∈
+
+−
+
+h
+2ε and
+−
+
+1 +
+
+1
+
+4ε2, 0
+
+−
+
+i [ h
+2 in the case of matrix
+
+p
+
+2,
+
+1
+
+−
+
+−
+
+−
+
+1
+
+−
+
+4ε2
+
+.
+
+p
+
+i
+
+is independent of the signal as can be seen from
+The spectral gap between
+Figure 7(b), where we use the signal proﬁle (3.27) with α = 1. We see that some eigenvalues changed, but that
+the spectral gap between λ41 and λ42 survived. The imaginary parts of the eigenvalues do not grow signiﬁcantly
+with α, and consequently the values of the real parts determine the stability of the scheme; we can use results
+
+A
+
+−
+
+(4.16)
+
+A
+
+(4.17)
+
+(4.18)
+
+λ
+1
+λ
+λ
+λ
+
+41
+
+42
+
+80
+
+1
+
+0
+
+i
+
+l
+
+s
+e
+u
+a
+v
+n
+e
+g
+e
+ 
+f
+o
+ 
+s
+t
+r
+a
+p
+ 
+l
+a
+e
+r
+
+−1
+
+−2
+
+−3
+
+−4
+
+−5
+0
+
+0.5
+
+0
+
+−0.5
+
+−1
+
+−1.5
+
+−2
+
+l
+
+s
+e
+u
+a
+v
+n
+e
+g
+e
+
+i
+
+ 
+f
+
+o
+
+ 
+s
+t
+r
+a
+p
+
+ 
+l
+
+a
+e
+r
+
+(a)
+
+(b)
+
+α=0,  n=40
+
+α=1,  n=40
+
+0.5
+
+0
+
+−0.5
+
+−1
+
+−1.5
+
+−2
+
+l
+
+s
+e
+u
+a
+v
+n
+e
+g
+e
+
+i
+
+ 
+f
+
+o
+
+ 
+s
+t
+r
+a
+p
+
+ 
+l
+
+a
+e
+r
+
+λ
+1
+λ
+λ
+λ
+
+41
+
+42
+
+82
+
+B
+
+δt = 0.5
+
+A
+
+λ
+1
+λ
+λ
+λ
+
+41
+
+42
+
+82
+
+(4.19)
+
+−2.5
+0
+
+0.2
+
+0.4
+
+ε
+
+0.6
+
+0.8
+
+−2.5
+0
+
+0.2
+
+0.4
+
+ε
+
+0.6
+
+0.8
+
+Figure 8: (a) Graph of real parts of eigenvalues of matrix
+i.e., S′
+λ42. (b) Graph of real parts of eigenvalues of matrix
+
+B
+n = 0. The eigenvalues are real for ε
+
+1 = . . . S′
+
+0 = S′
+
+∈
+
+for n = 40 and no signal gradient in the environment,
+[0, 0.5] and there is a spectral gap between λ41 and
+
+for signal given by (3.27) with α = 1 and for n = 40.
+
+from Lemma 3 for matrix
+to -1 for eigenvalues corresponding to fast modes, we put
+
+and small ε
+
+A
+
+∈
+
+[0, 1). To do that, we specify the time step δt. Since we want λδt close
+
+G
+
+λ
+ 
+f
+
+o
+
+ 
+t
+r
+a
+p
+
+ 
+y
+r
+a
+n
+g
+a
+m
+
+i
+
+i
+
+Considering our scaling (3.11), we see that (4.19) means that δt is equal to time 1/(2γ0). Next, if k is at least 2,
+1 is more extended then its second component around 0
+then the “component” of the stability region around
+(see Figure 5). Consequently, using Lemma 3, the size of interval containing the slow eigenvalues determines the
+gain
+
+of the method. Using (4.17) for the matrix
+
+, we have
+
+−
+
+1 + (1
+ε(1
+
+ε)k+1
+ε)k(k + 1)
+
+−
+
+,
+
+=
+
+G
+
+−
+
+which is approximately
+
+for small ε.
+
+(4.20)
+
+2
+ε(k + 1)
+
+Note that the gain
+, given by (4.20), is independent of the signal strength α and it can be very large for small
+ε. On the other hand, as we will see in Section 4.4, the choice of small ε will decrease the accuracy of the upwind
+discretization
+
+due to the strong artiﬁcial diﬀusion of the scheme.
+
+G
+
+A
+Next consider the matrix
+
+. The real parts of its eigenvalues as functions of ε are plotted in Figure 8. We
+see that the “boundary” eigenvalues
+are signal independent. The
+eigenvalues are all real for ε
+[0, 0.5] and for no signal in the environment. However, if we increase the signal
+strength α some eigenvalues become complex, as can be seen from Figure 9, where we plot the “slow” eigenvalues
+close to zero in the complex plane for n = 200, ε = 0.1, and for diﬀerent signal strengths. Choosing δt by (4.19)
+
+4ε2, 0 of
+
+1 + √1
+
+1 + √1
+
+4ε2,
+
+2,
+
+−
+
+−
+
+−
+
+−
+
+−
+
+∈
+
+B
+
+B
+
+(a)
+
+real part of λ
+
+α=0
+
+(b)
+
+real part of λ
+
+α=0.5
+
+(c)
+
+real part of λ
+
+α=1
+
+0.1
+
+0.05
+
+0
+
+−0.05
+
+−0.1
+0
+
+λ
+ 
+f
+
+o
+
+ 
+t
+r
+a
+p
+
+ 
+y
+r
+a
+n
+g
+a
+m
+
+i
+
+i
+
+0.1
+
+0.05
+
+0
+
+−0.05
+
+−0.1
+0
+
+λ
+ 
+f
+
+o
+
+ 
+t
+r
+a
+p
+
+ 
+y
+r
+a
+n
+g
+a
+m
+
+i
+
+i
+
+0.1
+
+0.05
+
+0
+
+−0.05
+
+−0.1
+0
+
+(ε=0.1, n=200)
+−0.02
+
+−0.01
+
+(ε=0.1, n=200)
+−0.02
+
+−0.01
+
+(ε=0.1, n=200)
+−0.02
+
+−0.01
+
+Figure 9: A plot of “slow” eigenvalues of matrix
+B
+zero for diﬀerent strength of the signal α from (3.27), namely: (a) α = 0, (b) α = 0.5 and (c) α = 1.
+
+for n = 200 and ε = 0.1. We plotted only eigenvalues close to
+
+and k, we can (for small signals) apply the results of Lemma 3 to compute maximal possible projective jump M
+
+16
+
+and, hence, to compute the gain
+matrix
+
+for small signal gradients, we have
+
+G
+
+B
+
+G
+
+=
+
+1 + (1
+
+4ε2)(k+1)/2
+
+1 + √1
+
+(
+−
+
+−
+
+−
+4ε2)(1
+
+−
+
+4ε2)k/2(k + 1)
+
+by (4.8) for small ε and for small signals. Using (4.18) and Lemma 3 for the
+
+,
+
+which is approximately
+
+for small ε.
+
+(4.21)
+
+1
+ε2(k + 1)
+
+We see that discretization (4.16) results in a very large gain
+for small ε and for small signal gradients. On
+the other hand, if we increase the signal gradients, then the result (4.21) is no longer true, because complex
+eigenvalues can appear outside the stability region (compare Figure 9 and Figure 5). For example, we see from
+[0.1i, 0.1i] for α = 1. Consequently,
+Figure 9(c) that the slow eigenvalues lie in the complex interval [
+the absolute values of the imaginary parts of the eigenvalues are much larger than the absolute values of the real
+parts and the result (4.21) is not applicable for large signals.
+
+0.02, 0]
+
+−
+
+×
+
+G
+
+4.4 Accuracy of projective integration
+
+As we see in (4.20), (4.21) and (4.14), choosing a larger δx will make ε smaller and we will have a larger gain
+for
+the projective integration. On the other hand, a smaller δx will increase the accuracy of the numerical method
+obtained by (4.13) or (4.16). The right choice of δx depends on the underlying signal. If we have signals with
+sharp second derivatives and if we want to capture the detailed transient behavior accurately, we have to use a
+suﬃciently small δx. However, if we want to make use of the spectral gaps (4.17) or (4.18), we must assure that
+s
+
+δx to have ε
+
+1.
+
+G
+
+≪
+
+≪
+
+Two types of errors arise in these computations: (1) the error between the projective integration of (4.13) or
+(4.16) and the corresponding solutions of (4.13) or (4.16), respectively; and (2) the error between solutions of
+(4.13) or (4.16) and the exact solution of (NJ). The error in part (1) is suﬃciently small as will be seen in Section
+4.5; it is easy to estimate this error here, since the exact solution of (4.13), (4.16) or even of (NJ) can be found
+through careful, error-controlled computations. For microscopic simulations though, when the corresponding
+macroscopic equation is not known, estimating these errors becomes an important task; fortunately, numerical
+analysis techniques for on line a posteriori error estimates have been extensively developed for continuum prob-
+lems, and can be naturally incorporated in equation-free computation [12]. For example, comparing results of
+the same computation with half the projective time step can be used to estimate the error of the scheme and
+control projective time step selection; comparable techniques for adaptive spatial meshing can also be used. It
+is, however, important to note one “twist” to traditional a posteriori numerical error estimates: errors due to
+the estimation scheme, e.g., due to ﬂuctuations in stochastic simulations; this can be controlled through variance
+reduction schemes, either by brute force computation of several replica simulations or possibly through biasing
+for variance reduction [29]. Beyond adaptive time steps, adaptive mesh sizes and possibly variance reduction, we
+will discuss at the end of the paper the adaptive check of the level at which a macroscopic description closes, i.e.,
+the number of macroscopic variables required, or the dimension of the “slow manifold”.
+
+We will now discuss errors of type (2), i.e., errors between solutions of (4.13) or (4.16) and the exact solution
+of (NJ). We can numerically estimate those errors by comparing the solution of (4.13) or (4.16) for diﬀerent δx.
+Representative results can be found in Figure 10 where we used s = 0.0001, a signal given by (3.27) with α = 0.1
+and δt given by (4.19). As is well known, the upwinding (4.13) discretization introduces artiﬁcial diﬀusion to the
+problem which makes the solution more dependent on δx. The central diﬀerences discretization (4.16) is more
+accurate here [40].
+
+4.5 Numerical examples
+
+Here we present illustrative numerical results. In view of (3.15), we choose
+
+s =
+
+1
+10000
+
+,
+
+δx = 0.01,
+
+ε =
+
+= 0.01;
+
+s
+δx
+
+and we consider 201 mesh points (4.11) in the interval [0, 2]. The time step δt is given by (4.19) and the initial
+condition is
+
+(4.22)
+
+(4.23)
+
+N (x, 0) = 1,
+
+J(x, 0) = 0.
+
+17
+
+(a)
+
+(b)
+
+t=10000
+
+(RL)
+
+t=10000
+
+(NU)
+
+l
+
+i
+
+i
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+1.6
+
+1.4
+
+1.2
+
+1
+
+0.8
+
+0.6
+
+l
+
+i
+
+i
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+1.6
+
+1.4
+
+1.2
+
+1
+
+0.8
+
+0.6
+
+dx=0.01
+dx=0.001
+dx=0.0001
+
+1
+position
+
+dx=0.01
+dx=0.001
+dx=0.0001
+
+1
+position
+
+0
+
+0.5
+
+1.5
+
+2
+
+0
+
+0.5
+
+1.5
+
+2
+
+w at time t = 104 for diﬀerent choices of δx. We used
+Figure 10: (a) Graph of a solution of (RL) given by ˙w =
+s = 0.0001, signal given by (3.27) with α = 0.1, δt given by (4.19) and initial conditions (4.23). Consequently,
+(b) Graph of a
+δx = 0.01, δx = 0.001 and δx = 0.0001 correspond to ε = 0.01, ε = 0.1, and ε = 1, respectively.
+z at time t = 104 for diﬀerent choices of δx. The parameters are the same as in
+solution of (NU) given by ˙z =
+(a).
+
+A
+
+B
+
+G
+
+We know from Section 4.4 that the discretization (4.16) gives rise to a suﬃciently accurate solution of (NJ) for
+the choice of parameters (4.22), so we start with the discretization (4.16) ﬁrst. We learned in Figure 9 that we
+can have a large gain
+of using projective inegration of (4.16) if the signal gradient is small; consequently, we
+consider the signal (3.27) with α = 0.1. The numerical results for k = 1 and M = 398 are given in Figure 11.
+= 200 using deﬁnition (2.2). In Figure 11, we compare the solution of system (4.16) with the
+Here the gain is
+projective integration of (4.16). We see that the errors between the projective integration of the system of ordinary
+diﬀerential equations (4.16) and the solution of (4.16) are small. Since the discretization (4.16) gives a reasonably
+accurate solution of (NJ), we can view also Figure 11 as a plot of the exact solution of (NJ). Consequently, what
+we presented appears to be capable of signiﬁcantly speeding up an explicit forward Euler method for small signal
+gradients (see also [16, 25, 28]).
+
+G
+
+The second numerical example in this section is based on the upwind discretization (4.13). We know from
+Section 4.4 that the discretization (4.13) provides a less accurate solution of (NJ) than (4.16) for parameters
+(4.22) due to the artiﬁcial diﬀusion of the upwinding scheme. On the other hand, the gain
+of the projective
+integration method (4.13) is independent of the signal stregth α. Consequently, we will present here results for
+α = 1, i.e., when the signal is maximal possible. If we compare the results obtained by projective integration of
+(4.13) and the corresponding plots of solutions of (4.13), we again obtain small errors (results not shown) similar
+to those in Figure 11. This would again support the numerical results from [15] concerning the accuracy of
+projective integration of ordinary diﬀerential equations. Instead, we compare the results of projective integration
+for two diﬀerent choices of ε with an accurate solution of (NJ). We use either (4.22) or
+
+G
+
+s =
+
+1
+10000
+
+,
+
+s
+δx
+
+δx = 0.001,
+
+ε =
+
+= 0.1.
+
+(4.24)
+
+Moreover, we use the initial condition (4.23) and δt given by (4.19); the results are shown in Figure 12. We see
+that the long time behavior is highly inﬂuenced by the artiﬁcial diﬀusion of the scheme. Projective integration
+, but it will reach the steady state much faster than the exact solution of (NJ). Note,
+with small ε has large gain
+that it is not an inaccuracy in projective integration per se; the inaccuracy is created by the inaccurate spatial
+discretization, based on upwinding with small ε.
+
+G
+
+Next, we will discuss how the ideas described so far in this paper can be used in Monte Carlo simulations of
+
+chemotaxis.
+
+18
+
+t=0
+
+t=1000
+
+0.5
+
+1
+position
+
+1.5
+
+2
+
+0.94
+0
+
+0.5
+
+1
+position
+
+1.5
+
+2
+
+1.6
+
+t=104
+
+t=105
+
+15
+
+0.5
+
+1
+position
+
+1.5
+
+2
+
+0.5
+
+1
+position
+
+1.5
+
+2
+
+t=106
+
+t=107
+
+1.5
+
+2
+
+1
+
+0.5
+
+i
+
+l
+
+i
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+0
+0
+
+l
+
+s
+a
+u
+d
+v
+d
+n
+
+i
+
+i
+
+i
+ 
+f
+
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+1.4
+
+1.2
+
+1
+
+0.8
+
+0.6
+0
+
+l
+
+i
+
+i
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+0
+
+0.5
+
+1
+position
+
+1.5
+
+2
+
+0
+0
+
+0.5
+
+1
+position
+
+1.5
+
+2
+
+Figure 11: The time evolution of the density of individuals for s = 0.0001 and α = 0.1. We plot the solution of
+the system (4.16) (dashed line) and the solution obtained by the projective algorithm (PM
+k -3) for (4.16)
+with k = 1 and M = 398 (solid line). The gain
+
+is 200. We use (4.22), (4.19) and (4.23).
+
+k -1) – (PM
+
+G
+
+1.06
+
+1.04
+
+1.02
+
+1
+
+0.98
+
+0.96
+
+l
+
+i
+
+i
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+l
+
+i
+
+i
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+10
+
+5
+
+0
+0
+
+5
+
+4
+
+3
+
+2
+
+1
+
+l
+
+i
+
+i
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+19
+
+(a)
+
+1.6
+
+t=1000
+
+(b)
+
+t=105
+
+i
+
+l
+
+i
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+1.4
+
+1.2
+
+1
+
+0.8
+
+0.6
+
+10
+
+i
+
+l
+
+i
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+8
+
+6
+
+4
+
+2
+
+0
+0
+
+0
+
+0.5
+
+1.5
+
+2
+
+1
+position
+
+0.5
+
+1
+position
+
+1.5
+
+2
+
+Figure 12: (a) Density of individuals for s = 0.0001 and α = 1 at time t = 1000. We plot the solution of (NJ)
+given by accurate numerical method (solid line), the solution obtained by projective algorithm (PM
+k -3)
+= 100 (dashed line). We also plot the solution obtained
+for (4.13) with (4.22), k = 1 and M = 198, i.e., with
+by projective algorithm (PM
+= 10 (dot-dashed
+line). In all computations, we use (4.19) and (4.23).
+
+G
+(b) The same plots as in (a) for time t = 105.
+
+k -3) for (4.13) with (4.24), k = 1 and M = 18, i.e., with
+
+k -1) – (PM
+
+k -1) – (PM
+
+G
+
+5 Coarse projective integration: a kinetic Monte Carlo example
+
+G
+
+In the previous sections we studied the gain
+of projective integration for the system (NJ) of deterministic partial
+diﬀerential equations. Here we present results of Monte Carlo simulations of the underlying random walks using
+coarse projective integration [15, 17, 24] that will make use of the previous analysis. While in principle we simulate
+the evolution of the particle density proﬁle over the entire spatial domain, we will demonstrate how to perform
+the computations required for coarse projective integration on a relatively small portion of the full domain. This
+is based on the presumed smoothness in physical space of the evolving density proﬁle, which constitutes the
+underpinning of equation-free methods such as the gap-tooth scheme [18, 35, 24] as described below. Here we are
+able to speed up the kinetic Monte Carlo simulation about a thousand times.
+
+Suppose that we have 2n0 random walkers in the interval [0, 2], and suppose that we have only a kinetic
+Monte Carlo simulator to model the evolution of the system. As before, the interesting macroscopic quantity
+is the density of random walkers N which can be obtained as follows. We choose a macroscopic mesh size δx
+and we discretize the interval [0, 2] using mesh (4.11). Then we obtain the (probability) density Ni+1/2(t) at
+point xi+xi+1
+as the number of particles in the interval [xi, xi+1] divided by n0δx. We thus create a histogram of
+particles, which can of course be noisy.
+
+2
+
+If we have randomly walking noninteracting particles, the histograms obtained by using 106 or 109 random
+walkers appear roughly the same; the former is just less “noisy” than the latter. Consequently, we can obtain
+relatively accurate results quickly by simply decreasing the number of particles. However, in many interesting
+biological problems, cells change their environment, they consume nutrients, secrete waste, etc. Consequently,
+cells interact through environmental chemicals and then the number of cells is prescribed by the biological setup,
+and we cannot change it without changing the computed solution.
+
+Therefore, in the examples of this section we will suppose that we do not know that the particles are noninter-
+acting; we will suppose that there is a ﬁxed number 2n0 of individuals in the domain of interest - the interval [0,2]
+- which are moving according to the rules of the random described in Section 3.2. We will show that in the case
+of a ﬁxed number of particles the coarse integration method leads to an even larger gain
+than the projective
+integration method used earlier, where as before, the gain
+is deﬁned by (2.1). In the numerical example, we
+choose
+
+G
+
+G
+
+2n0 = 108,
+
+s =
+
+1
+10000
+
+,
+
+δx = 0.01,
+
+(5.1)
+
+i.e., we consider 201 equi-spaced mesh points (4.11) in the interval [0, 2] on which we track the evolution of the
+
+20
+
+macroscopic density, and the parameters are the same as in (4.22).
+
+∈
+
+±
+
+Monte Carlo simulations are performed as follows. Each particle is described by two variables – position
+x
+s. We use a small microscopic time step dt = 0.01, i.e., the unbiased turning frequency
+[0, 2] and velocity
+divided by 100, and during each time step the particle moves with speed s in the chosen direction. At the end of
+each time step, a random number chosen from a uniform distribution on [0, 1] is generated and compared with the
+S′(x))dt. If a turn occurs, the cell will move in the opposite direction during
+probability of the turn γdt = (1
+the next time step. To apply the previous results, we choose a macroscopic time step δt given by (4.19) and do
+kinetic Monte Carlo simulations in the interval [t, t + δt], which means that we use the Monte Carlo simulator for
+δt/dt microscopic time steps dt.
+
+±
+
+Since the histograms are noisy, we will work with the integral of the density – i.e., with the cumulative density
+
+function deﬁned by
+
+C(x, t) =
+
+N (x, t)dx.
+
+(5.2)
+
+Discretizing the interval [0, 2] using mesh (4.11), we obtain
+
+Ci(t)
+
+C(xi, t) = δx
+
+Nk−1/2(t),
+
+and
+
+Ci(t)
+
+Ci−1(t) = Ni−1/2(t)δx.
+
+(5.3)
+
+≡
+
+−
+
+In particular, the number of particles in the interval [0, xi], i = 1, . . . , n is given by
+
+i
+
+Xk=1
+
+x
+
+0
+
+Z
+
+i
+
+Xk=1
+
+n0Ci(t) = n0δx
+
+Nk−1/2(t),
+
+i = 1, . . . , n.
+
+(5.4)
+
+In order to use coarse integration, it is important to compute the change of Ci(t) during the time interval [t, t+δt];
+equivalently, we want to know the change of the number of particles in [0, xi] during the time step [t, t + δt]. Given
+sδt, xi + sδt] at time t can
+that the speed of the particles is s, only particles which are in the small interval [xi −
+enter or leave the interval [0, xi]. Consequently, only a small number of particles around each mesh point have
+to be simulated (compare Figure 13(b)); of course we are implicitly assuming that the discretization mesh is ﬁne
+enough so that interpolation between mesh points provides an accurate estimate of the evolving density proﬁle.
+Using (4.19) and previous results, we choose
+
+δt = 0.5,
+
+T = 99,
+
+(5.5)
+
+and compute the cumulative density at time t + 2δt + T = t + 100 from the cumulative density function at time
+t by the following algorithm (compare with Figure 13(a) and Figure 2)
+
+(a1) Given a macroscopic initial cumulative density C(t) at mesh points (4.11), we compute the density
+Ni−1/2(t) by the formula
+
+Ni−1/2(t) =
+
+Ci(t)
+
+Ci−1(t)
+
+−
+δx
+
+,
+
+i = 1, . . . , n.
+
+We put n0Ni−1/2(t)δx particles in each interval [xi−1, xi] and distribute them so that the resulting prob-
+ability density function is a continuous piecewise linear function with value Ni−1/2(t) at point xi−1+xi
+,
+i = 1, . . . , n. Thus (see Figure 13(b))
+
+2
+
+N (x, t) = Ni−1/2(t) +
+
+Ni+1/2(t)
+
+Ni−1/2(t)
+
+−
+δx
+
+xi−1 + xi
+2
+
+x
+
+−
+
+(cid:18)
+
+for x
+
+∈
+
+(cid:20)
+
+(cid:19)
+
+xi−1 + xi
+2
+
+,
+
+xi + xi+1
+2
+
+.
+
+(cid:21)
+
+Moreover, we assign alternating velocities to the particles, so that the initial ﬂux is eﬀectively zero. As we
+mentioned earlier, we do not have to simulate all particles in [ xi−1+xi
+]; instead, we consider only
+2sδt, xi + 2sδt] around the macroscopic mesh point xi (this
+particles which are inside a small interval [xi −
+could be thought as analogous to the gap-tooth scheme [18], except that one does not have to formulate
+and impose eﬀective smoothness boundary conditions, see Figure 13(b)).
+
+, xi+xi+1
+2
+
+2
+
+21
+
+(a)
+
+J
+
+N(t+dt)
+
+(b1)
+
+(b2)
+
+"slow manifold"
+
+(d)
+
+(a3)
+
+(a2)
+
+(b)
+
+N     (t)
+i−3/2
+
+N     (t)
+i−1/2
+
+N     (t)
+i+1/2
+
+N
+
+N     (t)
+i+3/2
+
+i−1x +2sdt
+
+x −2sdt
+
+i
+
+0
+
+N(t)
+
+N(t+2dt)
+
+N(t+2dt+T)
+
+x
+
+i−1
+
+dx
+
+x
+
+i
+
+x +xi
+2
+
+i+1
+
+x
+
+i+1
+
+Figure 13: (a) Schematic of steps (a1) – (d) of the coarse integration algorithm. Monte Carlo simulation is
+denoted by solid lines. Dashed lines denote relatively fast steps, i.e., resetting the values of density to N (t) in
+steps (a2) and (a3) and the projective step (d). The dot-dashed line represents the evolution on the slow manifold
+(b) Schematic of
+of the system. We assume that the slow manifold can be accurately parametrized by density.
+three macroscopic mesh points xi−1, xi and xi+1 and kMC computational domains around them. Only particles
+close to the mesh points need be considered; the remaining particles will not leave/enter the interval [0, xi] during
+steps (a1) – (b2) and consequently, they do not have to be simulated. At the top, is the (piecewise linear) estimated
+density proﬁle which is used in step (a1). We place particles in the small computational domains that their number
+is consistent with this density proﬁle.
+
+(a2) Evolve the system using the microscopic Monte Carlo simulator for time δt. Then return the particles
+to their initial position as given in (a1) but with a velocity equal to the values computed in (a2) (this and
+the following are preparatory steps to bring the microscopic initialization close to the slow manifold).4
+
+(a3) Repeat (a2) again, i.e., evolve the system using the microscopic Monte Carlo simulator for time δt.
+Then return the position of particles to their initial values as given in (a1) keeping the velocities equal to
+computed velocities in (a3) (this can be repeated a few times).
+
+(b1) Using the positions and velocities produced at the end of step (a3), evolve the system using the
+microscopic Monte Carlo simulator for time δt. Compute the number of particles in the interval [0, xi] at
+time t + δt for i = 1, 2, . . . , n.
+
+(b2) Evolve the system using the microscopic Monte Carlo simulator for another time step δt. Compute
+the number of particles in the interval [0, xi] at time t + 2δt for i = 1, 2, . . . , n.
+
+(c) Using data from (b1) and (b2), compute cumulative densities C(t + δt) and C(t + 2δt) at mesh points
+x0, x1, . . . , xn (this is the restriction step in equation-free computation).
+
+(d) Estimate the time derivative
+
+and take an extrapolation (projective) step
+
+∂Ci
+∂t
+
+=
+
+Ci(t + 2δt)
+
+Ci(t + δt)
+
+−
+δt
+
+Ci(t + 2δt + T ) = Ci(t + 2δt) + T
+
+∂Ci
+∂t
+
+.
+
+(5.6)
+
+(5.7)
+
+Then use Ci(t + 2δt + T ) as the new initial condition in step (a1).
+
+The steps (a1)–(d) of the algorithm are illustrated in Figure 13(a) where the slow manifold in density-ﬂux space
+is shown as a dot-dashed line. Note that the steps (a1) – (a3) correspond to the step (a) from Figure 2. They are
+4This step annihilates the correlations between the present and the initial velocities of a particle, and at the macroscopic level the
+time required is essentially that in which a hyperbolic equation rather a parabolic equation is needed at the macroscopic level. This
+was already known to Einstein (cf. [33]).
+
+22
+
+preparatory steps used to initialize the ﬂux close to the slow manifold (since we assume that the ﬂux equilibrates
+quickly); they qualitatively correspond to evolving the macroscopic PDE for a short time constraining the density
+proﬁle to be the one we want to prescribe as our macroscopic initial condition. Such constrained evolution
+preparatory procedures (like “umbrella sampling”) are standard in computational chemistry [41, 34]. A more
+detailed description of such initialization algorithms in the case of legacy simulators can be found in [20, 19].
+The steps (b1) – (b2) correspond to step (b) from Figure 2. Moreover, (b1) corresponds to the step (PrM
+
+and (b2) to the step (PrM
+found in Figure 2; moreover, steps (c) and (d) together form step (PrM
+of (NJ).
+
+k -1)
+k -2) from projective integration algorithm of (NJ). Similarly, steps (c) and (d) can be also
+k -3) of the projective integration algorithm
+
+If there is a small number of cells in one of the computational domains, then the straightforward application
+of the algorithm (a1) – (d) could give unrealistic results. For example, suppose that there are only two cells in the
+interval [xi−1, xi] at time t, that the ﬁrst cell moves to the interval [0, xi−1] during the time interval [t, t + 2δt],
+the second cell moves outside the interval [0, xi] and that no other cell crosses mesh points xi−1 and xi during
+time interval [t, t + 2δt]. Then the time derivative of the cumulative density function (5.6) would be negative at
+point xi and positive at xi−1. Moreover, the projected solution (5.7) satisﬁes Ci−1(t + 2δt + T ) > Ci(t + 2δt + T );
+consequently there is a negative number of particles in the interval [xi−1, xi] at time t + 2δt + T. To avoid this
+problem we have to consider more realizations for each computational domain containing a small number of
+particles, and compute an average over this ensemble of realizations. Practically, if the number of particles ni
+in the small computational domain around xi is less than a given number m, we choose to repeat (a1) – (d) for
+m/ni microscopic realizations in this computational subdomain.
+
+Numerical results for δt = 0.5, T = 99, signal strength α = 0.1 and m = 10000 are given in Figure 14. There
+are two sources of gain for this method. First, we have the gain of the projective step. In one step (a1) – (d),
+we compute the evolution of the system over time T + 2δt = 100 and we run the Monte Carlo simulator for
+time 4δt = 2 in steps (a2) – (b2). Consequently, the gain factor of the projective step is (T + 2δt)/4δt = 50.
+The second part of the gain comes from the fact that important particles (for the estimation of the evolution
+of a smooth macroscopic density) are only those particles which are leaving/entering the interval [0, xi] at the
+endpoint. From Figure 13(b), we see that only particles which are at time t with distance less than 2sδt = 0.0001
+from the endpoint can leave/enter the interval [0, xi] during steps (b1) – (b2). Consequently, only the fraction
+2n0
+
+δx = 2n0
+Therefore, the combined gain of the coarse integration and reduced spatial simulation (based on macroscopic
+density smoothness) is 50
+because some computational time
+was lost by considering multiple microscopic realizations of domains which contained a small number of particles.
+In any case, we add less than 199m particles to the simulation where 199 is the number of “inner” computational
+domains and m = 10000 is the minimal number of particles in each of them. Consequently, we actually simulated
+more cells than 2n0
+106.
+So, in the worst possible case, we slow down the computation by a factor of 2, which means that the total gain
+
+50 of particles have to be simulated, and another factor of 50 appears in the gain.
+
+106 but, at any time, the number of simulated cells did not exceed 2n0
+
+50 = 2500. However, 2500 is not the actual gain
+
+50 + 199M
+
+50 = 2
+
+4s δt
+
+×
+
+∼
+
+G
+
+4
+
+·
+
+·
+
+of the method is at least
+
+= 50
+
+50/2 = 1250.
+
+G
+
+×
+
+G
+
+In Figure 14, we present the time evolution of the solution given by method (a1) – (d) (solid line) compared to
+the solution of the macroscopic PDE equations (dashed line). Since the algorithm (a1)–(d) computes cumulative
+density functions C(t) and we visualize the density N (t) in Figure 14, the results are noisy and the plots depend
+on the formula which is used to generate the density curves from the computed cumulative density data. To be
+precise, in Figure 14, we show a plot of the function
+
+Another representation of the results is given in Figure 15, where we show results for time t = 104 using diﬀerent
+
+N (xi, t) =
+
+Ci+1(t)
+
+Ci−1(t)
+
+.
+
+−
+2δx
+
+(5.8)
+
+23
+
+t=0
+
+1.6
+
+t=104
+
+0.5
+
+1
+position
+
+1.5
+
+0.5
+
+1
+position
+
+1.5
+
+t=3⋅104
+
+t=105
+
+0.5
+
+1
+position
+
+1.5
+
+0.5
+
+1
+position
+
+1.5
+
+10
+
+t=106
+
+t=107
+
+l
+
+s
+a
+u
+d
+v
+d
+n
+
+i
+
+i
+
+i
+ 
+f
+
+o
+
+ 
+y
+t
+i
+s
+n
+e
+d
+
+i
+
+i
+
+l
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+l
+
+i
+
+i
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+1.5
+
+0.5
+
+2
+
+1
+
+0
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+8
+
+6
+
+4
+
+2
+
+0
+
+l
+
+s
+a
+u
+d
+v
+d
+n
+
+i
+
+i
+
+i
+ 
+f
+
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+1.4
+
+1.2
+
+1
+
+0.8
+
+0.6
+
+i
+
+i
+
+l
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+i
+
+l
+
+i
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+20
+
+15
+
+10
+
+5
+
+0
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+24
+
+0.5
+
+1
+position
+
+1.5
+
+0.5
+
+1
+position
+
+1.5
+
+Figure 14: The time evolution of the density of individuals for (5.1), (5.5), α = 0.1 and initial conditions (4.23).
+We plot the density given by coarse integration (a1) – (d) and obtained by formula (5.8) from the computed
+cumulative density function C(t) (solid line). Here we have gain
+= 1250. We also plot the solution of the
+corresponding macroscopic moment equations (dashed line).
+
+G
+
+(a)
+
+t=104
+
+(b)
+
+t=104
+
+(c)
+
+t=104
+
+i
+
+i
+
+l
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+1.6
+
+1.4
+
+1.2
+
+1
+
+0.8
+
+0.6
+
+i
+
+l
+
+i
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+1.6
+
+1.4
+
+1.2
+
+1
+
+0.8
+
+0.6
+
+l
+
+i
+
+i
+
+s
+a
+u
+d
+v
+d
+n
+i
+ 
+f
+o
+ 
+y
+t
+i
+s
+n
+e
+d
+
+1.6
+
+1.4
+
+1.2
+
+1
+
+0.8
+
+0.6
+
+0.5
+
+1
+position
+
+1.5
+
+0.5
+
+1
+position
+
+1.5
+
+0.5
+
+1
+position
+
+1.5
+
+Figure 15: Plots of the density of individuals at time t = 104 for the same cumulative distribution function as
+in Figure 14, using diﬀerent expressions for for computing the discretized density. (a) formula (5.9); (b) formula
+(5.10); (c) formula (5.11). We also plot the solution of the corresponding macroscopic moment equations (dashed
+line).
+
+formulas for the density function N , namely
+
+(a) N (xi, t) =
+
+Ci+2(t)
+
+Ci−2(t)
+
+,
+
+−
+4δx
+
+(b) N
+
+(cid:18)
+(c) N (xi, t) =
+
+xi + xi+1
+2
+
+Ci+1(t)
+
+Ci(t)
+
+,
+
+=
+
+, t
+
+−
+δx
+Ci+2(t) + Ci+1(t)
+
+(cid:19)
+
+Ci−1(t)
+
+Ci−2(t)
+
+−
+
+.
+
+−
+6δx
+
+(5.9)
+
+(5.10)
+
+(5.11)
+
+Comparing plots in Figure 15 and the corresponding plot from Figure 14, we see how the visualization of the
+results depends on the formula for estimating the discretized density function N (t) from the discretized cumulative
+density function C(t). In particular, if we use (5.11) instead of (5.8) in Figure 14, then the results will look
+less noisy. Alternative discretizations of the particle density (namely, the use of orthogonal polynomials to
+represent the inverse cumulative distribution function, or ICDF) can be found in the literature [15, 36]. Techniques
+for estimating smooth ﬁeld proﬁles from noisy particle data have been proposed, among other places, in the
+computational materials science literature (e.g., the thermodynamic ﬁeld estimator [27]).
+
+One can also decrease the noise in the computation, and the resulting macroscopic ﬁeld estimates, by consid-
+ering multiple microscopic realizations, i.e., by increasing the value of m. However, if we increase m, then the
+gain
+will decrease (obviously the “wall clock” time of the overall computation remains the same if one does
+these computations in parallel).
+
+G
+
+Certainly, there is a relationship between the initial number of particles 2n0, the minimal number of particles
+of the method. If we have a large number of particles 2n0,
+in each small computational domain m and the gain
+then we can choose a large m without signiﬁcantly decreasing the gain of the method. On the other hand, if we
+have a stochastic problem with a small number of particles 2n0, then it may not be appropriate to consider a
+closed PDE as a good model of a single system realization. In our example, m was chosen in such a way that the
+of the method was decreased only by a factor of two, and thus the Monte Carlo simulation was accelerated
+gain
+by a factor of at least 1250. Increasing m would further decrease the gain
+and reduce the magnitude of the
+ﬂuctuations.
+
+G
+
+G
+
+G
+
+6 Discussion
+
+In Section 5 we analyzed an example in which a simple coarse integration scheme was “wrapped around” a kinetic
+Monte Carlo simulation. The short (in time) bursts of kMC simulation were performed over only part of the full
+computational domain; this provides another important factor in decreasing the overall computational cost for
+such complex problems. The idea of reduced spatial as well as temporal simulation (the so called “gap-tooth”
+scheme and its combination with projective integration in “patch dynamics”) is based on smoothness in the
+
+25
+
+evolution of macroscopic observables and constitutes a hallmark of equation-free computation. Let us note that
+the computation of long term dynamics of our system took several days on a IBM SP 375MHz Power3 processor
+using algorithm (a1) – (d). Consequently, a computation using the kinetic Monte Carlo simulator would take
+several years and was not attempted. We estimated the accuracy of coarse projective computations by comparing
+to solutions of accurate macroscopic partial diﬀerential equations, which in this example happened to be known.
+When we do not have population level equations, we must use standard a posteriori error estimates to check
+accuracy and adaptively control the error of our results as discussed below.
+
+B
+
+As we saw in Figure 9 for matrix
+
+, the length of the possible projective step T , as determined by stability
+considerations, decreases with increasing strength of the signal α. The same is true for algorithm (a1) – (d). If
+we increase α, then we have to decrease T in order to have a stable scheme. In order to achieve stability for larger
+T we could use a similar strategy to that used for the matrix
+: we could introduce artiﬁcial diﬀusion into the
+scheme which would make the scheme stable, independently of the strength of the signal α. It is not diﬃcult to
+design a coarse integration scheme with artiﬁcial diﬀusion present; however, such a scheme would predict incorrect
+dynamics for the system.
+
+A
+
+A better solution to the problem of large signal gradients is to note that large signal gradients are typically
+localised only in small parts of the domain of interest. In fact, the problem with the coarse integration scheme
+begins when a large signal gradient is present and particles become highly localized in space. Then the mesh is
+not ﬁne enough in certain small domains of interest (around peaks) but it is suﬃciently ﬁne in the remainder of
+the interval [0, 2]. Similarly, the projective step is good for most of computational subdomains, but it would lead
+to instabilities because of strong signal gradients for a few of the computational domains. One could conceivably
+adapt the mesh, leading to a nonuniform mesh, ﬁner in regimes with large signal gradients and coarser otherwise.
+Then we may need to make diﬀerent projective jumps in diﬀerent parts of the domain of interest; issues of this
+nature have been studied for nonuniform meshes in traditional continuum numerical analysis using adaptive mesh
+reﬁnement (AMR) methods [4], and in hybrid situations AMAR methods [13]. Eﬃcient implementations of such
+adaptive techniques may be the key to signiﬁcant acceleration of our illustrative Monte Carlo scheme, since they
+would allow us to obtain relatively accurate results for even larger sets of signal functions and for problems where
+the signal is also altered by the cells.
+
+Detailed methods have been developed for adapting the computation to the time and space scales of the
+problem in continuum numerical analysis. Adaptive stepsize selection in numerical integration, as well as adaptive
+mesh reﬁnement in spatial discretizations is an indispensible part of modern software, and is typically based on a
+posteriori error estimates of the solution accuracy computed on line. These methods can be naturally incorporated
+in equation-free algorithms to control, for example, projective integration time steps to control accuracy.
+It
+should be noted that in addition to adaptive time-step selection (for coarse projective integration) and adaptive
+mesh selection (for gap-tooth algorithms), there is an additional type of adaptivity that arises in equation-free
+computation. This is the adaptive detection of the level of modeling, which may involve augmenting or decreasing
+the number of variables needed for closure. At a very qualitative level, adaptation of this “level of description”
+comes from the estimation of the gap between “fast” and “slow” system variables, which can be attempted using
+matrix-free eigensolvers. By initializing the microscopic distribution using more variables than the current level
+of modeling, one can try to estimate the characteristic relaxation times of the additional variables to functionals
+of the ones we need. This allows one to detect (while the level of description is still successful) whether variables
+that are treated as “fast” are becoming “slow”, and should be included as independent variables in the modeling.
+A good illustration of this is the evolution of stresses in a microscopic simulator of ﬂuid ﬂow: for a Newtonian
+ﬂuid stresses rapidly become proportional to velocity gradients, while in non-Newtonian ﬂuids this is not true,
+and one must use more independent variables to model such ﬂows. This could be considered analogous to closing
+bacterial chemotaxis equations with only a single ﬁeld (density) which can be done for long time dynamics in
+some parameter regimes versus needing two independent variables (right- and left- ﬂuxes) to successfully close
+system in some other cases. In our case, the ﬂux quickly becomes functional of density, as can be seen directly
+from simulations.
+
+A summary of the steps of our computational approach is as follows.
+
+identify the appropriate level of closure
+apply the equation-free computational algorithm
+do a posteriori error estimation
+
+•
+•
+•
+
+26
+
+identify the slow dynamics of the
+As we discussed above, we have to ﬁrst identify the level of closure, i.e.
+system which we want to model. Then we can do coarse projective integration by making use of the spectral
+gap between fast and slow modes of the system. As we saw, it can be natural or desirable to combine coarse
+projective integration with gap-tooth methods, i.e. exploit the smoothness in physical space to only perform the
+computations on relatively small subdomains. As a result one can do transient calculations much faster than by
+direct simulations. If a modeller is interested in steady states and the transient dynamics are unimportant, then
+he or she can use other computational equation-free techniques (such as application of Newton-GMRES method)
+to obtain steady state behavior faster or do even bifurcation analysis [17, 37]. The ﬁnal step is a posteriori error
+analysis as suggested above. This is an important issue if one wants to use our computational approach for the
+problems where macroscopic equations are unavailable.
+
+As we discussed, the large gain of the coarse projective integration is governed by the large spectral gap
+between fast and slow eigenvalues of the system. Our biological model system had such a large spectral gap
+because the mean running distance of individuals was much smaller than the size of the domain of interest. The
+method has a potential to speed up other models of biological dispersal with similar properties.
+
+27
+
+References
+
+[1] Fernanda Alcantara and Marilyn Monk, Signal propagation during aggregation in the slime mold Dic-
+
+tyostelium discoideum, J. Gen. Microbiol. 85 (1974), 321–334.
+
+[2] S. Barkai, N.and Leibler, Robustness in simple biochemical networks, Nature 387 (1997), 913–917.
+
+[3] H. C. Berg, Bacterial microprocessing, Cold Spring Harbor Symp. Quantit. Biol. 55 (1990), 539–545.
+
+[4] M. Berger and J. Oliger, Adaptive mesh reﬁnement for hyperbolic partial diﬀerential equations, Journal of
+
+Computational Physics 53 (1984), 484–512.
+
+[5] E. Budrene and H. Berg, Complex patterns formed by motile cells of Esterichia coli, Nature 349 (1991),
+
+[6] C Cercignani, The Boltzmann Equation and Its Applications, Applied Mathematical Sciences, 67, Springer-
+
+630–633.
+
+Verlag, 1988.
+
+[7] S. Chapman and T. Cowling, The mathematical theory of non-uniform gases: an account of the kinetic theory
+
+of viscosity, thermal conduction and diﬀusion in gases, Cambridge University Press, 1991.
+
+[8] P. Cluzel, M. Surette, and S. Leibler, An ultrasensitive bacterial motor revealed by monitoring signaling
+
+proteins in single cells, Science 287 (2000), 1652–1655.
+
+[9] J. C. Dallon and H. G. Othmer, A discrete cell model with adaptive signalling for aggregation of dictyostelium
+
+discoideum, Philos Trans R Soc Lond B Biol Sci 352 (1997), no. 1351, 391–417.
+
+[10] R. Erban and H. Othmer, From individual to collective behaviour in bacterial chemotaxis, SIAM Journal on
+
+Applied Mathematics 65 (2004), no. 2, 361–391.
+
+[11]
+
+, From signal transduction to spatial pattern formation in E. coli: A paradigm for multi-scale modeling
+
+in biology, Multiscale Modeling and Simulation 3 (2005), no. 2, 362–394.
+
+[12] D.J. Estep, A short course on duality, adjoint operators, Green’s functions, and a posteriori error analysis,
+
+Lecture Notes, 2004.
+
+[13] A. Garcia, J. Bell, W. Crutchﬁeld, and B. Alder, Adaptive mesh and algorithm reﬁnement using direct
+
+simulation monte carlo, Journal of Computational Physics 154 (1999), 134–155.
+
+[14] G.W. Gardiner, Handbook of Stochastic Processes for physics, chemistry and natural sciences, 2 ed., Springer
+
+Verlag, 1985.
+
+[15] C. Gear, Projective integration methods for distributions, NEC TR 2001-130 (2001), 1–9.
+
+[16] C. Gear and I. Kevrekidis, Projective methods for stiﬀ diﬀerential equations: problems with gaps in their
+
+eigenvalue spectrum, SIAM Journal on Scientiﬁc Computing 24 (2003), no. 4, 1091–1106.
+
+[17] C. Gear, I. Kevrekidis, and C. Theodoropoulos, ’Coarse’ integration/bifurcation analysis via microscopic
+simulators: micro-Galerkin methods, Computers and Chemical Engineering 26 (2002), no. 4, 941–963.
+
+[18] C. Gear, J. Li, and I. Kevrekidis, The gap-tooth method in particle simulations, Physics Letters A 316 (2003),
+
+190–195.
+
+[19] C. W. Gear, T. J. Kaper, I. G. Kevrekidis, and A. Zagaris, Projecting on a slow manifold: Singularly
+perturbed systems and legacy codes, submitted to SIAM Journal on Applied Dynamical Systems, can be
+found as Physics/0405074 at arXiv.org, 2004.
+
+[20] C. W. Gear and I. G. Kevrekidis, Constraint-deﬁned manifolds: a legacy-code approach to low-dimensional
+
+computations, can be found as Physics/0312094 at arXiv.org, 2004.
+
+28
+
+[21] T. Hillen and A. Stevens, Hyperbolic models for chemotaxis in 1-D, Nonlinear Analysis: Real World Appli-
+
+cations 1 (2000), 409–433.
+
+[22] E. Keller and L. Segel, Model for chemotaxis, Journal of Theoretical Biology 30 (1971), 225–234.
+
+[23]
+
+, Traveling bands of chemotactic bacteria: A theoretical analysis, Journal of Theoretical Biology 30
+
+(1971), 235–248.
+
+[24] I Kevrekidis, C. Gear, J. Hyman, Kevrekidis P., O. Runborg, and K. Theodoropoulos, Equation-free, coarse-
+grained multiscale computation: enabling microscopic simulators to perform system-level analysis, Commu-
+nications in Mathematical Sciences 1 (2003), no. 4, 715–762.
+
+[25] V. I. Lebedev, Explicit diﬀerence schemes with variable time steps for solving stiﬀ systems of equations,
+Numerical Analysis and Its Applications, Proceedings of the Workshop on Numerical Analysis and Its Ap-
+plications (WNAA 96), Rousse, Bulgaria, Springer, Berlin, 1997, pp. 274–283.
+
+[26] J. Li, P. G. Kevrekidis, C. W. Gear, and I. G. Kevrekidis, Deciding the nature of the coarse equation through
+microscopic simulations: The baby-bathwater scheme, Multiscale modeling and simulation 1 (2003), no. 3,
+391–407.
+
+[27] J. Li, D. Liao, and S. Yip, Coupling continuum to molecular-dynamics simulation: Reﬂecting particle methods
+
+and ﬁeld estimator, Physical Review E 57 (1998), no. 6, 7259–7267.
+
+[28] A. L. Medovikov, High-order explicit methods for parabolic equations, BIT 38 (1998), 372–390.
+
+[29] M. Melchior and H.C. Oettinger, Variance reduced simulations of stochastic diﬀerential equations, Journal
+
+of Chemical Physics 103 (1995), 9506–9509.
+
+[30] B. Nadler, S. Lafon, R. Coifman, and I. Kevrekidis, Diﬀusion maps, spectral clustering and the reaction
+
+coordinates of dynamical systems, to appear in Appl. Comp. Harm. Anal., 2005.
+
+[31] H. Othmer, S. Dunbar, and W Alt, Models of dispersal in biological systems, Journal of Mathematical Biology
+
+26 (1988), 263–298.
+
+[32] H. Othmer and P. Schaap, Oscillatory cAMP signaling in the development of Dictyostelium discoideum,
+
+Comments on Theoretical Biology 5 (1998), 175–282.
+
+[33] H. G. Othmer, On the signiﬁcance of ﬁnite propagation speeds in multicomponent reacting systems, Journal
+
+of Chemical Physics 64 (1976), 460–470.
+
+[34] J. P Ryckaert, G. Ciccotti, and H.J.C. Berendsen, Numerical integration of the cartesian equations of motion
+of a system with constraints: molecular dynamics of n-alkanes, Journal of Computational Physics 23 (1977),
+327–341.
+
+[35] G. Samaey, D. Roose, and I. Kevrekidis, The gap-tooth scheme for homogenization problems, Special Issue
+
+of Multiscale Modeling and Simulation in Material and Life Sciences (submitted), 25 pages.
+
+[36] S. Setayeshgar, C. Gear, H. Othmer, and I Kevrekidis, Application of coarse integration to bacterial chemo-
+
+taxis, to appear in SIAM Journal on Applied Mathematics, 28 pages, 2004.
+
+[37] C. I. Siettos, M. D. Graham, and I. G. Kevrekidis, Coarse Brownian dynamics for nematic liquid crystals:
+Bifurcation, projective integration, and control via stochastic simulation, Journal of Chemical Physics 118
+(2003), no. 22, 10149–10156.
+
+[38] A.J. Smola, O.L. Mangasarian, and B. Schoelkopf, Space kernel feature analysis, Data Mining Institute
+
+Technical Report 99-04, University of Wisconsin, Madison, 1999.
+
+[39] P. Spiro, J Parkinson, and H. Othmer, A model of excitation and adaptation in bacterial chemotaxis, Pro-
+
+ceedings of the National Academy of Sciences USA 94 (1997), 7263–7268.
+
+29
+
+[40] J. Strikwerda, Finite Diﬀerence Schemes and Partial Diﬀerential Equations, Wadsworth, Inc., Paciﬁc Grove,
+
+California, 1989.
+
+[41] G. M Torrie and J. P. Valleau, Monte Carlo free energy estimates using non-Boltzmann sampling: Application
+
+to the sub-critical Lennard-Jones ﬂuid, Chemical Physics Letters 28 (1974), 578–581.
+
+[42] E. Zauderer, Partial Diﬀerential Equations of Applied Mathematics, John Wiley & Sons, 1983.
+
+30
+
+

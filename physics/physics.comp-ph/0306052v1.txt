@@ -1,0 +1,558 @@
+CHEP 2003, La Jolla, CA (USA), March 24-28, 2003
+
+1
+
+FAMOS: A Dynamically Conﬁgurable System for Fast Simulation and
+Reconstruction for CMS
+
+St. Wynhoff∗
+Princeton University, Princeton, NJ 08544, USA
+
+3
+0
+0
+2
+ 
+n
+u
+J
+ 
+6
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+2
+5
+0
+6
+0
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Detailed detector simulation and reconstruction of physics objects at the LHC are very CPU intensive and hence
+time consuming due to the high energy and multiplicity of the Monte-Carlo events and the complexity of the
+detectors. We present a dynamically conﬁgurable system for fast Monte-Carlo simulation and reconstruction
+(FAMOS) that has been developed for CMS to allow fast studies of large samples of Monte-Carlo events. Each
+single step of the chain - simulation, digitization and reconstruction, as well as combinations of chain links can
+be replaced by modules that sacriﬁce precision for speed. Fast and detailed modules have identical interfaces
+so that a change is fully transparent for the user.
+Currently, a complete set of the fastest possible implementation, i.e. going directly from the Monte-Carlo
+truth to reconstructed objects, has been implemented.
+It is about hundred to thousand times faster than
+the fully detailed simulation/reconstruction and provides tracks reconstructed by the inner tracker, clusters in
+calorimeters and trigger-Lvl1 objects and tracks reconstructed for the muon system of the CMS detector.
+
+1. Introduction
+
+The detailed simulation and reconstruction of
+physics events at the Large Hadron Collider (LHC),
+p¯p collisions at 14 TeV, where a large number of high-
+energy particles are produced and up to 200 collisions
+overlay, is extremely time consuming even on todays
+fastest CPUs. However, to investigate the physics po-
+tential of the CMS detector a large number of colli-
+sions must be studied. This is especially true for scan-
+ning the multi-dimensional parameter space of SUSY
+models. By replacing the detailed modeling of en-
+ergy losses and material eﬀects in simulation as well
+as the reconstruction algorithms by simple parame-
+terizations signiﬁcant improvements concerning speed
+can be at the price of precision losses.
+
+2. The Simulation, Reconstruction and
+Analysis chain
+
+The procedure to analyze physics models can be
+
+decomposed into four major steps:
+
+1. Generation of Monte-Carlo events.
+
+The Monte-Carlo events are created using gen-
+erators like Pythia, Herwig or ISAJET. These
+generators produce a list of particles - stable
+and decaying - and their four-vectors. In CMS
+the information is stored in form of HBOOK-
+Ntuples. The time required to generate an event
+is normally less than 100 milliseconds1.
+
+2. Simulation of material eﬀects.
+
+This is the most time consuming step required.
+
+∗current address: CERN, 1211 Geneva 23, Switzerland
+
+1All times are given as measured on a 1 GHz Pentium III.
+
+THJT004
+
+Currently, the simulation is still done with a
+Geant3 [1] based FORTRAN program: CM-
+SIM [2]. The time varies signiﬁcantly depending
+on the number of particles and their energies in
+the Monte-Carlo events. The average is between
+100 and 200 seconds per event. The information
+that is stored as output of this step are called
+SimHits. They contain the information about
+the energy stored in diﬀerent detector elements
+at diﬀerent times. A new, object-oriented simu-
+lation program OSCAR [3], based on Geant4 [4],
+is currently being validated.
+
+3. Simulation of readout electronics (digitization).
+The detector converts the energy deposited by
+the particles into electronic signals that are
+converted to digital information by ADCs and
+TDCs. At the high luminosity at the LHC the
+detector “sees” the overlap of up to 200 min-
+imum bias events with a single signal event.
+Since the simulation of material eﬀects requires
+large amount of CPU time, the minimum bias
+events are randomly selected from a large pool
+of simulated events and combined with the sim-
+ulated signal events. So even being technically
+part of the simulation, the combination of min-
+imum bias events with a signal event and the
+simulation of the detector response to the energy
+deposition are performed by the reconstruction
+software: ORCA [5]. The time for this depends
+on the simulated luminosity and the event type.
+It is 1 to 10 seconds per collision. The output
+created in this step is called DIGIs.
+
+4. Reconstruction of physics/analysis objects.
+
+The reconstruction is performed by ORCA in
+several sub-steps. First the DIGIs are combined
+to reconstructed hits, RecHits, which for exam-
+ple combine several strips of the silicon tracking
+detectors. Similarly, level-1 trigger objects are
+
+2
+
+CHEP 2003, La Jolla, CA (USA), March 24-28, 2003
+
+built. Then RecHits are used to ﬁnd tracks in
+the inner tracker and the muon chambers and
+clusters in the calorimeters. The reconstruction
+can produce more complicated objects like jets
+or information about the missing energy and
+ﬁnally physics objects like electrons, photons,
+muons etc. The time spent on this can vary
+largely but is typically 10 to 100 seconds per
+collision.
+
+The total CPU time required before the analysis of
+
+a collision can be started is 3-5 minutes.
+
+3. Structure of FAMOS
+
+To give physicists the possibility to study large
+event sample fast, the FAMOS2 project has been de-
+veloped in CMS. The main design concept is to pro-
+vide fast modules, able to replace each single step in
+the chain, as well as several steps in one go and this
+complying to the same interfaces as the full simulation
+and reconstruction.
+
+The ﬁrst implementation focuses on the replace-
+ment of all steps for simulation and reconstruction
+and produces physics objects directly from the Monte-
+Carlo four-vectors. This corresponds to the hashed
+area in Figure 1. The rest of this article describes the
+current implementation.
+
+4. Event handling and simulation
+modules
+
+When implementing the direct way from Monte-
+Carlo events to physics analysis objects, two main is-
+sues arise. First the Monte-Carlo event is read and
+second dedicated simulation modules for the diﬀerent
+sub-detectors of CMS are executed.
+
+4.1. Monte-Carlo event reading
+
+An important ﬁrst step in FAMOS is the handling
+of the original Monte-Carlo event. The event is stored
+in the class RawHepEvent that is an exact C++ im-
+plementation of the HEPEVT FORTRAN Common-
+Block that is used by most Monte-Carlo generators.
+An abstract base class BaseHepEventReader exists
+that allows to ﬁll the RawHepEvent from a multitude
+of sources. ASCII ﬁles, HBOOK Ntuples, particle
+guns - mostly used for single particle tests, from the
+databases used as persistency store by OSCAR and
+ORCA and directly from the Pythia-6 Monte-Carlo
+generator. Similar reader modules can be created for
+other Monte-Carlo generators.
+
+The event reader modules are provided by the CMS
+
+framework, COBRA, and used from there.
+
+In FAMOS an special event manager class, Famo-
+
+sEventMgr, takes care of
+
+• reading the Monte-Carlo event and
+
+• calling simulation modules that inherit from
+
+FamosSimulator
+
+It interfaces directly to the reconstruction on de-
+mand mechanism that is a key point of the CMS
+framework.
+Figure 2 shows a collaboration dia-
+gram between the FamosEventMgr and the framework
+classes. At startup FamosEventMgr accepts registra-
+tions from the selected FamosSimulator modules and
+reads the geometry. Concrete classes that inherit from
+FamosSimulator implement the fast simulation algo-
+rithms.
+
+When starting to loop over events, the FamosEv-
+entMgr ﬁrst ﬁlls RawHepEvent from the selected in-
+put. RawHepEvent is also used to keep track of new
+particles that can be created by the FamosSimulator
+
+Figure 1: FAMOS subsystems and their relation to other
+CMS projects. The arrows indicate the dependencies.
+
+4.2. FAMOS event handling
+
+To achieve this FAMOS is divided into several sub-
+systems that focus on the diﬀerent steps. Figure 1
+shows the diﬀerent subsystems and their relations to
+the other CMS object-oriented software projects. CO-
+BRA/CARF [7] is the general framework that controls
+event handling, DDD [8] provides services for geome-
+try handling, OSCAR is the simulation software and
+ORCA the reconstruction software. The subsystems
+for a particular task can be accessed via several in-
+terfaces: One providing the same interfaces as for the
+corresponding detailed simulation or reconstruction,
+one for simpliﬁed and easy standalone usage. The im-
+plementation of OSCARInterface and ORCAInterface
+allows to dynamically change from detailed simulation
+and reconstruction to the FAMOS implementations.
+
+2FAst MOnte-carlo Simulation, see [6]
+
+THJT004
+
+CHEP 2003, La Jolla, CA (USA), March 24-28, 2003
+
+3
+
+Figure 2: Collaboration diagram for the FAMOS event manager class
+
+classes. This modiﬁcation of the event is done to take
+care of eﬀects like Bremsstrahlung, pair production or
+multiple scattering.
+
+The FamosSimulator classes are called in a well de-
+It is important to follow the order
+ﬁned sequence.
+in which the particles cross the detector - ﬁrst the
+Tracker, then the Calorimeters (ECAL and HCAL)
+and only last the Muon system.
+
+Currently, the simulators are called in the order of
+their registration - the user is responsible to do this
+correctly.
+
+4.3. Simulation modules and interfaces
+to the framework
+
+The classes inheriting from FamosSimulator are im-
+plementing the concrete fast simulation parameteriza-
+tions. Currently, implementations exist for
+
+• material eﬀects
+
+• tracking (Tracker and Muon)
+
+• electromagnetic clustering
+
+• muon level-1 trigger
+
+The simulation modules - residing in the Generator-
+
+ToAnalysis subsystem have to implement a method
+bool reconstruct(RawHepEvent &);
+and can add methods to provide the objects they sim-
+ulate or reconstruct. All modules provide access to
+objects that are kept as simple as possible and a spe-
+cial, framework speciﬁc mechanism is then applied to
+provide the results in a form compatible with the in-
+terfaces used in normal ORCA jobs: RecObj
+
+classes. This is done in the ORCAInterface sub-
+system. Direct use of the simulators can be achieved
+using the StandaloneInterface subsystem.
+
+3
+
+Figure
+
+shows how classes
+
+from COBRA
+(LazyObserver, RecUnit), ORCA (TTrack) and
+FamosSimulator, Generator-
+FAMOS (generic:
+BaseFastTracksFromGenerator,
+ToAnalysis:
+RecTrackFromParticle,
+ORCAInterface:
+
+THJT004
+
+FastTrackReconstructor) work together to provide
+Tracker tracks produced by the fast
+simulation
+modules with identical interface to the ORCA anal-
+ysis program as tracks from the full reconstruction
+software.
+
+5. Example conﬁguration and results
+
+Since FAMOS provides ORCA compliant interfaces
+no change is required to the part of code that uses
+the objects (e.g. TTracks) when changing from full
+to fast reconstruction. However, instantiation of the
+FAMOS objects and their registration to the frame-
+work must be done. For Tracker tracks to be provided
+by the FATSIM simulation module this looks like the
+following:
+
+myTrackFinder = new RecTrackFromRawParticle(
+
+new FATSIM( &myPtEG, &myAngleEG,
+&myEff,
+myImpactParameterEG));
+
+myTrackReconstructor = new FastTrackReconstructor(
+
+myTrackFinder, "FATSIM");
+
+[...]
+RecCollection<TTrack> MyTracks(ev->recEvent(),
+
+"FATSIM");
+
+The ﬁrst lines instantiates an ORCA track-ﬁnding
+object with the FATSIM simulation module as argu-
+ment. This simulation module uses internal classes
+
+Figure 3: The relations between the simulator modules
+and the ORCA mechanism.
+
+4
+
+CHEP 2003, La Jolla, CA (USA), March 24-28, 2003
+
+that provide the parameterizations of transverse mo-
+mentum, angular distributions and the eﬃciencies.
+Then the ORCA track reconstructor is created an a
+string - “FATSIM” - is used to identify it. Creating
+the collections of TTrack specifying the same string
+will issue the reconstruction on demand, i.e. when
+iterated over the collection.
+
+This can be compared to the registration of the reg-
+
+ular track ﬁnding algorithm:
+
+myTrackFinder = new TrackReconstructor(
+
+new CombinatorialTrackFinder,
+"FkFTracks");
+RecCollection<TTrack> MyTracks(ev->recEvent(),
+
+"FkFTracks");
+
+Again a track-ﬁnder is instantiated and then a col-
+lection. For the collection the ONLY diﬀerence is the
+string to specify which reconstruction algorithm is to
+be used when the collection is accessed.
+
+Figure 4: Comparison between tracks obtained from full
+simulation (CMSIM) and reconstruction (ORCA6) to
+tracks obtained from FAMOS for the same Monte-Carlo
+events.
+
+Similarly, when linking the executable diﬀerent sets
+of libraries must be selected when using full or fast
+reconstruction. The main use-case is to run the fast
+simulation and reconstruction directly with a Monte-
+Carlo generator as input. However, it is also possi-
+ble to use the FAMOS in parallel to a regular full
+reconstruction from a prepared database. This is
+especially useful for direct comparison between full
+and fast simulation and reconstruction. The origi-
+nal Monte-Carlo event that was simulated in a time-
+consuming process is stored in the database, read
+from there by the FamosEventMgr and then handed
+to the fast simulators. That allows for example to an-
+alyze two RecCollections of TTracks in the same
+program since the diﬀerent collections are mapped
+via the string identiﬁer to diﬀerent track-ﬁnding algo-
+rithms: detailed reconstruction with RecHits as input
+and FAMOS with the Monte-Carlo event as input.
+
+THJT004
+
+6. Timing
+
+The main aim of the current ﬁrst implementation
+was to achieve the highest possible speed with rea-
+sonable agreement. The measured results for high-
+multiplicity events without minimum bias pileup is
+shown in Table 6.
+
+3%
+Framework
+40%
+Pythia
+9%
+FTSim
+35%
+FastCalorimetry
+5%
+Muon Lvl-1
+9%
+Muon reconstr.
+CMSIM+ORCA 312500%
+Material eﬀects prototype
+
+Fraction time/event [ms]
+2
+25
+6
+22
+3
+6
+200000
+2000
+
+Table I Measured time distribution for FAMOS
+compared with full simulation and reconstruction.
+
+The FAMOS time is dominated by the Monte-Carlo
+generator (Pythia) and the Calorimeter simulation
+module. All other modules - in particular the FAMOS
+framework (FamosEventMgr) contribute only insignif-
+icantly. The performance achieved is more than 3000
+times faster than the detailed simulation and recon-
+struction.
+
+It is possible to simulate the CMS detector and
+in particular the material eﬀects more precisely.
+A ﬁrst prototype has been developed that takes
+pair production and Bremsstrahlung into account.
+Without optimization for performance this reduces
+the speed of FAMOS to be only factor 100 faster
+than CMSIM+ORCA. The modularity - this is
+just one additional simulation module to register to
+FamosEventMgr - give the user full ﬂexibility to adapt
+the simulation to the precision his concrete physics
+analysis requires.
+
+7. Summary
+
+FAMOS is a high-performing, ﬂexible and dynami-
+cally conﬁgurable mini-framework for fast simulation
+and reconstruction. It is fully integrated in the gen-
+eral CMS framework but the components can be used
+independently. It is possible to mix full and fast sim-
+ulation with minimal changes to the user code. The
+ﬁrst modules implemented provide high-level recon-
+structed objects (Tracks, Muon, Muon Lvl-1 trigger,
+Calorimeter clusters) at reasonable agreement in pre-
+cision about 3000 times faster than full simulation and
+reconstruction.
+
+In future fast modules for individual steps in the
+analysis chain will be developed and geometry reading
+
+CHEP 2003, La Jolla, CA (USA), March 24-28, 2003
+
+5
+
+will be using the same XML description as used by the
+full simulation to ensure consistency.
+
+Acknowledgments
+
+Special thanks to Marco Battaglia, Filip Moortgat
+and Artur Kalinowsky for their implementations and
+the plots showing example results.
+
+References
+
+[1] R. Brun et al.,“GEANT 3”,CERN DD/EE/84-1
+
+(Revised), September 1987.
+
+[2] http://cmsdoc.cern.ch/cmsim/cmsim.html
+
+[3] http://cmsdoc.cern.ch/OSCAR
+[4] S. Agostinelli et al., CERN-IT-20020003, KEK
+Preprint 2002-85, SLAC-PUB-9350, submitted to
+Nuclear Instruments and Methods NIM A.
+
+[5] V. Innocente, D. Stickland, “Design, Implemen-
+tation and Deployment of a Functional Prototype
+OO Reconstruction Software for CMS. The ORCA
+Project.”, Proceedings to CHEP-2000, Padua.
+http://cmsdoc.cern.ch/ORCA
+[6] http://cmsdoc.cern.ch/FAMOS
+[7] V. Innocente, “CMS Software Architecture: Soft-
+ware framework, services and persistency in high
+level trigger, reconstruction and analysis” CMS
+IN/1999-034
+http://cobra.web.cern.ch/cobra/
+
+[8] http://cmsdoc.cern.ch/cms/software/ddd/www
+
+THJT004
+
+

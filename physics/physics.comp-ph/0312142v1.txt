@@ -1,0 +1,1633 @@
+3
+0
+0
+2
+ 
+c
+e
+D
+ 
+4
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+2
+4
+1
+2
+1
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+From molecular dynamics to coarse self-similar solutions:
+
+A simple example using equation-free computation.
+
+L. Chen1, P. G. Debenedetti1, C. W. Gear1,2 and I.G. Kevrekidis1,3 ∗
+
+1 Department of Chemical Engineering, Princeton University, Princeton, NJ 08544;
+
+3 Program in Applied and Computational Mathematics, Princeton University, Princeton, NJ 08544.
+
+2 NEC Institute, retired;
+
+February 2, 2008
+
+Abstract
+
+In the context of the recently developed “equation-free” approach to the computer-
+
+assisted analysis of complex systems, we illustrate the computation of coarsely self-
+
+similar solutions. Dynamic renormalization and ﬁxed point algorithms for the macro-
+
+scopic density dynamics are applied to the results of short bursts of appropriately
+
+initialized molecular dynamics in a simple diﬀusion simulation. The approach holds
+
+promise for locating coarse self-similar solutions and the corresponding exponents in a
+
+variety of multiscale computational contexts.
+
+∗Corresponding author, yannis@princeton.edu, tel (609) 258-2818, FAX (609) 258-0211
+
+1
+
+Keywords: dynamic renormalization, equation-free, microscopic model, distribu-
+
+tion function
+
+2
+
+1. Introduction
+
+In contemporary scientiﬁc and engineering modeling we are often faced with sit-
+
+uations where the best system models are available at a ﬁne scale (e.g. atomistic,
+
+individual-based); yet we want to predict the behavior of the system at a much more
+
+coarse-grained, macroscopic level. In traditional modeling successful closures often al-
+
+low us to write models directly at the coarse-grained, macroscopic level at which we
+
+want to model the behavior; typical examples include chemical kinetics closures in
+
+terms of reactant concentrations for reactor modeling, or Newton’s law of viscosity in
+
+the Navier-Stokes equations. Often, however, such accurate closures are not available,
+
+and the immense range of active scales (in space as well as time) precludes the practical
+
+prediction of macroscopic behavior through direct atomistic simulation.
+
+The recently developed “equation free” approach to coarse-grained computer-assisted
+
+analysis of complex systems attempts to bridge this enormous scale gap when macro-
+
+scopic equations conceptually exist, but are not available in closed form [1,2,3,4,5,6,7,8].
+
+The approach constitutes a bridge between traditional continuum numerical analysis
+
+and microscopic simulation. The main idea is to consider the microscopic simulation as
+
+a computational experiment which can be initialized and run at will. If a coarse-grained,
+
+macroscopic equation were available, traditional numerical tasks would involve repeated
+
+evaluations of the equation, and of its functional or parametric derivatives, at various
+
+values of the macroscopic state. The idea is to substitute these function evaluations
+
+with short bursts of appropriately initialized microscopic computational experimenta-
+
+tion, from the results of which the requisite numerical quantities are estimated. The
+
+quasi-continuum method of Phillips, Ortiz and coworkers [9], as well as the optimal
+
+predictor approach of Chorin and coworkers [10] embody many of these features; see [7]
+
+3
+
+for a discussion. The approach can be successfully combined with matrix-free iterative
+
+linear algebra to allow us to solve linear and nonlinear macroscopic equations, perform
+
+“coarse projective integration” as well as additional tasks like controller design and op-
+
+timization without ever writing down the macroscopic equations in closed form. This
+
+is a system identiﬁcation based, “closure on demand” approach.
+
+Over the last few years we have demonstrated how to use this approach for the accel-
+
+erated simulation and bifurcation analysis of the coarse-grained, expected behavior of
+
+kinetic Monte Carlo, Brownian Dynamics, Molecular Dynamics and Lattice-Boltzmann
+
+microscopic simulation codes, [1, 2, 3, 4, 5, 6, 7, 8, 11] as well as the solution of eﬀective
+
+medium equations [12, 13] for media with spatially varying properties. The approach
+
+gives rise to two-level (conceptually possibly multi-level) codes. The “inner code” is
+
+the best microscopic simulation of the phenomenon at our disposal. The outer code,
+
+the “wrapper”, is typically templated on traditional continuum numerical analysis, and
+
+constitutes a protocol for the design of microscopic simulations and for processing their
+
+results towards a macroscopic modeling goal. Accelerated simulation, the location of
+
+coarse ﬁxed points and their continuation and bifurcation analysis are typical such
+
+goals.
+
+In many cases of interest, the macroscopic dynamics we explore do not involve
+
+stationary solutions, but rather traveling or self-similar solutions.
+
+In this paper we
+
+will show how to use the basic coarse timestepper methodology to construct dynamic
+
+renormalization algorithms for the location of coarse self-similar solutions and the
+
+corresponding similarity exponents by acting on a microscopic code directly. Our illus-
+
+trative example – molecular diﬀusion in a thin two dimensional domain – is extremely
+
+simple, yet it does illustrate the basic ingredients of the approach.
+
+4
+
+The paper is organized as follows:
+
+In the next Section we will brieﬂy describe
+
+template-based dynamic renormalization when macroscopic equations are explicitly
+
+available. In Section 3 we summarize the main components of the coarse timestepper,
+
+and, in particular, its modiﬁcation for computation of self-similar solutions as ﬁxed
+
+points of the appropriate discrete time map. Section 4 presents our illustrative ex-
+
+amples for both coarse dynamic and coarse ﬁxed point computations in a dynamic
+
+renormalization context. We conclude with a brief summary and outline of the scope
+
+of the method and some of the challenges we expect to arise in its wider application.
+
+2. Dynamic renormalization in a continuum context
+
+In problems with translational invariance, one often encounters traveling wave so-
+
+lutions – constant shape waves that move in space at constant speed. It is convenient
+
+(mathematically, computationally and practically) to study these solutions, and the
+
+transient approach to them, in a co-traveling frame. In this frame the traveling so-
+
+lution appears stationary, and it is much easier to study the transient approach to
+
+it and its stability unencumbered by its constant motion. Good techniques exist for
+
+computationally locating the translationally invariant solution along with its traveling
+
+speed as a nonlinear eigenvalue problem. During transient simulation, however, the
+
+solutions both travel and approach their ultimate, translationally invariant shape; the
+
+right speed for “moving along” with such a transient solution may change from moment
+
+to moment, and the best way to choose it is not transparent. In a recent paper Rowley
+
+and Marsden [14] described a template based approach that allows one to systematically
+
+recover such an appropriate instantaneous speed; as the transient solution asymptoti-
+
+cally approaches the ultimate, translationally invariant, traveling wave, the speed from
+
+the template-based algorithm asymptotically approaches the correct traveling speed.
+
+5
+
+In a sequence of papers [15,16,17] we have shown how to adapt this approach from
+
+the computation of translationally invariant solutions to the case of scale invariant
+
+solutions – that is, solutions of dynamic equations that evolve across scales. Self-
+
+similar solutions [18, 19] are an important such class of scale-invariant solutions; in the
+
+same sense that it is practical to observe a traveling solution in a co-traveling frame,
+
+self-similar solutions are convenient to observe in a co-exploding or co-collapsing frame.
+
+Consider the rather general form of partial diﬀerential equation
+
+ut = Dx(u)
+
+(1)
+
+where the operator D satisﬁes the scaling relation
+
+Dx(Bf (x/A)) = AaBbDy(f (y)), where y = x/A
+
+(2)
+
+for A > 0, B > 0, and a and b are constants. We assume that there exists a family of
+
+where s = |t − t∗| (for the case of ﬁnite time blow-up at t = t∗) or s = t otherwise, and
+
+self-similar solutions,
+
+u(x, t) = sβU
+
+x
+sα (cid:19)
+
+;
+
+(cid:18)
+
+U satisﬁes the ODE,
+
+σβU − αyUy = Dy(U ),
+
+where y = x/(sα) with σ = sgn(t − t∗) and
+
+(3)
+
+(4)
+
+(5)
+
+β − 1 = aα + bβ.
+
+6
+
+We are interested in locating the self-similar shape of the solution as well as both
+
+similarity exponents α and β: one more equation is needed for this latter task. Starting
+
+with the general scaling
+
+u(x, t) = B(s)w(
+
+, τ (s))
+
+(6)
+
+x
+A(s)
+
+where A, B and τ are unknown functions, and setting τs(s) = σAaBb−1, the PDE
+
+becomes
+
+wτ +
+
+w −
+
+ywy = Dy(w), where y = x/A(τ ).
+
+(7)
+
+Bτ
+B
+
+Aτ
+A
+
+This is the “co-exploding” or “co-collapsing” equation which, for self-similar problems,
+
+is analogous to the “co-traveling” equation for translationally invariant ones. Two
+
+additional constraints, frequently called pinning conditions, are needed to ﬁnd both
+
+A(τ ) and B(τ ). There is some latitude in the selection of these conditions – diﬀer-
+
+ent conditions correspond to diﬀerent ways of “moving along with the solution across
+
+scales” before Eq. (7) reaches steady state, although all appropriate pinnings give the
+
+same self-similar shape and exponents [20]. In the spirit of Rowley and Marsden, we
+
+proposed in [15] that such conditions can be constructed by imposing relationships
+
+between the solution and (essentially arbitrary) template functions.
+
+Since there are two degrees of freedom (“amplitude” and “width”) we must impose
+
+two pinning conditions. Once these have been imposed, we can use Eq. (7) to solve
+
+for A(τ ) and B(τ ): it is actually possible to eliminate the Aτ /A and Bτ /B terms in
+
+Eq. (7) to end up with a “co-exploding” PDE that we called in [15] MN-dynamics.
+
+When (and if) the solution of this PDE approaches an asymptotic steady state, we can
+
+7
+
+compare coeﬃcients in Eqs. (4) and (7) to ﬁnd:
+
+α
+β
+
+=
+
+limτ →∞ Aτ /A
+limτ →∞ Bτ /B
+
+(8)
+
+Eqs. (5) and (8) allow us to obtain the scaling exponents α and β. A more detailed
+
+discussion can be found in [20]; the approach can be used to locate both types of self-
+
+similar solutions [18], and indeed in [15] it was used to locate both the Barenblatt and
+
+the Graveleau solutions of the porous medium equation.
+
+In view of our illustrative example using molecular dynamics below, we brieﬂy study
+
+the very simple case of the 1-dimensional diﬀusion equation,
+
+ut = uxx.
+
+(9)
+
+The operator in this case is Dx(u) = uxx. From Eq. (2), b = 1 and a = −2. Eq.
+
+(5) then yields α = 1/2. For self-similar solutions of the second kind, α and β cannot
+
+be computed a priori, and will be found as part of the solution process. For the two
+
+pinning conditions, we choose here to let w satisfy the following relations to two given
+
+template functions, T1(y) and T2(y) respectively,
+
++∞
+
+Z
+
+−∞
+
++∞
+
+Z
+
+−∞
+
+w(y, τ )T1(y)dy = 0
+
+w(y, τ )T2(y)dy = 1.
+
+(10)
+
+(11)
+
+These can be thought of as controlling the “width” and the amplitude of the solution.
+
+By multiplying Eq. (7) with each T (y), integrating and using the above two equations,
+
+we can eliminate A and B. A discussion of important technical conditions, having
+
+8
+
+to do with the existence of these integrals over inﬁnite domains, and the appropriate
+
+solution spaces, can be found in [34,35]. (An alternative approach is to require that the
+
+diﬀerence between the solution of Eq. (7) and a template is minimized, as discussed
+
+in [15, 17].)
+
+For our simple diﬀusion example, we set T1(y) to be
+
+T1(y) =
+
+1
+
+for |y| ≤ 1/2
+
+−1 for |y| > 1/2.
+
+
+
+
+
+From Eqs. (7), (10), and (12) we get an equation for Aτ /A. Since the subspace of
+
+solutions symmetric around x = 0 is invariant, restricting our search to symmetric
+
+solutions we ﬁnd that
+
+Similarly, if we set T2(y) = δ(y) we get
+
+Aτ
+A
+
+= −
+
+2wy(0.5, τ )
+w(0.5, τ )
+
+.
+
+Bτ
+B
+
+= wyy(0, τ ).
+
+Substituting these in Eq. (7) we get
+
+wτ + wyy(0, τ )w +
+
+ywy = wyy.
+
+(15)
+
+2wy(0.5, τ )
+w(0.5, τ )
+
+For an initial condition consistent with the constraints and the symmetry we take
+
+(12)
+
+(13)
+
+(14)
+
+(16)
+
+w(y, 0) =
+
+1
+
+for |y| ≤ 1
+
+0 for |y| > 1.
+
+
+
+
+
+9
+
+so that both Eqs. (10) and (11) are satisﬁed. Finally, we numerically integrate Eq.
+
+(15) to steady state, i.e. τ → ∞, and evaluate the exponent, β from
+
+Another choice for T2(y) would be T2(y) = 1. Physically it corresponds to conser-
+
+vation of mass, and the same procedure leads to
+
+β = −
+
+αw(0.5, +∞)wyy (0, +∞)
+2wy(0.5, +∞)
+
+.
+
+wτ +
+
+2wy(0.5, τ )
+w(0.5, τ )
+
+(w + ywy) = wyy.
+
+(17)
+
+(18)
+
+Without any further integration, it is clear that β = −α = −1/2.
+
+The above methodology evolves the diﬀerential equation in a dynamically rescaled
+
+time and space frame. Figure 1a shows the solution of the diﬀusion equation (in the
+
+central portion of a large domain) for the initial condition above; as time progresses we
+
+know that the solution decays, but it also asymptotically approaches a (self-similarly
+
+decaying) Gaussian. (For clarity, the solution is shown over several small blocks of
+
+time, alhough the equation was also integrated over the “spaces” in the ﬁgure.) Figure
+
+1b shows the same evolution in a rescaled frame using Eq. (15); the decay has now
+
+been removed through the template-based rescaling, and one only sees the transient
+
+approach to the self-similar shape (the Gaussian) consistent with the template-based
+
+pinning conditions. Figure 1c shows the same results in terms of cumulative material
+
+density and not the density itself; as we will discuss below, it is numerically more
+
+convenient in particle based simulation codes to work with the cumulative distribution
+
+function rather than the particle distribution function itself. It is interesting to consider
+
+the case in which we have a so-called “legacy code” – a code that evolves the original
+
+10
+
+equation and which we can run but cannot modify. The so-called numerical analysis of
+
+legacy codes allows us to transform a direct legacy dynamic simulator, by “‘wrapping”
+
+a computational superstructure around it, into a code capable of performing a diﬀerent
+
+set of tasks, for which the legacy simulator was not designed. In the dynamic renor-
+
+malization case, we will compute self-similar solutions by evolving in physical variables
+
+and rescaling the results, as opposed to ﬁrst obtaining and then evolving the rescaled
+
+equation. Our approach is a discrete-time approach (see also [12,21]); pioneering work
+
+on dynamic renormalization, especially in the context of the Nonlinear Schr¨odinger
+
+Equation can be found in [22, 23, 24, 25, 26, 27, 28, 29, 30, 31].
+
+3. Timestepping for coarse dynamic renormalization
+
+As we discussed above, one can use a direct simulator of the original equation to
+
+converge computationally to a (stable) self-similar solution as follows. Starting with
+
+an initial proﬁle, one evolves forward for a ﬁnite time; one then uses the template
+
+conditions to rescale the space variable for the ﬁnal proﬁle. The rescaled proﬁle is
+
+then given as an initial condition to the original equation, which is again evolved
+
+over ﬁnite time; the space variable is rescaled, and the procedure is iterated until
+
+the shape converges to a member of the family of self-similar shapes. The idea here is
+
+that rescaling, and then evolving the rescaled equation for a ﬁnite time, commutes with
+
+evolving in physical space and then rescaling the result (see Figure 2). Also, while stable
+
+self-similar solutions can be found by such dynamic rescaling and forward integration,
+
+they can also be found – and so can unstable self-similar solutions – through ﬁxed point
+
+algorithms (like Newton-Raphson). Indeed, if we call ΦT (w(y)) the result of integrating
+
+the rescaled equation with initial condition w(y) over time T , the self-similar solution
+
+11
+
+satisﬁes
+
+w(y) − ΦT (w(y)) = 0.
+
+(19)
+
+We have shown in the past how matrix-free iterative linear algebra techniques [32] can
+
+be used to converge to solutions of such problems even when the only available tool
+
+is a subroutine that numerically computes ΦT (w(y)). The original inspiration for this
+
+work was the so-called Recursive Projection Method (RPM) of Shroﬀ and Keller [33],
+
+who used this subroutine (the timestepper) and a computational superstructure (the
+
+RPM wrapper) to construct a ﬁxed point algorithm. Under appropriate conditions
+
+this algorithm accelerates the computation of stable ﬁxed points and also stabilizes
+
+the computation of dynamically unstable ones. In eﬀect, timestepping combined with
+
+matrix-free techniques “fools” a dynamic simulator into becoming a ﬁxed point solver.
+
+It is important to note in this entire exposition that we have essentially ignored here
+
+the role of the boundary conditions for the original and the rescaled equation, assum-
+
+ing we are solving in suﬃciently large domains and for suﬃciently short times; it is
+
+conceivable that weighted Sobolev spaces must be used in order to avoid spurious nu-
+
+merical oscillations [35]. This is an important issue which must be studied carefully;
+
+yet, as we will see, for our simple problem this does not create major computational
+
+diﬃculties.
+
+We now return to the premise of our introduction: we have a microscopic code
+
+(e.g. molecular dynamics, evolving a distribution of molecules); yet we believe that
+
+the coarse-grained, macroscopic behavior of the statistics of the simulation satisﬁes a
+
+macroscopic equation that possesses self-similar solutions. We will ﬁnd these solutions
+
+through what we will call the “coarse timestepper”, which we have extensively discussed
+
+12
+
+in [1, 2, 3, 4, 5, 6, 7, 8, 11], and which – for the case of dynamic renormalization – is
+
+illustrated in Figure 3. This “coarse dynamically renormalized timestepper” consists
+
+of the following elements:
+
+1. Choose the statistics of interest for describing the coarse-grained behavior of the
+
+system and an appropriate representation for them. In this case the concentration
+
+proﬁle in one space dimension is the appropriate macroscopic observable; it is
+
+the zeroth moment of the distribution of molecules over velocities (and over the
+
+second, “thin” dimension). It is more convenient to use the particle instantaneous
+
+Cumulative Distribution Function; assuming it is smooth enough, one can use a
+
+low-dimensional description of it based on the ﬁrst few of an appropriate sequence
+
+of orthogonal polynomials [36, 37]. We will call this the macroscopic description,
+
+u. These choices determine a restriction operator, M, from the microscopic-level
+
+description, U (particle coordinates) to the macroscopic description: u = MU.
+
+2. Choose an appropriate lifting operator, µ, from the macroscopic description, u, to
+
+the microscopic description, U. In our case we make random particle assignments
+
+consistent with the macroscopic CDF. µ should have the property that Mµ is
+
+the identity (Mµ = I).
+
+In other words, lifting from the macroscopic to the
+
+microscopic and then restricting (projecting) down again should have no eﬀect
+
+(except round-oﬀ).
+
+3. From an initial value at the microscopic level, U(t0), run the microscopic simula-
+
+tor (the ﬁne timestepper) for a (relatively short) macroscopic reporting horizon
+
+T generating the values U(T ). We may have to repeat this for several micro-
+
+scopic initial conditions Ui(t0), consistent with the same macroscopic one u(t0),
+
+for variance reduction purposes.
+
+13
+
+4. Obtain the restriction u(T ) = MU(T ) (the average restriction, in the case of
+
+many copies).
+
+5. Rescale u(T ) to obtain uR(T) (using the template conditions).
+
+6. Lift uR(T ) to get a new consistent microscopic U = µuR(T ) and use it as a new
+
+starting value for repeating steps 3 to 6.
+
+Since the diﬀusion equation has a stable self-similar solution, one can simply repeat
+
+the above procedure and observe the approach of the statistics of the molecular descrip-
+
+tion to the Gaussian; the repeated dynamic coarse rescaling helps avoid the continuous
+
+decay of the direct simulation towards zero. Alternatively, as we will show, one can
+
+use coarse ﬁxed point algorithms (such as Newton-Raphson) to converge iteratively to
+
+the ﬁxed point of the coarse rescaled timestepper (as opposed to repeatedly integrating
+
+and rescaling). Finally, while this is a problem where the exponents are known a priori
+
+through scaling, the formulas presented in Section 2 and the rescaling history upon
+
+convergence to the self-similar solution helps us estimate the limiting values of Aτ /A
+
+and Bτ /B. This will then help recover, through Eqs. (5) and (8) the self-similarity
+
+exponents for type-2 self-similar solutions.
+
+4. The computational experiment
+
+In this Section we outline the data collection procedure from the molecular dynamics
+
+simulation. A standard Lennard-Jones potential was used, i.e.
+
+V (r) = 4ǫ[(σ/r)12 − (σ/r)6]
+
+(20)
+
+with cutoﬀ distance 2.5σ. In what follows all results will be given in reduced units,
+
+i.e., length in units of σ, time in units of (mσ2/ǫ)1/2. The simulation was performed
+
+14
+
+in a quasi-1d box with size 400 × 10, and periodic boundary conditions in both x and
+
+y directions. We use T = 1.0, ρ = 0.5. The domain for such a simulation time was
+
+“large enough” to appear inﬁnite over the time of our simulation.
+
+First, the system is allowed to evolve to thermal equilibrium (as evidenced by
+
+stationarity of the average kinetic energy of the particles). After some simulation time
+
+we record our ﬁrst equilibrium conﬁguration, and “reset the clock” to t = 0. Subsequent
+
+equilibrium conﬁgurations are recorded at later times. To model the diﬀusion process,
+
+a fraction of the particles were colored according to prescribed distributions (consistent
+
+with given density proﬁles), and their positions in the later conﬁgurations were tracked.
+
+We are going to work with a single-variable cumulative distribution function (CDF)
+
+[36]. Suppose that N particles are colored, and the i-th particle is in position xi. Given
+
+all the colored particle positions, we can immediately obtain their empirical CDF by
+
+sorting them, that is, relabeling them so that xi ≥ xi−1, 0 < i ≤ N , and plotting xi vs
+
+pi = (i−0.5)/N ). We use the CDF rather than the density function because it is trivial
+
+to generate the empirical CDF while it is computationally diﬃcult and error-prone to
+
+compute the empirical density function which is the (ill-deﬁned) derivative of the CDF.
+
+Using only the x coordinate of particle positions is justiﬁed by our quasi-1d simu-
+
+lation box. In fact, it is easier to work with the inverse CDF, or ICDF, Q(p). It gives
+
+the the x coordinate of a given particle position, i, and it can be read oﬀ directly as
+
+Q(p(i)). Such continuous ICDFs can then be microscopically approximated by color-
+
+ing the particle with the nearest x-coordinate value in the simulation box. Using the
+
+data (positions of colored particles) from later time conﬁgurations, we can estimate
+
+the dynamics of the CDF (or ICDF) evolution.
+
+In the ﬁrst numerical experiments, we ran the systems for short bursts of time, then
+
+15
+
+applied templates to rescale the ICDF. Because the number of colored particles we used
+
+is constant, mass is automatically conserved, so that only one additional template, T1,
+
+is needed for dynamic rescaling. For this second template, we computed the slope of
+
+the center 20% of the colored particles by linear least squares, and normalized it to
+
+a ﬁxed value. This implied a simple rescaling of the x coordinates of the computed
+
+colored particle positions. These rescaled x values were then used to “lift” the rescaled
+
+ICDF: we selected the closest particles to these coordinates in the full set, and colored
+
+them for a further short burst of computation. Using this “evolve–restrict–rescale–lift”
+
+procedure repeatedly, the correct functional form of the self-similar solution will arise
+
+asymptotically: the shape of the coarse-grained description (the ICDF) converges to
+
+the inverse of the integral of a Gaussian (see Figure 4.)
+
+In the second numerical experiment, we used a Newton iteration to converge to the
+
+stationary, dynamically renormalized solution – that is, the self-similar solution. To do
+
+this, we need to restrict the CDF to a ﬁnite (preferably low-dimensional) approximate
+
+representation. Orthogonal polynomials usually provide computationally simple ap-
+
+proximations, but unfortunately they are not useful for the CDF which has a possible
+
+support from −∞ to +∞ (that is, the CDF is c(x) where x has a potentially inﬁnite
+
+range; c(x) must be monotone non-decreasing and must lie between 0 and 1). This is
+
+a second, and more important, reason for using the ICDF, x(p) where p lies in [0, 1].
+
+This function can easily be approximated by a low-degree polynomial over its range.
+
+We wish to ﬁnd a polynomial approximation, Q(p), that approximates the computed
+
+positions. That is, on the ﬁnite set of points, {xi}, corresponding to {pi} = {(i −
+
+0.5)/N }, we would like Q(pi) ≈ xi. This provides us our restriction of the microscopic
+
+data. Then we can evaluate Q at any point in [0,1] in the lifting process. (Typically, we
+
+16
+
+will evaluate it at each pi to get an approximate xi.) We are interested in minimizing
+
+the error of the approximation only at the arguments pi, i = 1, · · · , N . If we use least
+
+squares approximation with weights wi we thus want to minimize
+
+N
+
+Xi=1
+
+[xi − Q(pi)]2wi.
+
+(21)
+
+In the experiments we used unit weights, wi = 1. The best way to do this com-
+
+putationally is to create a basis for the N -dimensional vector space, φs, s = 1, · · · , N
+
+such that the s-th basis vector, φs has its i-th element deﬁned as the value of an
+
+(s − 1)-st degree polynomial evaluated at pi, that is, φsi = qs(pi). To make this basis
+
+set orthonormal, we require that
+
+hφs, φti ≡
+
+qs(pi)qt(pi) = δst.
+
+(22)
+
+N
+
+Xi=1
+
+The q polynomials thus deﬁned are scalar multiples of the orthogonal polynomials
+
+deﬁned in the usual way from the L2 norm over the unit interval.
+
+Since the steady state solution of w is symmetric, its ICDF will be an odd function
+
+of p − 0.5. For this reason, we chose orthogonal polynomials on the ﬁnite set {−0.5 +
+
+(i − 0.5)/N }. For the purposes of the Newton iteration we considered a ﬁfth degree
+
+polynomial representation of the ICDF written as
+
+Q(p) = c1φ1(p − 0.5) + c3φ3(p − 0.5) + c5φ5(p − 0.5).
+
+(23)
+
+The constancy of the number of colored particles provides one template condition for
+
+rescaling. In this example, the second template condition was applied by requiring that
+
+17
+
+c1 be constant. After each burst of microscopic simulation, the restriction to form Eq.
+
+(23) was performed, and then the polynomial was divided by c1 to get a scaled polyno-
+
+mial with c1 = 1. The use of a small number of features of the solution (“observables”)
+
+for the Newton iteration with timesteppers is justiﬁed when the long-term dynamics
+
+of an evolution equation are low-dimensional (i.e. lie on an attracting low-dimensional
+
+manifold parameterized by a small number of “modes” or “observables”, like the ci
+
+here).
+
+We can perform variance reduction by using multiple copies. In this case, because
+
+the box is large enough and the problem is translationally invariant, diﬀerent parts
+
+of the box can be used for diﬀerent realizations of evolving CDFs (and each can be
+
+colored diﬀerently so that they can be distinguished, as long as they are far enough
+
+apart to be uncorrelated). We take an average of several such realizations (typically
+
+10, or, for stationary point computations, 100).
+
+5. Results and discussion
+
+In order to demonstrate how rescaling can accelerate convergence to the self-similar
+
+shape we design a piecewise linear CDF with fewer particles in the tail part, as shown
+
+in Fig. 4. We evolve until t = 300 and rescale, but the tail part of the rescaled CDF
+
+is still signiﬁcantly away from the Gaussian.
+
+In the right lower corner of Figure 4
+
+snapshots of the colored particles in the simulation box at t = 300 and after rescaling
+
+and lifting are shown. It takes ﬁve repetitions of the procedure (evolving and rescaling)
+
+until the rescaled CDF converges visibly to the Gaussian curve.
+
+To reduce the eﬀect of noise in estimating functional derivatives or the ﬁxed point
+
+algorithm, 200 copies of the system at equilibrium are let to run further until t = 1000.
+
+A perturbation as large as 3% of the initial values of the coarse variables (the ci) is
+
+18
+
+necessary to ensure a meaningful ﬁnite diﬀerence estimate of the 2 × 2 Jacobian of the
+
+coarse self-similar ﬁxed point computation. As shown in Table 1, the ﬁxed point values
+
+of c3, c5 are c3/c1 ≈ 0.18, c5/c1 ≈ 0.075, respectively.
+
+Comparing the ﬁxed point solution shape (reconstructed based only on the com-
+
+puted polynomial terms) with the Gaussian, the only visual diﬀerence is at the tail
+
+part, where very few particles exist. The actual solution we have found (the result
+
+of initializing symmetrically with given values for the ﬁrst three odd ci and zero for
+
+the remaining ci, evolving for the given time horizon, and rescaling so that the ﬁrst
+
+three odd ci have the same values) has now acquired components in the remaining
+
+odd ci, and is closer to the Gaussian than its truncation. Using molecular dynamics
+
+constrained on these three macroscopic observables will give us a better estimate of
+
+the macroscopic ﬁxed point we located (see [38] for further discussion). Diﬀerent basis
+
+sets for the approximation can be used if signiﬁcant information in the tails is not well
+
+captured this way.
+
+The process we have described allows us to compute the shape of the self similar
+
+solution. If we also need the exponents α and β in Eq. (3) we have to know a and b
+
+deﬁned in Eq. (2) and the value of (lim Aτ /A)/(lim Bτ /B) so that we can apply Eqs.
+
+(5) and (8). When an equation is known, a and b are obtained by inspection. When
+
+it is not known in closed form, ideas similar to those used in [5] can be used to test
+
+the existence of self-similarity and estimate a and b; in particular, this will involve the
+
+microscopic simulation for short periods to estimate du/dt in Eq. (1) from multiple
+
+initial conditions that are scaled (in amplitude and space) versions of each other.
+
+Once a coarse self-similar solution has been converged to, whether through inte-
+
+gration or Newton-Raphson of the appropriately renormalized coarse dynamics, we
+
+19
+
+can use again short simulations to estimate At/A and Bt/B. Starting a microscopic
+
+simulation at time t and evolving for time d, the relative values of A and B, that is,
+
+A(t + d)/A(t) and B(t + d)/B(t), can be obtained from the scaling needed to re-impose
+
+the template conditions. These lead to approximations of At/A and Bt/B, from which
+
+α/β can be estimated using Eq. (8).
+
+6. Conclusions
+
+We have described a systematic approach for the computation of coarse self-similar
+
+solutions in situations where the only available model is a microscopic (in this case
+
+molecular dynamics) simulator. The procedure uses short, appropriately initialized
+
+bursts of MD simulation to estimate the coarse timestepper of the template-based
+
+renormalization ﬂow for the process. In the case we studied here, a 2 × 2 numerical
+
+Jacobian for the Newton iteration was suﬃcient; more generally, matrix-free tech-
+
+niques can be combined with this coarse renormalized timestepper to compute stable
+
+as well as unstable self-similar solutions, compute “ﬁnite times to blow-up” in the ap-
+
+propriate cases as well as estimate the self-similarity exponents. The stability of the
+
+self-similar solutions in the co-exploding frame can be probed through the same coarse
+
+renormalized timestepper and matrix-free eigenanalysis techniques. It is also possible
+
+to combine the equation-free algorithms presented here with the so-called ”gaptooth
+
+scheme” and ”patch dynamics” [6, 39, 40, 7]. The microscopic computations are not
+
+performed across all of space, but only in relatively small physical domains (”teeth”
+
+separated by gaps and connected through appropriate boundary conditions). This ap-
+
+proach exploits smoothness of the macroscopic observables (e.g. particle density) in
+
+space as well as time, in order to further reduce the microscopic simulation necessary
+
+to compute coarse self-similar solutions.
+
+20
+
+It is important to notice that the results are valid over some scaling regime, while for
+
+model equations they in principle hold over all scales. In the context of non-Newtonian
+
+ﬂuid mechanics, such techniques could assist the quantitative detection of self-similarity
+
+in phenomena such as spreading [41,42]. More ambitiously, one may envision the use of
+
+equation-free coarse renormalization to study the self-similar behavior of the evolution
+
+of spectra in turbulence studies [43].
+
+Extensive research explores the onset of dynamic self-similarity as operating pa-
+
+rameters vary [16] as well as the study of asymptotically self-similar solutions. Self-
+
+similar solutions may explode or collapse in inﬁnite time (as in the case of the diﬀusion
+
+equation we studied here) or can have ﬁnite-time blow-ups, in which the solution in-
+
+creasingly accelerates in time. Conversely it is possible to have self-similar solutions
+
+which progressively decelerate in time; this may be relevant in the description of glassy
+
+dynamics [44], and it is conceivable that extensions of the approach presented here may
+
+assist in accelerating the computation of self-similar solutions that progressively slow
+
+down.
+
+Acknowledgments
+
+This work was partially supported by AFOSR (Dynamics and Control) as well as
+
+an NSF/ITR grant. Discussions with Profs. P. Kevrekidis, C. Rowley, D. G. Aronson,
+
+S. Betelu and Dr. K. Lust are gratefully acknowledged.
+
+21
+
+References
+
+[1] K. Theodoropoulos, Y. H. Qian, and I. G. Kevrekidis, Coarse stability and bi-
+
+furcation analysis using timesteppers: a reaction diﬀusion example, Proc. Natl.
+
+Acad. Sci. USA, 97 (2000) 9840–9843.
+
+[2] C. W. Gear,
+
+I. G. Kevrekidis, and C. Theodoropoulos, Coarse integra-
+
+tion/bifurcation analysis via microscopic simulations: micro-Galerkin methods,
+
+Comp. Chem. Eng., 26 (2002) 941–963.
+
+[3] A. G. Makeev, D. Maroudas, A. Z. Panagiotopoulos, and I. G. Kevrekidis, Coarse
+
+bifurcation analysis of kinetic Monte Carlo simulations: a lattice gas model with
+
+lateral interactions, J. Chem. Phys., 117 (2002) 8229–8240.
+
+[4] C. Siettos, M. D. Graham, and I. G. Kevrekidis, Coarse Brownian dynamics for ne-
+
+matic liquid crystals: bifurcation, projective integration and control via stochastic
+
+simulation, J. Chem. Phys., 118 (2003) 10149–10157.
+
+[5] J. Li, P. G. Kevrekidis, W. C. Gear, and I. G. Kevrekidis, Deciding the nature of
+
+the coarse equation through microscopic simulations: the baby-bathwater scheme,
+
+SIAM MMS, 1 (2003) 391–407.
+
+[6] C. W. Gear, J. Li, and I. G. Kevrekidis, The gaptooth method in particle simula-
+
+tions, Phys. Lett. A, 316 (2003) 190–195.
+
+[7] I. G. Kevrekidis, C. W. Gear, J. M. Hyman, P. G. Kevrekidis, O. Runborg, and
+
+K. Theodoropoulos, Equation-free multiscale computation: enabling microscopic
+
+simulators to perform system-level tasks, Comm. Math. Sci., 1 (2003) 715–762,
+
+see also physics/0209043.
+
+22
+
+[8] G. Hummer and I. G. Kevrekidis, Coarse molecular dynamics of a peptide frag-
+
+ment: free energy, kinetics and long-time dynamics computations, J. Chem. Phys.,
+
+118 (2003) 10762–10773.
+
+[9] V. B. Shenoy, R. Miller, E. B. Tadmor, D. Rodney, R. Phillips, and M. Ortiz, An
+
+adaptive ﬁnite element approach to atomic-scale mechanics–the quasi-continuum
+
+method, J. Mechanics and Phys. Solids, 47 (1999) 611–642.
+
+[10] A. J. Chorin, A. P. Kast, and R. Kupferman, Optimal prediction of under-resolved
+
+dynamics, Proc. Natl. Acad. Sci. USA, 95 (1998) 4094–4098.
+
+[11] C. Theodoropoulos, K. Sankaranarayanan, S. Sundaresan, and I. G. Kevrekidis,
+
+Coarse bifurcation studies of bubble ﬂow Lattice Boltzmann simulations, Chem.
+
+Eng. Sci., (2003), in press, see also nlin.PS/0111040.
+
+[12] O. Runborg, C. Theodoropoulos, and I. G. Kevrekidis, Eﬀective stability and
+
+bifurcation analysis: a time stepper based approach, Nonlinearity, 15 (2002) 491–
+
+511.
+
+[13] J. Moeller, O. Runborg, P. G. Kevrekidis, K. Lust, and I. Kevrekidis, Eﬀec-
+
+tive equations for discrete systems: a time stepper based approach, Nonlinearity,
+
+(2003), submitted, see also physics/0307153.
+
+[14] C. W. Rowley and J. E. Marsden, Reconstruction equations and the Karhunen-
+
+lo´eve expansion for systems with symmetry, Physica D, 42 (2000) 1–19.
+
+[15] D. G. Aronson, S. I. Betelu, and I. G. Kevrekidis, Going with the ﬂow: a La-
+
+grangian approach to self-similar dynamics and its consequences, Proc. Natl. Acad.
+
+Sci. USA, (2003), submitted, see also nlin.AO/0111055.
+
+23
+
+[16] C. I. Siettos, I. G. Kevrekidis, and P. G. Kevrekidis, Focusing revisited: a renor-
+
+malization/bifurcation approach, Nonlinearity, 16 (2003) 497–506.
+
+[17] C. W. Rowley, I. G. Kevrekidis, J. E. Marsden, and K. Lust, Reduction and
+
+reconstruction for self-similar dynamical systems, Nonlinearity, 16 (2003) 1257–
+
+1275.
+
+[18] G. I. Barenblatt, Scaling, Self-similarity, and Intermediate Asymptotics, Cam-
+
+bridge University Press, Cambridge, 1996.
+
+[19] N. Goldenfeld, Lectures on Phase Transition and the Renormalization Group,
+
+Addison-Wesley, Reading, MA, 1992.
+
+[20] K. Lust, C. W. Rowley, and I. G. Kevrekidis, On the computation and stability
+
+analysis of self-similar solutions, (2003), in preparation.
+
+[21] L. Y. Chen and N. Goldenfeld, Numerical renormalization-group calculations for
+
+similarity solutions and traveling waves, Phys. Rev. E, 51 (1995) 5577–5581.
+
+[22] D. W. McLaughlin, G. C. Papanicolaou, C. Sulem, and P. Sulem, Focusing singu-
+
+larity of the cubic Schr¨odinger equation, Phys. Rev. A, 34 (1986) 1200–1210.
+
+[23] B. J. LeMesurier, G. C. Papanicolaou, C. Sulem, and P. Sulem, Focusing and
+
+multi-focusing solutions of the nonlinear Schr¨odinger equation, Physica D, 31
+
+[24] B. J. LeMesurier, G. C. Papanicolaou, C. Sulem, and P. Sulem, Local structure
+
+of the self-focusing singularity of the nonlinear Schr¨odinger equation, Physica D,
+
+(1986) 78–102.
+
+32 (1986) 210–226.
+
+24
+
+[25] M. J. Landman, G. C. Papanicolaou, C. Sulem, and P. Sulem, Rate of blow-up for
+
+solutions of the nonlinear Schr¨odinger equation at critical dimension, Phys. Rev.
+
+[26] N. J. Kopell and M. Landman, Spatial structure of the focusing singularity of the
+
+nonlinear Schr¨odinger equation: a geometrical analysis, SIAM J. Appl. Math., 55
+
+A, 38 (1988) 3837–3843.
+
+(1995) 1297–1323.
+
+[27] C. Sulem and P. L. Sulem, Focusing nonlinear Schr¨odinger equation and wave-
+
+packet collapse, Nonlin. Anal. Theor. Meth. Appl., 30 (1997) 833–844.
+
+[28] M. J. Landman, G. C. Papanicolaou, C. Sulem, P. Sulem, and X. P. Wang, Sta-
+
+bility of isotropic singularities for the nonlinear Schr¨odinger equation, Physica D,
+
+47 (1991) 393–415.
+
+[29] W. Ren and X. P. Wang, An iterative grid redistribution method for singular
+
+problems in multiple dimensions, J. Comp. Phys., 159 (2000) 246–273.
+
+[30] V. E. Zakharov and V. F. Shvets, Nature of wave collapse in the critical case,
+
+JETP Lett., 47 (1988) 275–278.
+
+[31] N. E. Kosmatov, V. F. Shvets, and V. E. Zakharov, Computer simulation of wave
+
+collapses in the nonlinear Schr¨odinger equation, Phys. D, 52 (1991) 16–35.
+
+[32] C. T. Kelley, Iterative Methods for Linear and Nonlinear Equations, SIAM Pub-
+
+lications, Philadelphia, 1995.
+
+[33] G. M. Shroﬀ and H. B. Keller, Stabilization of unstable procedures: the recursive
+
+projection method, SIAM J. Numer. Anal., 30 (1993) 1099–1120.
+
+[34] W. J. Beyn and V. Thuemmler, Freezing solutions of equivariant evolution equa-
+
+tions, Mathematics Preprint, University of Bielefeld, 03-022(2003).
+
+25
+
+[35] T. Gallay and C. E. Wayne, Invariant manifolds and the long-time asymptotics
+
+of the Navier-Stokes and vorticity equations on R2, Arch. Rat. Mech. Anal., 163
+
+[36] C. W. Gear, Projective integration methods for distributions, NEC TR, (2001)
+
+[37] S. Setayeshgar, C. W. Gear, H. G. Othmer, and I. G. Kevrekidis, Application of
+
+coarse integration to bacterial chemotaxis, SIAM MMS, (2003), submitted, see
+
+[38] C. W. Gear and I. G. Kevrekidis, Constraint-deﬁned manifolds: a legacy-code
+
+approach to low-dimensional computation, J. Sci. Comp., (2003), submitted, also
+
+(2002) 209–258.
+
+130.
+
+also physics/0308040.
+
+physics/0312094.
+
+[39] G. Samaey, D. Roose and I. G. Kevrekidis, Patch Dynamics for Homogenization
+
+Problems, SIAM MMS, (2003), submitted.
+
+[40] G. Samaey, I. G. Kevrekidis and D. Roose, Damping Factors for the gap-tooth
+
+scheme, Proceedings of the 2003 Multiscale Summer School in Lugano, Springer,
+
+October 2003, see also physics/0310014.
+
+[41] L. Ansini and L. Giacomelli, Shear-thinning liquid ﬁlms: macroscopic and asymp-
+
+totic behavior by quasi-self-similar solutions, Nonlinearity, 15 (2002) 2147–2164.
+
+[42] D. G. Aronson, S. I. Betelu M. A. Fontelos and A.Sanchez, Analysis of the self-
+
+similar spreading of power-law ﬂuids, (2003), math-ph/0306073.
+
+[43] M. V. Melander and B. R. Fabijonas, Self-similar entropy divergence in a shell
+
+model of isotropic turbulence, J. Fluid Mech., 463 (2002) 241–258.
+
+26
+
+[44] P. G. Kevrekidis, S. K. Kumar, and I. G. Kevrekidis, An exploding glass, Phys.
+
+Lett. A, 318 (2003) 364–372, see also cond-mat/0301021.
+
+27
+
+Figure Captions
+
+Fig. 1 a) Time evolution of an initial rectangular density proﬁle by the 1d diﬀusion
+
+equation, Eq. (9). b) Dynamically renormalized evolution of the same shape using Eq.
+
+(15). c) Cumulative distribution function representation of (b).
+
+Fig. 2 Rescaling the ﬁnite time direct simulation commutes with the dynamic
+
+renormalization ﬂow.
+
+Fig. 3 Schematic view of the coarse dynamically renormalized timestepper.
+
+Fig. 4 Coarse evolution of the cumulative distribution function using coarse renor-
+
+malized timestepping, starting with a piecewise linear CDF. The inset shows (top) a
+
+snapshot obtained around the center of the computational domain after t = 300, as
+
+well as (bottom) the result of restricting, rescaling and lifting this snapshot.
+
+28
+
+Table 1: Dynamically renormalized ﬁxed point computation using Newton-Raphson.
+c5/c1
+1
+0.156855
+0.0816683
+0.0745533
+0.0747852
+
+|∆c3/c1| + |∆c5/c1|
+1.09626
+0.138427
+0.01203
+0.00207797
+0.000377391
+
+c3/c1
+0
+0.278266
+0.188089
+0.176717
+0.178675
+
+iteration
+0
+1
+2
+3
+4
+
+29
+
+P
+
+P
+
+F
+D
+C
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+4
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+4
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+4
+
+2
+
+2
+
+2
+
+a
+
+b
+
+c
+
+1
+
+1
+
+1
+
+0
+
+x
+
+−2
+
+−4
+
+−4
+
+−3
+
+−2
+
+log(t)
+
+0
+
+−1
+
+0
+
+x
+
+−2
+
+−4
+
+−4
+
+−3
+
+−2
+
+log(t)
+
+0
+
+−1
+
+0
+
+x
+
+−2
+
+−4
+
+−4
+
+−3
+
+−2
+
+log(t)
+
+0
+
+−1
+
+30
+
+Figure 1:
+a) Time evolution of an initial rectangular density proﬁle by the 1d diﬀusion
+equation, Eq. (9). b) Dynamically renormalized evolution of the same shape using Eq. (15).
+c) Cumulative distribution function representation of (b).
+
+EVOLVE RESCALED
+
+E
+L
+A
+C
+S
+E
+R
+
+EVOLVE
+
+ 
+
+R
+E
+S
+C
+A
+L
+E
+E
+V
+O
+L
+V
+E
+D
+
+Figure 2: Rescaling the ﬁnite time direct simulation commutes with the dynamic renormal-
+ization ﬂow.
+
+Consistent Microscopic ICs
+
+Microscopic
+Timestepper
+
+T
+F
+I
+L
+
+µ
+
+(cid:38)(cid:39)(cid:41)
+
+(cid:51)(cid:39)(cid:41)
+
+Macroscopic Description
+
+M
+
+R
+E
+S
+T
+R
+C
+T
+
+I
+
+R
+E
+S
+C
+A
+L
+E
+
+(cid:38)(cid:39)(cid:41)
+
+(cid:51)(cid:39)(cid:41)
+
+(cid:38)(cid:39)(cid:41)
+
+(cid:51)(cid:39)(cid:41)
+
+Figure 3: Schematic view of the coarse dynamically renormalized timestepper.
+
+31
+
+Figure 4: Coarse evolution of the cumulative distribution function using coarse renormal-
+ized timestepping, starting with a piecewise linear CDF. The inset shows (top) a snapshot
+obtained around the center of the computational domain after t = 300, as well as (bottom)
+the result of restricting, rescaling and lifting this snapshot.
+
+32
+
+

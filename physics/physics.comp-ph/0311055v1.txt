@@ -1,0 +1,907 @@
+3
+0
+0
+2
+ 
+v
+o
+N
+ 
+3
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+5
+5
+0
+1
+1
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Improved neighbor list algorithm by using
+domain decomposition and data sorting
+method
+
+Yao Zhenhua a,∗, Wang Jian-Sheng a,b, Liu Guirong c
+Cheng Min d
+
+aThe Singapore-MIT Alliance, National University of Singapore, Singapore 117576
+bDepartment of Computational Science, National University of Singapore,
+Singapore 119260
+cCentre for Advanced Computations in Engineering Science (ACES), Department
+of Mechanical Engineering, National University of Singapore, Singapore 119260
+dDepartment of Communication Engineering, Nanyang Technological University,
+Singapore 639798
+
+Abstract
+
+The conventional Verlet table neighbor list algorithm is improved to reduce the
+number of unnecessary interatomic distance calculation in molecular simulation in-
+volving a lot of of atoms. Both of the serial and parallelized performance of molecu-
+lar dynamics simulation are evaluated using the new algorithm and compared with
+those using the conventional Verlet table and cell-linked list algorithm. Results
+show that the new algorithm signiﬁcantly improved the performance of molecular
+dynamics simulation in serial programs as well as parallelized programs.
+
+Key words: Molecular dynamics, Neighbor list, Verlet table, Cell-linked list
+PACS: 31.15Qg, 33.15Dj
+
+1 Introduction
+
+Some molecular simulation techniques such as molecular dynamics and Monte
+Carlo method are widely used to study the physical properties and chemical
+
+∗ Corresponding author.
+
+Email address: smayzh@nus.edu.sg (Yao Zhenhua).
+
+Preprint submitted to Elsevier Science
+
+20 February 2014
+
+processes which contain large amount of particles at the atomic level in sta-
+tistical physics, computational chemistry, and molecular biology ﬁeld[1]. All
+these methods involve evaluation of the sum of total interatomic potential
+energy Vtot of N atoms and/or its gradients. The potential energy contains
+various interatomic interactions in the physical system, and is usually the
+function of internal coordinates of atoms, or can be expressed by interatomic
+distances between two atoms, bond angles among three atoms, etc. For ex-
+ample in molecular dynamics, the potential energy of liquids and gases is
+often described as a sum of two-body (or pairwise) interactions over all atom
+pairs. A common practice of two-body interatomic interaction is expressed by
+Lennard-Jones potential function, which is a simple function of the distance
+rij between atom i and j, and is shown as follows,
+
+The total potential energy is the sum of pairwise interactions over all atoms,
+
+VLJ(rij) =
+
+σ
+rij !
+
+ 
+
+12
+
+−
+
+6
+
+σ
+rij !
+
+ 
+
+ǫ
+4 
+
+
+
+
+
+
+Vtot =
+
+VLJ(rij)
+
+1
+2
+
+N
+
+N
+
+i=1
+X
+
+j=1
+X
+j6=i
+
+(1)
+
+(2)
+
+In molecular dynamics simulation, evaluation of Eq.(2) and its gradient usu-
+ally costs usually most of CPU time. Apparently direct calculation of Eq.(2)
+requires N 2 steps. If we notice that V (rij) = V (rji), the total calculation steps
+can be decreased to N(N −1)/2. Obviously it is formidable to carry out such a
+calculation when there are many atoms in the system, and some methods are
+strongly needed to reduce the redundant computation related to evaluation of
+Eq.(2) .
+
+A General way to reduce the calculation steps of Eq.(2) is using a cutoﬀ
+distance rcut in potential functions, and assumes that both potential functions
+and gradients beyond the cutoﬀ distance are zero. This treatment reduces the
+computing time greatly by neglecting all atoms beyond the cutoﬀ distance,
+since interactions between these atoms are zero and needn’t to be considered.
+A straightforward way to determine which atoms are within cutoﬀ distance
+is to evaluate all distances over all atoms pairs, and this procedure needs
+N(N − 1)/2 steps.
+
+Eﬀective reduction of redundant calculation of interatomic potential can be
+accomplished by conventional Verlet table algorithm and cell-linked list algo-
+rithm.
+
+Basically there is a tradeoﬀ between overhead for maintaining neighbor list
+table and reduction of calculation of unnecessary interatomic distance.
+
+2
+
+In this paper conventional Verlet table method is improved and the overhead
+to maintain the neighbor list table has been reduced to the order O(N), and
+the eﬃciency of calculating interatomic distance is still as high as those of
+Verlet table and cell-linked list methods in almost all instances. Furthermore
+it is easy to parallelize on SMP platforms as well as on workstation clusters.
+
+Conventional Verlet table algorithm and cell-linked list algorithm have been
+widely parallelized and have shown signiﬁcant reduction in total computing
+time. In this work it is intend to optimize serial performance on single pro-
+cessor as well as parallel environment. The modiﬁcation of the algorithm and
+demonstration of the improved performance on single processor computer and
+dual–processors are described in this paper. Moreover the molecular dynamics
+program based on the improved Verlet table method has shown good scala-
+bility on Linux workstation cluster system.
+
+2 Improved Verlet table algorithm
+
+The conventional Verlet table method and cell-linked list method have been in-
+troduced in a classical book about molecular simulation by Allen and Tildesley[5].
+Some graphics in this section are drawn in two dimensions for convenience of
+illustration, however, all discussions are easy to be generalized to three dimen-
+sional systems.
+
+2.1 Conventional Verlet table algorithm
+
+The basic idea of Verlet table method is to construct and maintain a list of
+neighboring atoms for every atom in the system. During the simulation, this
+neighbor list will be updated periodically for a ﬁxed interval or reconstruct
+itself automatically when some atoms move too much and the list is going to
+be out-of-date.
+
+In conventional Verlet table algorithm the potential cutoﬀ sphere of radius
+rcut is surrounded by a “skin”, to give a larger sphere of radius rs [5]. In the
+ﬁrst step of simulation, a neighbor list is constructed for every atom in the
+system, and an atom is considered as a “neighbor” if the distance between
+two atoms is equal to or shorter than rs. Over the next few time steps this
+neighbor list is used in the force and potential evaluation routine. Each atom
+is assumed to interact only with those in its neighbor list, thus a huge amount
+of unnecessary interatomic distance calculation is eliminated and the overall
+performance is increased. In the following from time to time, the neighbor list
+is reconstructed and the similar procedure is repeated. It should be noticed
+
+3
+
+that the “skin” around the cutoﬀ distance is chosen to be large enough so that
+between reconstruction intervals any atom which is not in the neighbor list of
+an atom cannot penetrate through the skin into the cutoﬀ sphere.
+
+Cutoff
+
+Skin
+
+Fig. 1. Illustion of conventional Verlet table algorithm
+
+The interval between updating of neighbor list table can be a ﬁxed value in
+the program, and this value varies for diﬀerent system with diﬀerent atom mo-
+bility. Neighbor list can also be automatically updated by monitoring the ac-
+cumulation of atoms’ displacement vectors, when diﬀerence of any two atoms’
+displacement vectors is large enough, the neighbor list is reconstructed.
+
+In conventional Verlet table algorithm, it is needed to evaluate the interatomic
+distances between all atom pairs, so the total steps to construct a neighbor
+list table are the order O(N 2). But once the neighbor list is constructed and
+between the interval of updating, evaluation of the forces / potentials of the
+system is eﬃcient because there are only atoms in the neighbor list, i.e., in the
+sphere of rs as the radius, need to be evaluated the interatomic distances, and
+this procedure requires the order of O(N · Nneighbor) steps, in which Nneighbor
+is the average number of neighbors in the material and won’t change with the
+system size.
+
+The Verlet table method has been proven to be eﬃcient when a system con-
+tains a relatively small number of atoms and the atoms move slowly. Its ad-
+vantage of this conventional method is the eﬃciency of using neighbor list in
+the evaluation of forces / potentials, as the average number of neighbors in the
+list is only a few more than actual needed (they are atoms which fall inside the
+“skin”). Its disadvantage is the ineﬃciency of constructing neighbor list, as
+the procedure requires the order of O(N 2) steps (more precisely, N(N − 1)/2
+steps). Moreover, as the atoms move quickly, either the “skin” must increase
+or the frequency of reconstructing neighbor list table must increase. Both of
+two requirements make the overall calculation increases dramatically.
+
+4
+
+2.2 Cell-linked list algorithm
+
+The Conventional cell-linked list algorithm is another eﬀective method to re-
+duce the calculation of potential and force evaluation when the number of
+atoms is large. In this method, the simulation space is partitioned into several
+cells, and each edge of cells is equal to or larger than cutoﬀ distance of the
+potential function. All atoms are assigned to the cells according to their posi-
+tions, and during this procedure a linked list of the atom indices is created. At
+the beginning of a simulation, an array that contains a list of cell neighbors for
+each cell is created, and this list remains ﬁxed unless the simulation domain
+changes during the simulation[5].
+
+Any cell should be one of the neighbors of a cell if it has at least one point
+within the cutoﬀ distance of any point. Since in the conventional method all
+edges of each cell are equal to or larger than rcut, considering the periodic
+boundary condition any cell has 8 neighbors (for two dimensional domain) or
+26 neighbors (for three dimensional domain). The atoms which are not located
+in neighbors of a cell are fall outside of potential function cutoﬀ distance.
+Thus the neighbors of each atom can be listed by enumerating all atoms in all
+neighbor cells and the cell itself.
+
+The overhead to update the neighbor list, i.e., assigning each atom to corre-
+sponding cells, is very small, but a big number of interatomic distances still
+need to be evaluated in the potential/force calculation, and this makes cell-
+linked list method rather ineﬃcient compared to Verlet table method when
+the number of atoms is small. A common choice of the cell edge is the potential
+cutoﬀ distance rcut, thus for each atom all atoms in 27 cells, or in the volume
+of 27 × r3
+cut, will be evaluated the interatomic distances. Ideally, only atoms
+in the volume of 4
+cut ≈ 4.189 r3
+cut are fall in the cutoﬀ distance and need to
+evaluate the interatomic distances.
+
+3πr3
+
+However, if a small cell edge is used, volume used to contain atoms whose inter-
+atomic distance need to be calculated will dramatically reduced. For example
+if 1
+cut, only 57.87% of
+one in conventional method, as shown in ﬁgure 2 for two dimensional system.
+
+2rcut is chosen as the edge of cells, the volume is (2.5)3 r3
+
+Furthermore, the edges of cells can be chosen to as small as at most one
+atom can be contained only, as described in Ref[5]. This treatment seems
+completely solve the problem of over-counting too many atoms, but actually
+it is not convenient to enumerate all neighbors for each cell, thus the overall
+performance is limited.
+
+Comparing with conventional Verlet table method, we can know that the ad-
+vantage of cell-linked list method is the fast and eﬃcient building of “neighbor
+
+5
+
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+
+Fig. 2. In conventional cell-linked list method, the simulation domain is partitioned
+into cells with the edge length of rcut. For searching neighbors of circled atom, all
+atoms in nine cells need to evaluate the interatomic distance. But if the simulation
+domain is partitioned with 1
+2 rcut, atoms in shadowed 11 cells cannot be neighbors
+of circled atom, only 69.4% of interatomic distances in conventional method need
+to be evaluated.
+
+list”, and the disadvantage is that there are too many unnecessary atoms need
+to evaluate the interatomic distances in the “neighbor list” and the improved
+methods seems increase the complexity of constructing and using algorithm
+but the overall performance has little improvement only.
+
+2.3 Improved method of Verlet table
+
+In the section 2.1 one can know that the reason why the steps of maintaining
+Verlet table in conventional method is the order of O(N 2) is enumerating
+every atom in the simulation domain for ﬁnding out the neighbors of an atom.
+And also in section 2.2, we know that cell-linked list method doesn’t have this
+trouble so that its neighbor list constructing speed is higher, but the eﬃciency
+of utilizing neighbor list in force / potential evaluation is sacriﬁced. If the
+advantages of both methods can be combined together, the algorithm can be
+optimized.
+
+2.3.1 Domain decomposition approach to search neighbors
+
+In this work conventional Verlet table method and cell-linked list method are
+combined together, to prevent the constructing of the neighbor list table from
+over-counting too many atoms. Like the cell-linked list method, the whole
+simulation domain is partitioned into several cells, and the edges of these cells
+can be larger or smaller than the potential function cutoﬀ distance rcut, every
+time before constructing neighbor list table, each atom is assigned to these
+cells by their coordinates, and then Verlet table search algorithm is used to
+construct the neighbor list table, but only atoms in neighbor cells are needed
+to evaluate the interatomic distances, instead of all atoms in the system.
+
+Because the searching of neighbors is limited to a ﬁxed number of cells instead
+of whole simulation domain, the order of overall neighbor list construction
+
+6
+
+becomes O(c · N) from O(N 2). For systems contain more than 1000 atoms,
+this improvement is very signiﬁcant and the overall performance is greatly
+boosted.
+
+For gas and liquid simulation by using Lennard–Jones potential, we ﬁnd that
+the best practice of cell edge is 1
+2 rcut after testing on several computers with
+diﬀerent architechtures.
+
+2.3.2 Acceleration of data access by data sorting
+
+By considering the pipeline architecture of modern CPUs nowadays, further
+eﬀort has been made to boost the computation performance: sorting the stor-
+age sequences of atoms in the memory and make atoms which in the same cell
+or neighbor cells are also in adjacent memory locations, thus the data can be
+loaded and cached more eﬃciently.
+
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)
+
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+
+Fig. 3. Illustration of data sorting. In this method, atoms which near in simulation
+domain are also stored continuously. Every time after update the neighbor list table,
+all atom coordinates data are sorted to maximize the data cache hit rate.
+
+For better understanding the reason why carrying out data sorting, we can
+consider the gas and liquid materials which have high atomistic mobility. In
+the beginning while the structure data is just generated, the data of position,
+velocity and acceleration are well sorted, and the memory location of an atom
+is near those of its neighbors, sometimes all neighbors’ data can be loaded into
+limited number of cache lines if the original structure data is well orgnized.
+But as long as the simulation is going on and the atoms are moved here and
+there, this situation will change, the memory locations of every atom are far
+from each other, and seldom in the same cache line. Then the CPU is hard to
+ﬁnd the next neighbor’s data in the cache, and has to stall the calculation and
+fetch it into the cache, however, the useless data long with the newly incoming
+data pollute the data cache, thus the data cache can never be well utilized.
+This situation can be detected in a long time simulation, as an example shown
+in ﬁgure 4, in which a very signiﬁcant performance degradation can be seen.
+
+The solution of this problem is rather straightforward, i .e. , sorting the data
+of atoms by their positions and make the memory locations of same atom’s
+neighbors as near as possible. After this treatment, no distinct performance
+degradation can be seen in the long time simulation.
+
+Togeth with domain composition algorithm in section 2.3.1, the data locality
+is enhanced when the program is running. Thus when writing programs for
+
+7
+
+e
+c
+n
+a
+m
+r
+o
+f
+r
+e
+P
+
+73000
+
+72000
+
+71000
+
+70000
+
+69000
+
+68000
+
+67000
+
+66000
+
+65000
+
+10000
+
+20000
+
+30000
+
+40000
+
+70000
+
+80000
+
+90000
+
+100000
+
+60000
+50000
+Number of steps
+
+Fig. 4. Performance degradation with simulation due to high data cache miss rate.
+
+SMP platforms, the data can be easily and well partitioned, and the searching
+of neighbors can be carried out by each CPU in the computers independently,
+thus the well parallelized execution can be achieved.
+
+In this work, the overall procedure for constructing neighbor list table is shown
+in Algorithm 1.
+
+Algorithm 1. Improved neighbor list algorithm
+
+{Assigning all atoms into their appropriate cells}
+for all atoms in the system do
+
+calculate the index i of its appropriate cell;
+append the index of atom into the list of cell i;
+
+end for
+{Sorting atoms by their coordinates}
+{Now carry out conventional Verlet table procedure}
+for all atoms i in the system do
+l ⇐ the cell number of atom i
+for all cells m among neighbors of cell l and cell l do
+
+for all atoms j in cell m do
+
+calculate interatomic distance rij;
+apply the periodic boundary condition;
+if rij < rcut then
+
+append j into the neighbor list of atom i;
+
+end if
+end for
+
+end for
+
+end for
+
+3 Results
+
+A molecular dynamics simulation program using Lennard-Jones (12 − 6) two-
+body potential is developed to compare the performance of three diﬀerent
+
+8
+
+neighbor list algorithms. The benchmarks are carried out on Compaq Alpha
+Server DS20 with two EV67/667 MHz processors and Tru64 5.1A operating
+system installed, the program is written in Fortran 90 and compiled by Com-
+paq Fortran compiler V5.5–1877. We also run the same benchmarks on a PC
+with one Intel Pentium III 866 MHz CPU and Red Hat Linux 8.0 installed,
+and a HP RX2600 workstation with two Intel Itanium2 900 MHz processors
+and Red Hat Linux Advanced Workstation installed. CPUs in these three
+platforms have diﬀerent architectures: Alpha EV67 is a typical RISC (Re-
+duced Instruction Set Computing) CPU, Intel Pentium III is a CISC (Com-
+plex Instruction Set Computing) CPU, while Itanium2 is supposed to be a new
+architecture named EPIC (Explicitly Parallelized Instruction Computing) ar-
+chitecture. The performances on three platforms diﬀer largely, however the
+relative diﬀerence between three diﬀerent algorithms are qualitively similar.
+All data given in this section are results from Alpha Server DS20.
+
+For measuring the performance quantitatively a new unit named atom·step/second
+is deﬁned. It can be simply calculated by multiply number of atoms and num-
+ber of steps simulated divided by number of seconds elapsed. The larger is
+this value, the better is the overall performance. For computers with same
+architecture, and the program is linearly scaled, this number is proportional
+to the CPU performance.
+
+In the simulation, some uniformly distributed Argon atoms with random loca-
+tions are placed in the domain ﬁrstly, and the density of gas are predetermined.
+Then simulation in canonical ensemble is performed, and the number of steps
+is 102 for 104 atoms and above, or 103 for 103 ∼ 104 atoms, or 104 for 999
+atoms or less. The No´se–Hoover thermostat is used to implement the canonical
+ensemble simulation, and the temperature of system is 300 K.
+
+In order to verify the improved Verlet table algorithm, all neighbor lists were
+dumped to the disk ﬁles and compared those in Verlet table algorithm for
+diﬀerent system size. In the veriﬁcation simulation the statistical quantities,
+such as total potential energy, total kinetic energy, transient temperature of
+system and the trajectory of atoms have been recorded for every 10 steps, and
+three sets of data generated from three algorithms are compared and ensure
+they diﬀer in round-oﬀ errors only. A series of tests showed that neighbor
+lists from improved Verlet table method are exactly as same as those from
+conventional methods, and simulations with three diﬀerent algorithms output
+exactly same results.
+
+For diﬀerent simulation the volume of system is increased with constant den-
+sity, thus the number of atoms is increased correspondingly, and the perfor-
+mance is calculated.
+
+Comparison of performances of molecular dynamics simulation with diﬀerent
+
+9
+
+algorithms are shown in Fig. 5 (single processor results) and Fig. 6 (dual-
+processor results)
+
+1000
+
+10000
+Number of atoms
+
+100000
+
+1e+06
+
+Fig. 5. Comparison of three algorithms on single processor system. The performance
+is measured in the unit of “atom·step/second”, and its value can be calculated by
+multiply number of atoms by number of steps and divided by the whole simulation
+time. The three curves from top to bottom stand for performances of our improved
+method, Verlet table and cell-linked list method, respectively.
+
+cell-linked list
+Verlet table
+our work
+
+cell-linked list
+Verlet table
+our work
+
+100000
+
+90000
+
+80000
+
+70000
+
+60000
+
+50000
+
+40000
+
+30000
+
+20000
+
+10000
+
+e
+c
+n
+a
+m
+r
+o
+f
+r
+e
+P
+
+0
+100
+
+200000
+
+180000
+
+160000
+
+140000
+
+120000
+
+100000
+
+80000
+
+60000
+
+40000
+
+20000
+
+e
+c
+n
+a
+m
+r
+o
+f
+r
+e
+P
+
+0
+100
+
+1000
+
+10000
+Number of atoms
+
+100000
+
+1e+06
+
+Fig. 6. Comparison of three algorithms on dual-processor system. The three curves
+from top to bottom stand for performances of our improved method, Verlet table
+and cell-linked list method, respectively.
+
+From the results, we can see that improved Verlet table method in our work
+takes very signiﬁcant improvement to the overall simulation performance.
+When the system is small, the performance of new method is as high as those
+of conventional Verlet table method. While the system scale increases and
+there are more and more atoms, the performance of conventional Verlet ta-
+ble method decreases sharply, but the performance of new method becomes
+even better. As the system is as big as 75 atoms, the performance of conven-
+tional verlet table method becomes very bad, which is far behind those of new
+method. On the other hand, though conventional cell–linked list method can
+handle a large system due to its small memory allocation, its performance is
+much lower than that of new method.
+
+We can also see that in SMP platforms, the new method still exhibits higher
+performance than the other two methods. This should be taken by the using
+of domain composition algorithm.
+
+10
+
+4 Conclusions
+
+Nowadays the performance of CPU is increased follows Moore’s law, and
+more and more powerful supercomputers are emerged continuously, thus larger
+and complicated molecular simulations will be attempted which involve larger
+amount of atoms and more complex potential functions. The expectation of
+running molecular simulation faster and easier for larger systems on exist-
+ing platforms make it important to improve the conventional neighbor list
+updating algorithm in order to reduce the unnecessary interatomic distance
+calculations. A signiﬁcant improvement of molecular dynamics simulation per-
+formance has been shown in this paper by improved order O(N) Verlet table
+algorithm both on single processor platforms and dual-processor platforms. All
+results have shown that the new algorithm is superior than conventional Verlet
+table and cell-linked list algorithm in serial programs as well as parallelized
+programs.
+
+This work was supported under the project “Heat transport in nanostruc-
+ture — molecular dynamics and mode-coupling theory” of the Singapore-MIT
+Alliance, National University of Singapore.
+
+Acknowledgments
+
+References
+
+[1] J. M. Thijssen, Computational Physics, Cambridge University Press,
+
+Cambridge, 1999.
+
+[2] L. Verlet, Physics Review, 159: 98–103 1967.
+
+[3] D. Fincham, B. J. Ralston, Computer Physics Communication, 23: 127–134,
+
+[4] B. Quentrec, C. Brot, Journal of Computational Physics, 13, 430–432 (1975);
+R. W. Hockney, J. W. Eastwood, Computer simulation using particles,
+McGrow–Hill, New York, 1981.
+
+[5] M. P. Allen, D. J. Tildesley, Computer simulation of liquids, Oxford University
+
+Press, New York, 1990.
+
+[6] W. Mattson, B. M. Rice, Computer Physics Communications, 119: 135–148,
+
+[7] J. H. Walther, P. Koumoutasakos, Journal of Heat Transfer, 123: 741–748,
+
+1981.
+
+1999.
+
+2001.
+
+11
+
+

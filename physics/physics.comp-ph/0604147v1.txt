@@ -1,0 +1,2741 @@
+Coarse-grained computation of traveling waves of lattice
+
+Boltzmann models with Newton–Krylov solvers
+
+Giovanni Samaey1, Wim Vanroose1, Dirk Roose1, and Ioannis G. Kevrekidis2
+
+1 Dept. of Computer Science, K.U. Leuven, Celestijnenlaan 200A, 3001 Leuven, Belgium
+2 Dept. of Chemical Engineering and PACM, Princeton University, Princeton, NJ08544
+
+August 12, 2013
+
+Abstract
+
+For many complex dynamical systems, a separation of scales prevails between the
+(microscopic) level of description of the available model, and the (macroscopic) level at
+which one would like to observe and analyze the system. For this type of problems, an
+“equation-free” framework has recently been proposed. Using appropriately initialized
+microscopic simulations, one can build a coarse-grained time-stepper to approximate a
+time-stepper for the unavailable macroscopic model. Here, we show how one can use
+this coarse-grained time-stepper to compute coarse-grained traveling wave solutions of
+a lattice Boltzmann model. In a moving frame, emulated by performing a shift-back op-
+eration after the coarse-grained time-step, the traveling wave appears as a steady state,
+which is computed using an iterative method, such as Newton–GMRES. To acceler-
+ate convergence of the GMRES procedure, a macroscopic model-based preconditioner
+is used, which is derived from the lattice Boltzmann model using a Chapman–Enskog
+expansion. We illustrate the approach on a lattice Boltzmann model for the Fisher
+equation and on a model for ionization waves.
+
+6
+0
+0
+2
+ 
+r
+p
+A
+ 
+8
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+7
+4
+1
+4
+0
+6
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+1
+
+1
+
+Introduction
+
+There is an established algorithmic infrastructure to study the long-term dynamical fea-
+tures of systems of partial diﬀerential equations (PDEs), such as steady states or periodic
+solutions. When only a simulation code (a time-stepper) is available, algorithms such as
+the recursive projection method (RPM) [34] and Newton–Picard [24, 26] can locate steady
+states, as well as their stability, and perform a continuation for changing values of the param-
+eters. These methods project the Jacobian onto the eigenspace corresponding to the slowly
+decaying modes, which is typically low-dimensional. In this subspace, a Newton iteration is
+performed; in the orthogonal complement, Picard iterations (time-stepping) converge fast
+enough to the steady state. Alternatively, so-called Jacobian-free Newton–Krylov methods
+[20] solve the linear system for each Newton correction by means of an iterative method,
+such as GMRES, for which an appropriate preconditioner is crucial. Both standard pre-
+conditioning techniques, such as incomplete LU factorization (ILU) and multigrid, as well
+as application-speciﬁc physics-based preconditioners have been proposed, see [20] for an
+overview and references. If required, the stability can be computed as a post-processing
+step [21]. As a common feature, all these methods only use selected matrix-vector products
+with the system’s Jacobian, which are estimated using the time-stepper with several nearby
+initial conditions.
+
+Unfortunately, a low-dimensional macroscopic PDE is often not able to capture all
+detailed physical interactions accurately.
+In such cases, one needs to resort to a more
+microscopic description. For instance, the dynamics of a system of colliding particles with
+interactions that depend sensitively on the relative particle velocities can, in general, not
+be modeled by a reaction-diﬀusion equation for the particle density. One example, which
+forms the main motivation for the present paper, is the impact ionization reaction, where
+each collision of an electron with a neutral atom or molecule creates an additional electron
+when the relative velocity is above a certain treshold. Such a dynamical system should be
+modeled through a phase space evolution law, e.g. a Boltzmann equation.
+
+Nevertheless, a clear separation in time-scales is often present in the microscopic model:
+on fast time-scales, the microscopic variables equilibrate with respect to a few macroscopic
+variables, while these macroscopic variables themselves evolve on much slower time-scales.
+When this is the case, a macroscopic model should conceptually exist. However, it might
+be diﬃcult (or impossible) to derive a closed expression from the underlying microscopic
+model without introducing assumptions that are hard to justify.
+
+For such models, there is an active current interest in the development of so-called
+equation-free methods to study the long-term behavior [19]. The key idea, which was ﬁrst
+proposed in [38], is to construct a coarse-grained time-stepper for the unavailable macro-
+scopic equation as a three step procedure: (1) lifting, i.e. the creation of appropriate initial
+conditions for the microscopic model, conditioned upon the macroscopic state at time t∗; (2)
+
+2
+
+simulation, using the microscopic model, over the time interval [t∗, t∗ + δt]; (3) restriction,
+i.e. the extraction of the macroscopic state at time t∗ + δt. The result is a coarse time-δt
+map, which can be used to estimate the matrix-vector products that are required in an
+RPM, Newton–Picard or Newton–Krylov method.
+
+Based on RPM, coarse-grained bifurcation analysis has already been used in a number of
+applications [17, 36], and also allows to perform other system-level tasks, such as control and
+optimization [35]. In this paper, we will investigate the use of Jacobian-free Newton–Krylov
+techniques on a model problem concerning traveling wave solutions of lattice Boltzmann
+models. Traveling waves are solutions that move with constant speed without changing
+shape; in a co-moving frame, they appear as steady state solutions. We construct a coarse-
+grained time-stepper in this co-moving frame by performing a shift-back operation after each
+coarse-grained time-step, and compute its ﬁxed points using a Newton–GMRES procedure.
+To accelerate convergence of the GMRES procedure, we build a preconditioner based on
+an approximate PDE model, which is derived from the lattice Boltzmann model through
+a Chapman–Enskog expansion. As a consequence, the method described here could more
+appropriately be called equation-assisted, rather than equation-free. We expect that the
+techniques described here can be applied in other applications where particle based methods
+are necessary to describe the dynamics.
+
+This paper is organized as follows. In section 2, we brieﬂy review the basic properties
+of the coarse-grained time-stepper. Subsequently, we outline the model problems that will
+be used throughout the text in section 3. The non-linear system, of which the traveling
+waves are the solution, is constructed in section 4, and the preconditioned Newton–GMRES
+method is discussed in section 5. Section 6 contains a detailed numerical study of the
+convergence properties of the method. Finally, we conclude in section 7, which contains a
+discussion of the computational complexity and some ﬁnal remarks.
+
+2 Coarse-grained time-stepper
+
+We brieﬂy review the coarse-grained time-stepper, as it was introduced by Kevrekidis et al.
+[19]. To this end, we consider an abstract microscopic evolution law,
+
+∂tu(x, t) = f (u(x, t)),
+
+in which u(x, t) represents the microscopic state variables, x
+Dm and t are the microscopic
+independent variables, and ∂t denotes the time derivative. We assume that a macroscopic
+model, denoted by
+
+∈
+
+∂tU (X, t) = F (U (X, t)),
+
+conceptually exists, but is unavailable in closed form. In equation (2), U (X, t) represents the
+macroscopic state variables, and X
+DM and t are the macroscopic independent variables.
+
+(1)
+
+(2)
+
+∈
+
+3
+
+We introduce a time-stepper s for the microscopic evolution law (1),
+
+u(x, t + dt) = s(u(x, t); dt),
+
+(3)
+
+(4)
+
+(5)
+
+(6)
+
+where dt is the size of the microscopic time-step, and the aim is to obtain a coarse-grained
+time-stepper ¯S for the variables U (X, t) as
+
+¯U (X, t + δt) = ¯S( ¯U (X, t); δt),
+
+where δt denotes the size of the coarse-grained time-step, and the bars have been intro-
+duced to emphasize the fact that the time-stepper for the macroscopic variables is only an
+approximation of a time-stepper for (2), since this equation is not explicitly known.
+
+To deﬁne a coarse-grained time-stepper (4), we need to introduce two operators that
+make the transition between microscopic and macroscopic variables. We deﬁne a lifting
+operator,
+
+µ : U (X, t)
+
+u(x, t) = µ(U (X, t)),
+
+7→
+
+which maps macroscopic to microscopic variables, and its complement, the restriction op-
+erator,
+
+: u(x, t)
+
+U (X, t) =
+
+(u(x, t)).
+
+M
+
+7→
+
+M
+
+The restriction operator can often be determined as soon as the macroscopic variables are
+known. For instance, when the microscopic model consists of an evolving ensemble of many
+particles, the restriction typically consists of the computation of the ﬁrst few low order
+moments of the distribution (density, momentum, energy), which are considered as the
+appropriate macroscopic variables U (X, t), in terms of which a closed macroscopic equation
+can be written. The assumption that a macroscopic equation closes at the level of these low
+order moments, implies that the higher order moments become functionals of the low order
+moments on time-scales which are fast compared to the overall system evolution (slaving).
+
+The construction of the lifting operator is usually more involved. Again taking the
+example of a particle model, we need to deﬁne a mapping from a few low order moments
+to initial conditions for each of the particles. We know that the higher order moments
+of the resulting particle distribution should be functionals of the low order moments, but
+unfortunately, these functionals are unknown (since the macroscopic evolution law is also
+unknown). Several approaches have been suggested to address this problem. One could for
+instance initialize the higher order moments randomly. This introduces a lifting error, and
+one then relies on the separation of time-scales to ensure that the higher order moments relax
+quickly to a functional of the low order ones (healing) [14, 27, 36] (see also [30, 39]). We note
+that, in some cases, this approach produces inaccurate results [40]. In fact, to initialize the
+higher order moments correctly, one should perform a simulation of the microscopic system
+subject to the constraint that the low order moments are kept ﬁxed. How this can be done
+using only a time-stepper for the original microscopic system, is explained and analyzed in
+[12, 13, 41]. We will brieﬂy discuss the lifting step for our model problems in section 4.1.
+
+4
+
+Given an initial condition for the macroscopic variables U (X, t∗) at some time t∗, we
+
+can construct the time-stepper (4) in the following way:
+
+1. Lifting. Using the lifting operator (5), create appropriate initial conditions u(x, t∗)
+for the microscopic time-stepper (3), consistent with the macroscopic variables.
+
+2. Simulation. Use the microscopic time-stepper (3) to compute the microscopic state
+
+u(x, t) for t
+
+[t∗, t∗ + δt].
+
+∈
+
+3. Restriction. Obtain the macroscopic state U (X, t∗ + δt) from the microscopic state
+
+u(x, t∗ + δt) using the restriction operator (6).
+
+Assuming δt = kdt, this can be written as
+
+¯U (X, t + δt) = ¯S( ¯U (X, t), δt) =
+
+(sk(µ( ¯U (X, t)), dt)),
+
+(7)
+
+M
+
+where we have represented the k microscopic time-steps by a superscript on s.
+If the
+microscopic model is stochastic, one may need to perform multiple replica simulations,
+using an ensemble of microscopic initial conditions, to obtain an accurate result with a
+suﬃciently low variance.
+
+3 Model problems
+
+We now brieﬂy discuss the origins of the lattice Boltzmann method and the relation with
+the Boltzmann equation; we also introduce our model problems.
+
+3.1 Microscopic and macroscopic model
+
+We consider systems that, on a molecular level, consist of particles whose position and ve-
+locity are governed by two processes: free ﬂight and collisions. We introduce the probability
+f (x, v, t)dxdv, which represents the fraction of particles with position and velocity in the
+inﬁnitesimal domain [x, x + dx]
+[v, v + dv] at time t. The evolution of f is governed by a
+so-called kinetic equation,
+
+×
+
+∂tf (x, v, t) + v∂xf (x, v, t) + F ∂vf (x, v, t) = Q(f, f ),
+
+(8)
+
+where Q(f, f ) is the collision integral, and F is an external force term. The ﬁrst equation of
+this type was the Boltzmann equation for moderately rareﬁed gas ﬂows with F
+0 [2]. Of
+course, when multiple species are present, (8) becomes a system of equations. Throughout
+this paper, we conﬁne ourselves to problems in one space dimension.
+
+≡
+
+Usually, one introduces a kinetic model for Q(f, f ) to simplify equation (8) [15]. A
+
+standard choice is the non-linear Bhatnagar–Gross–Krook model (BGK) [1],
+
+∂tf (x, v, t) + v∂xf (x, v, t) + F ∂vf (x, v, t) =
+
+f (x, v, t)
+
+f eq(x, v, t)
+
+−
+
+−
+τ
+
+.
+
+(9)
+
+5
+
+Here, the collisions are interpreted as a relaxation to local equilibrium distribution, with a
+characteristic relaxation time τ . The choice of the equilibrium distribution f eq(x, v, t) (and
+therefore of the collision integral Q(f, f )) determines the physics of the system.
+
+Although the kinetic equation (8) and its BGK-approximation are able to describe the
+evolution of a wide range of physical systems, a numerical simulation quickly becomes in-
+tractable because of the high dimensionality. However, one can often obtain an approximate
+macroscopic description. We deﬁne the moments of the distribution function as
+
+¯ρ(i)(x, t) = m
+
+vif (x, v, t)dv,
+
+i = 0, 1, 2, . . . ,
+
+(10)
+
+∞
+
+−∞
+
+Z
+
+where m is the particle mass. The lowest order moments correspond to the density (i = 0),
+momentum (i = 1) and energy (i = 2), which we write as
+
+ρ(x, t) = ¯ρ(0)(x, t),
+
+φ(x, t) = ¯ρ(1)(x, t),
+
+ξ(x, t) = ¯ρ(2)(x, t)/2.
+
+(11)
+
+Using the assumption that the deviation from local equilibrium is suﬃciently small, one
+performs an asymptotic expansion (the Chapman–Enskog expansion, [22]) to obtain a closed
+description for the evolution of a number of low order moments. If we deﬁne the macroscopic
+variables as U (x, t) =
+
+M
+i=0, we obtain an approximate PDE of the form
+
+¯ρ(i)(x, t)
+
+(cid:8)
+∂tU (x, t) = F
+
+(cid:9)
+
+U (x, t), ∂xU (x, t), . . . , ∂d
+
+xU (x, t)
+
+,
+
+(12)
+
+which depends on the ﬁrst d spatial derivatives. Equation (12) is a good approximation of
+the system dynamics when there is a fast decay of the higher order terms in the Chapman–
+Enskog expansion.
+
+(cid:16)
+
+(cid:17)
+
+Consider as an example the advection-diﬀusion equation,
+
+∂tρ(x, t) + c∂xρ(x, t) = ∂x(D∂xρ(x, t)),
+
+(13)
+
+with transport coeﬃcient c and diﬀusion coeﬃcient D. This equation can be derived from
+0 by deﬁning the equilibrium distribution as
+equation (9) with F
+
+≡
+
+f eq(x, v, t) = ρ(x, t)
+
+λ
+π
+
+exp(
+
+λ(v
+
+−
+
+−
+
+c)2),
+
+r
+with λ = m/2kT , where T is temperature and k is the Boltzmann constant, and adding the
+conservation constraint
+
+∞
+
+−∞
+
+Z
+
+(f (x, v, t)
+
+g(x, v, t)) dv = 0.
+
+−
+
+A straightforward derivation reveals that the macroscopic behaviour of (9) is described by
+equation (13) when we choose τ = 2Dλ [44]. Diﬀerent equilibrium distributions can be
+used to obtain the Burgers’ equation, the Euler equations, the Navier–Stokes equations,
+etc. One can also add chemical reactions in the collision integral [15].
+
+6
+
+In this paper, we will use the lattice Boltzmann method (LBM) [4, 37], which can be
+viewed as a special discretization of the Boltzmann equation [16]. In an LBM method, the
+distribution function f (x, v, t) is discretized on a space-time lattice with grid spacing dx in
+space and dt in time. Only a discrete number of velocities are considered, which correspond
+to a movement over an integer number of lattice points during one time-step,
+
+vi = ci
+
+dx
+dt
+
+,
+
+ci =
+
+q,
+
+q + 1, . . . , q
+
+1, q.
+
+−
+
+−
+
+−
+
+For ease of exposition, we restrict ourselves to the case q = 1, which gives only three speeds
+(the so-called D1Q3 model).
+
+For reaction-diﬀusion systems, we can write the evolution law for fi(x, t) = f (x, vi, t) as
+
+fi(x + cidx, t + dt) = (1
+
+ω)fi(x, t)
+
+−
+
+−
+
+ωf eq
+
+i (x, t) + Ri(x, t),
+
+i =
+
+1, 0, 1.
+
+(14)
+
+−
+
+The right-hand side approximates the collision operator, and is composed of a reaction term
+Ri(x, t) and a BGK relaxation to the local equilibrium. After collision, the post-collision
+values are propagated to a neighboring lattice site, which corresponds to free ﬂight.
+
+For the lattice Boltzmann discretization, we can deﬁne the (non-dimensional) moments
+
+of the distribution function as
+
+ρ(x, t) =
+
+fi(x, t),
+
+φ(x, t) =
+
+cifi(x, t),
+
+ξ(x, t) =
+
+c2
+i fi(x, t).
+
+(15)
+
+1
+
+i=−1
+X
+
+1
+
+i=−1
+X
+
+1
+
+1
+2
+
+i=−1
+X
+
+It can easily be veriﬁed [5, 29] that, under suitable smoothness assumptions, the system is
+well approximated by a macroscopic reaction-diﬀusion equation
+
+∂tρ(x, t) = ∂x(D∂xρ(x, t)) + r(ρ(x, t)),
+
+(16)
+
+which can again be derived from the LBM equation using a Chapman–Enskog expansion
+[4, 42] using
+
+ω =
+
+2
+1 + 3Ddt/dx2 ,
+
+dt
+3
+
+Ri(x, t) =
+
+r (ρ(x, t)) ,
+
+f eq
+i (x, t) = ρ(x, t)/3.
+
+(17)
+
+To view these models in the equation-free context, we deﬁne
+
+u(x, t) = u(x, t) =
+
+fi(x, t)
+}
+
+{
+
+1
+i=−1 ,
+
+U (X, t) = U (x, t) = ρ(x, t).
+
+3.2 Model problems and traveling waves
+
+In this paper, we propose a numerical method to compute coarse-grained traveling wave
+solutions of lattice Boltzmann models of the form (14). Traveling waves are solutions of the
+form
+
+U (x, t) = U (x
+
+ct) = U (ζ),
+
+−
+
+U (ζ) = U
+
+±
+∞,
+
+lim
+ζ→±∞
+
+(18)
+
+7
+
+where ζ = x
+
+ct. They appear as steady states in a moving frame (ζ, t).
+
+−
+
+In this work, we consider traveling fronts, for which U −
+∞
+
+∞. For these solutions,
+the evolution of the density is not suﬃciently well described by the approximate reaction-
+diﬀusion PDE (16), due to a lack of smoothness of the density in the reaction front. Never-
+theless, we also observe in this case that the higher order moments (momentum and energy)
+become (more complicated) functionals of the density on fast time-scales. As a consequence,
+a PDE for the density should still exist.
+
+= U +
+
+We consider two model problems: a model which is derived from the Fisher PDE, and a
+lattice Boltzmann model for ionization. Both model problems exhibit traveling fronts with
+arbitrary speed c
+
+c∗, where c∗ is called the critical speed.
+
+≥
+
+Model problem 3.1 (Fisher model). We consider the reaction-diﬀusion lattice Boltz-
+mann model,
+
+fi(x + cidx, t + dt) = (1
+
+ω)fi(x, t)
+
+ωf eq
+
+i (x, t) + Ri(x, t),
+
+where i =
+
+1, 0, 1, with
+
+−
+
+−
+
+dt
+3
+
+−
+
+−
+
+Ri(x, t) =
+
+ρ(x, t)(1
+
+ρ(x, t)).
+
+Following the reasoning of the previous section, we deﬁne the approximate macroscopic
+PDE,
+
+∂tρ(x, t) = ∂x(D∂xρ(x, t)) + ρ(x, t)(1
+
+ρ(x, t)),
+
+−
+
+which was originally proposed by Fisher as a model for the spread of advantageous genes
+[11]. This equation appears in a range of physical and biological applications exhibiting
+waves, see e.g. [28], and supports traveling fronts of the form ρ(x, t) = ρ(ζ), with
+
+(19)
+
+(20)
+
+(21)
+
+lim
+ζ→−∞
+
+ρ(ζ) = 1,
+
+lim
+ζ→∞
+
+ρ(ζ) = 0.
+
+This model problem can be put in the equation-free framework by identifying
+
+u(x, t) = u(x, t) =
+
+fi(x, t)
+}
+
+{
+
+1
+i=−1 ,
+
+U (X, t) = U (x, t) = ρ(x, t).
+
+The Fisher equation is arguably the simplest model problem that exhibits traveling
+waves of arbitrary speed. It is known for the corresponding PDE that traveling waves exist
+c∗ = 2√D. Numerically, traveling waves exists for all c. However, the
+with speed c
+critical speed c∗ is the lowest speed for which the traveling waves are uniformly positive.
+The coarse-grained traveling wave with minimal speed c∗ = 2√D is shown in ﬁgure 1.
+
+≥
+
+Model problem 3.2 (Planar streamer fronts). Streamers are sharp, non-linear waves
+of electrons that propagate through gases in the presence of strong electric ﬁelds. The strong
+ﬁeld accelerates the electrons that cause ionization reactions during the collisions with the
+neutral gas particles. This ionization reaction creates additional electrons that are, again,
+accelerated. This results in an avalanche at the tip of the wave front.
+
+8
+
+6
+1
+
+0.75
+
+0.5
+
+0.25
+
+)
+t
+,
+
+x
+(
+U
+
+0
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10
+
+x
+
+Figure 1: Coarse-grained traveling wave solution of the Fisher lattice Boltzmann model (19)-(20).
+
+We consider a lattice Boltzmann model for the distributions fi(x, t) of electrons, which
+is coupled to a PDE that governs the evolution of the electric ﬁeld through the electron
+density ρ(x, t) =
+
+i fi(x, t). The coupled equations are
+
+fi(x + cidx, t + dt) = (1
+
+P
+
+(
+
+∂tE(x, t) =
+
+ω)fi(x, t)
+−
+ρ(x, t)E(x, t)
+
+ωf eq
+i (x, t)
+−
+D∂xρ(x, t)
+
+−
+−
+
+−
+
+P
+
+E(x, t)
+
+j Vijfj(x, t) + Ri(x, t),
+
+(22)
+in which the electric ﬁeld E(x, t) appears as an external force. In the original Boltzmann
+equation (8), this force appears as E(x, t)∂vf (x, v, t); in the lattice Boltzmann equation,
+this external force is discretized as E(x, t)
+
+j Vijfj, as proposed by Luo [23].
+
+In general, the reaction terms Ri(x, t) should be modeled on a microscopic level. How-
+ever, due to reasons of computational complexity, most analysis of streamers is based on
+the Townsend approximation of the microscopic ionization reactions that appear at the tip
+of the front [9]. The reaction terms are then given by Ri(x, t) = dtρ(x, t)g(E(x, t))/3, with
+g(E) =
+
+exp(
+
+P
+
+E
+|
+
+|
+
+E
+1/
+|
+
+).
+|
+
+−
+
+In this paper, we will also use this Townsend approximation to analyze the performance
+of our numerical method. In a forthcoming publication, the method presented here will be
+used to analyze the traveling waves of a ﬁve-speed lattice Boltzmann model, which is based
+on a more realistic set of microscopic interactions [43].
+
+Again, we can derive an approximate PDE model,
+
+∂tρ(x, t) = ∂x(ρ(x, t)E(x, t)) + D∂2
+
+xρ(x, t) + ρ(x, t)g(E(x, t)),
+
+(
+
+∂tE(x, t) =
+
+ρ(x, t)E(x, t)
+
+D∂xρ(x, t),
+
+−
+
+−
+
+This coupled equation exhibits traveling wave solutions with arbitrary speed c
+limx→∞
+
+Dg(E(x)), see ﬁgure 2.
+
++ 2
+
+≥
+
+E(x)
+|
+|
+
+This model problem can be put in the equation-free framework by considering
+
+p
+
+(23)
+
+c∗ =
+
+u(x, t) = u(x, t) =
+
+1
+i=−1, E(x, t)
+fi(x, t)
+}
+{
+
+U (X, t) = U (x, t) =
+
+ρ(x, t), E(x, t)
+}
+{
+
+.
+
+(cid:8)
+
+(cid:9)
+
+,
+
+9
+
+0.15
+
+0.1
+
+0.05
+
+)
+t
+,
+
+x
+(
+ρ
+
+)
+t
+,
+
+x
+(
+E
+
+0.5
+
+−
+
+0
+
+1
+−
+
+0
+
+0
+
+50
+
+100
+
+x
+
+0
+
+50
+
+100
+
+x
+
+Figure 2: Coarse-grained traveling wave solution of the lattice Boltzmann model for planar streamer
+fronts (22). We show both the density ρ(x, t) (left) and the electrical ﬁeld E(x, t) (right).
+
+4 The ﬁxed point problem
+
+To deﬁne the ﬁxed point problem for the traveling wave, we ﬁrst construct a coarse-grained
+time-stepper for the lattice Boltzmann model of the form
+
+¯U (x, t + δt) = ¯S( ¯U (x, t), δt),
+
+(24)
+
+where the coarse-grained time-step δt = kdt, see equation (4). In section 4.1, we describe
+the details of the lifting operator.
+
+Traveling waves appear as a one-parameter family of solutions: together with ¯U ∗(ζ),
+any translate ¯U ∗(ζ + ϕ), for an arbitrary but ﬁxed ϕ, is also a traveling wave. We therefore
+add a phase condition to remove this indeterminacy. The speciﬁc implementation of the
+shift-back operator and the phase condition are discussed in section 4.2.
+
+≥
+
+Note that we consider model problems for which a traveling wave exists for arbitrary
+c∗. It is of physical interest to study how the critical speed c∗ depends on the system
+c
+parameters. However, in this paper we conﬁne ourselves to the computation of a traveling
+wave for a ﬁxed speed c. A detailed analysis of the physical properties of the ionization
+model can be found in [43].
+
+4.1 Lifting for lattice Boltzmann models
+
+As already outlined in section 2, a coarse-grained time-stepper is constructed as a lift-
+simulate-restrict procedure. While the restriction step is well deﬁned by equation (15), the
+lifting step can be deﬁned in multiple ways. We discuss three possibilities.
+
+Weighted lifting. A ﬁrst possibility is to simply initialize the distributions as
+
+fi(x, t) = wiρ(x, t),
+
+wi = 1,
+
+(25)
+
+i
+X
+
+10
+
+where wi = 1/3 is an obvious choice, since this corresponds to the local diﬀusive equilibrium
+as deﬁned in equation (17). As a consequence, the higher order moments are initialized as
+
+φ(x, t) = 0,
+
+ξ(x, t) = ρ(x, t)/3.
+
+This very rough approximation of the higher order moments introduces a lifting error, and
+one relies on the separation of time-scales between low order and high order moments to
+heal this error quickly [38]. In [40], it is shown how this initialization can produce undesired
+artifacts for lattice Boltzmann models when δt is small.
+
+Slaving relations. From the assumption that a macroscopic model for ρ(x, t) exists, it
+follows that the higher order moments φ(x, t) and ξ(x, t) can be written as functionals of
+ρ(x, t). For lattice Boltzmann models of the form (14) with (17), these so-called slaving
+relations can be written down analytically as an asymptotic expansion in 1/ω. Up to third
+order, we have [41],
+
+φ(x, t) =
+
+∂xρ(x, t) +
+
+2dx
+3ω
+
+−
+1
+3
+
+dxdt
+ω2
+
+ω
+
+ω
+
+2
+
++
+
+1
+3
+
+(cid:18)
+(r (ρ(x, t))
+
+(cid:19)
+−
+(cid:0)
+∂tρ(x, t)) .
+
+−
+
+dt
+6ω
+
+−
+
+ξ(x, t) =
+
+ρ(x, t)
+
+∂xr (ρ(x, t))
+
+∂2
+xtρ(x, t)
+
+,
+
+−
+
+(26)
+
+(cid:1)
+
+These expansions can alternatively be written down in terms of ρ(x, t) and its spatial deriva-
+tives only, by making use of (16). The weighted lifting scheme coincides with the zeroth
+order term of the slaving relations.
+
+Constrained runs scheme. Although ideally one would like to use the slaving relations
+to initialize the lattice Boltzmann time-stepper, this is not always possible. The analytical
+derivation is cumbersome, and might even be impossible when the lattice Boltzmann model
+is coupled to a PDE, as in model problem 3.2. Moreover, the number of higher order
+moments increases when a more detailed discretization of the velocity space is used. Finally,
+the analytic derivation of the slaving relations is only tractable if only a small number of
+terms of the asymptotic expansion are needed. However, the macroscopic equation becomes
+invalid precisely when a large number of terms is needed.
+
+As an alternative, one can use the constrained runs scheme [12, 13] to approximate the
+full microscopic state corresponding to a set of predescribed macroscopic variables. The idea
+is to perform a number of lattice Boltzmann time-steps using equation (19), where after each
+time-step the density is reset to the initial density. During this iteration the microscopic
+variables converge towards their relaxed values; correspondingly, the higher order moments
+have then approximately reached the slaved state. As such, the constrained runs scheme is a
+ﬁxed point iteration for the higher order moments of the microscopic model. We reproduce
+the schematic representation that was given in [41] (ﬁgure 3).
+
+11
+
+✻
+
+φ(0), ξ(0)
+{
+
+}
+
+φ∗, ξ∗
+{
+φ(ρ(0)), ξ(ρ(0))
+}
+{
+
+}
+
+✉
+
+✛
+
+✛
+✛
+✛
+✉
+✉
+
+❄
+
+ρ(0)
+
+ρ∗
+
+approximate
+
+slow
+
+✲
+
+Figure 3: Sketch of the evolution of the constrained runs scheme. We plot the higher order moments
+φ and ξ are plotted as a function of the density ρ. After each lattice Boltzmann step, ρ is reset to
+the given ρ(0). The successive iterates converge to
+, which is an approximation to the slaved
+state
+
+{
+as given by equation (26). Figure reproduced from [41].
+
+φ∗, ξ∗
+
+}
+
+φ(ρ(0)), ξ(ρ(0))
+}
+
+{
+
+The constrained runs scheme can readily be applied to any lattice Boltzmann model, and
+deﬁnes a lifting operator that initializes the microscopic variables very close to their relaxed
+values. We refer to [41] for a detailed convergence and error analysis for reaction-diﬀusion
+systems.
+
+4.2 Shift-back procedure and phase condition
+
+Next, we discuss our speciﬁc implementation of the shift-back operator σϕ. By noting that
+a shift-back over a distance ϕ is equivalent with a time evolution of the transport equation
+
+over a time ϕ, we obtain
+
+∂tU (x, t)
+
+∂xU (x, t) = 0,
+
+−
+
+σϕ : U (x, t)
+
+σϕ(U (x, t)) = U (x, t) + ϕ∂xU (x, t),
+
+(27)
+
+7→
+
+which is a valid approximation for shift-backs over short distances.
+
+At this point, we have constructed a non-linear system
+
+¯U (ζ)
+
+σcδt
+
+¯S( ¯U (ζ), δt)
+
+= 0,
+
+−
+
+(cid:0)
+
+(cid:1)
+
+(28)
+
+Unless we add a phase condition, this system is singular. When deﬁning the Jacobian of
+the coarse-grained time-stepper as
+
+this singularity appears as a zero eigenvalue of I
+
+¯L( ¯U (ζ), δt) =
+
+∂
+
+σcδt
+
+(cid:2)
+
+¯S( ¯U (ζ), δt)
+∂ ¯U (ζ)
+(cid:0)
+¯L( ¯U ∗(ζ), δt), with eigenfunction d ¯U ∗(ζ)/dζ.
+
+(cid:1)(cid:3)
+
+,
+
+−
+
+12
+
+To compensate for the extra phase condition, we add a regularization parameter α as an
+additional unknown, similar to what is done in [33] for Hamiltonian systems. The resulting
+non-linear system is
+
+G( ¯U , α) =
+
+¯U
+−
+p( ¯U )
+
+(
+
+σcδt
+
+¯S( ¯U , δt)
+
+(cid:0)
+
+(cid:1)
+
++ αdζ ¯U = 0,
+= 0,
+
+(29)
+
+where ¯U denotes the space discretization of ¯U (ζ) and p( ¯U ) is the phase condition deﬁned
+below. This problem is well-posed for the unknowns ( ¯U , α) with a locally unique solution
+( ¯U ∗, α∗ = 0).
+
+Here, we use the phase condition
+
+p( ¯U ) =
+
+¯U (ζ)dζ ¯Uref (ζ)dζ,
+
+ζN−1
+
+ζ0
+
+Z
+
+which minimizes phase shift with respect to the reference solution ¯Uref (ζ), as is done in
+publicly available software for bifurcation analysis, such as AUTO (for ordinary diﬀerential
+equations) [6, 7, 8] or DDE-BIFTOOL [10] (for delay diﬀerential equations).
+
+5 Preconditioned Newton–GMRES
+
+We solve the non-linear equation (29) for the traveling wave solution. First, we discretize
+¯U (ζ) on the lattice Boltzmann grid [x0, x1 = x0 + dx, . . . , xN −1], and provide the time-
+stepper with homogeneous Neumann boundary conditions. The spatial derivative in (27) is
+discretized using central diﬀerences.
+
+We solve the resulting non-linear system (29) with a Newton–Raphson procedure
+
+¯U (k+1) = ¯U (k) + d ¯U (k),
+α(k+1) = α(k) + dα(k),
+
+(
+
+(30)
+
+where d ¯U (k) and dα(k) are the corrections calculated each iteration by solving linear systems
+of the form
+
+A( ¯U (k), δt)
+
+d ¯U (k)
+dα(k) #
+
+"
+
+=
+
+I
+
+"
+
+−
+d ¯U p
+
+¯U (k)
+
+¯L( ¯U (k), δt) dζ ¯U (k)
+
+0
+
+# "
+
+d ¯U (k)
+dα(k) #
+
+−
+
+=
+
+G( ¯U (k), α(k)),
+
+(31)
+
+where A( ¯U k, δt) denotes the linearization of G( ¯U , α) around the point ( ¯U (k), α(k)). The
+right hand side is the residual at the same point.
+
+(cid:0)
+
+(cid:1)
+
+We do not have an explicit formula for ¯L( ¯U (k), δt), since it involves the Jacobian of
+the coarse-grained time-stepper with shift-back. However, we can estimate matrix-vector
+products as
+
+I
+
+−
+
+(cid:0)
+
+¯L( ¯U , δt)
+
+v
+
+v
+
+≈
+
+−
+
+(cid:1)
+
+σcδt
+
+¯S( ¯U + ǫv, δt)
+ǫ
+(cid:1)
+
+(cid:0)
+
+−
+
+(cid:0)
+
+σcδt
+
+¯S( ¯U , δt)
+
+.
+
+(cid:1)
+
+(32)
+
+13
+
+Therefore, we solve the linear system (31) using a Krylov method, such as GMRES [32].
+
+The convergence rate of GMRES depends sensitively on the spectral properties of the
+system matrix in equation (31). For GMRES to converge rapidly, the eigenvalues should
+be clustered, e.g. around one [31]. It can be checked that the bordering row and column
+dζ ¯U , while leaving the
+
+transform the zero eigenvalue of the Jacobian of (28) into
+other eigenvalues unaltered [25]. The eigenvalues µk of 1
+
+±
+¯L( ¯U , δt) are of the form
+q
+−
+
+d ¯U p
+
+·
+
+µk = 1
+
+exp(λkδt),
+
+−
+
+k2) for k
+
+−
+
+≈
+
+≫
+
+O(
+
+1. For k small, λk
+
+0. When the system possesses a low-
+where λk
+dimensional inertial manifold, one can choose δt large, such that the spectrum becomes a
+compact perturbation of the unit matrix [18]. In this case, GMRES is known to converge
+very quickly; this, however, at the cost of a long simulation time for each matrix-vector
+product. If δt is chosen to be small, the eigenvalues µk range from 0 to 1. In that case,
+preconditioning will be necessary.
+
+≈
+
+We deﬁne a preconditioning matrix M ( ¯U , δt), and replace the linear system (31) with
+
+M ( ¯U (k), δt)
+
+−1A( ¯U (k), δt)
+
+M ( ¯U (k), δt)
+
+−1G( ¯U (k), α(k)).
+
+(33)
+
+d ¯U (k)
+dα(k)
+
+"
+
+=
+
+−
+
+#
+
+Ideally, M ( ¯U , δt) is both a good approximation of the system matrix, as well as a matrix for
+which an eﬃcient (direct) solver is available. We will use a time-stepper for the approximate
+macroscopic equation (12) to construct M ( ¯U , δt). Consider the macroscopic equation (12)
+in the moving frame (ζ, t),
+
+∂tU (ζ, t) = F
+
+U (ζ, t), ∂ζ U (ζ, t), . . . , ∂d
+(cid:16)
+
+= ˜F (U (ζ, t)) .
+
+(cid:17)
+
+ζ U (ζ, t)
+
++ c∂ζ U (ζ, t),
+
+(34)
+
+We construct a central ﬁnite diﬀerence/backward Euler time-stepper for (34) as
+
+U (t + δt) = S (U (t), δt) = [I
+
+δtJ (U (t))]
+
+−1 U (t),
+
+(35)
+
+−
+
+where again U (t) is the space discretization of U (ζ, t) on the lattice Boltzmann grid, and
+
+J (U (t)) =
+
+∂ ˜F (U (t))
+∂U
+
+.
+
+We then deﬁne
+
+I
+−
+d ¯U p( ¯U )
+with which we will solve linear systems of the form
+
+M ( ¯U , δt) =
+
+−
+
+"
+
+(cid:0)
+
+I
+
+δtJ( ¯U )
+
+−1 dζ ¯U
+0 #
+
+,
+
+(cid:1)
+
+(36)
+
+(37)
+
+M ( ¯U , δt)
+
+d ¯U
+dα#
+
+"
+
+=
+
+b ¯U
+bα#
+
+.
+
+"
+
+14
+
+The ﬁrst N equations can be simpliﬁed through some algebraic manipulation,
+
+I
+
+−
+
+I
+
+−
+h
+(cid:0)
+d ¯U =
+
+I
+
+−
+d ¯U =
+(cid:0)
+
+dζ ¯U = b ¯U ,
+
+dζ ¯U ,
+
+−1
+
+δtJ( ¯U
+
+(cid:1)
+δtJ( ¯U
+
+·
+
+i
+
+d ¯U + dα
+−1 d ¯U + b ¯U −
+δtJ( ¯U
+(cid:1)
+
+dα
+·
+−1 d ¯U + ˜b ¯U ,
+−
+δtJ( ¯U )
+d ¯U = d ¯U +
+(cid:1)
+
+I
+
+I
+
+˜b ¯U ,
+
+δtJ( ¯U )
+
+(cid:0)
+
+I
+
+−
+
+(cid:0)
+
+δtJ( ¯U )d ¯U =
+(cid:1)
+
+−
+δtJ( ¯U )
+(cid:0)
+
+˜b ¯U ,
+
+(cid:1)
+
+(cid:1)
+
+I
+
+−
+
+−
+
+(cid:0)
+
+which leads to the equivalent linear system
+
+δtJ( ¯U )
+d ¯U p( ¯U )
+"
+
+I
+
+−
+
+−
+
+(cid:0)
+
+δtJ( ¯U )
+0
+
+(cid:1)
+
+dζ ¯U
+
+d ¯U
+dα#
+
+# "
+
+=
+
+−
+
+"
+
+(cid:0)
+
+I
+
+−
+
+b ¯U
+
+δtJ( ¯U )
+bα
+
+(cid:1)
+
+,
+
+#
+
+(38)
+
+in which the system matrix is the sum of a band and a rank one matrix. There exist eﬃcient
+(order N ) direct solvers for linear systems of this type, see e.g. [3].
+
+6 Numerical results
+
+6.1 Fisher equation
+
+We consider the model problem 3.1 on the domain [0, L] with L = 10 and with diﬀusion
+10−3. For these
+coeﬃcient a = 0.1, and grid parameters dx = 2.5
+parameters N = 400 and ω
+1.35. We intend to ﬁnd the traveling wave with minimal
+speed c∗ = 2√D, which is depicted in ﬁgure 1. The initial guess ¯U (0) for the Newton
+process is obtained by a time integration of the Fisher PDE (21) over a time interval of size
+9000dt with initial condition
+
+10−2 and dt = 1
+
+≈
+
+·
+
+·
+
+U (x, 0) = ρ(x, 0) = exp(
+
+5x4), x
+
+−
+
+L, L],
+
+[
+−
+
+∈
+
+(39)
+
+from which we take the part where x
+
+0.
+
+≥
+
+In order to choose an adequate value for the coarse-grained time-step δt, we ﬁrst il-
+lustrate the eﬀects of the lifting operator. We then investigate the spectrum of the linear
+system that we need to solve, along with the eﬀect of the preconditioner, and we conclude
+by showing the convergence of the Newton process.
+
+6.1.1
+
+Initialization
+
+To understand the details of the initialization, we compare the exact evolution of the Fisher
+lattice Boltzmann model with the evolution after re-initialization. We perform an initial
+simulation of 100 steps with the lattice Boltzmann model, starting from the initial condition
+
+15
+
+r
+o
+r
+r
+e
+
+10−4
+
+100
+
+10−2
+
+10−6
+
+10−8
+
+weight lifting
+5 constrained run steps
+10 constrained run steps
+ﬁrst order slaving
+
+0
+
+0.005
+
+0.015
+
+0.02
+
+0.01
+t
+
+Figure 4: Evolution of the initialization error for the Fisher problem for diﬀerent lifting procedures.
+We show the diﬀerence between the distribution function of the re-initialized and the original lattice
+Boltzmann simulation.
+
+¯U (0), which is lifted to distribution functions using the ﬁrst order slaving relations. We
+extract the density at t = 80dt using equation (15). With this density, we initialize a
+second lattice Boltzmann simulation using the three procedures described in section 4.1.
+For the slaving relations, we only use the ﬁrst order approximation. We then compare the
+evolution of the distribution functions with the evolution of the original simulation as we
+continue to evolve both. The result is somewhat unexpected.
+
+In ﬁgure 4, we plot the error between the original solution and the re-initialized simu-
+lation in the ﬁrst 20 time-steps after re-initialization. We see that, in line with the results
+reported in [41], both the constrained runs scheme and initialization using ﬁrst order slav-
+ing relations lead to a reduced lifting error, compared to weighted lifting. Unexpectedly,
+however, we observe that after initialization, all re-initialized simulations show an initial
+convergence towards the exact solution with a convergence rate of
+. This convergence
+|
+stagnates after approximately 10 time-steps for this choice of ω. This behaviour is not
+completely understood yet. As is to be expected, the smallest error is obtained by fully
+converged constrained runs.
+
+1
+|
+
+−
+
+ω
+
+These results suggest that the simulation phase of the coarse-grained time-stepper, which
+involves the evolution of the lattice Boltzmann model from t∗ to t∗ + δt requires a coarse-
+grained time-step δt that is at least 10 times the microscopic time-step dt to eliminate
+initial transients caused by the lifting for this choice of ω.
+If a shorter time is choosen,
+undesired artifacts will show up in the spectrum of the coarse-grained time stepper. In our
+10−2, and we initialize using the constrained runs
+simulations, we choose δt = 15dt = 1.5
+scheme with 10 steps.
+
+·
+
+16
+
+)
+λ
+(
+
+ℑ
+
+0.04
+
+0.02
+
+0
+
+0.02
+
+0.04
+
+−
+
+−
+
+)
+λ
+(
+
+ℑ
+
+0.04
+
+0.02
+
+0
+
+0.02
+
+0.04
+
+−
+
+−
+
+1
+−
+
+0.5
+
+−
+
+0
+
+0.5
+
+1
+
+1
+−
+
+0.5
+
+−
+
+0
+
+0.5
+
+1
+
+(λ)
+
+ℜ
+
+(λ)
+
+ℜ
+
+Figure 5: Fisher traveling wave problem. Left: Spectrum of the system matrix of equation (31).
+Right: spectrum of the preconditioning matrix (36).
+
+6.1.2 Performance of the preconditioner
+
+We now compute the spectrum of the matrix A( ¯U (0), δt), using the parameters deﬁned
+above. To this end, we construct the matrix A( ¯U (0), δt) explicitly by computing the matrix-
+vector products with all coordinate vectors ei = [0, . . . , 0, 1, 0, . . . , 0]T . The matrix-vector
+10−8. The results are shown in ﬁgure 5(left).
+products are estimated using (32) with ǫ = 1
+·
+We compare with the spectrum of the matrix M (U (0), δt) shown in ﬁgure 5(right). We see
+good agreement between the two spectra. The diﬀerences are in the imaginary part of the
+eigenvalues, and in the very fast modes, which show up around 1 since we are computing the
+spectrum of the ﬁxed point iteration. Also remark how the zero eigenvalue, corresponding
+to the singularity of the ﬁxed point equation (28), is split into two isolated eigenvalues by
+the addition of the phase condition and the artiﬁcial unknown α.
+
+The spectrum of the matrix M ( ¯U (0), δt)−1A( ¯U (0), δt) is shown in ﬁgure 6(left). We see
+that this spectrum is nicely clustered around 1. As a result, we obtain very fast GMRES
+convergence. Figure 6 shows the error as a function of the number of GMRES iterations.
+We clearly see the fast linear convergence, as predicted by the theory [31].
+
+6.1.3 Convergence of the Newton process
+
+We are now ready to show the convergence of the Newton process. To this end, we take as
+an initial guess ¯U (0) a smoothed step function of the form
+
+¯U (0) =
+
+1
+L/2)) + 1
+
+,
+
+exp(2(x
+
+−
+
+(40)
+
+with L = 10, the length of the interval. The convergence of the Newton process is shown
+in ﬁgure 7. We notice that the convergence is linear, and the convergence factor changes
+after approximately 4 iterations. In the process, we have converged to the traveling wave
+
+17
+
+)
+λ
+(
+
+ℑ
+
+0.2
+
+0.1
+
+0
+
+0.1
+
+0.2
+
+−
+
+−
+
+105
+
+100
+
+r
+o
+r
+r
+e
+
+−5
+
+10
+
+−10
+
+10
+
+−15
+
+10
+
+0.8
+
+1
+
+1.2
+
+1.4
+
+1.6
+
+0
+
+5
+
+10
+
+15
+
+20
+
+(λ)
+
+ℜ
+
+iteration
+
+Figure 6: Fisher traveling wave problem. Left: spectrum of the product of the inverse of the
+preconditioner and the system matrix. Right: error of the linear system as a function of the number
+of GMRES iterations.
+
+·
+
+−
+
+2.24
+
+10−4. The fact that α∗ is not equal to zero can
+solution shown in ﬁgure 1, and α∗ =
+be shown to be an artifact of the space discretization, combined with the truncation to a
+ﬁnite domain. Indeed, α∗ becomes smaller when we reﬁne the lattice Boltzmann grid (and
+decrease the time-step to keep ω ﬁxed). We can explain this as follows: the conclusion that
+α∗ should equal zero follows from the assumption that the extra column that is added in the
+Jacobian, dζ ¯U , is the eigenvector associated with the zero eigenvalue of the ﬁxed point map
+(28). However, due to the space discretization, dζ ¯U will only be an approximation to this
+eigenvector. Therefore, we are using a quasi-Newton method (hence the linear convergence),
+and the solution value α∗ will be non-zero but small. The convergence factor changes when
+the traveling wave solution has been computed to machine precision. At that point, only
+the error in α shows up in the residual, indicating that the non-zero value of α∗ is indeed
+the main cause for the non-quadratic convergence.
+
+6.2 Planar streamer front
+
+As a second example, we numerically study model problem 3.2 for planar ionization fronts
+10−3. We choose
+on the domain [0, 130] with grid parameter dx = 1
+the diﬀusion coeﬃcient to be a = 1 and the electric ﬁeld E+
+1 (i.e. a constant, large
+electric ﬁeld on the far right). For these parameters, the corresponding lattice Boltzmann
+1.538, and N = 1300, which implies that the unknown solution
+relaxation parameter is ω
+has 2601 unknowns. We intend to compute the traveling wave solution with the minimal
+speed c∗ =
+∞), which is depicted in ﬁgure 2. The initial guess U (0) for the
+Newton process is obtained by a time integration of the ionization PDE (23) over a time
+q
+interval of size 4000dt with initial condition
+
+10−1 and dt = 1
+∞ =
+
+Dg(E+
+
+E+
+∞
+|
+
++ 2
+
+≈
+
+−
+
+·
+
+·
+
+|
+
+U (x, 0) = ρ(x, 0) = exp(
+
+15x2), x
+
+[0, 130].
+
+−
+
+∈
+
+(41)
+
+18
+
+e
+z
+i
+s
+
+p
+e
+t
+s
+
+100
+
+10−3
+
+10−6
+
+10−9
+
+l
+a
+u
+d
+i
+s
+e
+r
+
+100
+
+10−5
+
+10−10
+
+10−15
+
+r
+r
+o
+o
+r
+r
+r
+r
+e
+e
+
+10−2
+
+10−4
+
+10−6
+
+10−8
+
+0
+
+10
+
+20
+
+30
+
+0
+
+10
+
+20
+
+30
+
+iteration
+
+iteration
+
+Figure 7: Fisher traveling wave problem. Convergence of the Newton process as a function of
+iteration number.
+
+weight lifting
+5 constrained run steps
+10 constrained run steps
+ﬁrst order slaving
+
+0
+
+0.005
+
+0.015
+
+0.02
+
+0.01
+tt
+
+Figure 8: Evolution of the initialization error for the planar streamer model with diﬀerent lifting
+procedures. We show the diﬀerence between the distribution function of the re-initialized and the
+original lattice Boltzmann simulation.
+
+6.2.1
+
+Initialization
+
+Again, we study the properties of the initialization by comparing the exact evolution of
+a lattice Boltzmann simulation with the evolution after re-initialization. We performed a
+simulation of 100 steps, starting from ¯U (0), with the lattice Boltzmann model (22), which
+is initialized using the ﬁrst order slaving relations. Again, we extract the density at time
+t = 80dt, and initialize a second lattice Boltzmann simulation using the three procedures
+described in section 4.1. We observe the same behaviour as for the Fisher model.
+In
+ﬁgure 8, we show the evolution of the initialization error during the ﬁrst 20 steps after
+re-initialization. We again see an initial convergence towards the exact solution, which
+stagnates after 10 to 20 time-steps. Depending on the accuracy of the lifting step, we get a
+better correspondence with the correct distribution functions.
+
+19
+
+)
+λ
+(
+
+ℑ
+
+0.5
+
+0.25
+
+0
+
+0.25
+
+−
+
+0.5
+
+−
+
+)
+λ
+(
+
+ℑ
+
+0.4
+
+0.2
+
+0
+
+0.2
+
+0.4
+
+−
+
+−
+
+1
+−
+
+0.5
+
+−
+
+0
+
+0.5
+
+1
+
+1
+−
+
+0.5
+
+−
+
+0
+
+0.5
+
+1
+
+(λ)
+
+ℜ
+
+(λ)
+
+ℜ
+
+Figure 9: The planar streamer front problem. Left: Spectrum of the system matrix of equation
+(31). Right: spectrum of the preconditioner (36).
+
+Based on these observations, we choose δt = 15dt = 1.5
+·
+we initialize using the constrained runs scheme with 10 steps.
+
+10−2 in our simulations, and
+
+6.2.2 Performance of the preconditioner
+
+In ﬁgure 9, we show the spectrum of the matrix A( ¯U (0), δt), using the parameters deﬁned
+above, and the spectrum of the corresponding preconditioning matrix M ( ¯U (0), δt). Again,
+we see good qualitative agreement between the two spectra, but the diﬀerences are more
+pronounced than for the Fisher equation.
+
+The spectrum of the matrix M ( ¯U (0), δt)−1A( ¯U (0), δt) is shown in ﬁgure 10(left). Al-
+though most eigenvalues are in a small cluster around 1, a few eigenvalues are scattered on
+the real axis. These additional eigenvalues result in a temporary stagnation of the GMRES
+convergence, as shown in ﬁgure 10 (right). Between these stagnations, linear convergence
+is observed. We note that, even with the temporary stagnation, the solution is computed
+in 30 to 40 iterations, while the number of unknowns is 2601.
+
+6.2.3 Convergence of the Newton process
+
+We proceed to show the convergence of the Newton process, starting from the initial guess
+¯U (0). The results are shown in ﬁgure 11. We plot the norm of the residual and the correction
+(d ¯U (k), α(k)) after each iteration. For this problem, we get quadratic convergence towards
+the solutions shown in ﬁgure 2, and α∗ = 0. Thus, in this case, the eﬀect of the discretization
+is much less pronounced, or even absent.
+
+20
+
+0.5 0
+
+0.5
+
+1
+
+1.5
+
+2
+
+0
+
+20
+
+40
+
+(λ)
+(λ)
+
+ℜ
+ℜ
+
+iteration
+iteration
+
+Figure 10: Planar streamer front problem. Left: spectrum of the preconditioned system matrix
+M −1A (equation (33)) for the ﬁrst Newton step. Right: the convergence of the preconditioned
+GMRES procedure as a function of the number of iterations.
+
+)
+)
+λ
+λ
+(
+(
+
+ℑ
+ℑ
+
+0.5
+
+0.25
+
+0
+
+0.25
+
+−
+
+0.5
+
+−
+
+−
+
+l
+l
+a
+a
+u
+u
+d
+d
+i
+i
+s
+s
+e
+e
+r
+r
+
+100
+
+10−5
+
+10−10
+
+10−15
+
+r
+r
+o
+o
+r
+r
+r
+r
+e
+e
+
+104
+
+100
+
+−4
+
+10
+
+−8
+
+10
+
+−12
+
+10
+
+e
+e
+z
+z
+i
+i
+s
+s
+
+p
+p
+e
+e
+t
+t
+s
+s
+
+100
+
+10−5
+
+10−10
+
+10−15
+
+21
+
+0
+
+5
+
+10
+
+15
+
+20
+
+0
+
+5
+
+10
+
+15
+
+20
+
+iteration
+iteration
+
+iteration
+iteration
+
+Figure 11: Planar streamer front problem. Convergence of the Newton process as a function of
+iteration number.
+
+7 Discussion and conclusions
+
+In this article, we showed how one can use a coarse-grained time-stepper to compute trav-
+In a co-moving frame, emulated by
+eling wave solutions of lattice Boltzmann models.
+performing a shift-back operation after each coarse-grained time-step, the traveling wave ap-
+pears as a steady state, which is computed using a Jacobian-free Newton–GMRES method.
+The method uses repeated calls to the coarse-grained time-stepper to estimate the required
+matrix-vector products. For eﬃciency reasons, we limited the size of the coarse-grained
+time-step δt. The real part of the spectrum of the resulting Jacobian ranges from 0 to 1,
+which results in slow convergence of Krylov methods. Therefore, we accelerated convergence
+of the GMRES procedure by introducing a preconditioner that is based on an approximate
+macroscopic model, which is derived from the lattice Boltzmann model using a Chapman–
+Enskog expansion. We illustrated the approach on a lattice Boltzmann model for the Fisher
+equation and on a model for an ionization wave.
+
+The total cost of ﬁnding a solution is determined by the required number of microscopic
+time-steps, which depends on the number of GMRES iterations and on the number of
+microscopic time-steps per matrix-vector product. For each matrix-vector product, we use
+the microscopic time-stepper both during the simulation and the lifting step when the
+constrained runs scheme is used. The required number of calls to the microscopic time-
+stepper is determined by the microscopic relaxation parameter ω, since the convergence
+rate of the distribution functions towards their correctly slaved values is given by
+. In
+|
+our examples, approximately 10 lattice Boltzmann time-steps were needed for each lifting
+operation and an additional 10 to 15 for each microscopic simulation.
+
+1
+|
+
+−
+
+ω
+
+The convergence rate of the GMRES method is closely related to the quality of the
+preconditioner. The preconditioner performs well when the approximate macroscopic model
+is a good approximation of the lattice Boltzmann model. Our experiments indicate that
+the quality of the preconditioner is not related to the number of lattice points N , which
+implies that the number of GMRES iterations is approximately constant with varying N .
+
+Since the number of time-steps only depends on the relaxation parameter ω and the
+spectrum of the preconditioned time-stepper, we conclude that the convergence rate is
+independent of the number of variables in the problem. As a consequence, the algorithm
+scales with the cost of taking a single lattice Boltzmann time-step and the cost of a direct
+solve with the preconditioning matrix.
+
+In our numerical examples we found that, on average, 2000 time-steps are required
+to converge to the traveling wave solution. This is still expensive if we compare with
+straightforward time integration. E.g. for the Fisher model, a localized initial state evolves
+into a steady traveling wave within 9000 time-steps. However, direct time integration looses
+its appeal in situations where the microscopic time-step is so small that it is computationally
+infeasible to reach the time horizon where the traveling wave becomes steady. Furthermore,
+
+22
+
+the total number of time-steps will be much smaller in the context of continuation, where
+the behaviour of the solutions is studied as a function of one or more varying parameters.
+In this setting, the solution for nearby parameter values provides an accurate initial guess,
+hereby lowering the required number of Newton steps. Also, the Newton–GMRES method
+allows us to ﬁnd unstable traveling waves. These will never be found by simulation, since
+any perturbation will grow, and will destroy the traveling wave.
+
+Note that preconditioning with a roughly approximate macroscopic PDE model can
+also be helpful to study the linear stability properties of the traveling wave. Indeed, the
+relevant rightmost eigenvalues of the Jacobian matrix in the solution can be computed by
+an Arnoldi iteration that requires the solution of a linear system in each iteration [21]. This
+linear system can again be preconditioned with the techniques proposed in this article.
+
+In principle, the Newton–GMRES method could be applied to the lattice Boltzmann
+model directly. However, it is much harder to ﬁnd an appropriate preconditioner in that
+setting.
+Indeed, one cannot expect a preconditioner based on the approximate PDE to
+work well, since the fast time-scales, which describe the slaving of the higher order mo-
+ments, will not be correctly accounted for. We also emphasize that, from the coarse-grained
+solution, the detailed solution can easily be reconstructed using the constrained runs lifting
+scheme. Our method generalizes readily to lattice Boltzmann models with a more detailed
+description of the velocity space. A particular ﬁve-speed model, in which the Townsend
+approximation for the reaction term is replaced by a more realistic set of microscopic inter-
+action rules, is currently being investigated [43].
+
+Acknowledgements
+
+The authors thank Pieter Van Leemput, Christophe Vandekerckhove, Kurt Lust and Tim
+Boonen for interesting discussions about various aspects of this work. Pieter Van Leemput
+provided us with ﬁgure 3. GS is a Research Assistant of the Fund for Scientiﬁc Research –
+Flanders. WV is supported by the Belgian Science Policy Oﬃce through its action “return
+grants”. This work was supported by the Fund for Scientiﬁc Research – Flanders through
+Research Project G.0130.03 (GS, DR, WV) and by the Interuniversity Attraction Poles
+Programme of the Belgian Science Policy Oﬃce through grant IUAP/V/22. The scientiﬁc
+responsibility rests with its authors. The research of IGK was partially supported by the
+US DOE and DARPA.
+
+References
+
+[1] P.L. Bhatnagar, E.P. Gross, and M. Krook. A model for collision processes in gases,
+I. Small amplitude processes in charged and neutral one-component systems. Physical
+Review, 94(3):511–525, 1954.
+
+23
+
+[2] L. Boltzmann. Lectures on gas theory. University of California Press, Berkeley, 1964.
+
+[3] S. Chandrasekaran and M. Gu. Fast and stable algorithms for banded plus semisepa-
+rable systems of linear equations. SIAM Journal on Matrix Analysis and Applications,
+25(2):373–384, 2003.
+
+[4] B. Chopard, A. Dupuis, A. Masselot, and P. Luthi. Cellular automata and lattice
+Boltzmann techniques: an approach to model and simulate complex systems. Advances
+in Complex Systems, 5:103–246, 2002.
+
+[5] S.P. Dawson, S. Chen, and G.D. Doolen. Lattice Boltzmann computations for reaction-
+
+diﬀusion equations. Journal of Chemical Physics, 98(2):1514–1523, 1993.
+
+[6] E. Doedel. Auto: a package for the automatic bifurcation analysis of autonomous
+
+systems. Cong. Numer., pages 265–384, 1981.
+
+[7] E.J. Doedel, H. B. Keller, and J. P. Kern´evez. Numerical analysis and control of
+bifurcation problems, part I. International Journal of Bifuration and Chaos, 3:493–
+520, 1991.
+
+[8] E.J. Doedel, H. B. Keller, and J. P. Kern´evez. Numerical analysis and control of
+bifurcation problems, part II. International Journal of Bifuration and Chaos, 4:745–
+772, 1991.
+
+[9] U. Ebert, W. van Saarloos, and C. Caroli. Propagation and structure of planar streamer
+
+fronts. Phys. Rev. E, 55:1530 – 1549, 1997.
+
+[10] K. Engelborghs, T. Luzyanina, and G. Samaey. DDE-BIFTOOL v. 2.00: a Matlab
+package for bifurcation analysis of delay diﬀerential equations. Report TW 330, De-
+partment of Computer Science, K.U.Leuven, Leuven, Belgium, October 2001.
+
+[11] R.A. Fisher. The wave of advance of advantageous genes. Annals of Eugenics, 7:353–
+
+369, 1937.
+
+[12] C.W. Gear, T.J. Kaper, I.G. Kevrekidis, and A. Zagaris. Projecting to a slow manifold:
+Singularly perturbed systems and legacy codes. SIAM Journal on Applied Dynamical
+Systems, 4(3), 2005.
+
+[13] C.W. Gear and I.G. Kevrekidis. Constraint-deﬁned manifolds: a legacy code approach
+
+to low-dimensional computation. J. Sci. Comp., 2004. In press.
+
+[14] C.W. Gear, I.G. Kevrekidis, and C. Theodoropoulos. Coarse integration/bifurcation
+analysis via microscopic simulators: micro-Galerkin methods. Computers and Chemical
+Engineering, 26:941–963, 2002.
+
+24
+
+[15] A.N. Gorban and I.V. Karlin. Invariant manifolds for physical and chemical kinetics,
+volume 660 of Lecture Notes in Physics. Springer–Verlag Berlin Heidelberg, 2005.
+
+[16] X. He and L.-S. Luo. A priori derivation of the lattice Boltzmann equation. Physical
+
+Review E, 55(6):R6333–R6336, 1997.
+
+[17] G. Hummer and I.G. Kevrekidis. Coarse molecular dynamics of a peptide fragment: free
+energy, kinetics and long-time dynamics computations. J. Chem. Phys., 118(23):10762–
+10773, 2003. Can be obtained as physics/0212108 at arxiv.org.
+
+[18] C.T. Kelley, I.G. Kevrekidis, and L. Qiao. Newton–Krylov solvers for time-steppers.
+
+Can be obtained as math/0404374 from http://www.arxiv.org, 2004.
+
+[19] I.G. Kevrekidis, C.W. Gear, J.M. Hyman, P.G. Kevrekidis, O. Runborg, and
+C. Theodoropoulos. Equation-free, coarse-grained multiscale computation: enabling
+microscopic simulators to perform system-level tasks. Comm. Math. Sciences, 1(4):715–
+762, 2003.
+
+[20] D.A. Knoll and D.E. Keyes. Jacobian-free newton–krylov methods: a survey of ap-
+proaches and applications. Journal of Computational Physics, 193:357–397, 2004.
+
+[21] R.B. Lehoucq and A.G. Salinger. Large-scale eigenvalue calculations for stability analy-
+sis of steady ﬂows on massively parallel computers. International Journal for Numerical
+Methods in Fluids, 36:309–327, 2001.
+
+[22] R. Liboﬀ. Kinetic theory: classical, quantum and relativistic descriptions. Springer–
+
+Verlag New York, 2003.
+
+Lett., 81:1618, 1998.
+
+[23] Li-Shi Luo. Uniﬁed theory of lattice boltzmann models for nonideal gases. Phys. Rev.
+
+[24] K. Lust. Numerical bifurcation analysis of periodic solutions of partial diﬀerential
+
+equations. PhD thesis, Katholieke Universiteit Leuven, 1997.
+
+[25] K. Lust. Private communication, 2005.
+
+[26] K. Lust, D. Roose, A. Spence, and A.R. Champneys. An adaptive Newton–Picard
+algorithm with subspace iteration for computing periodic solutions. SIAM Journal on
+Scientiﬁc Computing, 19(4):1188–1209, 1998.
+
+[27] A.G. Makeev, D. Maroudas, A.Z. Panagiotopoulos, and I.G. Kevrekidis. Coarse bi-
+furcation analysis of kinetic Monte Carlo simulations: a lattice-gas model with lateral
+interactions. J. Chem. Phys., 117(18):8229–8240, 2002.
+
+[28] J.D. Murray. Mathematical biology. Springer–Verlag, 1989.
+
+25
+
+[29] Y.H. Qian and S.A. Orszag. Scalings in diﬀusion-driven reaction A+B
+
+C : numerical
+simulations by lattice BGK models. Journal of Statistical Physics, 81:237–253, 1995.
+
+→
+
+[30] J. P. Ryckaert, G. Ciccotti, and H. Berendsen. Numerical integration of the cartesian
+equation of motion of a system with constraints: molecular dynamics of n-alkanes. J.
+Comp. Phys., 23:237, 1977.
+
+[31] Y. Saad.
+
+Iterative Methods for Sparse Linear Systems. Society for Industrial and
+
+Applied Mathematics, Philadelphia, PA, USA, 2003.
+
+[32] Y. Saad and M.H. Schultz. GMRES: A generalized minimal residual algorithm for
+solving nonsymmetric linear systems. SIAM Journal of Scientiﬁc and Statistical Com-
+puting, 7(3):856–869, 1986.
+
+[33] D.S. Schmidt. Hopf’s bifurcation theorem and the center theorems of Lyapunov. In
+J.E. Marsden and M. McCracken, editors, The Hopf bifurcation and its applications,
+volume 19 of Applied Math. Sci., pages 95–104. Springer, New York, 1976.
+
+[34] G.M. Schroﬀ and H.B. Keller. Stabilization of unstable procedures: the recursive
+projection method. SIAM Journal on Numerical Analysis, 30:1099–1120, 1993.
+
+[35] C.I. Siettos, A. Armaou, A.G. Makeev, and I.G. Kevrekidis. Microscopic/stochastic
+timesteppers and coarse control: a kinetic Monte Carlo example. AIChE J., 49(7):1922–
+1926, 2003. Can be obtained as nlin.CG/0207017 at arxiv.org.
+
+[36] C.I. Siettos, M.D. Graham, and I.G. Kevrekidis. Coarse Brownian dynamics for ne-
+matic liquid crystals: bifurcation, projective integration and control via stochastic
+simulation. J. Chem. Phys., 118(22):10149–10157, 2003. Can be obtained as cond-
+mat/0211455 at arxiv.org.
+
+[37] S. Succi. The lattice Boltzmann equation for ﬂuid dynamics and beyond. Oxford Science
+
+Publications, 2001.
+
+[38] C. Theodoropoulos, Y.H. Qian, and I.G. Kevrekidis. Coarse stability and bifurcation
+analysis using time-steppers: a reaction-diﬀusion example. In Proc. Natl. Acad. Sci.,
+volume 97, pages 9840–9845, 2000.
+
+[39] G. M. Torrie and J. P. Valleau. Monte carlo free energy estimation using non-boltzmann
+sampling:application to the sub-critical lennard jones ﬂuid. Chem. Phys. Letters,
+28:578–581, 1974.
+
+[40] P. Van Leemput, K. Lust, and I.G. Kevrekidis. Coarse-grained numerical bifurcation
+
+analysis of lattice Boltzmann models. Physica D, 210(1–2):58–76, 2005.
+
+[41] P. Van Leemput, W. Vanroose, and D. Roose. Initialization of a lattice Boltzmann
+model with constrained runs. Journal of Computational Physics, 2005. Submitted.
+
+26
+
+[42] P. Van Leemput, W. Vanroose, and D. Roose. Numerical and analytical spatial coupling
+of a lattice Boltzmann model and a partial diﬀerential equation. In A.N. Gorban et al.,
+editor, Model Reduction and Coarse-graining Approaches for Multiscale Phenomena,
+Springer Lecture Series. Springer, 2006.
+
+[43] W. Vanroose, G. Samaey, P. Van Leemput, and D. Roose. Analysis of a lattice Boltz-
+
+mann model for planar streamer fronts. In preparation, 2006.
+
+[44] K. Xu. Gas-kinetic schemes for unsteady compressible ﬂow simulations. VKI (von
+
+Karman Institute) Lecture Series 1998-03, 1998.
+
+27
+
+

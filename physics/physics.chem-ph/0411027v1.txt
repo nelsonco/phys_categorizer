@@ -1,0 +1,950 @@
+4
+0
+0
+2
+ 
+v
+o
+N
+ 
+2
+ 
+ 
+]
+h
+p
+-
+m
+e
+h
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+7
+2
+0
+1
+1
+4
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Energy controlled insertion of polar molecules in dense ﬂuids
+
+Gianni De Fabritiis,∗ Rafael Delgado-Buscalioni,† and Peter V. Coveney‡
+Centre for Computational Science, Department of Chemistry,
+University College London, 20 Gordon Street, WC1H 0AJ London, U.K.
+(Dated: July 24, 2013)
+
+We present a method to search low energy conﬁgurations of polar molecules in the complex poten-
+tial energy surfaces associated with dense ﬂuids. The search is done in the conﬁgurational space of
+the translational and rotational degrees of freedom of the molecule, combining steepest-descent and
+Newton-Raphson steps which embed information on the average sizes of the potential energy wells
+obtained from prior inspection of the liquid structure. We perform a molecular dynamics simula-
+tion of a liquid water shell which demonstrates that the method enables fast and energy-controlled
+water molecule insertion in aqueous environments. The algorithm ﬁnds low energy conﬁgurations
+of incoming water molecules around three orders of magnitude faster than direct random insertion.
+This method is an important step towards dynamic simulations of open systems and it may also
+prove useful for energy-biased ensemble average calculations of the chemical potential.
+
+PACS numbers: 82.20.Wt, 02.70.Ns, 61.20.Ja
+
+Many processes of physical, chemical and biological
+interest involve open systems which exchange matter
+with their surroundings. Molecular dynamics (MD) and
+Monte Carlo (MC) simulations of these systems often
+require a method for molecule insertion and, therefore,
+a method for searching conﬁgurations with prescribed
+(low) potential energy.
+Indeed, a randomly placed
+molecule is likely to overlap with pre-existing atoms, re-
+leasing into the system a very high amount of energy.
+
+The most natural setting for these systems is the grand
+canonical (GC) ensemble. Several methods for GC sim-
+ulations require the location of energy cavities for inser-
+tion (such as cavity-biased methods for GCMC1,2,3) or
+careful control of the solvent insertion energy in the case
+of GCMD4,5. Mass, momentum and energy transfer are
+also a key feature of a class of hybrid methods for non-
+equilibrium simulations which couple an open MD region
+with an interfacing continuum-ﬂuid-dynamics domain6,7.
+Open boundaries in such hybrid schemes can avoid ﬁnite
+size eﬀects in small MD simulation boxes8, thereby saving
+on computational time. These sort of open boundaries
+could also be used to improve the closed “water shells”
+widely used to hydrate restricted subdomains9 in many
+MD simulations of biological systems.
+
+Water insertion is also particularly important in pro-
+tein simulations. For instance, it is possible to study pro-
+tein unfolding via gradual water insertion in the protein’s
+cavities10,11. On the other hand, water molecules buried
+in protein cavities at very low energies are essential for
+protein structure and function12,13,14. Indeed, some tools
+for MD simulations (such as dowser12) are specialised
+for water insertion in hydrophilic cavities, leaving empty
+however the larger hydrophobic cavities which frequently
+contain stable yet disordered water molecules relevant to
+protein function13,15.
+
+Several methods for the calculation of ensemble aver-
+ages require sampling the potential energy released to the
+system upon insertion of a test molecule1,16,17,18. Exam-
+ples include calculation of the chemical potential, hydra-
+
+tion energies and pair distribution functions19. The ap-
+plicability of these methods can be expanded to dense ﬂu-
+ids using techniques that bias the sampling towards low
+energy conﬁgurations. Some of these techniques, such as
+cavity-biased20,21 or excluded volume map22 sampling,
+are however hampered by the considerable amount of
+time needed to ﬁnd “cavities” where the test molecule
+could be inserted without overlapping with others.
+In
+fact, these cavities are just proxies to search low energy
+conﬁgurations which could better be identiﬁed by an en-
+ergy controlled insertion method.
+
+The algorithms for water insertion proposed in the lit-
+erature usually involve rather lengthy steps which com-
+prise three separate parts: location of a suitable “cavity”,
+normally using an expensive grid search with O(106) dif-
+ferent cells3,4,21; random insertion in the cavity, followed
+by a large number of energy minimisation steps (either of
+the inserted molecule4,12 or of the entire system10) and,
+ﬁnally, thermostatting the whole system over a one to ten
+picoseconds period to extract the extra energy released
+upon insertion. In this article, we present a method to
+locate low energy conﬁgurations of dense liquids that al-
+lows insertion of solvent molecules on-the-ﬂy: avoiding
+expensive grid search, non-local energy minimisation and
+thermostatting steps.
+
+On the potential energy surface, low energies are lo-
+cated inside energy wells whose local minima span a rel-
+atively large range of energy values. The main idea of
+the present method is to reconstruct the energy land-
+scape with a limited number of probes by constraining
+the search to be inside the energy wells. In fact, any ex-
+cursion outside the explored well implies the loss of all the
+information accumulated on the current well which is ef-
+fectively equivalent to a random restart. Eﬃciency is ob-
+tained by minimising both the number of probes needed
+to determine if the target energy is found within the
+well and the number of explored wells per successful in-
+sertion. The present minimisation algorithm generalises
+non-trivially to multiple degrees of freedom the usher al-
+
+gorithm for insertion of Lennard-Jones atoms23. It shares
+with some other global minimisation methods the recipe
+of applying in turns random moves and local energy
+minimisation24,25,26. However, it is distinguished from
+these others in the way the minimisation is performed via
+a combined steepest-descent and Newton-Raphson iter-
+ator which is tailored adaptively to the structure of the
+potential energy landscape being searched.
+
+The method uses local information on the gradient
+and the average size of the potential wells, which are
+dependent on the molecule’s location and the thermody-
+namic state respectively. The input parameters specify
+the maximum distance ∆R and rotation angle ∆Θ that
+the incoming molecule can jump without exiting the cur-
+rent well together with a measure of the roughness of the
+potential energy surface ∆ER. The insertion algorithm
+starts by selecting a random location for the centre of
+mass of the molecule and placing the atoms at the equi-
+librium bond and angle positions in a random orienta-
+tion. The non-bonded potential energy of an incoming
+molecule is given by
+
+U =
+
+VLJ (rij ) +
+
+VC (rij ),
+
+(1)
+
+1
+2 X
+
+i6=j
+
+1
+2 X
+
+i6=j
+
+where VLJ and VC are the Lennard-Jones and Coulomb
+pair potentials respectively1 and the index i runs over
+the atoms of the molecule and j over all other atoms,
+which remain ﬁxed while inserting. The energy E =
+2U released to the system upon insertion is computed
+and compared with the target energy ET . The insertion
+succeeds once the energy diﬀerence ∆E = E − ET is
+less than a certain prescribed tolerance set here at 10−3
+Kcal/mol.
+
+It is likely that for the random starting conﬁguration
+∆E will be a large positive value because there is a high
+chance that the inserted molecule will overlap with oth-
+ers. Then, the force F = Pi Fi applied to the centre
+of mass rcm and torque τ = Pi rcm,i × Fi are used
+to compute the next displacement and rotation. Here,
+the index i runs over the atoms of the inserted molecule
+and rcm,i = ri − rcm. The molecule is translated by
+δr = min(∆E/F, ∆R) where F is the magnitude of the
+force on the centre of mass and ∆R is the maximum
+displacement. With the reference system ﬁxed to the
+molecule, we then compute the rotation angle around
+the torque axis δθ = min(∆E/τ, ∆Θ) and rotate the
+molecule around the centre of mass. The resulting up-
+date rule is ﬁnally given by
+
+rn+1
+cm = rn
+cm +
+rn+1
+cm,i = Rτ n rn
+
+Fn
+F n δr,
+cm,i,
+
+(2)
+
+where R is the rotation matrix around the axis of torque
+of angle δθ. This is equivalent to a ﬁrst order steep-
+est descent procedure for large energy diﬀerences and a
+second order Newton method for energy close to the tar-
+get energy23. The angular minimisation is stopped when
+
+)
+
+A
+
+(
+ 
+j
+
+5
+
+0
+
+0
+
+2
+
+4
+
+3
+
+1
+
+0
+
+500
+100
+0
+1
+
+0
+
+−1
+
+−2
+
+−3
+
+0
+
+−4
+
+−5
+
+0
+1
+
+−4
+
+0
+0
+1
+
+5
+
+0
+
+0
+
+1 0 0
+
+100
+
+500
+
+1
+
+0
+
+1
+
+0
+
+100
+
+500
+
+5 0 0
+
+0
+
+−
+5
+
+0
+
+0
+0
+5
+
+0
+0
+5
+
+5
+−
+
+0
+
+1 0 0
+
+0
+
+1
+
+5 0 0
+
+5
+
+0
+
+0
+
+1
+
+0
+
+0
+
+a 
+
+100
+
+0
+
+0
+
+5
+
+5
+
+0
+
+0
+
+0
+0
+5
+
+5 0 0
+
+0
+
+0
+
+1
+
+0
+
+1
+
+0
+1
+
+−2
+
+1
+
+0
+
+0
+
+500
+
+0
+i (A)
+
+0
+
+1
+
+−
+
+5
+−
+
+0
+
+0
+1
+
+−
+
+5
+
+0
+1
+
+0
+
+−10
+
+−
+
+1
+
+0
+
+5
+
+10
+
+0
+
+2
+−
+
+5
+
+−
+
+2
+
+5
+−
+
+−
+
+2
+
+0
+
+−
+
+5
+
+)
+
+°
+
+(
+ 
+φ
+
+150
+
+100
+
+50
+
+0
+
+−50
+
+−2
+
+0
+
+5
+
+10
+
+5
+
+− 2
+
+−100
+
+− 5
+
+−150
+
+5
+
+0
+
+−2
+
+−5
+
+−5
+
+− 2
+
+0
+
+0
+θ (°)
+
+500
+
+2
+
+5 0 0
+
+100
+4
+
+−
+
+1
+
+0
+
+5
+−
+
+2
+−
+
+0
+
+5
+
+−150
+
+−100
+
+−50
+
+10
+50
+
+5
+
+0
+
+−
+
+2
+
+−
+5
+
+100
+
+150
+
+2
+
+b 
+
+−2
+
+0
+
+5
+
+0
+
+− 2
+
+FIG. 1: Contour plot of the potential energy landscape in
+Kcal/mol: (a) for translation relative to the axes i and j ﬁxed
+to the water molecule; (b) for a rotation θ about the axis j
+and φ about the axis k for an equilibrated periodic liquid wa-
+ter system at 300K and density 0.96 g/cm3. The maximum
+translational displacement ∆R = 1.0 ˚A and maximum rota-
+tional angles ∆Θ = ∆Φ = 45◦ are indicated by double-headed
+arrows. For visual convenience angles smaller than −90◦ and
+larger than 90◦ in θ are plotted although being redundant.
+
+the angle δθ is less than 1◦ to avoid oscillations due to
+the coupling of rotational and translational degrees of
+freedom. If during the iterations ∆E increases by more
+than ∆ER then the current attempt is abandoned and a
+new random conﬁguration is generated. This provides a
+threshold to control the amount of time spent searching
+in the well and the number of wells explored.
+
+The insertion algorithm in Eq. (2) does not require
+a baroque implementation and indeed can be easily in-
+cluded in any molecular dynamics program. The code
+used here is based on the serial version of a well estab-
+lished parallel molecular dynamics code NAMD with the
+Charmm27 force ﬁeld27, but it has been designed to in-
+terface easily with any other serial or parallel MD code.
+The search algorithm applies in general to small polar
+molecules but given its importance we focus on controlled
+insertion of water molecules in aqueous environments.
+We use the TIP3P model for water, widely utilised in
+biological simulations28. This water model is based on
+three interaction sites, bonds (O-H) and angle (H-O-H)
+being constrained rigidly or, in its ﬂexible version (used
+here), by a harmonic potential with equilibrium conﬁgu-
+rations of 0.96 ˚A and 104.52◦ respectively.
+
+As stated, the restriction on the maximum displace-
+ment and rotation has the eﬀect of limiting the search
+to the current potential well. For water, the maximum
+displacement can be extracted from the oxygen-hydrogen
+28. We found that an op-
+pair distribution function gOH
+timum value for the maximum displacement ∆R = 1 ˚A
+is half of the ﬁrst peak in gOH which is around 2 ˚A. Ex-
+ploring the potential energy landscape provides another
+simple way of obtaining the input parameters. In Fig. 1a,
+we show a cross-section of the potential energy surface for
+a displacement of up to 5 ˚A around an equilibrated water
+molecule in the direction of the axes i and j. The unit
+vectors i, j, k form a reference system ﬁxed rigidly to the
+water molecule with the axis i being in the direction of
+
+the dipole. As shown in Fig. 1a the optimum value of ∆R
+is approximately the radius of the potential energy well,
+corroborating information furnished from the pair distri-
+bution function. It is more diﬃcult to obtain structural
+information for the angular degrees of freedom. However,
+a simple inspection of Fig. 1b provides a gross estimate of
+potential energy wells in the rotational degrees of freedom
+as being between 90 − 100◦ wide; therefore the maximum
+rotation can be ﬁxed at ∆Θ = 45◦. The value of ∆ER,
+which sets the maximum uphill energy jump allowed in
+one move, is important to reduce the number of unsuc-
+cessful wells explored. We found that an optimal value
+is near ∆ER = 3 Kcal/mol.
+
+It is well known that the local structure of liquid wa-
+ter at equilibrium consists of a hydrogen bond network
+formed by oxygen and hydrogen atoms from neighbour-
+ing water molecules. This structure makes it very hard
+for an incoming water molecule to ﬁnd low energy con-
+ﬁgurations by forming hydrogen bonds with pre-existing
+molecules. However, the insertion algorithm needs only
+to control the thermodynamics by inputting into the sys-
+tem a speciﬁed amount of energy which depends on the
+ensemble considered. We performed an MD simulation of
+bulk water using a simple spherical water shell to show
+that it is possible to insert water molecules on-the-ﬂy
+while precisely controlling the energy released to the sys-
+In a previous work23 considering Lennard-Jones
+tem.
+atoms, it was shown that this procedure ensures thermo-
+dynamic consistency after a relaxation time of the order
+of the collision time. We set up an equilibrated TIP3P
+bulk water system within a sphere of radius 37.5 ˚A at
+300K and a pressure of 1 atm. The simulations were run
+with a 12 ˚A cutoﬀ radius and without corrections to the
+long ranged electrostatic forces27. The water molecules
+in the outer shell of length d = 12.5 ˚A play the role of a
+reservoir conﬁned in the sphere by a simple constant ra-
+dial force ﬁeld speciﬁed by an acceleration g acting only
+within the outer shell. The eﬀect of this force is a linear
+decay of the pressure in the water shell according to the
+usual formula for the hydrostatic pressure in an incom-
+pressible ﬂuid P1 = P0 − ρgd, where P1 is the pressure at
+the surface of the water sphere and P0 is the pressure of
+the bulk that we want to maintain. We impose P1 = 0
+by setting g = P0/(ρd).
+
+In the present set up, the ﬂow rate of molecules to
+the inner shell is controlled by the applied pressure force,
+while the number of reservoir molecules in the outer shell
+is ﬁxed at the bulk density. This implies that molecules
+which, due to ﬂuctuations or sudden pressure waves,
+move outside the sphere are removed and reinserted using
+the insertion method at a random location in the outer
+shell, with a velocity given by the Maxwell-Boltzmann
+distribution at 300K. We note that the present setting
+can be generalised to avoid ﬁnite-size eﬀects due to pe-
+riodic boundary conditions in a hydrodynamically con-
+sistent way6. The total energy of the system can be
+ﬁxed by setting the amount of energy released upon inser-
+tion equal to the energy lost when a molecule moves out
+
+3
+
+7
+10
+
+6
+10
+
+5
+10
+
+4
+10
+
+3
+10
+
+2
+10
+
+l
+
+s
+a
+i
+r
+t
+ 
+.
+n
+
+1
+10
+−15
+
+−10
+
+−5
+E (Kcal/mol)
+
+0
+
+5
+
+10
+
+FIG. 2: Number of energy evaluations per molecule required
+to insert a water molecule while releasing an energy less than
+E (Kcal/mol) to the system. The proposed insertion algo-
+rithm (crosses) is around three orders of magnitude faster
+than random insertion (circles) at low energies. The his-
+togram for random insertion is computed from 107 trials.
+
+through the open boundary6. On average, the exchanged
+potential energy per molecule is equal to the mean en-
+ergy per molecule: by inserting at this energy target we
+kept the total energy under control (without drift) with
+no thermostat at all. In other situations, such as at con-
+stant temperature, it is suﬃcient to release a moderately
+greater energy, for example equal to the excess chemical
+potential, which can be thermalized dynamically by the
+thermostat.
+
+An estimate of the eﬃciency of this insertion method
+can be obtained by determining the average number of
+energy evaluations, including failed well searches, needed
+to insert a single water molecule at the speciﬁed energy.
+Each iteration of the insertion algorithm corresponds to
+one energy evaluation on the solvent molecule, which is
+a three atom-force calculation for TIP3P water. In par-
+ticular, it takes an average of 206 iterations, exploring 34
+wells, to insert at the reference energy of the mean energy
+per molecule (−11 Kcal/mol), and 36 iterations (only 6
+wells) at the energy of the excess chemical potential (-
+5.8 Kcal/mol, calculated using the Bennett method16).
+We note that the computational cost required by the
+insertion method in a typical MD simulation is quite
+small. For instance, in the simulation of the open water
+shell mentioned above, incoming water molecules were
+inserted at a target energy of ET = −11Kcal/mol within
+a volume of 155.4nm3 at a rate of 141 per picosecond.
+The amount of CPU time devoted to insertion was only
+3% of the grand total of the simulation.
+
+Interestingly, the mean number of iterations to explore
+a well which leads to the correct target energy is only
+around 12, independent of the target energy. The method
+may be improved further by reducing the total number of
+searched wells but it is already optimal in the sense that
+the number of iterations to explore a single well does
+not depend on the target energy. Future applications
+
+4
+
+may require searching many more degrees of freedom,
+e.g. conformational searches, for which it is impractical
+to ﬁx each maximum displacement a priori. In this case,
+it would be useful to set up an adaptive rule to infer the
+input parameters from the eﬃcacy of the search itself.
+
+E
+
+It is useful to compare our insertion algorithm with a
+direct random insertion. To this end, the probability dis-
+tribution f (E) of releasing a total energy E upon random
+insertion was estimated by computing a histogram from
+107 random insertion trials. The number of trials re-
+quired to obtain an energy smaller than E is given by the
+reciprocal of the cumulative distribution 1/F (E) where
+−∞ f (E′)dE′. This number is compared with
+F (E) = R
+the number of iterations (energy evaluations) required by
+the insertion algorithm in Fig. (2). The insertion algo-
+rithm is around three orders of magnitude faster than
+a random insertion for energies lower than the chemical
+potential and so may provide an eﬃcient alternative to bi-
+ased methods, such as cavity-biased sampling20,21, to re-
+construct the probability distribution f (E). Indeed, the
+present algorithm enables one to identify the important
+low energy regions very accurately where an un-biased
+sampling can be performed. This appealing approach
+enables fast computation of the chemical potential from
+the probability distribution f (E) at low energies29.
+
+In summary, we have reported a new method for the
+
+insertion of polar molecules in dense ﬂuids by a gener-
+alisation of the usher protocol23. The energy minimi-
+sation is applied concurrently to all degrees of freedom
+(translational and rotational for water) and is indepen-
+dent of the speciﬁc potential used. Indeed, the method
+is even more general. It may be applied to other prob-
+lems related to conformational searches and minima of
+potential energy surfaces with many more degrees free-
+dom. Given its importance for computational biology,
+we focused on water and demonstrated that it is possible
+to eﬃciently insert water molecules in aqueous environ-
+ments while controlling the thermodynamic state. This
+task is commonly considered to be very time consuming,
+but we are able to achieve it at negligible computational
+cost thanks to a very eﬃcient conﬁgurational search al-
+gorithm. The present algorithm is an essential tool for
+performing hybrid MD-continuum simulations6,8 of bio-
+logical interest. Indeed, it represents an important step
+towards a general method for performing MD simulations
+of open systems, for which a dynamic calculation of the
+chemical potential18,29 could be used to control the inser-
+tion rate so as to maintain constant the solvent chemical
+potential.
+
+This research was supported by the EPSRC Integrative
+Biology project GR/S72023 and by the EPSRC Reality-
+Grid project GR/67699.
+
+67, 046704 (2003).
+
+52, 271 (2000).
+
+7 E. G. Flekkøy, G. Wagner, and J. Feder, Europhys. Lett.
+
+2370 (1989).
+
+8 S. Barsky, R. Delgado-Buscalioni, and P. V. Coveney, J.
+
+119, 978 (2003).
+
+∗ g.defabritiis@ucl.ac.uk
+† r.delgado-buscalioni@ucl.ac.uk
+‡ p.v.coveney@ucl.ac.uk
+1 M. Allen and D. Tildesley, Computer Simulations of Liq-
+
+uids (Oxford University Press, 1987).
+2 D. Adams, Mol. Phys. 29, 307 (1975).
+3 M. Mezei, Mol. Phys. 61, 565 (1987).
+4 T. C. Jie Ji and B. M. Pettitt, J. Chem. Phys. 96, 1333
+
+(1992).
+
+5 B. G.C. Lynch, Chemical Physics 258, 405 (2000).
+6 R. Delgado-Buscalioni and P. V. Coveney, Phys. Rev. E
+
+Chem. Phys. 121, 2403 (2004).
+
+9 G. King and A. Warshel, J. Chem. Phys. 91, 3647 (1989).
+10 J. M. Goodfellow, M. Knaggs, M. A. Williams, and J. M.
+
+Thornton, Faraday Discussions 103, 339 (1996).
+
+11 M.A.Williams, J.M.Thornton, and J.M.Goodfellow, Pro-
+
+tein Engineering 10, 895 (1997).
+
+12 L. Zhang and J. Hermans, Proteins:Struct. Func. Genet.
+
+24, 433 (1996).
+
+30, 100 (1998).
+
+14 M. Jensen, E. Tajkorshid, and K. Schulten, Biophysical
+
+Journal 85, 2884 (2003).
+
+15 S. Cai, S. Stevens, A. Budor, and E. Zuiderweg, Biochem-
+
+istry 42, 9 (2003).
+
+16 C. H. Bennett, J. Comput. Phys. 22, 245 (1976).
+17 K.S.Shing and K.E.Gubbins, Mol. Phys. 46, 1109 (1982).
+18 N. Lu, J. K. Singh, and D. A. Kofke, J. Chem. Phys. 118,
+
+19 B. Guillot, Y. Guissani, and S. Bratos, J. Chem. Phys. 95,
+
+20 P. Jedlovszky and M. Mezei, J. Am. Chem. Soc. 122, 5125
+
+21 A. Pohorille and M. A. Wilson, J. Chem. Phys. 104, 3760
+
+22 G.L.Deitrick, L. Scriven, and H. Davis, J. Chem. Phys. 90,
+
+2977 (2003).
+
+3643 (1991).
+
+(2000).
+
+(1996).
+
+23 R. Delgado-Buscalioni and P. V. Coveney, J. Chem. Phys.
+
+24 M. Levitt and A. Warshel, Nature 253, 694 (1975).
+25 Z. Li and H. A. Scheraga, Proc. Natl. Acad. Sci. USA 84,
+
+6611 (1987).
+
+26 M. Saunders, J. Am. Chem. Soc. 109, 3150 (1987).
+27 L. Kal´e, R. Skeel, M. Bhandarkar, R. Brunner, A. Gursoy,
+N. Krawetz, J. Phillips, A. Shinozaki, K. Varadarajan, and
+K. Schulten, J. Comp. Phys. 151, 283 (1999).
+
+28 W. L. Jorgensen, J. Chandrasekhar, and D. Madura, J.
+
+29 R. Delgado-Buscalioni, G. De Fabritiis, and P. Coveney,
+Fast calculation of the chemical potential using energy-
+biased sampling, preprint (2004).
+
+13 I. Hofacker and K. Schulten, Proteins:Struct. Func. Genet.
+
+Chem. Phys. 79, 926 (1983).
+
+

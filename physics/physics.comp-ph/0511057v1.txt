@@ -1,0 +1,4401 @@
+5
+0
+0
+2
+ 
+v
+o
+N
+ 
+7
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+7
+5
+0
+1
+1
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Multilevel domain decomposition for electronic
+structure calculations
+
+M. Barrault1, E. Canc`es2, W. W. Hager 3 and C. Le Bris2
+1 EDF R&D, 1 avenue du G´en´eral de Gaulle, 92141 Clamart Cedex, France
+
+maxime.barrault@edf.fr
+2 CERMICS, ´Ecole Nationale des Ponts et Chauss´ees,
+
+6 & 8, avenue Blaise Pascal, Cit´e Descartes,
+
+77455 Marne-La-Vall´ee Cedex 2, France
+
+cances,lebris
+
+@cermics.enpc.fr
+
+3 Department of Mathematics, University of Florida,
+
+{
+
+}
+
+Gainesville FL 32611-8105, USA, hager@math.ufl.edu
+
+We introduce a new multilevel domain decomposition method (MDD) for elec-
+tronic structure calculations within semi-empirical and Density Functional Theory
+(DFT) frameworks. This method iterates between local ﬁne solvers and global
+coarse solvers, in the spirit of domain decomposition methods. Using this approach,
+calculations have been successfully performed on several linear polymer chains con-
+taining up to 40,000 atoms and 200,000 atomic orbitals. Both the computational
+cost and the memory requirement scale linearly with the number of atoms. Addi-
+tional speed-up can easily be obtained by parallelization. We show that this do-
+main decomposition method outperforms the Density Matrix Minimization (DMM)
+method for poor initial guesses. Our method provides an eﬃcient preconditioner for
+DMM and other linear scaling methods, variational in nature, such as the Orbital
+Minimization (OM) procedure.
+
+July 25, 2013
+
+Abstract
+
+1
+
+1 INTRODUCTION AND MOTIVATION
+
+2
+
+1 Introduction and motivation
+
+A central issue in computational quantum chemistry is the determination of the electronic
+ground state of a molecular system. For completeness and self-consistency, we now brieﬂy
+introduce the problem. In particular, we present it in a mathematical way.
+
+1.1 Standard electronic structure calculations
+
+A molecular system is composed of N electrons, modelled quantum mechanically, and a
+given number of nuclei, the latter being considered as classical point-like particles clamped
+at known positions (Born-Oppenheimer approximation). We refer to [7] for a general
+mathematical exposition and to [12, 19] for the chemical background. Determining the
+electronic ground state amounts to solving a time-independent Schr¨odinger equation in
+IR3N . This goal is out of reach for large values of N. In fact it is already infeasible for
+values of N exceeding three or four, unless dedicated techniques are employed. Examples
+are stochastic-like techniques such as Diﬀusion Monte-Carlo approaches, or emerging tech-
+niques, such as sparse tensor products techniques [17]. Approximations of the Schr¨odinger
+equation have been developed, such as the widely used tight-binding, Hartree-Fock and
+Kohn-Sham models. For these three models, the numerical resolution of a problem of the
+following type is required: given H and S, respectivement an Nb ×
+Nb symmetric matrix
+Nb symmetric positive deﬁnite matrix (with Nb > N), compute a solution
+and an Nb ×
+D⋆ of the problem
+
+ǫ1 ≤
+
+. . .
+
+ǫN ≤
+
+ǫN +1 ≤
+
+≤
+
+. . .
+
+≤
+
+ǫNb,
+
+(1.1)
+
+Hci = ǫiSci,
+
+ct
+iScj = δij,
+
+D⋆ =
+
+cict
+i.
+
+N
+
+i=1
+X
+
+
+
+
+
+
+Let us mention that most electronic structure calculations are performed with closed shell
+models [12], and that, consequently, the integer N in (1.1) then is the number of electron
+pairs. We remark that when S is the identity matrix, a solution D⋆ to (1.1) is a solution
+to the problem
+
+Find the orthogonal projector on the space spanned by the N eigenvectors
+associated with the lowest N eigenvalues of H.
+
+(1.2)
+
+(cid:26)
+
+In (1.2), and throughout this article, the eigenvalues are counted with their multiplicities.
+The N eigenvectors ci, called generalized eigenvectors in order to emphasize the presence
+
+1 INTRODUCTION AND MOTIVATION
+
+of the matrix S, represent the expansion in a given Galerkin basis
+of the
+N one-electron wavefunctions. The matrix H is a mean-ﬁeld Hamiltonian matrix. For
+instance, for the Kohn-Sham model, we have
+
+χi}1≤i≤Nb
+
+{
+
+Hij =
+
+1
+2
+
+χi · ∇
+
+χj +
+
+ZIR3 ∇
+
+ZIR3
+
+V χiχj
+
+where V is a mean-ﬁeld local potential. The matrix S is the overlap matrix associated
+with the basis
+
+:
+
+χi}1≤i≤Nb
+
+{
+
+Sij =
+
+χiχj.
+
+ZIR3
+In this article, we focus on the Linear Combination of Atomic Orbitals (LCAO) approach.
+, com-
+This is a very eﬃcient discretization technique, using localized basis functions
+pactly supported [23] or exhibiting a gaussian fall-oﬀ [12].
+
+χi}
+
+{
+
+It is important to emphasize what makes the electronic structure problem, discretized
+with the LCAO approach, speciﬁc as compared to other linear eigenvalue problems en-
+countered in other ﬁelds of the engineering sciences (see [2, 13] for instance). First, Nb is
+2N to ﬁx the ideas). Hence, the
+proportional to N, and not much larger than it (say Nb ∼
+problem is not ﬁnding a few eigenvectors of the generalized eigenvalue problem (1.1). Sec-
+ond, although the matrices H and S are sparse for large molecular systems (see section 1.2
+for details), they are not as sparse as the stiﬀness and mass matrices usually encountered
+when using ﬁnite diﬀerence or ﬁnite element methods. For example, the bandwith of H
+and S is of the order of 102 in the numerical examples reported in section 4. Note that,
+in contrast, for plane wave basis set discretizations (which will not be discussed here),
+100 N), the matrix S is the identity
+the parameter Nb is much larger than N (say Nb ∼
+matrix and the matrix H est full. Third, and this is a crucial point, the output of the cal-
+culation is the matrix D⋆ and not the generalized eigenvectors ci themselves. This is the
+fundamental remark allowing the construction of linear scaling methods (see section 1.2).
+
+A solution D⋆ of (1.1) is
+
+D⋆ = C⋆C t
+⋆
+
+where C⋆ is a solution to the minimization problem
+
+inf
+
+Tr
+
+HCC t
+
+, C
+
+Nb,N (IR), C tSC = IN
+
+.
+
+(cid:26)
+
+(cid:16)
+
+(cid:17)
+
+∈ M
+
+Note that the energy functional Tr
+
+HCC t
+
+can be given the more symmetric form
+
+Tr
+
+C tHC
+
+. Here and below,
+
+k,l denotes the vector space of the k
+
+l real matrices.
+
+(cid:16)
+
+(cid:17)
+
+(cid:16)
+
+(cid:17)
+
+M
+
+(cid:27)
+
+×
+
+3
+
+(1.3)
+
+(1.4)
+
+(1.5)
+
+(1.6)
+
+1 INTRODUCTION AND MOTIVATION
+
+4
+
+×
+
+Notice that (1.6) has many minimizers: if C⋆ is a minimizer, so is C⋆U for any orthogonal
+N matrix U. However, under the standard assumption that the N-th eigenvalue of
+N
+H is strictly lower than the (N + 1)-th one, the matrix D∗ deﬁned by (1.5) does not in
+fact depend on the choice of the minimizer C⋆ of (1.6). Notice also that (1.1) are not the
+Euler-Lagrange equations of (1.6) but that any critical point of (1.6) is obtained from a
+solution of (1.1) by an orthogonal transformation of the columns of C⋆ = (c1| · · · |
+
+cN ).
+
+The standard approach to compute D⋆ is to solve the generalized eigenvalue prob-
+lem (1.1) and then construct C⋆ thus D⋆ by collecting the lowest N generalized eigenvec-
+tors of H. This approach is employed when the number N of electrons (or electron pairs)
+is not too large, say smaller than 103.
+
+1.2 Linear scaling methods
+
+One of the current challenges of Computational Chemistry is to lower the computational
+complexity N 3 of this solution procedure. A linear complexity N is the holy grail. There
+are various existing methods designed for this purpose. Surveys on such methods are
+[6, 11]. Our purpose here is to introduce a new method, based on the domain decomposi-
+tion paradigm. We remark that the method introduced here is not the ﬁrst occurrence of
+a method based on a decomposition of the matrix H [24], but a signiﬁcant methodologi-
+cal improvement is fulﬁlled with the present method. To the best of our knowledge, such
+methods only consist of local solvers complemented by a crude global step. The method
+introduced below seems to be the ﬁrst one really exhibiting the local/global paradigm in
+the spirit of methods used in other ﬁelds of the engineering sciences. Numerical oberva-
+tions conﬁrm the major practical interest methodological improvement.
+
+Why is a linear scaling plausible for computing D⋆? To justify the fact that the cubic
+scaling is an estimate by excess of the computational task required to solve (1.1), we
+argue that the matrix does not need to be diagonalized. As mentioned above, only the
+orthogonal projector on the subspace generated by the lowest N eigenvectors is to be
+determined and not the explicit values of these lowest N eigenvectors. But in order to
+reach a linear complexity, appropriate assumptions are necessary, both on the form of the
+matrices H and S, and on the matrix D⋆ solution to (1.1):
+
+•
+
+(H1). The matrices H and S are assumed sparse, in the sense that, for large systems,
+the number of non-zero coeﬃcients scales as N. This assumption is not restrictive.
+In particular, it follows from (1.3) and (1.4) that it is automatically satisﬁed for
+Kohn-Sham models as soon as the basis functions are localized in real space, which
+is in particular the case for the widely used atomic orbital basis sets [7];
+
+1 INTRODUCTION AND MOTIVATION
+
+5
+
+•
+
+(H2). A second assumption is that the matrix D⋆ built from the solution to (1.1) is
+also sparse. This condition seems to be fulﬁlled as soon as the relative gap
+
+γ =
+
+ǫN +1 −
+ǫNb −
+deduced from the solution of (1.1) is large enough. As explained in section 2 below,
+this observation can be supported by qualitative physical arguments. On the other
+hand, we are not aware of any mathematical argument of linear algebra that would
+justify assumption (H2) in a general setting.
+
+ǫN
+ǫ1
+
+(1.7)
+
+.
+
+We assume (H1)-(H2) in the following. Current eﬀorts aim at treating cases when the
+second assumption is not fulﬁlled, which in particular corresponds to the case of conduct-
+ing materials. The problem (1.2) is then extremely diﬃcult because the gap γ in (1.7)
+being very small, the matrix D is likely to be dense. Reaching linear complexity is then a
+challenging issue, unsatisfactorily solved to date. State of the art linear scaling methods
+presented in the literature experience tremendous diﬃculties (to say the least) in such
+cases. It is therefore reasonable to improve in a ﬁrst step the existing methods in the
+setting of assumption (H2), before turning to more challenging issues.
+
+Before we get to the heart of the matter, we would like to point out the following
+
+feature of the problem under consideration.
+
+In practice, Problem (1.1) has to be solved repeatedly. For instance, it is the inner loop
+in a nonlinear minimization problem where H depends self-consistently on D⋆. We refer to
+[8, 14] for eﬃcient algorithms to iterate on this nonlinearity and to [7] for a review on the
+subject. Alternatively, or in addition to the above, problem (1.1) is parametrized by the
+positions of the nuclei (both the mean-ﬁeld operator H and the overlap matrix S indeed
+depend on these positions), and these positions may vary. This is the case in molecular
+mechanics (ﬁnd the optimal conﬁguration of nuclei that gives the lowest possible energy
+to the molecular system), and in molecular dynamics as well (the positions of nuclei
+follow the Newton law of motion in the mean-ﬁeld created by the electrons). In either
+case, problem (1.1) is not be solved from scratch. Because of previous calculations, we
+may consider we have at our disposal a good initial guess for the solution. The latter
+comes from e.g. previous positions of nuclei, or previous iterations in the outer loop
+of determination of H. In diﬃcult cases it may even come from a previous computation
+with a coarse grained model. In other words, the question addressed reads solving Problem
+(1.1) for some H + δH and S + δS that are small perturbations of previous H and S for
+which the solution is known. This speciﬁc context allows for a speed up of the algorithm
+when the initial guess is suﬃciently good. This is the reason why, in the following, we
+shall frequently make distinctions between bad and good initial guesses.
+
+2 LOCALIZATION IN QUANTUM CHEMISTRY
+
+6
+
+2 Localization in Quantum Chemistry
+
+The physical system we consider is a long linear molecule (for instance a one-dimensional
+polymer or a nanotube). Let us emphasize that we do not claim a particular physical
+relevance of this system. This is for the purpose of illustration. We believe the system
+considered to be a good representative of a broad class of large molecular systems that
+may be encountered practically. Each atomic orbital χi is centered on one nucleus. Either
+it is supported in a ball of small radius [20] (in comparison to the size of the macromolecule
+under study), or it has a rapid exponential-like or Gaussian-like [10] fall-oﬀ. The atomic
+orbitals are numbered following the orientation of the molecule. Then, the mean-ﬁeld
+Hamiltonian matrix H whose entries are deﬁned by (1.3) has the band structure shown
+in Figure 1.
+
+Although the eigenvectors of H are a priori delocalized (most of their coeﬃcients
+do not vanish), it seems to be possible to build a S-orthonormal basis of the subspace
+generated by the lowest N eigenvectors of H, consisting of localized vectors (only a few
+consecutive coeﬃcients are non zero). This is motivated by a physical argument of locality
+of the interactions [16]. For periodic systems, the localized vectors correspond to the so-
+called Wannier orbitals [4]. It can be proven that in this case, the larger the band gap, the
+better the localization of the Wannier orbitals [15]. For insulators, the Wannier orbitals
+indeed enjoy an exponential fall-oﬀ rate proportional to the band gap. For conductors,
+the fall-oﬀ is only algebraic. As mentioned in the introduction, we only consider here the
+former case. This allows us to assume that there exists some integer q
+Nb, such that
+Nb/q is an integer, for which all of these localized functions can be essentially expanded
+on q consecutive atomic orbitals. Denoting by n = 2q, we can therefore assume a good
+approximation of a solution C⋆ to (1.6) exists, with the block structure displayed on Fig-
+ure 2. Note that each block Ci only overlaps with its nearest neighbors. Correspondingly,
+we introduce the block structure of H displayed on Figure 3. The matrix D constructed
+from a block matrix C using (1.5) has the structure represented in Figure 4 and satisﬁes
+the constraints D = Dt, D2 = D, Tr(D) = N.
+
+≪
+
+Let us point out that the integers q and n = 2q depend on the band gap, not on the
+= INb, it is
+
+size of the molecule. The condition n = 2q is only valid for S = INb. For S
+1 is the bandwidth of the matrix S.
+replaced by n = 2q + nbs where 2 nbs
+
+−
+
+The domain decomposition algorithm we propose aims at searching an approximate
+
+solution to (1.6) that has the block structure described above.
+
+For simplicity, we now present our method assuming that S = INb, i.e.
+
+that the
+is orthonormal. The extension of the method to the case when
+
+Galerkin basis
+
+χi}1≤i≤Nb
+
+{
+
+6
+2 LOCALIZATION IN QUANTUM CHEMISTRY
+
+7
+
+S
+
+= INb is straightforward. Problem (1.6) then reads
+
+inf
+
+Tr
+
+HCC t
+
+, C
+
+Nb,N (IR), C tC = IN
+
+.
+
+(2.1)
+
+(cid:26)
+
+(cid:16)
+
+(cid:17)
+
+∈ M
+
+(cid:27)
+
+Our approach consists in solving an approximation of problem (2.1) obtained by min-
+on the set of the matrices C which have the block
+imizing the exact energy Tr
+structure displayed on Figure 2 and satisfy the constraint C tC = IN . The resulting
+minimization problem can be recast as
+
+HCC t
+
+(cid:17)
+
+(cid:16)
+
+p
+
+inf
+
+Tr
+
+HiCiC t
+i
+
+,
+
+(cid:26)
+
+i=1
+X
+
+(cid:0)
+
+(cid:1)
+
+Ci ∈ M
+
+n,mi(IR), mi ∈
+
+IN, C t
+
+i Ci = Imi ∀
+
+1
+
+i
+
+p,
+
+≤
+
+≤
+
+C t
+
+i T Ci+1 = 0
+
+1
+
+i
+
+p
+
+1,
+
+∀
+
+≤
+
+≤
+
+−
+
+p
+
+i=1
+X
+
+mi = N
+
+.
+
+(2.2)
+
+(cid:27)
+
+In the above formula, T
+
+n,n(IR) is the matrix deﬁned by
+
+∈ M
+
+1
+0
+
+l = q
+
+if k
+−
+otherwise
+
+Tkl =
+
+(cid:26)
+
+(2.3)
+
+and Hi ∈ M
+
+n,n(IR) is a symmetric submatrix of H (see Figure 3). Indeed,
+
+H 1 
+
+C 1 
+
+0 
+
+C 1 
+
+0 
+
+t
+
+ = 
+
+ p
+
+Σ 
+
+ i=1
+
+ Tr
+
+t
+
+H i 
+
+C i 
+
+C i 
+
+H p 
+
+0 
+
+C p 
+
+0 
+
+C p 
+
+Tr
+
+and
+
+t
+
+C 1 
+
+0 
+
+C 1 
+
+0 
+
+0 
+
+C p 
+
+0 
+
+C p 
+
+t
+i C T
+
+C i+1 
+
+0 
+
+ = 
+
+0 
+
+t
+C i C i 
+
+6
+2 LOCALIZATION IN QUANTUM CHEMISTRY
+
+8
+
+In this way, we replace the N (N +1)
+p
+i=1
+
+global scalar constraints C tC = IN involving vectors
+p−1
+i=1 mimi+1
+of size Nb, by the
+local scalar constraints C t
+i T Ci+1 = 0, involving vectors of size n. We would like to em-
+phasize that we can obtain in this way a basis of the vector space generated by the lowest
+N eigenvectors of H, but not the eigenvectors themselves. This method is therefore not
+directly applicable to standard diagonalization problems.
+
+2
+local scalar constraints C t
+
+i Ci = Imi and the
+
+mi(mi+1)
+2
+
+P
+
+P
+
+Our algorithm searches for the solution to (2.2), not to (2.1). More rigorously stated,
+
+we search for the solution to the Euler-Lagrange equations of (2.2):
+
+HiCi
+C t
+i Ci
+i T Ci+1 = 0
+
+C t
+
+
+
+
+= CiEi + T tCi−1Λi−1,i + T Ci+1Λt
+= Imi
+
+i,i+1
+
+1
+1
+1
+
+i
+i
+i
+
+≤
+≤
+≤
+
+≤
+≤
+≤
+
+p,
+p,
+p
+
+1,
+
+−
+
+where by convention
+
+
+
+C0 = Cp+1 = 0.
+
+(2.4)
+
+(2.5)
+
+The matrices (Ei)1≤i≤p and (Λi,i+1)1≤i≤p−1 respectively denote the matrices of Lagrange
+multipliers associated with the orthonormality constraints C t
+i T Ci+1 = 0.
+mi+1. The above
+The mi ×
+equations can be easily derived by considering the Lagrangian
+
+mi matrix Ei is symmetric. The matrix Λi,i+1 is of size mi ×
+
+i Ci = Imi and C t
+
+(
+{
+
+Ci}
+
+,
+
+Ei}
+
+{
+
+,
+
+Λi,i+1}
+{
+
+L
+
+) =
+
+p
+
+p
+
+Tr
+
+HiCiC t
+i
+
++
+
+Tr
+
+i=1
+X
+
+(cid:0)
+
+Tr
+
+(cid:1)
+i T Ci+1Λt
+
+C t
+
+i,i+1
+
+(cid:0)(cid:0)
+
+.
+
+i=1
+X
+
+p−1
+
++
+
+i=1
+X
+
+C t
+i Ci −
+
+Imi
+
+Ei
+
+(cid:1)
+
+(cid:1)
+
+(cid:0)
+The block structure imposed on the matrices clearly lowers the dimension of the search
+space we have to explore. However, this simpliﬁcation comes at a price. First, prob-
+lem (2.2) only approximates problem (2.1). Second, (2.2) may have local, non global,
+minimizers, whereas all the local minimizers of (2.1) are global. There are thus a priori
+many spurious solutions of the Euler Lagrange equations (2.4) associated with (2.2).
+
+(cid:1)
+
+A point is that the sizes (mi)1≤i≤p are not a priori prescribed. In our approach, they
+
+are ajusted during the iterations. We shall see how in the sequel.
+
+3 DESCRIPTION OF THE DOMAIN DECOMPOSITION ALGORITHM
+
+9
+
+3 Description of the domain decomposition algorithm
+
+3.1 Description of a simpliﬁed form
+
+For pedagogic purpose, we ﬁrst consider the following problem
+
++
+
+inf
+
+H1Z1, Z1i
+
+Z1, Z2i
+Problem (3.1) is a particular occurence of (2.2). We have denoted by
+Euclidean scalar product on IRNb.
+
+H2Z2, Z2i
+
+, Zi ∈
+
+Zi, Zii
+
+h
+(cid:8)
+
+= 1,
+
+h
+
+h
+
+h
+
+IRNb,
+
+= 0
+
+.
+
+(3.1)
+
+,
+
+(cid:9)
+the standard
+·i
+
+h·
+
+For (3.1), the algorithm is deﬁned in the following simpliﬁed form. Choose (Z 0
+
+1 , Z 0
+2 )
+2 )k∈IN by the following itera-
+
+satisfying the constraints and construct the sequence (Z k
+1 , Z k
+tion procedure. Assume (Z k
+
+2 ) is known, then
+
+1 , Z k
+
+Local step. Solve
+
+Z k
+1 = arginf
+Z k
+2 = arginf
+e
+e
+Global step. Solve
+
+(
+
+h
+(cid:8)
+h
+(cid:8)
+
+•
+
+•
+
+where
+
+and set
+
+H1Z1, Z1i
+H2Z2, Z2i
+
+, Z1 ∈
+, Z2 ∈
+
+IRNb,
+IRNb,
+
+Z1, Z1i
+Z2, Z2i
+
+h
+h
+
+= 1
+= 1
+
+h
+h
+
+Z1, Z k
+2 i
+Z k
+1 , Z2i
+e
+
+= 0
+= 0
+
+,
+;
+
+(cid:9)
+(cid:9)
+
+α∗ = arginf
+
+H1Z1, Z1i
+
++
+
+H2Z2, Z2i
+
+h
+
+, α
+
+∈
+
+IR
+
+Z1 =
+
+, Z2 = −
+
+h
+(cid:8)
+Z k
+Z k
+1 + α
+2
+√1 + α2
+e
+e
+1 + α∗
+Z k
+Z k
+2
+1 + (α∗)2
+
+Z k+1
+
+1 =
+
+, Z k+1
+
+2 = −
+
+(cid:9)
+
+,
+
+e
+
+Z k
+2
+
+Z k
+α
+1 +
+√1 + α2
+e
+α∗
+Z k
+Z k
+1 +
+2
+1 + (α∗)2
+e
+
+e
+
+.
+
+(3.2)
+
+(3.3)
+
+(3.4)
+
+(3.5)
+
+e
+
+1 . Then we ﬁx Z1 = ˜Z k
+
+e
+p
+In the k-th iteration of the local step, we ﬁrst ﬁx Z2 = Z k
+
+p
+1 and optimize over Z2 to obtain ˜Z k
+
+2 and optimize over Z1
+to obtain ˜Z k
+2 . This local
+step monotonically reduces the objective function, however, it may not converge to the
+global optimum. The technical problem is that the Lagrange multipliers associated with
+= 0 may converge to diﬀerent values in the two subproblems
+the constraint
+h
+H1Z1, Z1i
+associated with the local step.
++
+h
+H2Z2, Z2i
+2 , subject to the constraints in (3.1).
+h
+1 and ˜Z k
+The global step again reduces the value of the objective function since ˜Z k
+2 are
+feasible in the global step. It can be shown that the combined algorithm (local step +
+
+over the subspace spanned by ˜Z k
+
+In the global step, we optimize the sum
+
+1 and ˜Z k
+
+Z1, Z2i
+
+3 DESCRIPTION OF THE DOMAIN DECOMPOSITION ALGORITHM
+
+10
+
+global step) monotonically decreases the objective function and globally converges to an
+optimal solution of (3.1).
+
+This algorithm operates at two levels: a ﬁne level where we solve two problems of
+dimension Nb rather than one problem of dimension 2Nb; a coarse level where we solve a
+problem of dimension 2. Left by itself, the ﬁne step converges to a suboptimal solution
+of (3.1). Combining the ﬁne step with the global step yields convergence to a global
+optimum.
+
+In addition to providing a pedagogic view on the general algorithm presented in the
+following section, the simpliﬁed form (3.2)-(3.5) has a theoretical interest. In contrast to
+the general algorithm for which we cannot provide a convergence analysis, the simpliﬁed
+form (3.2)-(3.5) may be analyzed mathematically, at least in the particular situation when
+H1 = H2 = H. Then solving (3.1) amounts to searching for the lowest two eigenelements
+of the matrix H. Notice that the global step (3.3)-(3.5) is then unnecessary because the
+functional to minimize in (3.3) does not depend on α.
+
+However, we can show that the iterations (3.2) converge in the following sense. The
+2-dimensional vector space spanned by the lowest two eigenvalues of H is reached asymp-
+totically. This occurs under an appropriate condition on the matrix H. The latter is a
+ǫ2 with obvious notation.
+condition of separation of the eigenvalues, namely ǫ2 −
+ǫ2 gives the speed of convergence. For brevity, we do not detail the proof
+The gap ǫ3 −
+here (see [5]). Future work on the numerical analysis of more general cases is in progress.
+
+ǫ1 < ǫ3 −
+
+3.2 Description of the algorithm
+
+We deﬁne, for all p-tuple (Ci)1≤i≤p,
+
+and set by convention
+
+p
+
+(Ci)1≤i≤p
+
+=
+
+Tr
+
+HiCiC t
+i
+
+,
+
+(cid:17)
+
+i=1
+X
+
+(cid:16)
+
+(cid:17)
+
+E
+
+(cid:16)
+
+U0 = Up = 0.
+
+(3.6)
+
+(3.7)
+
+We introduce an integer ǫ, initialized to one, that will alternate between the values zero
+and one during the iterations.
+
+At iteration k, we have at hand a set of block sizes (mk
+n,mk
+i )1≤i≤p such that C k
+
+(C k
+how to compute the new iterate (mk+1
+
+i ]tC k
+)1≤i≤p, (C k+1
+
+, [C k
+)1≤i≤p.
+
+i (IR), [C k
+
+i = Imk
+
+i ∈ M
+
+i
+
+i
+
+i
+
+Multilevel Domain Decomposition (MDD) algorithm
+
+i )1≤i≤p and a set of matrices
+i+1 = 0. We now explain
+
+i ]tT C k
+
+3 DESCRIPTION OF THE DOMAIN DECOMPOSITION ALGORITHM
+
+11
+
+Step 1: Local ﬁne solver.
+
+•
+
+(a) For each i, diagonalize the matrix H2i+ǫ in the subspace
+
+V k
+2i+ǫ =
+
+IRn,
+
+x
+
+∈
+
+C k
+
+2i+ǫ−1
+
+t
+
+T x = 0,
+
+xtT C k
+
+2i+ǫ+1 = 0
+
+,
+
+n
+(cid:3)
+i.e. diagonalize P k
+2i+ǫH2i+ǫP k
+2i+ǫ where P k
+mk
+mk
+This provides (at least) n
+2i+ǫ−1−
+
+and associated orthonormal vectors xk
+
+(cid:2)
+
+· · ·
+the column vectors of C k
+
+−
+i−1 and C k
+
+i+1.
+
+o
+
+2i+ǫ is the orthogonal projector on V k
+2i+ǫ+1 real eigenvalues λk
+
+2i+ǫ.
+λk
+2i+ǫ,2 ≤
+2i+ǫ,j. The latter are T -orthogonal to
+
+2i+ǫ,1 ≤
+
+(b) Sort the eigenvalues (λk
+
+2i+ǫ,j)i,j in increasing order, and select the lowest
+
+m2i+ǫ
+
+of them. For each i, collect in block #2i + ǫ the eigenvalues λk
+New intermediate block sizes ¯mk
+
+i
+X
+2i+ǫ,j selected.
+
+(c) For each i, collect the lowest ¯mk
+
+×
+(d) For each i, diagonalize the matrix H2i+ǫ+1 in the subspace
+
+2i+ǫ,j in the n
+
+¯mk
+
+2i+ǫ matrix C
+
+k
+2i+ǫ.
+
+2i+ǫ are deﬁned.
+2i+ǫ vectors xk
+
+t
+
+C
+
+k
+2i+ǫ
+
+T x = 0,
+
+xtT C
+
+k
+2i+ǫ+2 = 0
+
+i
+λk
+and associated orthonor-
+2i+ǫ+1,2 ≤ · · ·
+2i+ǫ+1,j. The latter are T -orthogonal to the column vectors of
+
+2i+ǫ+1,1 ≤
+
+h
+
+(cid:27)
+
+V k
+2i+ǫ+1 =
+
+IRn,
+
+x
+
+∈
+
+(cid:26)
+
+in order to get eigenvalues λk
+mal vectors xk
+k
+2i+ǫ and C
+C
+
+k
+2i+ǫ+2.
+
+(e) Sort all the eigenvalues
+
+(λk
+
+2i+ǫ+1,j)i,j, (λk
+
+2i+ǫ,j)i,j
+
+the lowest N. For each l, collect in block #l the eigenvalues λk
+intermediate block sizes (mk+1
+
+)1≤l≤p are thus deﬁned.
+
+(cid:8)
+
+(cid:9)
+
+in increasing order. Select
+l,j selected. New
+
+(f) Set
+
+C k
+
+l =
+
+xk
+l,1| · · · |
+
+xk
+l,mk+1
+l
+
+(g) Replace ǫ by 1
+e
+
+h
+
+−
+
+l
+
+.
+
+i
+
+Step 2: global coarse solver. Solve
+
+ǫ and proceed to step 2 below.
+
+•
+
+where
+
+n
+
+∗ = arginf
+
+U
+
+f (
+
+),
+
+U
+
+U
+
+= (Ui)i,
+
+1
+∀
+
+i
+
+≤
+
+≤
+
+p
+
+1 Ui ∈ M
+
+−
+
+mi+1,mi(IR)
+
+,
+
+(3.8)
+
+f (
+
+) =
+
+U
+
+Ci(
+
+)
+
+Ci(
+
+U
+
+)tCi(
+
+)
+
+U
+
+U
+
+E
+
+(cid:18)(cid:16)
+
+(cid:0)
+
+− 1
+2
+
+(cid:1)
+
+,
+
+i
+(cid:17)
+
+(cid:19)
+
+o
+
+(3.9)
+
+3 DESCRIPTION OF THE DOMAIN DECOMPOSITION ALGORITHM
+
+12
+
+and
+
+U
+
+Ci(
+
+) =
+
+C k
+
+i + T
+
+C k
+
+i+1Ui
+
+C k
+[
+
+i ]tT T t
+
+C k
+i
+
+T t
+
+C k
+
+i−1U t
+
+i−1
+
+C k
+[
+
+i ]tT tT
+
+C k
+i
+
+.
+
+(3.10)
+
+Next set, for all 1
+
+e
+
+i
+
+e
+≤
+
+≤
+
+p,
+
+(cid:16)
+
+e
+
+−
+
+(cid:17)
+
+e
+
+e
+
+(cid:17)
+
+e
+
+(cid:16)
+
+e
+
+−1/2
+
+.
+
+(3.11)
+
+C k+1
+
+i = Ci
+
+∗
+
+U
+
+∗
+
+t Ci
+
+Ci
+
+U
+
+∗
+
+U
+
+t
+
+(cid:1)(cid:17)
+i+1 = 0 (this follows from T 2 = 0).
+
+(cid:1) (cid:16)
+
+(cid:1)
+
+(cid:0)
+
+(cid:0)
+
+(cid:0)
+
+T C k+1
+
+Note that
+
+C k+1
+i
+
+(cid:2)
+
+(cid:3)
+
+We think of the even indexed unknowns C2i as the black variables and the odd indexed
+unknowns C2i+1 as the white variables.
+In the ﬁrst phase of the local ﬁne solver, we
+optimize over the white variables while holding the black variables ﬁxed. In the second
+phase of the local ﬁne solver, we optimize over the black variables while holding the white
+variables ﬁxed. In the global step, we perturb each variable by a linear combination of
+= (Ui)i in (3.8) play the same role as the real
+the adjacent variables. The matrices
+parameter α in (3.3). The perturbation is designed so that the constraints are satisﬁed.
+The optimization is performed over the matrices generating the linear combinations. In
+the next iteration, we interchange the order of the optimizations: ﬁrst optimize over
+the black variables while holding the white variables ﬁxed, then optimize over the white
+variables while holding the black variables ﬁxed.
+
+U
+
+Let us point out that an accurate solution to (3.8) is not needed.
+
+In practice, we
+reduce the computational cost of the global step, by using again a domain decomposition
+method. The blocks (Ci)1≤i≤p are collected in r overlapping groups (Gl)1≤l≤r as shown
+in Figure 5. Problem (3.8) is solved ﬁrst for the blocks (G2l+1), next for the blocks
+(G2l). Possibly, this procedure is repeated a few times. The advantage of this strategy
+is that the computational time of the global step scales linearly with N.
+In addition,
+it is parallel in nature. The solution of (3.8) for a given group is performed by a few
+steps of a Newton-type algorithm. Other preconditioned iterative methods could also be
+considered.
+
+3.3 Comments on the local step
+
+The local step is based on a checkerboard iteration technique.
+
+3 DESCRIPTION OF THE DOMAIN DECOMPOSITION ALGORITHM
+
+13
+
+When ǫ = 1, steps 1a-1c search for a solution ( ¯mk
+
+2i+1, C
+
+k
+2i+1)i to the problem
+
+inf
+
+Tr
+
+H2i+1C2i+1C t
+
+2i+1
+
+,
+
+n,m2i+1(IR), C t
+
+2i+1C2i+1 = Im2i+1,
+
+i
+
+(cid:26) X
+
+(cid:0)
+
+(cid:1)
+
+C2i+1 ∈ M
+[C k
+
+m2i+1 ∈
+
+IN,
+
+2i]tT C2i+1 = 0, C t
+
+2i+1T C k
+
+2i+2 = 0,
+
+m2i+1 =
+
+mk
+
+2i+1
+
+.
+
+(cid:27)
+
+i
+X
+
+i
+X
+
+During steps 1a-1c, the “white” blocks C k
+2i+1 are
+optimized under the orthogonality constraints imposed by the “white” blocks. A point
+is that most of the computational eﬀort can be done in parallel. Indeed, for p even, say,
+performing step 1a amounts to solving p/2 independent diagonalisation problems of size n.
+
+2i are kept ﬁxed. The “black” blocks C k
+
+Likewise, steps 1d-1f solve
+
+p
+
+inf
+
+Tr
+
+HiCiC t
+i
+
+,
+
+(cid:26)
+
+i=1
+X
+
+(cid:0)
+
+(cid:1)
+
+Ci ∈ M
+
+n,mi(IR), C t
+
+[C
+
+k
+2j−1]tT C2j = 0,
+
+IN,
+
+i Ci = Imi, mi ∈
+[C2j]tT [C 2j+1]k = 0,
+
+i
+X
+
+mi = N
+
+0
+
+m2j+1 ≤
+
+≤
+
+¯mk
+2j+1, C2j+1 ⊂
+
+C
+
+k
+2j+1
+
+,
+
+(cid:27)
+
+where the notation C2j+1 ⊂
+Here again, most of the computational eﬀort can be performed in parallel.
+
+k
+2j+1 means that each column of C2j+1 is a column of C
+
+C
+
+k
+2j+1.
+
+When ǫ = 1, “black” vectors (i.e. vectors belonging to blocks with odd indices) are
+allowed to become “white” vectors, but the reverse is forbidden. In order to symmetrize
+ǫ in the next iteration.
+the process, ǫ is replaced by 1
+
+We wish to emphasize that, although called local, this step already accounts for some
+global concern. Indeed, and it is a key point of the local step, substeps (b) and (e) sort
+the complete set of eigenvalues generated locally. This, together with the update of the
+size mi of the blocks, allows for a preliminary propagation of the information throughout
+the whole system. The global step will complement this.
+
+−
+
+Finally, let us mention that in the local steps, (approximate) T -orthogonality is ob-
+tained by a Householder orthonormalization process. The required orthonormality crite-
+rion is
+
+i ]tT ˜C k
+∀
+where ǫL > 0 is a threshold to be chosen by the user.
+
+[ ˜C k
+
+≤
+
+≤
+
+−
+
+1,
+
+p
+
+1
+
+i
+
+i+1
+
+ǫL,
+
+≤
+
+(cid:13)
+(cid:13)
+
+(cid:13)
+(cid:13)
+
+(3.12)
+
+3 DESCRIPTION OF THE DOMAIN DECOMPOSITION ALGORITHM
+
+14
+
+3.4 Comments on the global step
+
+Let us brieﬂy illustrate the role played by the global step. For simplicity, we consider the
+case of two blocks of same initial size m1 = m2 = m and we assume that m1 and m2 do
+not vary during the iterations. If only the local step is performed, then the new iterate
+
+(C k+1
+1
+
+, C k+1
+2
+
+) = (
+
+C k
+1 ,
+
+C k
+2 )
+
+does not necessarily satisﬁes (2.4). Indeed, there is no reason why the Lagrange multipliers
+corresponding to the two contraints C tT C k
+2 = 0 (step 1a when ǫ = 1) on the one hand and
+1 ]tT C = 0 (step 1d when ǫ = 1) on the other hand should be the same. The global step
+C k
+[
+asymptotically enforces the equality of Lagrange multipliers. This is a way to account for
+a global feature of the problem.
+e
+
+e
+
+e
+
+Let us emphasize this speciﬁc point. Assume U ∗ = 0 in the global step of the k-th
+iteration of the algorithm, or in other words that the global step is not eﬀective at the k-th
+iteration. Then it implies that the output (
+2 ) of the local step already
+satisﬁes (2.4). Indeed,
+
+C2) = (
+
+C k
+1 ,
+
+C1,
+
+C k
+
+f (U) = Tr
+
+e
+J1(U)C1(U)tH1C1(U)
+
+e
++ Tr
+
+with Ji(U) =
+
+Ci(U)tCi(U)
+
+for i = 1, 2. Since
+
+(cid:16)
+
+−1
+
+(cid:17)
+
+e
+
+e
+
+J2(U)C2(U)tH2C2(U)
+(cid:16)
+
+(cid:17)
+
+(3.13)
+
+(cid:16)
+J1(U)
+
+−1
+
+(cid:17)
+
+= Im +
+
+C t
+
+1T T t
+
+C1
+
+U t
+
+C t
+
+2T tT
+
+C2
+
+U
+
+C t
+
+1T T t
+
+C1
+
+,
+
+(cid:16)
+
+J2(U)
+
+−1
+
+(cid:17)
+
+(cid:16)
+
+= Im +
+
+2T tT
+C t
+e
+
+C2
+e
+
+(cid:17)
+
+U
+
+(cid:16)
+1T T t
+C t
+e
+
+C1
+e
+
+(cid:16)
+
+(cid:17)
+U t
+
+2T tT
+C t
+e
+
+C2
+e
+
+(cid:17)
+,
+
+(cid:17)
+J2(0) = 0. The matrix U being a square matrix of dimension m, for
+∇
+
+(cid:17)
+
+(cid:16)
+
+(cid:17)
+
+(cid:17)
+
+(cid:16)
+
+(cid:16)
+
+e
+
+e
+
+e
+
+e
+
+e
+
+e
+
+we have
+all 1
+
+∇
+i, j
+
+(cid:16)
+J1(0) =
+m,
+
+≤
+
+≤
+∂f
+∂Uij
+
+1
+2
+
+(0) = Tr
+
+(0)
+
+H1
+
+C1
+
++ Tr
+
+(0)
+
+H2
+
+C2
+
+t
+
+∂C1
+∂Uij
+
+t
+
+∂C2
+∂Uij
+
+(cid:18) (cid:20)
+C t
+
+1T T t
+
+C1
+
+(cid:21)
+C t
+
+e
+1H1T
+
+(cid:19)
+C2
+
+(cid:18) (cid:20)
+
+(cid:21)
+C2
+
+(cid:19)
+e
+2T tT
+
+C t
+
+C2
+
+C t
+
+1T H2
+
+=
+
+=
+
+(cid:18)(cid:16)
+
+(cid:18)(cid:16)
+
+e
+1T T t
+C t
+
+e
+C1
+
+e
+(Λ1 −
+
+e
+Λ2)
+
+(cid:17)
+
+(cid:17)
+
+(cid:19)ji −
+C t
+
+(cid:18)
+2T tT
+
+(cid:16)
+
+e
+
+e
+C2
+
+e
+
+(cid:17)(cid:19)ji
+
+(cid:16)
+
+e
+
+e
+,
+
+where Λ1 and Λ2 are deﬁned by
+
+e
+
+e
+
+(cid:17)(cid:19)ji
+
+e
+
+(3.14)
+
+(3.15)
+
+H1
+H2
+
+(
+
+C1 =
+C2 =
+e
+e
+
+C1E1 + T
+C2E2 + T t
+e
+e
+
+C2Λt
+1,
+C1Λ2.
+e
+e
+
+4 NUMERICAL TESTS
+
+As U ∗ = 0 implies
+
+1
+
+∀
+
+≤
+
+i, j
+
+≤
+
+m
+
+∂f
+∂Uij
+
+(0) = 0,
+
+15
+
+(3.16)
+
+we conclude that Λ1 = Λ2 if the matrices
+
+C t
+
+1T T t
+
+C1
+
+and
+
+C t
+
+2T tT
+
+C2
+
+are invertible,
+
+which is generally the case when n
+
+2m. Consequently, (2.4) is satisﬁed by (
+
+C1,
+
+C2).
+
+(cid:16)
+
+(cid:17)
+
+(cid:16)
+
+(cid:17)
+
+e
+On the other hand, when n is not much larger that 2m, the above matrices are not
+invertible and (2.4) is usually not satisﬁed. In this case, the global step is slightly modiﬁed
+in order to recover (2.4) and thus improve the eﬃciency of the global step. We replace
+(3.10) by
+
+e
+
+e
+
+e
+
+e
+
+e
+
+≫
+
+−
+
+1
+
+i
+
+∀
+
+≤
+
+≤
+
+U
+
+p, Ci(
+
+) = ˜C k
+
+i + T
+
+C k
+
+i+1Ui
+
+C k
+[
+
+i ]tT T t
+
+C k
+i
+
+T t
+
+C k
+
+i−1U t
+
+i−1
+
+C k
+[
+
+i ]tT tT
+
+C k
+i
+
+(3.17)
+
+b
+
+b
+
+b
+
+(cid:16)
+
+(cid:17)
+
+C k
+i
+
+(cid:17)
+C k
+where
+i . These
+is a block formed by vectors collected in the vector space deﬁned by
+b
+vectors are selected using a modiﬁed Gram-Schmidt orthonormalization process. The size
+i , the more precise the
+of the blocks
+global step but the worse the conditioning of the optimization problem. In addition, since
+the global step is the most demanding step of the algorithm, considerations both on the
+computational time and in terms of memory are accounted for when ﬁxing the sizes of
+the blocks
+
+is appropriately chosen. The larger the blocks
+
+C k
+i
+
+C k
+
+(cid:16)
+
+b
+
+b
+
+b
+
+e
+
+b
+
+b
+
+C k
+i .
+
+b
+
+Our numerical experiments show that when the global step is performed (using (3.10)
+or (3.17), depending on n and m), the blocks (C k+1
+)i do not exactly satisfy the orthonor-
+mality constraint, owing to evident round-oﬀ errors. All the linear scaling algorithms have
+diﬃculties in ensuring this constraint and our MDD approach is no exception. The tests
+performed however show that the constraint remains satisﬁed throughout the iterations
+within a good degree of accuracy.
+
+i
+
+4 Numerical tests
+
+An extensive set of numerical tests was performed to illustrate the important features of
+the domain decomposition algorithm introduced above, and to compare it with a standard
+scheme, commonly used in large scale electronic structure calculations.
+
+4.1 Setting of the algorithm and of the tests
+
+Molecular systems used for the tests Numerical tests on the algorithm presented
+above were performed on three chemical systems. The ﬁrst two systems both have for-
+mula COH-(CO)nm-COH. They diﬀer in their Carbon-Carbon interatomic distances. For
+
+4 NUMERICAL TESTS
+
+16
+
+For each of the three systems
+
+system
+On the other hand, our third system, denoted by
+
+P1, this distance is ﬁxed to 5 atomic units, while it is ﬁxed to 4 for system
+P2.
+P3 has formula CH3-(CH2)nm-CH3.
+P3, several numbers nm of monomers were
+considered. A geometry optimization was performed using the GAUSSIAN package [26]
+in order to ﬁx the internal geometrical parameters of the system. The only exception to
+P2, which, as said above, is ﬁxed a priori.
+P1 and
+this is the Carbon-Carbon distance for
+Imposing the Carbon-Carbon distance allows to control the sparsity of the matrices H and
+S (the larger the distance, the sparser the matrices). Although not physically relevant,
+ﬁxing the Carbon-Carbon distance is therefore useful for the purpose of numerical tests.
+
+P1,
+
+P2,
+
+Data, parameters and initialization For an extremely large number nm of monomers,
+the matrices H, S, and D⋆ cannot be generated directly with the GAUSSIAN package.
+We therefore make a periodicity assumption. For large values of nm, these matrices ap-
+proach a periodic pattern (leaving apart, of course, the “boundary layer”, that is the
+terms involving orbitals close to one end of the linear molecule). So, we ﬁrst ﬁx some nm
+suﬃciently large, but for which a direct calculation with Gaussian is feasible, and con-
+struct H, S. The matrices H and S, as well as the ground-state density matrix D⋆, and
+the ground-state energy E0, are then obtained for arbitrary large nm assuming periodicity
+out of the “boundary layer”. Likewise, the gap γ in the eigenvalues of H is observed to be
+constant, for each system, irrespective of the number nm of polymers, supposedly large.
+Proceeding so, the gap for systems
+P3 is respectively evaluated to 0.00104,
+P2, and
+0.00357, and 0.0281.
+For our MDD approach, localization parameters are needed. They are shown in Ta-
+ble 4.1 below. Additionally, we need to provide the algorithm with an initial guess on the
+size mi of the blocks. Based on physical considerations on the expected repartition of the
+electrons in the molecule and on the expected localization of the orbitals, the sizes were
+ﬁxed to values indicated in Table 4.1. The speciﬁc block Ci is then initialized in one of
+the following three manners:
+
+P1,
+
+strategy
+yields a bad initial guess way;
+
+I1: the entries of C are generated randomly, which of course generically
+
+I2: each block Ci consists of the lowest mi (generalized) eigenvectors as-
+strategy
+sociated to the corresponding block matrices Hi and Si in the matrices H and S,
+respectively. This provides with an initial guess, depending on the matrices H and
+S, thus of better quality than the random one provided by strategy
+
+I1;
+
+•
+
+strategy
+described in section 3.2.
+
+I3: the initial guess provided by
+
+I2 is optimized with the local ﬁne solver
+
+•
+
+•
+
+4 NUMERICAL TESTS
+
+17
+
+n
+q
+Bandwith of S
+Bandwith of H
+Cut-oﬀ for entries of H
+Cut-oﬀ for entries of D
+Size of ﬁrst block
+Size of last block
+
+P2
+200
+80
+79
+159
+10−12
+10−11
+m1 = 67 m1 = 105 m1 = 136
+mp = 67 mp = 106 mp = 137
+Size of a generic block mi = 56 mi = 84 mi = 104
+
+P3
+308
+126
+111
+255
+10−10
+10−7
+
+P1
+130
+50
+59
+99
+10−12
+10−11
+
+Table 1: Localization parameters and initial size of the blocks used in the tests
+
+Implementation details Exact diagonalizations in the local steps are performed with
+the routine dsbgv.f from the LAPACK package [1]. In the global step, the resolution of
+the linear system involving the Hessian matrix is performed iteratively, using SYMMLQ
+[25]. Diagonal preconditionning is used to speed up the resolution.
+
+The calculations have been performed using only one processor of a bi-processor Intel
+
+Pentium IV-2.8 GHz.
+
+Criteria for comparison of results For assesment of the quality of the results, we
+have used two criteria, regarding the ground-state energy and the ground-state density
+matrix, respectively. For either quantity, the reference calculation is the calculation using
+the Gaussian package [26]. The quality of the energy is measured using the relative error
+
+. For evaluation of the quality of the density matrix, we use the L∞ matrix
+
+eE = |
+norm
+
+E
+
+E0|
+
+−
+E0|
+
+|
+
+e∞ =
+
+sup
+(i,j) s.t. |Hij|≤ε
+
+Dij −
+(cid:12)
+(cid:12)
+(cid:12)
+
+[D⋆]ij
+
+,
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+(4.1)
+
+where we ﬁx ε = 10−10. The introduction of the norm (4.1) is consistent with the cut-oﬀ
+performed on the entries of H (thus the exact value of ε chosen). Indeed, in practice, the
+matrix D is only used for the calculations of various observables (for instance electronic
+energy and Hellman-Feynman forces), all of the form Tr(AD) where the symmetric matrix
+A shares the same pattern as the matrix H (see [7] for details). The result is therefore
+not sensitive to entries with indices (i, j) such that
+
+is below the cut-oﬀ value.
+
+Hij|
+
+|
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+4 NUMERICAL TESTS
+
+18
+
+4.2
+
+Illustration of the role of the local and global steps
+
+Our MDD method consists in three ingredients:
+
+the local optimization of each block performed in the local step;
+
+the transfer of vectors from some blocks to other blocks, along with the modiﬁcation
+of the block sizes mi, again in the local step;
+
+the optimization performed in the global step.
+
+To highlight the necessity of each of the ingredients, and their impacts on the ﬁnal result,
+we compare our MDD algorithm with three simpliﬁed variants. Let us denote by
+
+strategy
+block sizes, and no global step;
+
+S1:
+
+local optimization of the blocks, without allowing variations of the
+
+strategy
+
+S2: full local step (as deﬁned in Section 3.2), no global step;
+S3: local optimization of the blocks, without allowing for variations of the
+
+strategy
+block sizes, and global step;
+
+strategy
+
+S4: full algorithm.
+
+P2 and
+
+We compare the rate of convergence for the above four strategies. Two categories of
+tests are performed, depending on the quality of the initial guess. The results displayed
+P1 with nm = 801 monomers. This corresponds to
+on Figures 6 to 9 concern polymer
+Nb = 8050 and N = 5622. Analogous tests were performed on
+P3, but we do not
+present them here, for brevity.
+The energy of the ground state of this matrix (i.e. the minimum of (1.6)) is E0 =
+27663.484. The number of blocks considered is p = 100. For the global step, we have
+−
+collected these 100 blocks in 99 overlapping groups of 2 blocks.
+Interestingly, such a
+partition provides with optimal results regarding CPU time and memory requirement. It
+S3 are not satisfactory for they converge towards
+is observed on Fig. 6-9 that
+some local, non global, minima of (2.2) whatever the initial guess. The failure of the
+strategy S3 performed on the initial guess
+I2 is surprising: this initial guess is not good
+enough. Indeed, if the initial guess is
+S3 and
+S2 applied to the initial
+S4 behave identically. Notice that the strategy
+guess
+S4 performs very well whatever the initial guess (see
+P3. Finally,
+
+I3, we check numerically that the strategies
+
+Fig. 7 and Fig. 9). The same behavior is observed for the polymers
+
+We also remark that the strategy
+
+I3 is identical to
+
+P2 and
+
+S2 and
+
+S1,
+
+I2.
+
+4 NUMERICAL TESTS
+
+19
+
+•
+
+•
+
+•
+
+•
+
+•
+
+after orthonormalization, the Density Matrix Minimization (DMM) method [18] failed
+I2. That is the
+with the random initial guess and reveals very slow with the initial guess
+reason why we consider the initial guess
+
+I3 to compare these methods.
+
+4.3 Comparison with two other methods
+
+Having emphasized the usefulness of all the ingredients of our MDD algorithm, we now
+compare it to two other algorithms:
+
+the diagonalization routine dsbgv.f from the LAPACK library;
+
+the Density Matrix Minimization (DMM) method [18].
+
+These two algorithms are seen as prototypical approaches for standard diagonalization
+algorithms and linear scaling techniques respectively. They are only used here for com-
+parison purposes. Regarding linear scaling methods, two other popular approaches are the
+Fermi Operator method [11] and the McWeeny iteration method [21]. We have observed
+that, at least in our own implementation, based on the literature, they are outperformed
+by the DMM method for the actual chemical systems we have considered. We therefore
+take DMM as a reference method for our comparison.
+
+Recall that the routine dsbgv.f consists in the three-step procedure
+
+transform the generalized eigenvalue problem into a standard eigenvalue problem
+by applying a Cholesky factorization to S;
+
+reduce the new matrix to be diagonalized to a tridiagonal form;
+
+compute its eigenelements by using the implicit QR method.
+
+The algorithmic complexity of this approach is in N 3
+N 2
+b .
+
+b and the required memory scales as
+
+For the description of DMM method, we refer to [18]. Let us only mention here that
+this approach consists in a minimization procedure, applied to the energy expressed in
+terms of the density matrix. Both the algorithmic complexity and the memory needed for
+performing the DMM approach scale linearly with respect to the size Nb of the matrix.
+The DMM method is initialized with the density matrix D = CC t computed with the
+initial guess C of the domain decomposition method. Two important points for the tests
+shown below are the following.
+
+First, we perform a cut-oﬀ on the coeﬃcients on the various matrices manipulated
+throughout the calculation: only the terms of the density matrices within the frame
+
+4 NUMERICAL TESTS
+
+20
+
+deﬁned in Figure 4 are taken into account. Such a cut-oﬀ has some impact on the qualities
+of the results obtained with the DMM method. We are however not able to design a better
+comparison.
+
+Second, the DMM method requires the knowledge of the Fermi level (as is the case for
+the linear scaling methods commonly used in practice to date). The determination of the
+Fermi level is the purpose of an outer optimization loop. In contrast, the MDD approach
+computes an approximation of the Fermi level at each iteration. Here, for the purpose of
+comparison, we provide DMM with the exact value of the Fermi level. Consequently, the
+CPU times for the DMM method displayed in the sequel are underestimated.
+
+We emphasize that the routine dsbgv.f computes the entire spectrum of the matrix,
+both eigenvalues and eigenvectors. In contrast, the MDD approach only provides with
+the lowest N eigenvalues, among Nb, and the projector on the vector space spanned by
+the corresponding eigenvectors, not the eigenvectors themselves.
+
+4.3.1 Comparison with Direct diagonalization and DMM
+
+We have computed the ground states of the polymers
+P3 with the three meth-
+ods (direct diagonalization, DMM and MDD) and for various numbers nm of monomers,
+corresponding to matrix sizes Nb in the range 103-105.
+
+P2 and
+
+P1,
+
+For DMM and MDD, the initial guess is generated following the strategy
+
+I3. The
+results regarding the CPU time at convergence and the memory requirement are displayed
+P2, and
+on Figures 10 to 12 for the polymers
+For small values of Nb, i.e. up to around 104, the results observed for the direct
+diagonalization, DMM and MDD agree. The CPU times for our MDD approach scale
+linearly with Nb.
+
+P3 respectively.
+
+P1,
+
+For larger values of Nb, the limited memory prevented us from either performing an
+exact diagonalization or from implementing DMM. So, we extrapolate the CPU time and
+memory requirement according to the scaling observed for smaller Nb.
+
+The data for the DMM method are not plotted in Figure 12 as the DMM method
+P3 when the number of monomers exceeds 103. From
+does not converge for the polymer
+our point of view, it comes from the truncation errors which cause the divergence of the
+method (note that the truncation strategy we consider here is very simple).
+
+4.3.2 Comparison with DMM and a hybrid strategy
+
+We now concentrate on the two approaches that scale linearly, namely DMM and MDD.
+We consider
+
+• P1 with 4001 monomers, corresponding to Nb = 40050,
+
+5 CONCLUSIONS AND REMARKS
+
+21
+
+• P2 with 2404 monomers, corresponding to Nb = 24080,
+• P3 with 208 monomers, corresponding to Nb = 854.
+
+These particular values have been chosen for the purpose of having simple values for
+the numbers of blocks. For each of the three polymers, we compare the DMM and MDD
+methods initialized by the strategy
+I3 and a hybrid strategy. The hybrid strategy consists
+of a certain number of iterations performed with MDD, until convergence is reached for
+this method, followed by iterations with DMM. We use the following stopping criterion
+for MDD:
+
+Dn−2k
+where ǫa is a threshold parameter. We take ǫa = 10−4, respectively ǫa = 10−3, for the
+polymer
+
+Dn−1k ≥ k
+
+Dn−1k ≤
+
+Dn−1 −
+
+Dn −
+
+Dn −
+
+(4.2)
+
+and
+
+ǫa
+
+k
+
+k
+
+P1, respectively
+
+P2 and
+
+P3.
+
+The Figures 13 to 15 show the evolution of the error in density versus CPU time. The
+hybrid version is demonstrated to be a very eﬃcient combination of the two algorithms.
+For completeness, let us highlight the temporary increase for the error in density
+appearing in Fig. 14 when MDD is used on
+P2. Analogously, the energy of the current
+solution, which is actually below the reference energy, also increases. In fact, this is due
+to a loss of precision in the orthonormality constraints. In MDD, these constraints are
+not imposed exactly at each iteration, but only approximately (see equation 3.12).
+
+Finally, we report in ﬁgures 16 to 18 the results obtained with MDD for the largest
+possible case that can be perfomed on our platform, owing to memory limitation. We
+I3. Notice that for the local step the
+used the initial guesses obtained with the strategy
+memory requirement scales linearly with respect to the number nm of monomers, while
+for the global step, the memory requirement is independent of nm. Therefore, for large
+polymers, the memory needed by MDD is controled by the local step. In contrast, for
+small polymers, the most demanding step in terms of memory is the global step.
+
+5 Conclusions and remarks
+
+The domain decomposition algorithm introduced above performs well, in comparison to
+the two standard methods considered. More importantly, our approach is an eﬀective pre-
+conditionning technique for DMM iterations. Indeed, MDD provides a rapid and accurate
+approximation, both in terms of energy and density matrix, regardless of the quality of
+the initial guess. In contrast, DMM outperforms MDD when the initial guess is good, but
+only performs poorly, or may even diverge, when this is not the case. The combination of
+
+5 CONCLUSIONS AND REMARKS
+
+22
+
+the two methods seems to be optimal. More generally, our MDD algorithm could consti-
+tute a good preconditionner to all variational methods, such as the Orbital Minimization
+method [20].
+
+Regarding the comparison with DMM, the following comments are in order.
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+All our calculations have been performed on a single processor machine. Poten-
+tially, both DMM and MDD should exhibit the same speed-up when parallelized.
+We therefore consider the comparison valid, at least qualitatively, for parallel imple-
+mentations. The parallelization of the MDD is currently in progress, and hopefully
+will conﬁrm the eﬃciency of the approach.
+
+We recall the Fermi level has to be provided to the DMM method. This is an
+additional argument in favor of the MDD approach.
+
+The MDD method, in contrast to the other linear scaling methods, does not perform
+any truncation in the computations. So, once the proﬁle of C is choosen, the method
+does not suﬀer of any instabilities, contrary to DMM (or OM) for which divergences
+have been observed for the polymer
+
+P3.
+
+The domain decomposition method makes use of several threshold parameters. For
+the three polymers we have considered, the optimal values of these parameters,
+except for the stopping criterion ǫa (equation (4.2)), are the same. We do not know
+yet if this interesting feature is a general rule.
+
+Recall our method solves problem (2.2), which is only an approximation of prob-
+lem (2.1). Therefore, the relative error obtained in the limit is only a measure of
+the diﬀerence between (2.2) and (2.1). In principle, such a diﬀerence could be made
+arbitrarily small by an appropriate choice of the parameters of problem (2.2).
+
+Finally, let us emphasize that there is much room for improvement in both the local
+and the global steps. We have designed an overall multilevel strategy that performs
+well, but each subroutine may be signiﬁcantly improved. Another interesting issue
+is the interplay between the nonlinear loop in the Hartree-Fock or Kohn-Sham prob-
+lems (Self-Consistent Field - SCF - convergence [7, 8, 14]) and the linear subproblem
+considered in the present article. Future eﬀorts will go in these directions.
+
+Acknowledgments. We would like to thank Guy Bencteux (EDF) for valuable discus-
+sions and for his help in the implementation. C.L.B. and E.C. would like to acknowledge
+many stimulating discussions with Richard Lehoucq (Sandia National Laboratories).
+
+REFERENCES
+
+References
+
+23
+
+[1] E. Anderson, Z. Bai, C. Bischof, S. Blackford, J. Demmel, J. Dongarra, J. Du Croz,
+A. Greenbaum, S. Hammarling, A. McKenney and D. Sorensen, LAPACK users’
+guide, 3rd edition, SIAM 1999.
+
+[2] P. Arbenz, U.L. Hetmaniuk, R.B. Lehoucq and R.S. Tuminaro, A comparison of
+eigensolvers for large-scale 3D modal analysis using AMG-preconditioned iterative
+methods, Int. J. Numer. Meth. Engng 64 (2005) 204-236.
+
+[3] D.A. Areshkin, O.A. Shenderova, J.D. Schall and D.W. Brenner, Convergence accel-
+eration scheme for self consistent orthogonal basis set electronic structure methods,
+Mol. Sim. 29 (2003) 269-286.
+
+[4] N.W. Ashcroft and N. D. Mermin, Solid-State Physics, Saunders College Publishing
+
+1976.
+
+[5] M. Barrault, D´eveloppement de m´ethodes rapides pour le calcul de structures
+
+´electroniques, th`ese de l’Ecole Nationale des Ponts et Chauss´ees, 2005.
+
+[6] D. Bowler, T. Miyazaki and M. Gillan, Recent progress in linear scaling ab initio
+
+electronic structure theories, J. Phys. Condens. Matter 14 (2002) 2781-2798.
+
+[7] E. Canc`es, M. Defranceschi, W. Kutzelnigg, C. Le Bris, and Y. Maday, Computa-
+tional Quantum Chemistry: a Primer, in: Handbook of Numerical Analysis, Special
+volume, Computational Chemistry, volume X, North-Holland 2003.
+
+[8] E. Canc`es and C. Le Bris, Can we outperform the DIIS approach for electronic struc-
+
+ture calculations, Int. J. Quantum Chem. 79 (2000) 82-90.
+
+[9] J.J.M. Cuppen, A divide and conquer method for symmetric tridiagonal eigenprob-
+
+lems, Numer. Math. 36 (1981) 177-195.
+
+[10] P.M.W. Gill, Molecular integrals over gaussian basis functions, Adv. Quantum Chem.
+
+25 (1994) 141-205.
+
+1085-1123.
+
+theory, Wiley 1986.
+
+[11] S. Goedecker, Linear scaling electronic structure methods, Rev. Mod. Phys. 71 (1999)
+
+[12] W.J. Hehre, L. Radom, P.v.R. Schleyer, and J.A. Pople, Ab initio molecular orbital
+
+REFERENCES
+
+24
+
+[13] U.L. Hetmaniuk and R.B. Lehoucq, Multilevel methods for eigenspace computations
+in structural dynamics, Proceedings of the 16th International Conference on Domain
+Decomposition Methods, Courant Institute, New-York, January 12-15, 2005.
+
+[14] K.N. Kudin, G.E. Scuseria and E. Canc`es, A black-box self-consistent ﬁeld conver-
+
+gence algorithm: one step closer, J. Chem. Phys. 116 (2002) 8255-8261.
+
+[15] W. Kohn, Analytic properties of Bloch waves and Wannier functions, Phys. Rev. 115
+
+(1959) 809-821.
+
+[16] W. Kohn, Density functional and density matrix method scaling linearly with the
+
+number of atoms, Phys. Rev. Lett. 76 (1996) 3168-3171.
+
+[17] C. Le Bris, Computational chemistry from the perspective of numerical analysis,
+
+Acta Numerica,volume 14, 2005, pp 363-444.
+
+[18] X.-P. Li, R.W. Numes and D. Vanderbilt, Density-matrix electronic structure method
+
+with linear system size scaling, Phys. Rev. B 47 (1993) 10891-10894.
+
+[19] R. McWeeny, Methods of molecular quantum mechanics, 2nd edition, Academic Press
+
+1992.
+
+[20] P. Ordej´on, D.A. Drabold, M.D. Grumbach and R.M. Martin, Unconstrained mini-
+mization approach for electronic computations that scales linearly with system size,
+Phys. Rev. B 48 (1993) 14646-14649.
+
+[21] A. Palser and D. Manopoulos, Canonical puriﬁcation of the density matrix in elec-
+
+tronic structure theory, Phys. Rev. B 58 (1998) 12704-12711.
+
+[22] Y. Saad, Numerical methods for large eigenvalue problem : theory and algorithms,
+
+Manchester University Press 1992.
+
+[23] D. S´anchez-Portal, P. Ordej´on, E. Artacho and J.M. Soler, Density-functional method
+for very large systems with LCAO basis sets, Int. J. Quantum Chem. 65 (1997) 453-
+461.
+
+[24] W. Yang and T. Lee, A density-matrix divide-and-conquer approach for electronic
+
+structure calculations of large molecules, J. Chem. Phys. 163 (1995) 5674.
+
+[25] C. Paige and M. Saunders, Solution of sparse indeﬁnite systems of linear equations,
+
+SIAM J. Numer. Anal., 12, 617-629, 1975.
+
+REFERENCES
+
+25
+
+[26] M.J. Frisch, G.W. Trucks, H.B. Schlegel, G.E. Scuseria, M.A. Robb, J.R. Cheeseman,
+V.G. Zakrzewski, J.A. Montgomery, R.E. Stratmann, J.C. Burant, S. Dapprich, J.M.
+Millam, A.D. Daniels, K.N. Kudin, M.C. Strain, O. Farkas, J. Tomasi, V. Barone,
+M. Cossi, R. Cammi, B. Mennucci, C. Pomelli, C. Adamo, S. Cliﬀord, J. Ochterski,
+G.A. Petersson, P.Y. Ayala, Q. Cui, K. Morokuma, D.K. Malick, A.D. Rabuck,
+K. Raghavachari, J.B. Foresman, J. Cioslowski, J.V. Ortiz, B.B. Stefanov, G. liu,
+A. Liashenko, P. Piskorz, I. Kpmaromi, G. Gomperts, R.L. Martin, D.J. Fox, T.
+Keith, M.A. Al-Laham, C.Y. Peng, A. Nanayakkara, C. Gonzalez, M. Challacombe,
+P.M.W. Gill, B.G. Johnson, W. Chen, M.W. Wong, J.L. Andres, M. Head-Gordon,
+E.S. Replogle and J.A. Pople, Gaussian 98 (Revision A.7), Gaussian Inc., Pittsburgh
+PA 1998.
+
+REFERENCES
+
+26
+
+bN   
+
+0 
+
+0 
+
+H  = 
+
+bN   
+
+Figure 1: Band structure of the symmetric matrix H.
+
+C  = 
+
+bN  = (p+1) n/2 
+
+m 
+1 
+
+n 
+
+C 1 
+
+0 
+
+m 
+p 
+
+C p 
+
+0 
+
+N = m  + ... + m  
+p 
+
+1 
+
+Figure 2: Block structure of the matrices C. Note that by construction each block only
+overlaps with its nearest neighbors.
+
+REFERENCES
+
+27
+
+H 1 
+
+H  = 
+
+n 
+
+0 
+
+0 
+
+H p 
+
+N  = (p+1) n/2 
+
+b
+
+Figure 3: Block structure of the matrix H.
+
+0 
+
+D  = 
+
+n 
+
+0 
+
+N  = (p+1) n/2 
+
+b
+
+Figure 4: Block structure of the matrix D.
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+G1
+
+G2
+
+G3
+
+Figure 5: Collection of p = 10 blocks into r = 3 groups.
+
+REFERENCES
+
+28
+
+S1
+S2
+S3
+S4
+
+S1
+S2
+S3
+S4
+
+−1
+
+10
+
+−2
+
+10
+
+−3
+
+10
+
+−4
+
+10
+
+−5
+
+10
+
+−6
+
+10
+
+−7
+
+10
+
+−8
+
+10
+
+−9
+
+10
+
+r
+o
+r
+r
+e
+ 
+y
+g
+r
+e
+n
+E
+
+−10
+
+10
+
+−11
+
+10
+
+0
+
+0
+10
+
+−1
+
+10
+
+r
+o
+r
+r
+e
+ 
+y
+t
+i
+s
+n
+e
+D
+
+−2
+
+10
+
+−3
+
+10
+
+−4
+
+10
+
+0
+
+500
+
+1000
+
+1500
+
+2000
+
+2500
+
+3000
+
+3500
+
+4000
+
+4500
+
+CPU Time in seconds
+
+Figure 6: Energy error versus CPU time obtained with a bad initial guess (
+
+I1).
+
+500
+
+1000
+
+1500
+
+2000
+
+2500
+
+3000
+
+3500
+
+4000
+
+4500
+
+CPU Time in seconds
+
+Figure 7: Density error versus CPU time obtained with a bad initial guess (
+
+I1).
+
+REFERENCES
+
+29
+
+S1
+S2
+S3
+S4
+
+S1
+S2
+S3
+S4
+
+0
+10
+
+−2
+
+10
+
+−4
+
+10
+
+−6
+
+10
+
+−8
+
+10
+
+r
+o
+r
+r
+e
+ 
+y
+g
+r
+e
+n
+E
+
+−10
+
+10
+
+−12
+
+10
+
+0
+
+0
+10
+
+−1
+
+10
+
+r
+o
+r
+r
+e
+ 
+y
+t
+i
+s
+n
+e
+D
+
+−2
+
+10
+
+−3
+
+10
+
+−4
+
+10
+
+0
+
+500
+
+1000
+
+1500
+
+3500
+
+4000
+
+4500
+
+5000
+
+2000
+
+2500
+CPU Time in seconds
+
+3000
+
+Figure 8: Energy error versus CPU time obtained with a better initial guess (
+
+I2).
+
+500
+
+1000
+
+1500
+
+3500
+
+4000
+
+4500
+
+5000
+
+2000
+
+2500
+CPU Time in seconds
+
+3000
+
+Figure 9: Density error versus CPU time obtained with a better initial guess (
+
+I2).
+
+REFERENCES
+
+30
+
+MDD   
+LAPACK
+DMM   
+
+MDD   
+LAPACK
+DMM   
+
+0
+10
+
+2
+10
+
+3
+10
+
+4
+10
+N
+b
+
+5
+10
+
+6
+10
+
+9
+10
+
+8
+10
+
+7
+10
+
+6
+10
+
+5
+10
+
+4
+10
+
+3
+10
+
+2
+10
+
+1
+10
+
+9
+10
+
+8
+10
+
+7
+10
+
+6
+10
+
+5
+10
+
+4
+10
+
+s
+d
+n
+o
+c
+e
+s
+ 
+n
+i
+ 
+e
+m
+T
+U
+P
+C
+
+ 
+
+i
+
+s
+e
+t
+y
+b
+K
+ 
+n
+i
+ 
+t
+n
+e
+m
+e
+r
+i
+u
+q
+e
+r
+ 
+y
+r
+o
+m
+e
+M
+
+3
+10
+
+2
+10
+
+3
+10
+
+4
+10
+N
+b
+
+5
+10
+
+6
+10
+
+Figure 10: Scaling of the CPU time (top) and memory requirement (bottom) for the
+polymer
+
+P1.
+
+REFERENCES
+
+31
+
+MDD   
+LAPACK
+DMM   
+
+MDD   
+LAPACK
+DMM   
+
+1
+10
+
+2
+10
+
+3
+10
+
+4
+10
+N
+b
+
+5
+10
+
+6
+10
+
+8
+10
+
+7
+10
+
+6
+10
+
+5
+10
+
+4
+10
+
+3
+10
+
+2
+10
+
+9
+10
+
+8
+10
+
+7
+10
+
+6
+10
+
+5
+10
+
+4
+10
+
+s
+d
+n
+o
+c
+e
+s
+ 
+n
+i
+ 
+e
+m
+T
+U
+P
+C
+
+ 
+
+i
+
+s
+e
+t
+y
+b
+K
+ 
+n
+i
+ 
+t
+n
+e
+m
+e
+r
+i
+u
+q
+e
+r
+ 
+y
+r
+o
+m
+e
+M
+
+3
+10
+
+2
+10
+
+3
+10
+
+4
+10
+N
+b
+
+5
+10
+
+6
+10
+
+Figure 11: Scaling of the CPU time (top) and memory requirement (bottom) for the
+polymer
+
+P2.
+
+REFERENCES
+
+32
+
+MDD   
+LAPACK
+
+3
+10
+
+4
+10
+
+5
+10
+
+N
+b
+
+MDD   
+LAPACK
+
+3
+10
+
+4
+10
+
+5
+10
+
+N
+b
+
+Figure 12: Scaling of the CPU time (top) and memory requirement (bottom) for the
+polymer
+
+P3.
+
+7
+10
+
+6
+10
+
+5
+10
+
+4
+10
+
+3
+10
+
+2
+10
+
+s
+d
+n
+o
+c
+e
+s
+ 
+n
+i
+ 
+e
+m
+T
+U
+P
+C
+
+ 
+
+i
+
+s
+e
+t
+y
+b
+K
+ 
+n
+i
+ 
+t
+n
+e
+m
+e
+r
+i
+u
+q
+e
+r
+ 
+y
+r
+o
+m
+e
+M
+
+7
+10
+
+6
+10
+
+5
+10
+
+4
+10
+
+1
+10
+
+2
+10
+
+8
+10
+
+3
+10
+
+2
+10
+
+REFERENCES
+
+33
+
+DDD    
+DMM    
+DDD+DMM
+
+DDD    
+DMM    
+DDD+DMM
+
+2
+
+4
+
+6
+
+8
+
+10
+
+12
+
+14
+
+16
+
+CPU Time in seconds
+
+18
+4
+x 10
+
+Figure 13: Evolution of the density error with the CPU time for the polymer
+4001 monomers.
+
+P1 made of
+
+r
+o
+r
+r
+e
+ 
+y
+t
+i
+s
+n
+e
+D
+
+r
+o
+r
+r
+e
+ 
+y
+t
+i
+s
+n
+e
+D
+
+0
+10
+
+−1
+
+10
+
+−2
+
+10
+
+−3
+
+10
+
+−4
+
+10
+
+−5
+
+10
+
+0
+
+0
+10
+
+−1
+
+10
+
+−2
+
+10
+
+−3
+
+10
+
+−4
+
+10
+
+−5
+
+10
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10
+
+12
+
+CPU Time in seconds
+
+14
+4
+x 10
+
+Figure 14: Evolution of the density error with the CPU time for the polymer
+2404 monomers.
+
+P2 made of
+
+REFERENCES
+
+34
+
+DDD    
+DMM    
+DDD+DMM
+
+Energy error 
+Density error
+
+0.5
+
+1
+
+1.5
+
+2
+
+CPU Time in seconds
+
+2.5
+
+3
+
+3.5
+4
+x 10
+
+Figure 15: Evolution of the density error with the CPU time for the polymer
+208 monomers.
+
+P3 made of
+
+0
+10
+
+−1
+
+10
+
+r
+o
+r
+r
+e
+ 
+y
+t
+i
+s
+n
+e
+D
+
+−2
+
+10
+
+−3
+
+10
+
+−4
+
+10
+
+0
+
+0
+10
+
+−2
+
+10
+
+−4
+
+10
+
+−6
+
+10
+
+−8
+
+10
+
+s
+r
+o
+r
+r
+e
+ 
+y
+t
+i
+s
+n
+e
+d
+d
+n
+a
+
+ 
+
+ 
+y
+g
+r
+e
+n
+E
+
+−10
+
+10
+
+−12
+
+10
+
+−14
+
+10
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10
+
+12
+
+CPU Time in seconds
+
+14
+4
+x 10
+
+Figure 16: Evolution of the MDD energy and density errors versus CPU time for the
+polymer
+
+P1 (20001 monomers, Nb = 200050).
+
+REFERENCES
+
+35
+
+Energy error 
+Density error
+
+0
+10
+
+−1
+
+10
+
+−2
+
+10
+
+−3
+
+10
+
+−4
+
+10
+
+−5
+
+10
+
+−6
+
+10
+
+−7
+
+10
+
+−8
+
+10
+
+−9
+
+10
+
+s
+r
+o
+r
+r
+e
+ 
+y
+t
+i
+s
+n
+e
+d
+ 
+d
+n
+a
+ 
+y
+g
+r
+e
+n
+E
+
+−10
+
+10
+
+0
+
+5
+
+10
+
+CPU Time in seconds
+
+15
+4
+x 10
+
+Figure 17: Evolution of the MDD energy and density errors versus CPU time for the
+polymer
+
+P2 (12004 monomers, Nb = 120080).
+
+REFERENCES
+
+36
+
+Energy error 
+Density error
+
+s
+r
+o
+r
+r
+e
+ 
+y
+t
+i
+s
+n
+e
+d
+ 
+d
+n
+a
+ 
+y
+g
+r
+e
+n
+E
+
+0
+10
+
+−1
+
+10
+
+−2
+
+10
+
+−3
+
+10
+
+−4
+
+10
+
+−5
+
+10
+
+−6
+
+10
+
+−7
+
+10
+
+−8
+
+10
+
+1
+
+2
+
+3
+
+4
+
+8
+
+9
+
+10
+
+5
+7
+6
+CPU Time in seconds
+
+11
+4
+x 10
+
+Figure 18: Evolution of the MDD energy and density errors versus CPU time for the
+polymer
+
+P3 (5214 monomers, Nb = 36526).
+
+

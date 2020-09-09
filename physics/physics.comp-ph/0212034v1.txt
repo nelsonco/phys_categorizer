@@ -1,0 +1,1646 @@
+2
+0
+0
+2
+ 
+c
+e
+D
+ 
+7
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+4
+3
+0
+2
+1
+2
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Deciding the Nature of the “Coarse Equation” through Microscopic Simulations: the
+Baby-Bathwater Scheme
+
+Ju Li1, Panayotis G. Kevrekidis2, C. William Gear3,4 and Ioannis G. Kevrekidis4
+1Department of Materials Science and Engineering, Ohio State University, Columbus, OH 43210
+2Department of Mathematics and Statistics, University of Massachusetts, Amherst, MA 01003-4515
+3NEC Research Institute, 4 Independence Way, Princeton, New Jersey 08540
+4Department of Chemical Engineering and PACM, Princeton University, Princeton, New Jersey 08544
+(February 2, 2008)
+
+Recent developments in multiscale computation allow the solution of “coarse equations” for the
+expected macroscopic behavior of microscopically/stochastically evolving particle distributions with-
+out ever obtaining these coarse equations in closed form. The closure is obtained “on demand”
+through appropriately initialized bursts of microscopic simulation. The eﬀective coupling of micro-
+scopic simulators with macrosocopic behavior embodied in this approach requires certain decisions
+about the nature of the unavailable “coarse equation”. Such decisions include (a) the determination
+of the highest spatial derivative active in the equation, (b) whether the coarse equation satisﬁes
+certain conservation laws, and (c) whether the coarse dynamics is Hamiltonian. These decisions
+aﬀect the number and type of boundary conditions as well as the nature of the algorithms employed
+in good solution practice. In the absence of an explicit formula for the temporal derivative, we pro-
+pose, implement and validate a simple scheme for deciding these and other similar questions about
+the coarse equation using only the microscopic simulator. Microscopic simulations under periodic
+boundary conditions are carried out for appropriately chosen families of random initial conditions;
+evaluating the sample variance of certain statistics over the simulation ensemble allows us to infer
+the highest order of spatial derivatives active in the coarse equation. In the same spirit we show how
+to determine whether a certain coarse conservation law exists or not, and we discuss plausibility tests
+for the existence of a coarse Hamiltonian or integrability. We argue that such schemes constitute
+an important part of the equation-free approach to multiscale computation.
+
+I. INTRODUCTION
+
+It is often the case that a microscopic or ﬁne description of a physical system is available, while we are interested
+in its macroscopic or coarse behavior. Consider, as an example, a biased random walk model for which the particle
+density asymptotically evolves according to a macroscopic law such as the Burgers equation. Typically, the study
+of macroscopic behavior starts with obtaining a closed PDE-level description (a “coarse equation”) for the time
+evolution of the expected or ensemble-averaged ﬁelds of a few, low order moments of the micro-state phase space
+distribution. For our example, this would be the zero-th moment, the density ﬁeld. Then, an array of mathematical
+and computational tools (numerical integration, ﬁxed-point algorithms etc.) can be brought to bear on the coarse
+equation.
+
+Over the last few years, we have been developing a class of numerical algorithms which attempt to analyze the
+coarse behavior without ever obtaining the coarse equation in closed form [1]. The common character of these
+schemes is to use short, appropriately initialized bursts of microscopic simulations to estimate the quantities which,
+if the coarse equation was available, we would simply evaluate using the equation itself. Such quantities, estimated
+on-demand, include the time derivative of the evolving coarse ﬁelds, to be used in coarse projective integration [3],
+or the eﬀect of the time-evolution operator for the implicit coarse Jacobian, to be used in Newton-Krylov type
+contraction mappings like the Recursive Projection Method (RPM) [4,5] or in eigenvalue/vector computations. These
+methods are based on matrix-free large scale scientiﬁc computing, and we sometimes collectively refer to them as
+“equation-free methods”. What makes these computations possible is the assumption of a separation of time scales
+in the dynamics of the evolving microscopic distribution. Typically, one ﬁnds that the hierarchy of coupled equations
+involving higher cumulants of the microscopic distribution constitutes a singularly perturbed problem: higher-order
+cumulants become, in the course of simulation, quickly slaved to (become deterministic functionals of) the lower-order
+cumulants. The consequences of slaving, realized in the computer as a black-box, embody the closures that allow us
+to solve for the coarse behavior. Fundamentally it is no diﬀerent than if the closures are expressed in closed form ﬁrst
+and then evaluated later. This way of thinking and newly developed computing technology can in practice exceed
+the traditional approach in both accuracy and total cost, especially if the constitutive relation is nonlinear and multi-
+dimensional. An example of this type is given in [6]. An additional advantage of such methods is their ability to
+
+1
+
+detect parametric regimes where the (number of moments used in the) present closure model is inadequate and hence
+appropriate reﬁnements (including higher order moments) are necessary.
+
+In the projective integration method [3] one takes advantage of the slow dynamics of the coarse variables to carry
+out only bursts of microscopic simulations connected via projections (in eﬀect, extrapolations and/or interpolations)
+over gaps of time.
+In the same spirit of exploiting regularity, but now in space, we have developed the so-called
+gaptooth scheme [7,8] by evolving the full process only in an array of small spatial boxes (the teeth) separated by
+empty regions (the gaps). Clearly, the two methods are closely related by the physics of the problem. Indeed we can
+have a combined gaptooth-projective integration scheme; this is the focus of another paper [8]. Here, we simply want
+to point out the fact that in the gaptooth method, the teeth communicate with each other via appropriate boundary
+conditions for the microscopic simulations performed inside them. And here lies the raison d’etre of this paper.
+
+It is a well-known fact that certain features of a given equation aﬀect the nature of the appropriate numerical solver.
+A Hamiltonian dynamics problem, for example, is best integrated by a symplectic integrator; often, ﬁnite diﬀerence
+solvers of partial diﬀerential equations (PDE) are built to respect certain properties of the PDE, such as conservation
+laws. Most importantly, the highest spatial order of an evolution equation critically aﬀects the types of boundary
+conditions leading to a well-posed problem.
+
+In a completely analogous manner, the way in which the microscopic model is solved seperately in each tooth in
+the gaptooth scheme, and the boundary conditions applied to the edges of each tooth, must respect the nature of
+the unavailable equations and their order. Furthermore, gaptooth algorithms compatible with conservation laws (e.g.
+using ﬂuxes to estimate temporal derivatives, see for example [9]) are predicated upon knowing that the unavailable
+equation possesses certain conservation laws.
+
+When the closed-form equation is available, some of these questions (e.g. the order of the highest spatial derivative
+in an evolution equation) can be answered by direct inspection. Other issues (such as the existence of conservation
+laws, or integrability) may, in the case of closed form equations, be relatively obvious, or may require a lot of work.
+What we explore in this paper is the development of computer-assisted methodologies to answer the above questions
+when closed form equations are not available. The idea is that we can probe the consequences of these answers on the
+dynamics of the unavailable coarse equations using microscopic, particle- or agent-based, simulators by trying out large
+classes of appropriately chosen initial conditions. We will illustrate what we call the Baby-Bathwater algorithm on
+examples of particle systems realizing the Burgers and Korteweg-de Vries (KdV) equations, for the task of inferring the
+highest order of spatial derivative on the right-hand-side, and for answering questions concerning coarse conservation
+laws.
+
+The paper is organized as follows: In Section II we brieﬂy present our illustrative particle-based example. In Section
+III we discuss the determination of the highest order spatial derivative active in the “unavailable equation”. In Section
+IV we explore the possible existence of conservation laws. In the concluding Section we discuss the scope and limita-
+tions of the procedure, as well as additional questions that may be addressed through this approach. An interesting
+“twist” about reverse coarse integration arises in discussing the exploration of possible “coarse Hamiltonianity” of the
+unavailable coarse equation.
+
+II. NUMERICAL EXPERIMENT SETUP
+
+Our illustrative examples will be based on simple numerical experiments. We will ﬁrst, as a sanity check, demon-
+strate the approach using a traditional numerical simulator of a known evolution equation as a “black box”. We
+will then substitute the simulator of the known continuum equation with a particle-based simulator, and repeat the
+procedure. Our ﬁrst illustration will be the Burgers equation,
+
+ut + uux = νuxx,
+
+as well as a particle based simulator constructed so that the evolution of its density resembles (at the appropriate
+limit, reproduces) the Burgers evolution. Since one of the issues to be explored is the number and type of boundary
+conditions in evolving the equation, our simulations must be possible without this a priori knowledge. We therefore use
+periodic boundary conditions (PBC) enforced on x ∈ [0, 2π) in all our exploratory simulations. One of the attractive
+features of the Burgers is that, for any initial proﬁle u(x, t = 0), and even with PBC, the Cole-Hopf transformation
+[10] provides an analytical solution. The accuracy of the numerics can thus be checked directly.
+
+A biased random walker-based particle simulator mimicking the Burgers dynamics was also constructed to demon-
+strate the direct application of our procedure on microscopic, particle based solvers. A detailed study of the features
+of this particle model is reported elsewhere [11]. As a reference, the diﬀusion equation,
+
+(1)
+
+(2)
+
+ut = νuxx,
+
+2
+
+has the well-known microscopic realizations of Langevin dynamics or unbiased random walkers. It is not too diﬃcult to
+conjure up a similar realization motivated by the Burgers equation using random walkers: a unit mass
+u(x, t)dx = 1
+in the coarse description corresponds to Z walkers, where Z is a large integer constant. In the simulation, N random
+walkers move on [0, 2π) at discrete timesteps tn = nh. At each step, (a) the walkers’ positions {xi} are sorted, (b) each
+, and m-places behind, xm−
+walker i checks out the position of the walker m-places ahead, xm+
+(properly accounting
+for PBC, of course). The diﬀerence xm+
+is inversely proportional to the local density of walkers, therefore (c)
+i − xm−
+every walker moves by ∆xi sampled from N (mh/Z(xm+
+), 2νh), a biased Gaussian distribution. The xi’s are
+then wrapped around to [0, 2π), and the process repeats. This achieves a coarse-grained ﬂux of j ≡ u2/2 − νux as
+motivated by the (1) by assigning each walker a drift speed of u/2. Quantifying the approximation of the Burgers
+evolution is an interesting subject that we take up separately in [11]; this is not, however, an important issue for
+this paper. It is only for benchmarking purposes that the relation to a known macroscopic equation is brought up.
+One can start by presenting a microscopic evolution law, without knowing anything about its corresponding coarse
+equation, and apply our algorithms on it directly.
+
+i − xm−
+
+R
+
+i
+
+i
+
+i
+
+i
+
+Relating the ﬁne with the coarse description requires the use of lifting and restriction operators [5]. Lifting constructs
+particle distributions conditioned on some of their lower moment ﬁelds (here the zero-th moment, or coarse density
+ﬁeld); it clearly is a one-many operator, and several microscopic “copies” of a given macroscopic initial condition
+are often required as discussed in detail in [1,5]. The restriction (here computing moment ﬁelds of a given particle
+distribution) is a form of projection. Clearly the restriction (back to coarse variables) of a lifting of these coarse
+variables should be the identity (or close to it, due to noise eﬀects). The lifting and restriction operators we constructed
+for this work, with u interpreted as the coarse density on [0, 2π) PBC, are given in Appendix A. Fig. 1 shows a result
+of the “reversibility test”: we randomly generate a coarse density u(x), lift it to a random walker distribution, then
+restrict back to ˜u(x), and observe the very good agreement between ˜u(x) with u(x). Notice that the only point where
+this agreement may be less satisfactory is close to local maxima or minima, where the derivative changes sign.
+
+Total number of random walkers = 68416
+
+actual    
+estimation
+
+FIG. 1. Reversibility test ( ˆMˆµ ≈ ˆI) of the ˆµ, ˆM operators constructed in Appendix A: Z = 1000, M = 10, and u(x) is
+
+generated by randomly drawing nan,nbn from N (0, 1), n = 1..M (see the Appendix for details).
+
+1
+
+2
+
+4
+
+5
+
+6
+
+3
+
+x
+
+While the proximity of our particle scheme to the Burgers evolution is not the issue in this paper, we brieﬂy
+illustrate the correspondence of the evolution of an initial proﬁle through the two approaches. Fig. 2 shows the
+analytical solution obtained through the Cole-Hopf transformation; it also contains the result of a 21991-particle
+simulation, after the conﬁgurations have been processed by the ˆM operator of Appendix A to extract the coarse
+density ﬁeld estimate. A small value of viscosity ν = 0.1 is picked to accentuate the behavior of steepening wave-front
+with time. The microscopic simulation clearly captures the important features of the coarse behavior. Ensemble
+averaging with the same initial condition in coarse ﬁeld u(x, 0) would reduce the error, but as we can see, even a
+single microscopic simulation using a reasonable number of particles may still perform quite eﬃciently.
+
+18
+
+16
+
+14
+
+12
+
+u
+
+10
+
+8
+
+6
+
+4
+
+2
+0
+
+3
+
+Initial profile: 3.5+3sin(x); Total number of random walkers = 21991
+
+ν = 0.1, t = 0.2
+
+actual    
+estimation
+
+1
+
+2
+
+4
+
+5
+
+6
+
+2
+
+4
+
+8
+
+10
+
+12
+
+6
+
+x
+
+(b)
+
+3
+
+x
+
+(a)
+ν = 0.1, t = 1
+
+)
+0
+=
+t
+(
+u
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+0
+
+u
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+FIG. 2. Analytical solution of the Burgers at ν = 0.1, and solutions of our particle-based scheme. (a) Initial condition
+u(x, 0) = 3.5 + 3 sin(x), comparison between designated proﬁle and after ˆMˆµ for Z = 1000, M = 10, (b) comparison of
+analytical solution and simulation (after restriction) at t = 0.2 (tiled for ease of seeing the wave steepening), and (c) t = 1.
+The microscopic simulation is carried out with m = 10, h = 5 × 10−4.
+
+2
+
+4
+
+8
+
+10
+
+12
+
+6
+
+x
+
+(c)
+
+Lastly, we mention the existence of particle methods to solve partial diﬀerential equations (PDEs) such as the
+
+Korteweg - de Vries (KdV) equation:
+
+which can be formulated as conservation laws [12,13]. In this paper we use our construction above for the Burgers
+example. We should highlight once more that our ultimate purpose is not to construct particle solvers of given
+equations, but rather to decide on features of the unavailable coarse equations for given microscopic schemes.
+
+ut = 6uux − uxxx
+
+III. IDENTIFYING THE HIGHEST SPATIAL ORDER OF COARSE VARIABLES
+
+As we mentioned in Section I, system identiﬁcation lies at the heart of the equation-free approach. Here, we suppose
+
+the coarse dynamics follows a certain time-evolution equation of the form:
+
+ut = f (u, ux, uxx, .., u(N )
+
+),
+
+x
+
+that is unavailable to us. We have already identiﬁed u (the “coarse variable” for which we believe that a coarse
+deterministic equation exists in closed form), and constructed the lifting and restriction operators that connect
+macro/micro descriptions. We seek a general approach to decide qualitative questions, such as (a) what is N , and
+(b) whether f can be written as −∇ · j, without having f in closed form. One important motivation for this lies in
+that “production run” simulations of the problem via equation-free computation (for example through the gaptooth
+scheme) do not require knowledge of f , but are aﬀected by the knowledge of N (through “teeth” boundary conditions).
+What we do have is a microscopic simulator embodied in a computer code that can be initialized at will; the physical
+details of the microscopic code are both extremely important (that is where the “underlying physics” lies) and - for
+our purposes - irrelevant: we will use the microscopic simulation code as an “input-output” (I/O) black box. By
+
+(3)
+
+(4)
+
+u
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+4
+
+probing the coarse I/O response of the black box, the question that we would like to address is whether we can decide
+on (a) and/or (b).
+
+It may appear initially that we are trying to answer a circular question: in order to probe the coarse input-output
+response of a microscopic simulator we need to run it, and in order to run it we need well-posed boundary conditions,
+which - among other factors - depend on (a) and (b). To cut the knot, we use (for the decision stage exploratory
+runs) the Born-von Karman periodic boundary conditions. We are going to assume that the microscopic simulations
+can be carried out in PBC, which is an option prevalent among microscopic simulators. This enables us to probe the
+system’s response to only the initial u(x, 0) proﬁle input.
+
+The so-called baby-bathwater identiﬁcation scheme works as follows:
+
+(i) Take an integer n, starting from 1.
+
+(ii) Pick a random point x0 in the spatial periodic box.
+(iii) Generate n random numbers, designated as u(x0, 0), ux(x0, 0), uxx(x0, 0), .., u(n−1)
+
+x
+
+(x0, 0) of u(x, 0).
+
+(iv) Generate a conditionally random proﬁle u(x, 0) compatible with the PBC and consistent with the above u(x0, 0),
+(x0, 0) requirements. This can almost always be accomplished, for example, by
+
+ux(x0, 0), uxx(x0, 0), .., u(n−1)
+x
+summing 2L sine and cosine harmonics of the PBC:
+
+u(x, 0) = b0 +
+
+al sin(lx) + bl cos(lx), x ∈ [0, 2π),
+
+L
+
+Xi=1
+
+with L > ⌈n/2⌉. Because we have 2L + 1 coeﬃcients, even though there are n constraints to satisfy, we still
+have some random degrees of freedom left in (5). In practice, this initialization can be accomplished by applying
+conjugate gradient minimization of the n-dimensional residual norm starting from a random {al, bl} vector.
+
+(v) Lift u(x, 0) of (5), run it in the microscopic simulator for time ∆, restrict it back to ˜u(x, ∆), and estimate:
+
+˜ut(x0, 0) ≡
+
+˜u(x0, ∆) − ˜u(x0, 0)
+∆
+
+.
+
+Note that here ˜u(x0, 0) instead of u(x0, 0) is used in the ﬁnite diﬀerence. This will cancel some internal noise
+from the lifting and restriction operations.
+
+(vi) Repeat step (v) I times to obtain an ensemble averaged ˜ut(x0, 0) to reduce the microscopic noise.
+
+(vii) Repeat step (iv) J times, collect the ˜ut(x0, 0) estimates:
+
+(˜u1
+
+t (x0, 0), ˜u2
+
+t (x0, 0), ..., ˜uJ
+
+t (x0, 0)),
+
+compute the sample variance σ2(˜ut(x0, 0)).
+
+(viii) Repeat step (ii) K times, compute the averaged sample variance hσ2(˜ut)in.
+
+(5)
+
+(6)
+
+(7)
+
+(ix) Go back to step (i), n → n + 1. N is identiﬁed when from n = N to n = N + 1, the averaged sample variance
+
+hσ2(˜ut)iN +1 decreases drastically to practically 0.
+
+Fig. 3 shows such families of constructed initial proﬁles with progressively more controlled initial derivatives. The
+, if they
+, ... are varied randomly. The “critical integer order”
+(x0, 0) jumps
+) with the
+
+basic idea is very simple: even though f could have complicated functional dependencies on u, ux, uxx, .., u(N )
+are all ﬁxed, ut should have no dispersion even as u(N +1)
+N is identiﬁed when the variance at N controlled derivatives u(x0, 0), ux(x0, 0), uxx(x0, 0), .., u(N −1)
+to a ﬁnite value; we then have already thrown out the “baby” (the highest relevant spatial derivative u(N )
+“bathwater” (the higher, non-relevant ones).
+
+, u(N +2)
+x
+
+x
+
+x
+
+x
+
+x
+
+5
+
+10
+
+9
+
+8
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+9
+
+8
+
+7
+
+6
+
+5
+
+1
+0
+
+10
+
+4
+0
+
+250
+
+200
+
+150
+
+)
+)
+
+x
+(
+u
+(
+
+0
+
+t
+
+2
+σ
+
+100
+
+50
+
+0
+1
+
+Number of Controlled Derivatives = 1
+
+Number of Controlled Derivatives = 2
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+1
+
+(a) 0
+
+(b)
+
+Number of Controlled Derivatives = 3
+
+Number of Controlled Derivatives = 4
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+1
+
+(c) 0
+
+(d)
+
+FIG. 3. Families of random initial proﬁles u(x, 0) (J = 4). (a) n = 1, (b) n = 2, (c) n = 3, (d) n = 4 controlled initial
+derivatives. To avoid confusion notice that control of n = 1 derivatives means that only u(x0, 0) is identical between the runs,
+n = 2 means that u(x0, 0) and ux(x0, 0) are identical and so on.
+
+It is important to recognize that the time derivative estimation (6) does not occur instantaneously. A short “healing”
+period should elapse, during which the higher cumulants of the lifted phase space (micro-state) distribution become
+functionals of the lower order, slow governing cumulants. This separation of time scales, which fundamentally underlies
+the existence of a deterministic coarse equation closing with the lower cumulants, is discussed in more detail in [1].
+
+FIG. 4. (a) Identiﬁcation the order of the highest (spatial) derivative in the Burgers ﬁnite-diﬀerence PDE time-stepper (12).
+
+(b) Identiﬁcation of the order of the highest (spatial) derivative for the KdV ﬁnite-diﬀerence PDE time-stepper (13).
+
+2
+
+3
+Number of Controlled Derivatives
+
+4
+
+5
+
+(a)
+
+2
+
+3
+Number of Controlled Derivatives
+
+4
+
+5
+
+(b)
+
+As a sanity check, this algorithm is also applied to a traditional continuum PDE time-stepper “black box” ﬁrst.
+Fig. 4(a) and 4(b) show the results of applying our decision scheme to forward Euler ﬁnite-diﬀerence PDE solvers of
+the Burgers and KdV equations, respectively. A spatial mesh of ∆x = 2π/100 is adopted, and we deﬁne
+
+umk
+x ≡
+
+u(m+1)∆x,kh − u(m−1)∆x,kh
+2∆x
+
+,
+
+(8)
+
+9
+
+8
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+8
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+6
+
+350
+
+300
+
+250
+
+0
+
+200
+
+t
+
+)
+)
+
+x
+(
+u
+(
+
+2
+σ
+
+150
+
+100
+
+50
+
+0
+1
+
+umk
+xx ≡
+
+umk
+xxx ≡
+
+umk
+avg ≡
+
+u(m+1)∆x,kh + u(m−1)∆x,kh − 2um∆x,kh
+∆x2
+− 2umk
+
+um+1,k
+x
+
+x
+
+,
+
+,
+
++ um−1,k
+x
+∆x2
+
+u(m+1)∆x,kh + um∆x,kh + u(m−1)∆x,kh
+3
+
+.
+
+um∆x,(k+1)h − um∆x,kh
+h
+
+= νumk
+
+xx − um∆x,khumk
+x ,
+
+um∆x,(k+1)h − um∆x,kh
+h
+
+= 6umk
+
+avgumk
+
+x − umk
+xxx,
+
+We use,
+
+to integrate the Burgers equation forward, and
+
+to integrate the KdV equation forward. u(x0, kh) is obtained by cubic spline over {um∆x,kh}, and ut(x0, 0) is evaluated
+by ﬁnite diﬀerences, same as in (6). As can be seen in Fig. 4(a) and 4(b), N is identiﬁed to be 2 using the Burgers
+PDE time-stepper and 3 using the KdV PDE time-stepper: the variances drop by more than four decades in both
+cases when going from N to N + 1 controlled derivatives. To see where the remaining “noise” comes from, note that,
+
+u(x0, ∆) − u(x0, 0) = ut(x0, 0)∆ + utt(x0, 0)
+
++ ...,
+
+∆2
+2
+
+and clearly utt(x, 0) has higher-than-u(N )
+spatial derivative dependencies, which are, however, scaled by ∆ compared
+to the leading term. Thus the sample variances should drop by ∼ ∆2 for n > N , which explains the observed
+magnitude of the four-decade decrease.
+
+x
+
+(9)
+
+(10)
+
+(11)
+
+(12)
+
+(13)
+
+(14)
+
+300
+
+250
+
+200
+
+)
+)
+
+x
+(
+u
+(
+
+0
+
+t
+
+2
+σ
+
+150
+
+100
+
+50
+
+0
+1
+
+FIG. 5. Identiﬁcation of the Burgers microscopic simulator of Section II with the lifting and restriction operators of Appendix
+
+A. Here, ν = 1, Z = 10000, m = 100, I = 10, ∆ = 0.01.
+
+2
+
+3
+Number of Controlled Derivatives
+
+4
+
+5
+
+We then apply the identiﬁcation scheme to the microscopic simulator of Section II, with the lifting and restriction
+operators constructed in Appendix A. The results are shown in Fig. 5. Under favorable conditions such as ν = 1
+and m = 100, it takes about 10 minutes of computer time on a single 1GHz-CPU personal computer to obtain a
+reasonably good microscopic noise reduction so the variance drops by about 2 decades going from n = 2 to n = 3.
+Under unfavorable conditions such as ν = 0.1 and m = 1, it can take up to 1, 000 minutes of computer time to obtain
+the same 2 decades drop. Compared with the deterministic ﬁnite-diﬀerence PDE time-steppers, identiﬁcation of a
+microscopic simulator is undoubtedly much more computationally intensive, even though fundamentally there is no
+diﬀerence between the two “black boxes”. The problem of microscopic noise reduction is a persistent issue among all
+“equation-free” methods including bifurcation [1], projective / gaptooth integration [7,8], and identiﬁcation, and calls
+for a uniﬁed treatment. This “one time” decision, performed at the beginning of studying a problem, will critically
+aﬀect subsequent production runs of the microscopic simulator.
+
+Here, one must pay special attention to the rank (M ) of the restriction operator (see Appendix A). As can be
+seen in Figs. 1 and 2, our proposed restriction operator satisﬁes the constraint of reversibility and also accurately
+represents the proﬁle’s long-time evolution. However, these merits do not guarantee automatically good short-time
+˜ut estimates by ﬁnite-diﬀerence. Special attention must be paid to the restriction operator ˆM: for example, if the
+highest harmonic in (5) for u(x, 0) is L, then with M = L, we can get good reversibility test of u(x, 0). Unless we use
+
+7
+
+M = 2L for restricting the Burgers microscopic dynamics, however, we would not get a good estimate of ut, because
+the nonlinear interaction uux in (1) creates higher harmonics in ut up to 2L. If M = L is still used, it is equivalent
+to forcing a least-square projection of a 4L + 1 vector to a 2L + 1 subspace, which may work well enough in the long
+term, but is too inaccurate for short-term ﬁnite diﬀerence estimates. Unless this is taken care of, the ut estimate
+using our ˆM is found to not even be superior to a crude bin-count density estimator with bin-width (2π/n)/8 about
+x0, as 2π/n is the shortest wavelength in u(x, 0).
+
+Lastly, we note that (4) represents a wide category of coarse dynamics; those with higher time-derivatives and
+mixed derivatives can be converted to a multi-variate version of (4) and the baby-bathwater identiﬁcation scheme
+will still, in principle, work. A notable exception is the incompressible ﬂuid dynamics case, where the sound-speed
+is inﬁnite and the pressure plays the role of a global Lagrange multiplier. The incompressible ﬂuid model is but
+a mathematical idealization of a certain physical limit.
+It is nonetheless useful and important enough, that the
+fact that it is not directly amenable to the baby-bathwater identiﬁcation is worth mentioning. In general, the baby-
+bathwater identiﬁcation presented here will not work for dynamics with instantaneous remote-action over macroscopic
+lengthscales, such as,
+
+for which it is easy to show that ut(x, t) correlates with inﬁnite number of local spatial derivatives {u(n)
+
+x (x, t)}.
+
+ut(x, t) =
+
+dξu(ξ, t)K(x − ξ),
+
+Z
+
+IV. IDENTIFYING CONSERVATION LAWS
+
+In section III above we address the concern of how to identify the highest spatial derivative of an unavailable coarse
+equation of the type (4). It is natural to try to decide other qualitative questions: for example, whether the coarse
+dynamics conserve a speciﬁc quantity,
+
+G ≡
+
+Z
+
+g(u, ux, uxx, .., u(N ′′
+
+)
+
+x
+
+)dx,
+
+or not. In the simplest case, we ask whether g ≡ u is conserved. We note that is equivalent to asking whether the
+RHS of (4) can be written as,
+
+f (u, ux, uxx, .., u(N )
+
+x
+
+) = −∂xj(u, ux, uxx, .., u(N ′
+
+)
+
+),
+
+x
+
+or not. Alternatively, we ask whether there exists j(u, ux, uxx, .., u(N ′
+
+x
+
+)
+
+) such that,
+
+x1
+
+d
+dt Z
+
+x0
+
+u(x, t)dx = j(x0, t) − j(x1, t),
+
+(15)
+
+(16)
+
+(17)
+
+(18)
+
+for arbitrary x0,x1. Whereas in section III we try to identify features of f (u, ux, uxx, .., u(N )
+) through (4), here we can
+try to identify consequences of j(u, ux, uxx, .., u(N ′
+) and its features through (18). The process of the baby-bathwater
+identiﬁcation can be carried over; the only diﬀerence is that it is going to be a boundary scheme. In one dimension,
+the boundary sheme reduces to a two-point scheme as follows:
+
+x
+
+x
+
+)
+
+(i) Take an integer n, starting from 1.
+
+(ii) Pick two random points x0 and x1 in the PBC.
+(iii) Generate 2n random numbers, which are to be designated u(x0, 0), ux(x0, 0), uxx(x0, 0), .., u(n−1)
+(x1, 0), of u(x, 0).
+
+u(x1, 0), ux(x1, 0), uxx(x1, 0), .., u(n−1)
+
+x
+
+x
+
+(x0, 0) and
+
+(iv) Generate a conditionally random proﬁle u(x, 0) compatible with the PBC that is consistent with the above
+u(x0, 0), ux(x0, 0), uxx(x0, 0), .., u(n−1)
+(x1, 0) requirements.
+This can always be done by (5) with L > n. As we discussed above, we have 2L + 1 coeﬃcients, even though
+there are 2n constraints to satisfy, we still have some random degrees of freedom left in u(x, 0).
+
+(x0, 0) and u(x1, 0), ux(x1, 0), uxx(x1, 0), .., u(n−1)
+
+x
+
+x
+
+8
+
+(v) Lift u(x, 0) of (5), run it in the microscopic simulator for time ∆, restrict it back to ˜u(x, ∆), estimate:
+
+˜Ut(0) ≡ R
+
+x1
+x0
+
+˜u(x′, ∆)dx′ −
+∆
+
+R
+
+x1
+x0
+
+˜u(x′, 0)dx′
+
+.
+
+(vi) Repeat step (v) I times to obtain an ensemble averaged ˜Ut(0) to reduce the microscopic noise.
+
+(vii) Repeat step (iv) J times, collect the ˜Ut(0) estimates:
+
+( ˜U 1
+
+t (0), ˜U 2
+
+t (0), ..., ˜U J
+
+t (0)),
+
+compute the sample variance σ2( ˜Ut(0)).
+
+(viii) Repeat step (ii) K times, compute the averaged sample variance hσ2( ˜Ut)in.
+
+(ix) Go back to step (i), n → n+1. A conservation law is positively identiﬁed when going from n = N ′ to n = N ′ +1,
+
+the averaged sample variance hσ2( ˜Ut)iN ′+1 decreases drastically to practically 0.
+
+(19)
+
+(20)
+
+Number of Controlled Derivatives = 1
+
+Number of Controlled Derivatives = 2
+
+10
+
+5
+
+0
+
+8
+
+6
+
+4
+
+2
+
+0
+
+−5
+0
+
+−2
+
+−4
+
+−6
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+(a)
+
+−8
+0
+
+(b)
+
+Number of Controlled Derivatives = 3
+
+Number of Controlled Derivatives = 4
+
+FIG. 6. Families of random initial proﬁles u(x, 0) (J = 4) for conservation law identiﬁcation. (a) n = 1, (b) n = 2, (c) n = 3,
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+(c)
+
+−8
+0
+
+(d)
+
+(d) n = 4 controlled initial derivatives.
+
+Fig. 6 plots families of initial proﬁles thus constructed with progressively more controlled initial derivatives. Fig.
+7(a) and 7(b) show the results of applying the identiﬁcation scheme to the Burgers ﬁnite-diﬀerence PDE time-stepper
+(12) and the KdV ﬁnite-diﬀerence PDE time-stepper (13), respectively. N ′ is identiﬁed to be 1 for (12) and 2 for
+(13).
+
+6
+
+4
+
+2
+
+0
+
+−2
+
+−4
+
+−6
+
+8
+
+6
+
+4
+
+2
+
+0
+
+−2
+
+−4
+
+−6
+
+9
+
+t
+
+50
+
+)
+x
+d
+u
+ 
+∫
+
+(
+
+2
+σ
+
+90
+
+80
+
+70
+
+60
+
+40
+
+30
+
+20
+
+10
+
+0
+1
+
+FIG. 7. (a) Conservation of the Burgers ﬁnite-diﬀerence PDE time-stepper (12). (b) Conservation of the KdV ﬁnite-diﬀerence
+
+2
+
+3
+Number of Controlled Derivatives
+
+4
+
+5
+
+(a)
+
+2
+
+3
+Number of Controlled Derivatives
+
+4
+
+5
+
+(b)
+
+PDE time-stepper (13).
+
+Two comments are in order: ﬁrst, we probe the consequences of conservation (i.e. that boundary ﬂuxes are the only
+cause of change for the conserved quantity in a domain); second, we obtain (as a side-product) the highest spatial
+derivative of the conserved quantity u in the constitutive equation for the ﬂux. It is important to note that if the
+procedure progressively returns negative answers (e.g., if the sample variance is non-zero for a given number n of
+controlled derivatives), this does not imply that a conservation law does not exist. It only implies that a conservation
+law of the class encompassed by our equation (4) with spatial derivatives up to the tested order n does not exist. In
+that sense, our procedure provides suﬃcient conﬁrmation, but its success is not necessary for a conservation law in a
+diﬀerent class to prevail. Nevertheless, the class we consider is wide enough to encompass many known examples and
+problems of interest to applications.
+
+Note that N ′ is one order less than N identiﬁed in section III in both cases. This is true in 1-D because of Eq.
+(17). So in 1-D, the baby-bathwater schemes give a deﬁnite answer to whether u is conserved or not in a ﬁnite N − 1
+steps, as long as N is identiﬁed ﬁrst.
+
+V. DISCUSSION
+
+)
+
+x
+
+In section IV we proposed methods to check whether a coarse quantity (such as the mass corresponding to the
+coarse density g(u, ux, uxx, .., u(N ′′
+)) is conserved, without knowledge of the coarse evolution equation. The obvious
+question that arises is how do we know which g to check? The path that we suggest here, in the equation-free setting,
+is to examine the consequences of conservation laws. For example, consider the conservation of (linear) momentum.
+An equivalent statement, through Noether’s theorem [14] is the existence of translational invariance. If we numerically
+establish the latter, then we can claim the former. Let us then consider initial conditions to the available integrator
+which are shifts of an original proﬁle e.g., u(x − x0), u(x − (x0 + ǫ)), u(x − x0 + 2ǫ), etc. Then if we time evolve
+the problem, using our microscopic time-stepper, and the equation is translationally invariant, upon reaching the
+integration reporting horizon, we can back-shift the proﬁle (by the original shift amount). If all back-shifts provide an
+identical proﬁle, we can conclude translational invariance and hence linear momentum conservation. An additional
+note of caution is that the examination of such consequences is relevant when Noether’s theorem applies, hence
+when there is an underlying Lagrangian/Hamiltonian structure in the problem (we discuss separately the issue of
+Hamiltonian nature below). Notice, however the modulo the proviso of “Hamiltonianity”, this methodology can be
+used to establish additional dynamical invariants, e.g. the invariance with respect to phase of the evolution of a ﬁeld
+can be related to norm invariance etc.
+
+Establishing an underlying Hamiltonian structure in a sense proceeds in a similar fashion through its correlation
+with invariance with respect to time reversal. The crudest way to examine this is by simply running the integrator
+with a negative time-step (if that option is available). A more reﬁned way to check the same symmetry is by examining
+computations of the spectrum (e.g., eigenvalues) of linearization of the coarse PDE. In particular, a straightforward
+consequence of the Hamiltonian nature is that all linearization eigenvalues should come in quartets, namely if λ is
+an eigenvalue, then so are −λ, λ⋆, −λ⋆, where ⋆ denotes complex conjugation. It is fortunate that time-stepper based
+numerical analysis techniques for the numerical approximation of the leading spectrum of such a linearization are
+well-developed for the case of large scale continuum simulations (see for example [18,19,21–23,20]). If an eigenvalue
+λ of the linearization is identiﬁed, matrix-free eigen-computations with shift can be used to explore the existence of
+the −λ eigenvalue (in general, real eigenvalues will come in pairs and complex conjugate eigenvalues in quartets).
+
+1200
+
+1000
+
+800
+
+t
+
+)
+x
+d
+u
+∫
+
+ 
+
+(
+
+2
+σ
+
+600
+
+400
+
+200
+
+0
+1
+
+10
+
+While coarse time-reversibility can be answered by exploring the spectrum of the linearization, it raises the in-
+teresting question of how to integrate backward in time with the microscopic code. Consider a molecular dynamics
+conﬁguration with a certain set of velocities at time zero, and the same molecular conﬁguration with “ﬂipped” ve-
+locities. A well known (and testable) consequence of microscopic reversibility and the “molecular chaos” ansatz is
+that, whether we integrate the molecular dynamics equations forward or backward in time starting from a randomly
+picked phase point, we will get “the same” forward in time evolution of the coarse macrosocpic observables. It is
+interesting, however, that the coarse projective integration techniques in an equation-free context can be used to
+attempt integration of the coarse variables backward in time (under appropriate conditions about the spectrum of the
+unavailable equation) as follows: Consider the lifting of a particular coarse initial condition to consistent molecular
+realizations; ﬂipping the molecular velocities for these realizations will not aﬀect the coarse procedure. We then evolve
+microscopically the molecular conﬁgurations (whether with the original or with ﬂipped velocities) forward in time
+long enough for the higher moments to heal, say for a time τ > τmol. We now estimate the time derivative du/dt of
+the healed coarse variables from the restriction of the “tail end” of the molecular trajectories, and then take a large,
+macroscopic Euler step backward in time for the coarse variables. We lift again, run molecular dynamics forward or
+backward microscopically, estimate the coarse forward time derivative, and take another coarse backward step. This
+procedure can of course be done in a much more sophisticated way as far as the coarse backward time step is concerned
+- algorithms like Runge-Kutta or Adams method can be combined with the MD computations to integrate density
+expectations backward in time for the coarse equations on the “slow manifold”. This “see-saw” forward-backward
+coarse integration procedure can also be used on stiﬀ systems of ODEs and even dissipative PDEs under the appro-
+priate conditions to evolve trajectories backwards on a slow manifold. The numerical analysis of these algorithms
+in the continuum case is an interesting subject in itself, and we are currently pursuing it [24]. It is interesting that
+the technique, in the molecular dynamics case, can be used to coarsely integrate backward in time on a free energy
+surface, and thus help molecular simulations escape from free energy minima; we have already conﬁrmed this in the
+case of Alanine dipeptide folding in water at room temperature through molecular dynamics simulations [25].
+
+Finally, a more complicated question than checking the existence of one (a speciﬁc, and hence related to a speciﬁc
+invariance, in accordance with the above discussion) integral of the motion is the one of integrability. The latter
+necessitates inﬁnite integrals of the motion, normally established by means of identifying Lax pairs and using the
+inverse scattering transformation machinery [15]. However, one can also use in this case consequences of integrability
+to establish it. For instance, in recent work [16] it was qualitatively argued (and veriﬁed through numerical experiments
+in diﬀerent settings) that a feature particular to integrable Hamiltonian systems is the presence of double continuous
+spectrum eigenvalues, when linearizing around a (coarse PDE) solitary wave under periodic boundary conditions.
+These as well as other criteria (such as the existence of point spectrum eigenvalues in the spectral gap [17]) can also
+be (conversely) used to potentially rule out the existence of integrable structure. In short, the spectral properties of the
+coarse PDE linearization can be used to establish or disprove not only the Hamiltonian (see above), but also potentially
+the integrable nature of the ﬂow. While these are just initial thoughts towards attempting to decide vital questions
+about the nature of the unavailable closed equation, it is important to note that, what is computationally involved is a
+time-stepper based identiﬁcation of facts about the spectrum of the linearization of an operator. This “computational
+technology” is quite mainstream in the case of large scale continuum simulators, and can be straightfowardly adapted
+to the case of coarse timesteppers in conjunction with the lifting-restriction steps. Variance reduction will clearly be
+the most signiﬁcant step in the wide applicability of these and similar-spirited approaches.
+
+Acknowledgements The authors would like to thank Frank Alexander for stimulating discussions. This work
+was partially supported by the National Science Foundation (IGK,PGK) AFOSR (CWG,IGK) and the Clay Institute
+(PGK).
+
+APPENDIX A: COARSE DENSITY LIFTING / RESTRICTION OPERATORS
+
+For a coarse ﬁeld u, the lifting operator ˆµ generates a microstate U: U = ˆµu. Similarly, for a microstate U, the
+restriction operator ˆM returns a coarse ﬁeld estimate ˜u: ˜u = ˆMU. Both ˆµ and ˆM can be one-to-one or one-to-many
+operators, but we demand that ˆMˆµ → ˆI asymptotically when the wavelength of u is large enough compared to the
+microscopic length scale [5]. For 1-D coarse density ﬁeld u(x) under x ∈ [0, 2π) PBC, we use the following ˆµ, ˆM
+operators for the sake of deﬁniteness in numerical experiments, even though their construction is not unique.
+
+The lifting operator ˆµ, u(x) → {xi}:
+(i) Estimate uapprox
+
+1.1uapprox
+max
+
+.
+
+on [0, 2π).
+
+max ≈ umax ≡ maxx∈[0,2π) u(x). Pick usafe that is “safely” greater than umax, for example usafe =
+
+(ii) Deﬁne N ′ ≡ ⌈2πusafeZ⌉. Create N ′ particles {xi} with each xi independently drawn from uniform distribution
+
+11
+
+Q ≡ Z
+
+u(x)dx
+
+2π
+
+Z
+
+0
+
+a(x) ≡
+
+δ(x − x−
+i )
+
+1
+Z
+
+N
+
+Xi=1
+
+c(x) ≡
+
+a(x′)dx′.
+
+x
+
+Z
+0
+
+r(x) ≡ c(x) −
+
+N x
+2πZ
+
+(iii) Go to each particle i, randomly decimate it with probability 1− 2u(xi)
+
+. Count the total number of surviving
+
+uapprox
+
+max +usafe
+
+particles N ′′.
+
+(iv) Compute quadrature,
+
+randomly round to N = ⌈Q⌉ or N = ⌈Q⌉ + 1 such that hN i = Q. Randomly pick N ′′ − N particles out of the
+N ′′ survivors and decimate them. We now have a set of particles {xi}, totally numbered either ⌈Q⌉ or ⌈Q⌉ + 1.
+
+The restriction operator ˆM, {xi} → ˜u(x):
+
+(i) Deﬁne microscopic density function,
+
+and corresponding cumulant function,
+
+Clearly, at the the ﬁrst, second, third particle positions xn1 , xn2 , xn3 , c(xn1 ) = 1/Z, c(xn2 ) = 2/Z, c(xn3 ) = 3/Z,
+etc. And we have c(0) = 0, c(2π) = N/Z.
+
+(ii) Deﬁne a residual function r(x),
+
+which is the diﬀerence between c(x) and the cumulant of a homogenized particle gas background. The idea is
+that r(0) = r(2π) = 0, so it is a periodic function and can be approximated by,
+
+r(x) ≈ ˜r(x) =
+
+an(cos(nx) − 1) + bn sin(nx).
+
+In fact, a sound strategy is to least-square ﬁt ˜r(x) (its {an},{bn} coeﬃcients) to r(x) at x = xni ’s, where {xni }
+is the sorted list of {xi}. r(x) can be easily evaluated at xni ’s, noting the last sentence of step 1.
+
+(iii) The coarse density estimate can be obtained by taking the derivative of ˜c(x) ≡ N x/2πZ + ˜r(x),
+
+˜u(x) =
+
++
+
+−nan sin(nx) + nbn cos(nx).
+
+(A6)
+
+M
+
+Xi=1
+
+N
+2πZ
+
+M
+
+Xi=1
+
+It is worth noting that although the constructed ˆM depends on M , it satisﬁes the particle number conservation
+exactly because the ﬁnite harmonics all integrate to zero and only the background contribution remains.
+In fact,
+h ˆMˆµi also satisﬁes exact particle number conservation to the original u(x) under probabilistic average. Further, one
+can show h ˆMˆµi = ˆI exactly for u(x) in the ﬁrst M harmonics subspace.
+
+(A1)
+
+(A2)
+
+(A3)
+
+(A4)
+
+(A5)
+
+[1] I.G. Kevrekidis, C.W. Gear, J.M. Hyman, P.G. Kevrekidis, O. Runborg, C. Theodoropoulos, “Equation-Free Multiscale
+Computation: enabling microscopic simulators to perform system-level tasks,” submitted to Communications in the Math-
+ematical Sciences;
+
+12
+
+[2] A.G. Makeev, D. Maroudas, I.G. Kevrekidis, “Coarse stability and bifurcation analysis using stochastic simulators: Kinetic
+Monte Carlo examples,” J. Chem. Phys. 116 (2002) 10083-91; A.G. Makeev, D. Maroudas, A.Z. Panagiotopoulos, I.G.
+Kevrekidis, “Coarse bifurcation analysis of kinetic Monte Carlo simulations: A lattice-gas model with lateral interactions,”
+J. Chem. Phys. 117 (2002) 8229-40.
+
+[3] C.W. Gear, I.G. Kevrekidis, “Projective Methods for Stiﬀ Diﬀerential Equations: problems with gaps in their eigen-
+in press; can also be obtained as NECI-TR 2001–29 at
+
+value spectrum,” SIAM Journal on Scientiﬁc Computing,
+http://www.neci.nj.nec.com/homepages/cwg
+
+[4] G.M. Shroﬀ, H.B. Keller, “Stabilization of Unstable Procedures - the Recursive Projection Method,” SIAM Journal on
+
+Numerical Analysis 30 (1993) 1099-1120.
+
+[5] C.W. Gear, I.G. Kevrekidis, C. Theodoropoulos, “Coarse Integration/Bifurcation Analysis via Microscopic Simulators:
+
+micro-Galerkin methods,” Computers and Chemical Engineering 26 (2002) 941-963.
+
+[6] J. Li, K.J. Van Vliet, T. Zhu, S. Yip, S. Suresh, “Atomistic mechanisms governing elastic limit and incipient plasticity in
+crystals,” Nature 418 (2002) 307-310. The quasi-continuum method is a superset of IPFEM. See, for instance, R. Phillips,
+D. Rodney, V. Shenoy, E. Tadmor and M. Ortiz, Model. Simul. Mater. Sci. Eng. 7, 769 (1999).
+
+[7] I.G. Kevrekidis, “Coarse Bifurcation Studies of Alternative Microscopic/Hybrid Simulators,” Plenary Lecture, CAST
+Division, AIChE Annual Meeting, Los Angeles, 2000. Slides can be obtained at http://arnold.princeton.edu/∼yannis/
+[8] C.W. Gear, J. Li, I.G. Kevrekidis, “Patch Dynamics on the Burgers Equation,” to be submitted to Physical Review Letters.
+[9] W. E, B. Engquist, “The Heterogeneous Multi-Scale Methods,” Communications in Mathematical Sciences, in press (2003).
+[10] J.D. Cole, “On a quasilinear parabolic equation occurring in aerodynamics”, Quart. Appl. Math. 9 (1951) 225-236; E.
+
+Hopf, “The partial diﬀerential equation ut + uux = µuxx”, Comm. Pure Appl. Math. 3 (1950) 201-230.
+
+[11] J. Li, C.W. Gear, I.G. Kevrekidis, “Particle solution of the Burgers equation and microscopic correlations,” to be submitted
+
+(2003).
+
+(preprint).
+
+[12] A. Chertock, D. Levy, “Particle methods for dispersive equations,” Journal of Computational Physics 171 (2001) 708-30.
+[13] A. Chertock, D. Levy, “A particle method for the KdV equation,” Journal of Scientiﬁc Computing 17 (2002) 491-499.
+[14] V.I. Arnold, Mathematical Methods of Classical Mechanics, Springer-Verlag (New York, 1989).
+[15] M.J. Ablowitz, H. Segur, Solitons and the Inverse Scattering Transform, SIAM (Philadelphia, 1981).
+[16] P.G. Kevrekidis, N.R. Quintero, “Using the Continuous Spectrum to Feel Integrability, the Eﬀect of Boundary Conditions,”
+
+[17] P.G. Kevrekidis, “Integrability Revisited: A Necessary Condition”, Phys. Lett. A 285, 383 (2001).
+[18] K.N. Christodoulou, L.E. Scriven, “Finding leading modes of a viscous free surface ﬂow: an asymmetric generalized
+
+[19] I. Goldhirsch, S.A. Orszag, B.K. Maulik, “An eﬃcient method for computing leading eigenvalues and eigenvectors of large
+
+eigenproblem,” J. Sci. Comput. 3 (1988) 355-406.
+
+asymmetric matrices,” J. Sci. Comput. 2 (1987) 33-58.
+
+[20] Z. Bai, J.W. Demmel, J. Dongarra, A. Ruhe, H. van der Vorst eds. Templates for the Solution of Algebraic Eigenvalue
+
+Problems: A Practical Guide (SIAM publications, Philadelphia, 2000).
+
+[21] W.E. Arnoldi, “The principle of minimized iterations in the solution of the matrix eigenvalue problem,” Q. Appl. Math. 9
+
+[22] C. Lanczos, “An iteration method for the solution of the eigenvalue problem of linear diﬀerential and integral operators,”
+
+(1951) 17-29.
+
+J. Res. Natl. Bur. Stand. 45 (1950) 255-282.
+
+[23] L.S. Tuckerman, D. Barkley, “Bifurcation analysis for time-steppers,” in Numerical Methods for Bifurcation Problems and
+Large-Scale Dynamical Systems, IMA Volumes in Mathematics and its Applications 119, p.453-466, E. Doedel and L.S.
+Tuckerman eds., (Springer, New York, 2000).
+
+[24] C.W. Gear, I.G. Kevrekidis “Reverse Projective Integration” in preparation.
+[25] G. Hummer, I. G. Kevrekidis, “Coarse Molecular Dynamics of a Peptide Fragment: Free Energy, Kinetics and Long-Time
+
+Dynamics Computations,” submitted to J.Chem.Phys (2002).
+
+13
+
+

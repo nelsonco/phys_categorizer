@@ -1,0 +1,1038 @@
+Optimal Allocation of Replicas to Processors in Parallel
+Tempering Simulations
+
+David J. Earl and Michael W. Deem
+Department of Bioengineering and Department of Physics & Astronomy
+Rice University
+6100 Main Street—MS 142
+Houston, TX 77005–1892
+
+January 20, 2014
+
+Corresponding author: M. W. Deem, mwdeem@rice.edu, fax: 713–348–5811.
+
+4
+0
+0
+2
+ 
+b
+e
+F
+ 
+2
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+2
+6
+0
+2
+0
+4
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+1
+
+Abstract
+
+The optimal allocation of replicas to a homogeneous or heterogenous set of proces-
+sors is derived for parallel tempering simulations on multi-processor machines. In the
+general case, it is possible without substantially increasing wall clock time to achieve
+nearly perfect utilization of CPU time. Random ﬂuctuations in the execution times of
+each of the replicas do not signiﬁcantly degrade the performance of the scheduler.
+
+1 Introduction
+
+The parallel tempering, or replica-exchange, Monte Carlo method is an eﬀective molec-
+ular simulation technique for the study of complex systems at low temperatures.1–3 Parallel
+tempering achieves good sampling by allowing systems to escape from low free energy minima
+by exchanging conﬁgurations with systems at higher temperatures, which are free to sample
+representative volumes of phase space. The use of parallel tempering is now widespread in
+the scientiﬁc community.
+
+The idea behind the parallel tempering technique is to sample n replica systems, each
+in the canonical ensemble, and each at a diﬀerent temperature, Ti. Generally T1 < T2 <
+... < Tn, where T1 is the low temperature system, of which we are interested in calculating
+the properties. Swaps, or exchanges, of the conﬁgurational variables between systems i and
+j are accepted with the probability
+
+p = min{1, exp [−(βi − βj)(Hj − Hi)]},
+
+(1)
+
+where β = 1/(kBT ) is the reciprocal temperature, and Hi is the Hamiltonian of the conﬁgura-
+tion in system i. Swaps are typically attempted between systems with adjacent temperatures,
+j = i + 1. Parallel tempering is an exact method in statistical mechanics, in that it satisﬁes
+the detailed balance or balance condition,4 depending on the implementation.
+
+Due to the need to satisfy the balance condition, the n diﬀerent systems must be syn-
+chronized whenever a swap is attempted. This synchronization is in Monte Carlo steps,
+rather than in real, wall clock time. In other words, all processors must ﬁnish one Monte
+Carlo step before any of the processors may start the next Monte Carlo step. In parallel
+tempering, a convenient deﬁnition of Monte Carlo step is the ordered set of all of the Monte
+Carlo moves that occur between each attempted swap move. These Monte Carlo moves are
+all of the individual moves that equilibrate each system in the parallel tempering ensemble,
+such as Metropolis moves, conﬁgurational bias moves, volume change moves, hybrid Monte
+Carlo moves, and so on. Rephrasing, the balance condition requires that at the beginning of
+each Monte Carlo step, each replica must have completed the same number of Monte Carlo
+steps and must be available to swap conﬁgurations with the other replicas. This constraint
+introduces a potentially large ineﬃciency in the simulation, as diﬀerent replicas are likely
+to require diﬀerent amounts of computational processing time in order to complete a Monte
+Carlo step. This ineﬃciency is not a problem on a single processor system, as a single proces-
+sor will simply step through all the replicas to complete the Monte Carlo steps of each. This
+ineﬃciency is a signiﬁcant problem on multi-processor machines, however, where individual
+CPUs can spend large quantities of time idling as they wait for other CPUs to complete the
+Monte Carlo steps of other replicas.
+
+2
+
+Traditionally, each processor on multi-processors machines has been assigned one replica
+in parallel tempering simulations.
+It is the experience of the authors that this type of
+assignment is generally highly ineﬃcient, with typical CPU idle times of 40–60%. When one
+takes into account that the lower-temperature systems should have more moves per Monte
+Carlo step due to the increased correlation times, the idle time rises to intolerable levels that
+can approach 95%. The issue of idle time has not been previously addressed, and it is clear
+that a scheme which could allocate replicas to processors in an optimal manner would be
+useful.
+
+In this paper we address the optimal allocation of replicas to CPUs in parallel tempering
+simulations. The manuscript is organized as follows. In Sec. 2 we present the theory for the
+allocation of replicas to a homogeneous set of processors. In Sec. 3 we present results where
+the theory is applied to several model examples. In Sec. 4 we discuss our results, compare
+them with the conventional parallel tempering scheme, and consider the eﬀects of including
+communication times and randomness in execution time into our model. We draw our
+conclusions in Sec. 5. An appendix presents the theory for a heterogeneous set of processors.
+
+2 Theory of Replica Allocation to Processors
+
+In a parallel tempering simulation, balance requires that each replica system be syn-
+chronized at the start of each Monte Carlo step. Considering replica i, in every Monte Carlo
+step we will attempt Nmove(Ti) random Monte Carlo conﬁgurational moves, and the average
+real wall clock time to complete one Monte Carlo move is given by α(Ti). The total wall
+clock time for replica i to complete its Monte Carlo step is
+
+τi = α(Ti)Nmove(Ti).
+
+(2)
+
+As we have already stated, the simple allocation of one replica to one processor for the entire
+simulation is ineﬃcient. This is because α, the time per conﬁgurational move, depends on
+the temperature of the system. The value of α can typically vary by a factor of 3 or more
+between the fastest and the slowest system resulting in long idle times for the CPUs that are
+assigned to the higher temperature systems. The value of α varies because the composition of
+the conﬁgurational moves and their acceptance ratio varies with temperature. Typically, but
+not always, the highest temperature moves take less wall clock time on average to complete.
+Additionally, it is often desirable to perform more conﬁgurational Monte Carlo moves per
+Monte Carlo step at lower temperatures because the correlation time is longer than it is at
+higher temperatures. This makes the ineﬃciency of allocating one replica to one processor
+dramatically worse. In Eqn. 2, Nmove is a function of Ti to allow for the larger number of
+conﬁgurational moves that may be performed at lower temperatures. In most simulations
+that are currently performed, Nmove is the same for all replicas because of the disastrous
+ineﬃciency implications of increasing Nmove for low temperature replicas, for which α is also
+often larger. Using an optimal allocation of replicas, the possibility of varying Nmove for
+diﬀerent replicas exists, as discussed in Sec. 3 below.
+
+The optimal allocation of replicas to processors is a non-trivial problem even in remark-
+ably simple situations. For example, consider the case where n = 3, τ1 = 5, τ2 = 4, and
+
+3
+
+τ3 = 3. Using three processors is clearly ineﬃcient, as two processors would be idle while
+they are waiting for replica 3 to complete. The optimal allocation is to split one of the
+replicas on two processors, as shown in Fig. 1. Only two processors are required, and they
+will both run at 100% eﬃciency if the replica is split correctly. Note that the splitting must
+be causally ordered in time. In the example of Fig. 1, replica 2 is started on processor 2 and
+completed on processor 1 two time units after being stopped on processor 2.
+
+A general replica scheduler can be derived starting with the assumptions that one replica
+cannot be simultaneously run on more than one processor and that one processor can only
+run one replica at a time, this second assumption being the simplest and, as it turns out,
+the most eﬃcient use of the processors. The logic of the derivation comes from scheduling
+theory,5, 6 which is frequently used to solve problems of this type in operations research and
+industrial engineering. Given n replicas, where the time to complete replica i is τi, the total
+processing time required to complete all of the replicas is
+
+(3)
+
+(4)
+
+(5)
+
+(6)
+
+W =
+
+τi.
+
+n
+
+Xi=1
+
+τwall = max(W/X, τlong).
+
+X (N ) = ⌊W/τlong⌋,
+
+X (N +1) = ⌈W/τlong⌉,
+
+We let τlong be the CPU time of the longest replica.
+If we have X processors, then the
+shortest possible total wall clock time required to complete execution of all of the replicas is
+given by
+
+The optimum integer number of processors to achieve 100% theoretical eﬃciency will be
+
+where ⌊y⌋ is the largest integer equal to or less than the real number y. The number of
+processors required to achieve the minimum wall clock time will be
+
+where ⌈y⌉ is the smallest integer equal to or greater than the real number y. The optimal
+allocation can either be done for minimum, zero percent, idle time, X (N ), or minimum wall
+clock time X (N +1). Having made the choice of one of these two numbers of processors, the
+optimal scheduler then proceeds by assigning the replicas sequentially to the ﬁrst processor
+until that processor has ﬁlled its allocation of τwall wall clock time. Typically this will result
+in the last replica allocated to the ﬁrst processor being split, with the “remaining” time
+carried over to the second processor. The remaining replicas are sequentially allocated to
+the second processor, with again a possible split in the last replica allocated. This procedure
+is repeated until all the replicas have been allocated. In the minimum wall clock, X (N +1),
+case, the ﬁnal processor will not be completely ﬁlled unless W/X (N +1) = τlong, and there will
+be a small amount of idle time. In the minimum idle time case, there will be no idle time.
+An example of how the scheduler assigns replicas to processors is shown in Figure 2 for a
+20 replica case where τlong/τshort = 3, where τshort is the wall clock time of the replica that
+completes its Monte Carlo step most quickly.
+
+It is immediately apparent that the scheduler7 is extremely simple and very eﬀective.
+
+4
+
+The scheduler may easily be applied to existing parallel simulation codes. To apply the
+theory to a practical simulation, one must ﬁrst perform a short preliminary simulation for
+each replica to obtain an estimate of α(Ti), and hence τi from Eqn. 2. We note that the
+scheduler could be run after each Monte Carlo step, since the calculation time associated
+with the scheduler is minimal. Such use of the scheduler would automatically lead to an
+adaptive or cumulative estimate of α. Note that at all times, the balance properties of the
+underlying Monte Carlo scheme are unaﬀected by the replica allocations of the scheduler. It
+is also worthy of comment that the scheduler could be run with parallel tempering in multiple
+dimensions, for example diﬀering chemical potentials 8–10 or pair potentials11 for each replica,
+in addition to variations in temperature. Increasing the number of order parameters that we
+use in the parallel tempering not only may improve sampling but also may provide a better
+estimate of α, since the estimate of α as a local function of phase space increases as the
+number of order parameters increases.
+
+In this section we have derived the scheduler for a homogeneous cluster of processors.
+
+In the Appendix we derive a similar scheme for a heterogeneous cluster.
+
+3 Results
+
+In this section we apply the optimal replica scheduler to three diﬀerent parallel tem-
+pering simulation examples. Details of the three diﬀerent examples are given below, and
+the performance of the scheduler can be seen in Table 1. Results are shown in the table for
+the minimum idle time, minimum wall clock time, and traditional one-replica-per-processor
+cases. For each case we show the number of processors used, the CPU idle time as a per-
+centage of the overall time for one Monte Carlo step, and the real wall clock time for the
+simulation relative to that of the traditional parallel tempering approach. To motivate the
+parameter values chosen for the examples, we note than in our experience with simulations
+of the 20–50 amino acid peptides from the innate immune system that are known as cystine-
+knot peptides, we ﬁnd the ratio of correlation times between the low and high temperature
+replicas can vary by a factor of 102 to 105, Nmove(T1)/Nmove(Tn) = 102–105, on the order
+of Nmove(Tn) = 103–105 conﬁgurational Monte Carlo moves are typically performed during
+each Monte Carlo step at the highest temperature, and Nmove = 106 conﬁgurational Monte
+Carlo moves take on the order of 24 hours to complete.
+
+Example 1
+
+For example 1, the simulation system is chosen such that n = 20, and α(T1)/α(Tn) = 3.
+In parallel tempering simulations, it is usual for the temperature to increase exponentially
+from T1 to Tn, since higher temperature systems have wider energy histograms, and so
+higher temperature replicas can be spaced more widely than lower temperature replicas.12
+For speciﬁcity, we assume that the wall clock time per conﬁgurational step also increases
+exponentially from α(Tn) to α(T1). We take Nmove to be constant for each of the replicas.
+The allocation of the replicas to the diﬀerent processors is shown in Figure 2a) and b) for
+the traditional and zero idle time cases, respectively. This example is typical of most parallel
+tempering simulations that are currently being performed on multi-processor systems.
+
+5
+
+For example 2, we use n and α(Ti) from example 1. We, furthermore, consider that the
+correlation times of the lower temperature replicas are longer, and so there should be more
+conﬁgurational moves per Monte Carlo step at the lower temperatures. We consider Nmove
+to increase exponentially from Nmove(Tn) to Nmove(T1) such that Nmove(T1)/Nmove(Tn) = 100.
+With the values for α(T ) from example 1, we ﬁnd τlong/τshort = 300.
+
+Example 2
+
+Example 3
+
+For example 3, we use n = 50, modeling α(Ti) in the same way as in examples 1 and 2,
+α(T1)/α(Tn) = 3. We model Nmove in the same way as in example B, but in this example set
+Nmove(T1)/Nmove(Tn) = 1000, since the reason for the increased number of replicas would have
+been the poor and slow equilibration at the lowest temperatures. We ﬁnd τlong/τshort = 3000.
+
+4 Discussion
+
+From Table 1, it is clear that the scheduler substantially improves the CPU utilization
+in parallel tempering simulations. This allows the multi-processor cluster to be used with
+conﬁdence, for example, for other jobs or simulations at other parameter values of interest.
+Example 1 demonstrates that the number of processors used can be reduced by 40% with
+an increase of only 1.66% in wall clock time. Alternatively, the number of processors can
+be reduced by 35% and result in no increase in wall clock time relative to the traditional
+parallel tempering method. As Example 1 is conservative in its characterization of most
+multi-processor parallel tempering simulations currently being performed, we anticipate that
+utilization of the optimal scheduler presented here will result in a large increase in the
+computational eﬃciency of parallel tempering simulations.
+
+It is interesting to note that, for all examples, as we increase the number of proces-
+sors used in the simulations, X, from 1, the wall clock time decreases until the number of
+processors that result in minimum wall clock time is used, X (n+1) = ⌈W/τlong⌉. Increasing
+the number of processors still further, to say the number of replicas, results in no reduction
+in overall simulation time and only increases the CPU idle time. This behavior is demon-
+strated in Figure 3, where the idle time is shown as a function of X for example 2. This
+ﬁgure highlights the importance of proper job scheduling on large, multi-processor clusters.
+The use of the optimal scheduler derived here is needed in order for the simulation to make
+the best use of a large number of CPU cycles. It is theoretically possible to achieve 100%
+eﬃciency on multi-processor systems, making them ideal for parallel tempering simulations.
+This is especially important in cases where it is desirable to vary Nmove between diﬀerent
+replicas (examples 2 and 3). Taking into account the dependence of the correlation time
+on temperature is computationally disastrous for the traditional one-replica-per-processor
+method of performing parallel tempering simulations, as CPU idle times easily become >
+90%. However, the optimal scheduler makes the simulation of this case feasible, opening the
+door to performing parallel tempering simulations that sample conﬁgurational space more
+eﬀectively and eﬃciently.
+
+6
+
+In the results presented in Sec. 3, we have not explicitly taken into account communica-
+tion times or the time taken to conduct swap moves. Swap moves that exchange conﬁgura-
+tions between replicas occur at the beginning of each Monte Carlo step and replica allocations
+occur at the beginning and possibly once within each Monte Carlo step. These operations
+are extremely rapid compared to the Nmove conﬁguration moves performed for each replica,
+as one can show. Recalling from the Results section that one conﬁgurational move takes ap-
+proximately 0.1 seconds and knowing that a typical communication time for inter-processor
+message passing is on the order of 10−4 seconds, we ﬁnd that example 3 contains the most
+communication time. In example 3, the increase in idle time due to communication from the
+zero idle time case is less than 0.00001%. This demonstrates that communication time is not
+a signiﬁcant eﬀect in these types of simulations. Communication eﬀects can, thus, safely be
+ignored.
+
+We have characterized the execution time of each replica in a deterministic fashion, but
+in reality the execution time is a stochastic quantity due to noise in variables not among
+the degrees of freedom chosen for the parallel tempering. In order to model the simulation
+times more realistically, we have also included randomness into our analysis. That is, the
+value of α is assumed to ﬂuctuate during each conﬁgurational step. As previously mentioned,
+the accuracy of the estimation of α is dependent on the number of order parameters used
+to parameterize it. Thus, ﬂuctuations in α will be smaller for systems that use parallel
+tempering in multiple dimensions. We note that for the case where the temperature is the
+only parameter used to characterize α, ﬂuctuations in α can be as high as 10-50%. This
+results in a ﬂuctuation in the time required to complete replica i, which can be represented
+mathematically as
+
+(7)
+
+(8)
+
+τi = α(Ti)Nmove(Ti)
+
+1 +
+
+σ
+[Nmove(Ti)/β(Ti)]1/2 )
+
+,
+
+(
+
+where σ is a Gaussian random number, and β is a value that is proportional to the correlation
+time. As we generally choose Nmove to be proportional to the correlation time, we expect
+Nmove/β = constant. Thus, we use
+
+τi = α(Ti)Nmove(Ti)[1 + γσ]
+
+to model the ﬂuctuations. We examine the cases where γ = 0.1, 0.5, and 1.0. To analyze
+the performance of the scheduler in the presence of the randomness, we take into account
+that a processor may be idle while it is waiting for another processor to complete its share
+of calculations on a replica system that is shared between the two processors.
+
+Table 1 shows the results of including randomness into our model for examples 1–3. The
+averages and standard errors are calculated from the average results from 10 blocks, each
+containing 1000 runs of the simulation system. The CPU idle time increases monotonically
+and non-linearly with γ. For the more complex systems where Nmove is varied, the ineﬃciency
+introduced by the randomness is smaller, since the randomness of several replicas is typically
+averaged over on most of the processors. The results are encouraging and show that the
+eﬃciency of the parallel tempering simulations organized by the scheduler remains within
+an acceptable limit, even when relatively large ﬂuctuations are considered. Increasing Nmove
+
+7
+
+will lead to lower ﬂuctuations, with the observed eﬃciency converging to the γ → 0 limit as
+O(1/N 1/2
+
+move).
+
+5 Conclusions
+
+In this paper we have introduced a theory for the optimal allocation of replicas to
+processors in parallel tempering simulations. The scheduler leaves intact the balance or de-
+tailed balance properties of the underlying parallel tempering scheme. The optimal scheduler
+derived from the theory allows multi-processor machines to be eﬃciently used for parallel
+tempering simulations. The allocation of replicas to CPUs produced by the scheduler results
+in a signiﬁcant enhancement of CPU usage in comparison to the traditional one-replica-per-
+processor approach to multi-processor parallel tempering. The optimal scheduling vastly
+reduces the number of required processors to complete the simulation, allowing an increased
+number of jobs to be run on the cluster. The computational eﬃciency of the scheduler also
+makes it feasible to vary the number of conﬁgurational moves per Monte Carlo step, which
+was not practicable using the one-replica-per-processor scheme, due to the associated large
+ineﬃciencies. This ﬂexibility to vary number of conﬁgurational steps is desirable because the
+correlation time at lower temperatures is often much longer than that at higher temperatures.
+Our results show that randomness does not have a signiﬁcant eﬀect for γ < 0.1, and
+the performance is still quite tolerable even for the extreme case of γ = 1. Despite the
+random execution times, the replica allocation produced by the optimal scheduler is always
+signiﬁcantly more eﬃcient than the traditional one-replica-per-processor approach. The idle
+time caused by random execution times is reduced as the number of conﬁgurational moves per
+Monte Carlo step is increased. Furthermore, parallel tempering in more than one dimension,
+with order parameters other than temperature, allows for a more accurate determination of
+the CPU time per replica. For the same reason, these extra dimensions will also aid the
+sampling eﬃciency of the underlying parallel tempering algorithm.
+
+This work was supported by the U.S. Department of Energy Oﬃce of Basic Energy
+
+Acknowledgments
+
+Sciences.
+
+Appendix
+
+Allocation Scheme for a Heterogeneous Cluster
+
+Using scheduling theory5, 6 it is possible to derive an allocation scheme for a multi-
+processor machine with heterogeneous processors. It is assumed that the number of CPU
+cycles required for each replica to complete one Monte Carlo step and the speed of each of
+the processors in the machine are known. In this general scheme, the number of processors
+used by the scheduler, m, is adjusted downward until an acceptably low idle time and total
+wall clock time are achieved.
+
+8
+
+For n replicas, where τi is the number of CPU cycles required to complete replica i, the
+
+total number of CPU cycles required, W , is given in Eqn. 3. We now deﬁne
+
+(A-1)
+
+(A-2)
+
+(A-3)
+
+(A-4)
+
+Wj =
+
+τi, 1 ≤ j ≤ n.
+
+j
+
+Xi=1
+
+j
+
+Xi=1
+
+K =
+
+ki.
+
+m
+
+Xi=1
+
+For m processors, where ki is the speed of each processor in CPU cycles per unit time, with
+k1 ≥ k2 ≥ ... ≥ km, the total number of CPU cycles available per unit time is
+
+We deﬁne
+
+Kj =
+
+ki, 1 ≤ j ≤ m.
+
+The shortest possible wall clock time to execute the Monte Carlo step for all the replicas is
+then
+
+τwall = max(W/K, τlong),
+
+where τlong is the maximum value of Wj/Kj, 1 ≤ j ≤ m.
+
+The general scheduler works with a time interval granularity of dt. At the start of the
+simulation and at the end of each time interval, we assign a level of priority to the replicas.
+The highest priority is given to the replica with the largest number of CPU cycles required for
+completion, and the lowest priority is given to the replica with the least number of CPU cycles
+remaining. A loop is performed through the priority levels, starting at the highest priority.
+If there are r replicas in the priority level under consideration and s remaining unassigned
+processors and if r ≤ s, then the r replicas are assigned to be executed on the fastest r
+number of processors. If the processors have diﬀerent speeds, each replica must spend an
+equal amount of wall clock time on each of the processors during the time interval, dt. The
+total wall clock time for the step is computed from the processor speeds and the required
+number of CPU cycles. The number of conﬁgurational moves that equals 1/r of the wall
+clock time on each processor is computed, and this number is the number of conﬁgurational
+moves that each replica will perform on each processor. For the ﬁrst 1/r of the wall clock
+time, the replicas are assigned sequentially to the r processors. For the next 1/r of the wall
+clock time, the assignment of the replicas to the processors is cyclically permuted, i.e. replica
+1 to processor 2, replica 2 to processor 3, . . . , replica r to processor 1. The assignment of
+replicas to processors is cycled at the end of each 1/r of wall clock time until the entire time
+step is completed. On the other hand if r > s, the replicas are assigned to the processors by
+splitting the time interval in each processor r times, and assigning the replicas to spend one
+short time interval being processed in each processor. This is accomplished by assigning the
+ﬁrst processor to execute sequentially replicas 1, 2, . . . , r. The second processor is assigned
+a cyclic permutation of the replicas to execute sequentially: replicas 2, 3, . . . , r, 1. In general
+processor i executes a cyclic permutation of the replica sequence of processor i − 1. This
+allocation leads to each replica being executed for an equal amount of wall clock time on
+each processor. A singe replica, moreover, is never allocated to more than one processor at
+
+9
+
+a single point in time.
+
+If there are still processors remaining to be allocated, the replicas at the next lower pri-
+ority level are allocated by this same process. The procedure is repeated until all processors
+have been allocated or all replicas have been allocated.
+
+The replica assignment for wall clock time dt is now complete. Replica are reassigned
+for the next period of wall clock time using the same rules. If the time interval, dt, is chosen
+to be small enough, then the total wall clock time of the simulation tends toward τwall. After
+the wall clock time of the entire Monte Carlo step has been assigned, the simulation can be
+performed.
+
+There is some ﬂexibility in the use of this general optimal scheduler for a heterogeneous
+multi-processor machine. In general, the best value of m is not known in closed form. It
+is found by choosing the smallest value of m that gives an acceptably low value wall clock
+time, Eqn. A-4, and an acceptably low idle time in the derived allocation. The time step for
+the scheduler, dt, must also be chosen. It should be chosen to be small, but not so small that
+communication eﬀects become signiﬁcant. Moreover, there must be many conﬁgurational
+Monte Carlo steps per time step, dt, otherwise the splitting of replicas among r processors
+required by the algorithm will not be possible. The computational time associated with the
+scheduler will generally be very much smaller than that associated with the simulation. The
+scheduler may, therefore, be run after each Monte Carlo step. Such use of the scheduler would
+automatically lead to an adaptive or cumulative estimate of the execution times required by
+each replica.
+
+In practical application of the results of this general scheduler, the processor allocation
+will typically be reordered to an equivalent one. For example, in the case of two replicas
+of equal length to be assigned to a single processor, the algorithm given above will switch
+between execution of each replica at each time step, dt, rather than complete execution of
+each replica sequentially. A reordering of the output of the general scheduler, therefore, will
+generally lead to a simpler processor allocation. Consistent with the constraints of causality,
+replica execution in time on a single processor may be reordered. Allocation of replicas to
+processors at each time step, dt, may also be permuted among the processors as along as the
+idle time so introduced is tolerable.
+
+Alternatively, the schedule optimization for heterogeneous processors can be cast as a
+linear programming problem. With a penalty for each switch between replicas on a proces-
+sor, an optimized schedule may be derived at the onset by solving the linear programming
+problem with a time resolution of dt.
+
+References
+
+[1] Geyer, C. J. Markov Chain Monte Carlo Maximum Likelihood. In Computing Science
+and Statistics: Proceedings of the 23rd Symposium on the Interface; American Statistical
+Association: New York, 1991.
+
+[2] Geyer, C. J.; Thompson, E. A. J. Am. Stat. Assn. 1995, 90, 909-920.
+
+10
+
+[3] Marinari, E.; Parisi, G.; Ruiz-Lorenzo, J. Numerical Simulations of Spin Glass Sys-
+tems. In Spin Glasses and Random Fields, Vol. 12; Young, A., Ed.; World Scientiﬁc:
+Singapore, 1998.
+
+[4] Manousiouthakis, V. I.; Deem, M. W. J. Chem. Phys. 1999, 110, 2753.
+
+[5] Coﬀman, E. G. Computer and Job-Shop Scheduling Theory; Wiley: New York, 1976.
+
+[6] Ashour, S. Sequencing Theory; Springer-Verlag: New York, 1972.
+
+[7] Scheduler is available under the GPL at http://www.mwdeem.rice.edu/scheduler.
+
+[8] Yan, Q.; de Pablo, J. J. J. Chem. Phys. 1999, 111, 9509.
+
+[9] Yan, Q.; de Pablo, J. J. J. Chem. Phys. 2000, 113, 1276.
+
+[10] Faller, R.; Yan, Q. L.; de Pablo, J. J. J. Chem. Phys. 2002, 116, 5419.
+
+[11] Bunker, A.; Dunweg, B. Phys. Rev. E 2001, 63, 010902.
+
+[12] Kofke, D. A. J. Chem. Phys. 2002, .
+
+11
+
+Example 1
+
+Maximum eﬃciency
+Minimum run time
+Traditional
+
+Example 2
+
+Maximum eﬃciency
+Minimum run time
+Traditional
+
+Example 3
+
+Maximum eﬃciency
+Minimum run time
+Traditional
+
+12
+13
+20
+
+3
+4
+20
+
+6
+7
+50
+
+0.0
+3.93
+80.77
+
+0.0
+5.26
+86.74
+
+1
+2
+
+X I (%) C (%)
+
+I (%)
+γ = 0.1
+
+C (%)
+γ = 0.1
+
+I (%)
+γ = 0.5
+
+C (%)
+γ = 0.5
+
+I (%)
+γ = 1.0
+
+C (%)
+γ = 1.0
+
+0.0
+6.16
+39.0
+
+101.66
+100.0
+100.0
+
+10.55 ± 0.02
+16.16 ± 0.02
+41.12 ± 0.03
+
+113.81 ± 0.05
+112.10 ± 0.05
+104.12 ± 0.06
+
+36.96 ± 0.06
+41.10 ± 0.06
+57.35 ± 0.06
+
+163.26 ± 0.23
+161.47 ± 0.23
+147.18 ± 0.29
+
+54.55 ± 0.10
+57.65 ± 0.10
+69.65 ± 0.07
+
+227.59 ± 0.46
+225.71 ± 0.48
+208.72 ± 0.60
+
+128.20
+100.0
+100.0
+
+4.65 ± 0.02
+9.81 ± 0.02
+80.62 ± 0.01
+
+134.62 ± 0.07
+106.75 ± 0.06
+100.00 ± 0.10
+
+19.29 ± 0.09
+27.49 ± 0.09
+82.55 ± 0.02
+
+160.33 ± 0.33
+134.82 ± 0.28
+116.60 ± 0.31
+
+34.50 ± 0.73
+43.34 ± 0.15
+86.41 ± 0.03
+
+193.76 ± 0.66
+171.60 ± 0.55
+149.97 ± 0.48
+
+110.53
+100.0
+100.0
+
+7.25 ± 0.02
+12.93 ± 0.03
+86.75 ± 0.01
+
+119.28 ± 0.05
+108.95 ± 0.05
+100.78 ± 0.11
+
+27.70 ± 0.07
+33.70 ± 0.10
+89.07 ± 0.03
+
+154.55 ± 0.22
+144.92 ± 0.23
+126.69 ± 0.38
+
+44.20 ± 0.13
+49.59 ± 0.15
+97.76 ± 0.03
+
+200.60 ± 0.44
+191.20 ± 0.444
+169.56 ± 0.66
+
+Table 1: Results for the parallel tempering job allocation optimized by the scheduler for run time or number of CPUs and
+for the traditional allocation. Results are shown for the three example systems described in Sec. 3. Shown are the number
+of processors (X), the percentage CPU idle time (I), and the wall clock time of the simulation relative to the results for the
+traditional allocation without randomness (C). Idle time and wall clock time are also shown for the case where the CPU time
+required for each replica is a stochastic quantity, Eqn. 8, with γ = 0.1, 0.5, and 1.0.
+
+Figure 1: Simple example of the allocation of three replicas to two processors.
+In this
+example, an eﬃcient allocation requires that replica 2 be split between processors 1 and 2.
+The replica numbers are marked on the ﬁgure.
+
+Figure 2: a) Replica allocation in the traditional one replica per processor parallel temper-
+ing simulation using 20 replicas. b) The assignment of the same replicas to processors as
+optimized by the scheduler derived in Sec. 2. The replica numbers are marked on the ﬁgure.
+
+Figure 3: CPU idle time as a function of number of processors used to solve the 20-replica
+example 2 from Sec. 3.
+
+13
+
+2
+
+r
+e
+b
+m
+u
+n
+ 
+r
+o
+s
+s
+e
+c
+o
+r
+P
+
+1
+
+2
+
+3
+
+1
+
+2
+
+0
+
+1
+
+2
+
+5
+
+6
+
+3
+Time
+
+4
+
+Figure 1. Earl and Deem, “Optimal Allocation of Replicas . . . .”
+
+14
+
+20
+
+17
+
+19
+
+16
+
+18
+
+15
+
+13
+
+12
+
+14
+
+11
+
+10
+
+9
+
+8
+
+7
+
+6
+
+18
+
+15
+13
+11
+
+9
+
+6
+
+8
+
+5
+
+4
+
+5
+
+4
+
+3
+
+16
+
+10
+
+2
+
+1
+19
+
+14
+
+12
+
+7
+
+3
+
+2
+
+1
+
+a)
+
+20
+18
+16
+14
+12
+10
+8
+6
+4
+2
+
+12
+11
+10
+9
+8
+7
+6
+5
+4
+3
+2
+1
+
+r
+e
+b
+m
+u
+n
+ 
+r
+o
+s
+s
+e
+c
+o
+r
+P
+
+r
+e
+b
+m
+u
+n
+ 
+r
+o
+s
+s
+e
+c
+o
+r
+P
+
+0
+
+b)
+
+20
+
+17
+
+18
+
+15
+
+13
+11
+
+8
+
+4
+
+9
+
+6
+
+5
+
+3
+
+2
+
+3000
+
+1000
+
+2000
+Time / α(Tn)
+
+Figure 2. Earl and Deem, “Optimal Allocation of Replicas . . . .”
+
+15
+
+100
+
+)
+
+%
+
+(
+ 
+e
+m
+
+i
+t
+ 
+e
+d
+i
+ 
+
+l
+
+U
+P
+C
+
+80
+
+60
+
+40
+
+20
+
+0
+0
+
+5
+15
+10
+Number of processors
+
+20
+
+Figure 3. Earl and Deem, “Optimal Allocation of Replicas . . . .”
+
+16
+
+

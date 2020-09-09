@@ -1,0 +1,1236 @@
+Effective Monte Carlo simulation on System-V massively parallel associative
+string processing architecture
+
+G´eza ´Odor
+Research Institute for Techn. Physics and Materials Science
+P.O.Box 49 H-1525 Budapest, Hungary
+odor@mfa.kfki.hu
+
+Argy Krikelis
+ASPEX Microsystems
+Brunel University, Uxbridge
+Middlesex, United Kingdom, UB8 3PH
+Argy.Krikelis@aspex.co.uk
+
+Gy¨orgy Vesztergombi
+Research Institute for Particle Physics
+P.O.Box 49 H-1525 Budapest, Hungary
+veszter@rmki.kfki.hu
+
+Francois Rohrbach
+CERN
+Gen`eve 23, CH-1211, Switzerland
+F.Rohrbach@cern.ch
+
+Abstract
+
+We show that the latest version of massively parallel processing associative string processing architecture (System-V)
+is applicable for fast Monte Carlo simulation if an effective on-processor random number generator is implemented. Our
+lagged Fibonacci generator can produce 108 random numbers on a processor string of 12K PE-s. The time dependent Monte
+Carlo algorithm of the one-dimensional non-equilibrium kinetic Ising model performs 80 faster than the corresponding serial
+algorithm on a 300 MHz UltraSparc.
+
+9
+9
+9
+1
+ 
+p
+e
+S
+ 
+7
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+4
+5
+0
+9
+0
+9
+9
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+1 Introduction
+
+Massively parallelism appears nowadays mainly on the
+level of MIMD processor clusters owing to the commer-
+cially available cheap building elements with ever increas-
+ing clock speeds. However everybody knows that CPU
+clock speed can not increased without limit, and the mem-
+ory access speeds are well behind. Therefore redesigning
+of the high performing architectures are necessary time to
+time. One such a direction is the intelligent memory (IRAM
+[11]) or processor on memory projects. By putting more
+and more fast memory on the silicon surface of the pro-
+cessors (cashes) or processors at the edges of the memory
+matrices one can avoid huge (1000 times magnitude) losses
+on the connection hardware, buses.
+
+The Massively Parallel Processing Collaboration [21]
+started a research and development of conceptually simi-
+lar architectures in the early nineties with a target of pro-
+cessing large quantities of parallel data on-line. The basic
+architecture was a low level MIMD high level SIMD to ﬁt
+the best to the requirements. While the development has
+stopped with prototype (ASTRA-2) in the physics research
+development collaboration, the founding engineering com-
+pany ASPEX continued developing the ASP architecture to
+produce a special ”co-processor” for workstations that en-
+hances image processing capabilities.
+
+The latest architecture System-V has already proven its
+image processing power [13]. We demonstrate is this work
+that it is also applicable for Monte Carlo simulations in sta-
+tistical physics. In section 2 we introduce the basics of the
+hardware of the new architecture, while in sections 3 and 6
+we show how effective random generation and simulations
+can be coded. In section 5 we introduce the statistical phys-
+ical models and the time dependent algorithms 4 to measure
+critical exponents. More detailed analysis of the results will
+be discussed elsewhere [15, 20].
+
+2 The System-V architecture
+
+System-V is a speciﬁc VMEbus system implementation
+of the Modular MPC (Massively Parallel Computing) archi-
+tecture. It provides programmable, cost-effective yet ﬂexi-
+ble solutions for high performance data-intensive comput-
+ing applications, such as signal and image processing and
+2D and 3D image generation problems. The architecture
+of System-v is modular, so that the conﬁguration of proces-
+sors, memory, data channels and I/O units in a system can be
+independently scaled and exactly balanced to give the most
+economical and effective application solution. Application
+development is achieved by programming in C.
+
+System-V derives its computational ﬂexibility and high-
+performance from a programmable SIMD architecture,
+
+namely the ASP (Associative String Processor) [14]. In ad-
+dition to the SIMD core, high performance RISC processors
+and custom ASICs are used to issue program instruction and
+manage data I/O.
+
+High-Speed I/O
+
+High-Speed I/O
+
+SDT Channel
+
+SDT Channel
+
+••••
+
+RAM
+RAMRAM
+(SDS)
+
+SDMC
+
+ASP
+ASPASP
+
+RAM
+RAMRAM
+(SDS)
+
+SDMC
+
+ASP
+ASPASP
+
+Data & SDMC Cmnd
+
+Main
+Processor
+
+m LAC
+
+ASP Instruction
+
+Figure 1. System-V architecture schematic di-
+agram
+
+As indicated in Figure 1, the key features of the System-
+V architecture are multiple data channels with overlapped
+data transfer and processing, independent scalability of pro-
+cessors and memory in each channel, and multiple external
+I/O paths. The major building block of the architecture is
+the Secondary Data Transfer (SDT) Channel, comprising
+the ASP, Secondary Data Movement Controller (SDMC)
+and Secondary Data Store (SDS). SDT channels can be
+replicated to increase SDT bandwidth. Each channel also
+has its own high-speed Tertiary Data Interface (TDI) for di-
+rect high-speed external I/O.
+
+As described in a following sub-section, the ASP con-
+tains an array of Associative Processing Elements (APEs)
+and a Primary Data Store (PDS). Each APE has a private
+Primary Data Transfer (PDT) channel to the PDS. In addi-
+tion, all APEs are connected via a ﬂexible communications
+network.
+
+The PDS is connected to the SDS by the SDMC, which
+performs secondary data transfers between the two.
+Its
+also controls access to the SDS for Tertiary Data Transfers
+(TDT) from external devices or the Main Processor.
+
+The Low-level ASP Controller (uLAC) performs global
+control of the ASPs. The Main Processor can be a conven-
+tional workstation, PC, CPU card or micro-processor. To
+control System-V it must perform the tasks of Instruction
+Stream Management (ISM) and Data Stream Management
+(DSM). It does this by issuing commands to the uLAC and
+the SDMCs.
+
+S
+
+A
+
+M
+
+R
+
+1
+
+/
+
+P
+
+b
+
+1
+
+u
+
+s
+
+A
+
+G
+
+b
+
+u
+
+s
+
+S
+
+A
+
+M
+
+S
+
+A
+
+M
+
+R
+
+2
+
+/
+
+P
+
+b
+
+2
+
+u
+
+s
+
+D
+
+S
+
+M
+
+b
+
+u
+
+s
+
+S
+
+M
+
+M
+
+M
+
+b
+
+e
+
+u
+
+s
+
+m
+
+o
+
+r
+
+y
+
+A
+
+P
+
+E
+
+A-3101
+
+S
+
+I
+
+b
+
+u
+
+s
+
+T D T  &
+
+R S port
+
+IS
+
+M
+
+-2
+
+001
+
+M E/P 2
+
+V
+
+R P port
+
+M E/P 1
+
+V
+
+Figure 2. System-V stackable implementation
+diagram
+
+As depicted in Figure 2, comprises a VMEbus mother-
+board on which sits a stack of daughter-boards with the
+option of smaller mezzanine cards installed on-top of the
+daughter-boards.
+
+In the heart of System-V ﬂexibility and scalability is its
+stacking buses. Three high performance buses called AG-
+bus, SIbus and DSMbus run through all the cards in the
+System-V stack. A further two nested buses provide APE
+and memory expansion on the SDT Channel cards.
+
+The ASP Global Bus (AGbus), a synchronous bus, car-
+ries instructions from the instruction stream manager on
+the stack base card to the ASP devices on the APE array
+daughter-boards.
+
+A single System Interface bus (SIbus) connects all the
+cards in the System-V stack to the management processors
+on the base card and to the VMEbus.
+
+The Data Stream Manager bus (DSMbus) connects the
+data stream management processor on the base card or on
+a daughter-board to all the cards in the System-V stack be-
+tween it and the next DSM card above it. There can be up
+to eight DSMbuses in a single System-V stack, all of which
+can operate in parallel.
+
+The Stackable APE Module bus (SAMbus) allows the
+number of APEs to be scaled per SDT channel by plugging
+
+in more SAMs.
+
+Finally, the memory expansion bus allows the amount
+of memory per SDT channel to be scaled by plugging in
+Stackable Memory Modules (SMM)s.
+
+Multiple System-V SIMD stacks can be connected to-
+gether in pipeline or processor farm topologies to provide
+even higher levels of performance.
+
+2.1 System-V building blocks
+
+The hardware blocks that can be used in building a
+System-V conﬁguration are 4 cards. The base or ISM card
+combines the ISM and DSM functionalities of System-V. It
+is a VMEbus card that provides the interface between the
+SIMD stack and the rest of the VME system. It features
+two SPARC processors and a uLAC-1001 co-processor for
+DSM and ISM functions respectively.
+
+The APE Array (APEA) card is SIMD stack daughter-
+boards that implement a Secondary Data channel contain-
+ing an Associative Processing Element (APE) Array, Sec-
+ondary Data Store (SDS) and a Secondary Data Movement
+Controller. The number of APEs and size of memory can be
+independently scaled by SAM and SMM mezzanine cards.
+The Stackable APE Module (SAM) cards contain VLSI
+chips implementing APEs and conform to a standard me-
+chanical and interface speciﬁcation. The number of APEs
+in a system can be increased by adding more SAMs. The
+SAM and SAMbus standards allow existing systems to be
+simply upgraded as new generations of VLSI chips become
+available.
+
+The SMM-1016 is a stackable SDS memory expansion
+module that can sustain a 120 Mbytes/s access bandwidth.
+
+2.2 Associative String Processor (ASP)
+
+As mentioned above, the processing core in System-V
+is an SIMD processing structure implemented using ASP
+Modules. The ASP, shown in Figure 3, is a modular mas-
+sively parallel and inherently fault-tolerant processing ar-
+chitecture.
+
+At the logical level, the Associative String Processor
+(ASP) constitutes a high-performance cellular string asso-
+ciative processor, whereas, at the physical level, the ASP is
+implemented as a bit-parallel word-parallel associative par-
+allel processor. The ASP is a programmable, homogeneous
+and fault-tolerant ﬁne-grain SIMD massively parallel pro-
+cessor incorporating a string of identical Associative Pro-
+cessing Elements (APEs), a reconﬁgurable inter-processor
+communication network and a Vector Data Buffer for fully-
+overlapped data input-output as indicated in Figure 3.
+
+Each APE, depicted in Figure 4, incorporates a 64-bit
+Data Register and a 6-bit Activity Register, a 70-bit par-
+allel Comparator, a single-bit full-adder, 4 status ﬂags and
+
+Vector  Data  Buffer
+Vector  Data  Buffer
+
+PDX
+
+Inter  APE  Communication  Network
+
+R
+K
+L
+
+APE
+
+APE
+
+APE
+
+APE
+
+X
+D
+S
+
+L
+K
+L
+
+MR
+
+Data  Bus
+
+Activity  Bus
+
+Control  Bus
+
+Figure 3. Associative String Processor archi-
+tecture
+
+control logic for local processing and communication with
+other APEs. The 6-bit Activity Register is used to select
+subsets of APEs for subsequent parallel processing.
+
+Inter APE Communication Network
+
+M D
+
+C
+
+Data
+Register
+
+Activity
+Register
+
+Comparator
+
+A
+
+l
+
+o
+r
+t
+n
+o
+C
+
+Data
+Regi
+
+MR
+
+A
+
+l
+
+o
+r
+t
+n
+o
+C
+
+Data Bus
+
+Activity Bus
+
+Control Bus
+
+Figure 4. Associative Processing Element ar-
+chitecture
+
+The APEs are connected via the Inter APE Communica-
+tion Network, which supports the navigation of data struc-
+tures and implements a simply-scalable, fault-tolerant and
+dynamically-reconﬁgurable (to support emulation of com-
+mon network topologies) tightly-coupled APE interconnec-
+tion strategy. As an activity-passing, rather than a data-
+passing, network, the Inter APE Communication Network
+reduces data transfers. Time-consuming data transfers are
+only executed on the Inter APE Communication Network,
+if they cannot be otherwise avoided. Most signiﬁcantly,
+the APE interconnection strategy supports simple unlimited
+modular network extension, via the LinK Left (LKL) and
+LinK Right (LKR) ports (shown in Figure 3) to enable tai-
+
+loring of parallel processing power to match user require-
+ments.
+
+The Inter APE Communication Network is derived from
+a shift register and a chordal ring, which supports 2
+modes of inter APE communication: asynchronous bidirec-
+tional single-bit communication, to connect APE sources
+and corresponding APE destinations of high-speed activa-
+tion signals, implementing a fully-connected dynamically-
+conﬁgured (programmer-transparently) permutation, and
+broadcast network for APE selection and inter-APE rout-
+ing functions; synchronous bidirectional multi-bit com-
+munication, via a high-speed bit-serial shift register for
+data/message transfer between APE groups. Thus, the in-
+terconnection strategy adopted for the ASP supports a high
+degree of parallelism for local communication and progres-
+sively lower degrees of parallelism for longer distance com-
+munication. In particular, the chordal ring topology enables
+the Inter APE Communication Network to be implemented
+as a hierarchy of APE groups. Thus, communication times
+are signiﬁcantly reduced through automatic bypassing of
+those groups that do not include destination APEs.
+In a
+similar way, namely through bypassing of faulty groups of
+APEs, fault tolerance of the ASP architecture is guaranteed.
+In operation, data are distributed over the APEs and
+stored in the local Data Registers. Successive computa-
+tional tasks are performed on the stored data and the re-
+sults are dumped via the PDX, to the Vector Data Buffer
+(shown in Figure 3). The ASP supports a form of set
+processing, in which a subset of active APEs (i.e., those
+which match broadcast scalar data and activity values) sup-
+port scalar-vector (i.e., between a scalar and Data Registers)
+and vector-vector (i.e., within Data Registers) operations.
+Matching APEs are either directly activated or source inter
+APE communications to indirectly activate other APEs via
+the Inter APE Communication Network. The Match Re-
+ply (MR) line to the control interface provides feedback on
+whether none or some APEs match. The APE can operate
+in three different data modes dictated by the Data Regis-
+ter conﬁguration. The supported modes are: storage and
+bit-parallel processing of two 32-bit words or four 8-bit
+byte ﬁelds and storage and bit-serial processing of one to
+three bit-ﬁelds of varying length (of no more than 64 bits
+per ﬁeld). The instruction set is based on 4 basic opera-
+tions, match, add, read and write. In order to achieve bit-
+level masking, during match and write operations, the corre-
+sponding byte and bit ﬁelds of the Data Bus are represented
+with ternary (i.e., 2-bit) digits.
+
+3 The random number generator
+
+The random number generator we used here is a lagged
+Fibonacci, algorithmically the same that was described in
+[19] in more details. We exploit the orthogonal manipula-
+
+(cid:229)
+(cid:229)
+tion capabilities of the ASP string and generate 160 bit long
+pseudo random numbers along the string with fast ”look
+ahead carry” operations.
+
+xi = xi−17 ± xi−5 ± c
+
+(1)
+
+We segment the ASP string to 160 APE parts and so we
+generate No. of APE-s / 160 such numbers in parallel. We
+take one bit of the generated numbers for each processor as
+a bit of a 18-bit integer random number. hence to build up a
+full 18-bit random number for an APE we have to repeat the
+xi generation step 18 times. The lag columns are moving
+in a circular way in the 18-bit memory ﬁeld of APE-s. The
+carries of eq. 1 are transmitted back between two addition
+steps to the beginning of the segments by the effective ”Ac-
+tivity Link” operation. So we can generate a 18-bit random
+number – which is a compromise of the on-processor mem-
+ory and necessary resolution – within a few clock cycles in
+all APE-s independently of the system size.
+
+These integer random numbers can be thresholded in
+parallel by constants (p ∗ 218) that are stored in the memory
+of the ISM . By this operation we can tag processors with
+probability p. Practically we could achieve a ∼ 104 update/
+sec. that means ∼ 108 random numbers in every second if
+the system size is 12K.
+
+Testing of the random number generator was through
+comparing the simulation results with results obtained on
+a serial computer.
+
+4 Time dependent Monte Carlo simulation
+
+Time dependent Monte Carlo simulation suggested by
+[6] has become a very precise and effective tool in statisti-
+cal physics. We start the system from a state that is usually
+random or near to the absorbing state and follow the evo-
+lution of its statistical properties for a few thousand time
+steps.
+
+In general one usually ”measure” the following quanti-
+
+ties
+
+• survival probability ps(t) of the initial seed
+
+• order parameter density ρ(t)
+
+The evolution runs are averaged over Ns independent
+runs for each different value of p in the vicinity of pc. At
+the critical point we expect these quantities to behave in ac-
+cordance with the power law as t → ∞, i.e.
+
+ps(t) ∝ t
+
+−δ ,
+
+ρ(t) ∝ tα ,
+
+(2)
+
+(3)
+
+For estimating critical exponents and the critical point
+there is a very effect way by analysing the local slopes of
+
+the log − log quantities. Example for ρ
+
+α(t) =
+
+ln [ρ(t)/ρ(t/m)]
+ln(m)
+
+(4)
+
+where we use m = 8 usually. In the case of power-law
+behaviour we expect α(t) to be straight line as 1/t → 0,
+when p = pc. The off-critical curves should possess curva-
+ture. Curves corresponding to p > pc should veer upward,
+curves with p < pc should veer down.
+
+5 The NEKIM model
+
+The research of phase transitions of non-equilibrium
+models is in the forefront of statistical physics. Very few
+models are solved and the universality class picture of equi-
+librium systems can not be directly transferred to here. The
+lack of detailed balance condition
+
+P ({s})W ({s} → {s,}) = P ({s,})W ({s,} → {s})
+
+(5)
+
+— where P ({s}) is the probability of a state, and W is
+the transition probability — enables arbitrary noise and this
+seems to have an affect on the ordered state inﬂuencing the
+critical scaling behaviour. This suggests much richer be-
+haviour than in equilibrium statistical systems. Contrary to
+this for a long time there has been only one phase transi-
+tion universality class known according to which models are
+categorised in equilibrium systems. Namely every contin-
+uous phase transition to an absorbing state have ultimately
+been found to belong to the class of Directed Percolation or
+Reggeon Filed theory [1]. Theoretical investigations have
+shown the robustness of this class [10, 5]. There are a few
+exceptions found up to now. One such an exceptional class
+is the Parity Conserving (PC) universality class in 1d, which
+was named after that the number of particles is conserved
+modulo 2. Later it was realized [2] that more precisely the
+special dynamics the ”Branching and annihilating random
+walk with even number of offsprings” (BARWe) is respon-
+sible for this non-DP behaviour since the underlying ﬁeld
+theory possesses a special symmetry in this case. The ﬁeld
+theoretical description of this class has not given quantita-
+tively precise results and we can rely on simulation results
+for critical exponents and scaling relations. We have been
+investigating one representative of the PC class for some
+years namely a special non-equilibrium kinetic Ising model
+in 1d (NEKIM) [3, 16, 17, 18].
+
+The Ising model is the simplest system that is capable
+of describing of ferro-magnetism on the basis of collec-
+tive action of spin variables (si). The generalisation of the
+static model that involves spin ﬂip dynamics was done by
+Glauber [4]ﬁrst. The Glauber model is exactly solvable in
+1d and the kink variables (ki) (’01’or ’10’ pairs ) between
+the ordered domains has been found to exhibit annihilating
+
+random walk. Other kind of dynamics can also be intro-
+duced that lead to the same equilibrium state, for example
+the spin number conserving Kawasaki dynamics (see [12]).
+It was suggested that if we apply different kind of dynam-
+ics alternately we can create a system that does not have an
+equilibrium state described by Boltzmann distribution but
+may possess a steady state in which the some global pa-
+rameters are constant (magnetisation example) similarly to
+the eq. systems but others are not (example particle or en-
+ergy currents can ﬂow through). The alternating application
+of Glauber spin-ﬂip and Kawasaki spin-exchange was pro-
+posed by [3] and it was discovered by [16] that there is non-
+temperature driven phase transition in which the kinks ex-
+hibit BARWe dynamics and so the universality class is PC.
+Originally this transition has been shown for zero temper-
+ature spin-ﬂip (because in 1d any ﬁnite temperature causes
+such a strong ﬂuctuations that destroy the order) plus an
+inﬁnite temperature (process that does not depend on the
+local neighbourhood of spins) spin-exchange. The spin ex-
+changes don’t destroy the order because they don’t do any-
+thing inside the ordered domains.
+
+In this work we investigate numerically the generalisa-
+tion of this model for ﬁnite temperature spin-exchange (TK)
+and investigate its effect on the transition [15]. We deﬁne
+the model on the 1d ring (i.e. periodic boundary conditions)
+with the transition probabilities:
+
+• kink random walk : wW = Γ(1 − δ)
+
+• kink annihilation : wA = Γ
+
+2 (1 + δ)
+• spin-exchange : wi,i+1 = pex
+
+γ
+2 (si−1si + si+1si+2)
+
+2 (1 − sisi+1)(1 −
+
+where the parameters we used are : Γ = 0.35, pT =
+exp(−4J/kTK), γ = (1 − pT )/(1 + pT ), pex = 0.239.
+The free parameters are : δ, TK.
+
+We used one site per processor mapping and therefore a
+parallel updating version of the NEKIM had to be invented
+in order to exploit the resources of the ASP. To realize the
+above processes ”two lattice update” was employed in case
+of the spin-ﬂip. That means that in one step the ”even” lat-
+tice sites and in the next step the ”odd” lattice sites were
+updated. In case of the subsequent spin-exchange a ”three
+lattice update was performed. Further algorithmic details
+will be presented in the next section.
+
+The time dependent simulations have been performed on
+a L = 3040 size (number of APE-s) ring by starting from
+random initial states and following the kink density up to
+tMAX = 8000. The number of runs over which the sta-
+tistical averaging was performed was 3 − 5 × 104 for each
+pT parameter. First the critical point was located for a ﬁxed
+value of δ = −0.362, pex = 0.239 by varying pt. As one
+can see on the local slope Figure 5 it is about pT = 0.27, be-
+cause the other curves corresponding to other pT -s deviate
+
+from scaling as t → ∞. We can read off from the ordi-
+nate of the graph that the corresponding critical exponent is
+0.28(1) that is in a good agreement with the PC class value
+[16].
+
+We performed timing measurements on a System-V with
+12K APEs and with 4 Mbytes of memory (that occupy
+3 6U VME slots) and is attached to a SparcStation 5/64
+that serves as host for the applications. On that machine
+∼ 2 × 10−8 second is necessary to update a site. In com-
+parison the serial simulation Fortran program that was run
+on a DEC-ALPHA 2000 station has achieved 2 × 10−6 sec.
+/ site speed.. The other thing that we investigated is the ef-
+
+-0.24
+
+-0.25
+
+-0.26
+
+-0.27
+
+-0.28
+
+-0.29
+
+-0.3
+
+0
+
+0.0005
+
+0.0015
+
+0.002
+
+0.001
+1/t
+
+Figure 5. Local slopes of log(ρkink(t)) versus
+log(1/t) in the NEKIM simulations at for pT =
+0.26, 0.265, 0.27, 0.275, 0.28, 0.285, 0.29 (from
+bottom to top curves). Scaling can be ob-
+served for pT = 0.27(1), with the exponent
+α ∼ 0.28 in agreement with PC order parame-
+ter density decays.
+
+fect of long-range initial conditions that has just recently
+been shown to be relevant [7] in case of DP transitions.
+The initial states with < kiki+x > ∝ x−(1−σ) kink-kink
+correlations and even numbered kinks are generated by the
+same serial algorithm as described and numerically tested
+in ref.
+[7] in the σ ∈ (0, 1) interval. We required the
+even-numbered initial kink sector because the kink number
+is conserved mod 2. The spin states are assigned to the kink
+conﬁguration and are loaded to the ASP string time to time
+during the trial runs. The kink density has been measured
+in L = 12000 sized systems up to tmax = 80000 time steps
+such that we can observe good quality of scaling for three
+decades in the (80, 80000) time interval (see Figure 6). As
+one can see there is an increase with exponent α ∼ 0.28
+in the kink density for σ = 0, where in principle only one
+
+a
+pair of kinks is placed on the lattice in agreement with for-
+mer simulation results [18]. On the other extreme case for
+σ = 1 the kink density decays with α ∼ −0.28 exponent
+again in agreement with our expectations i [16]. In between
+the exponent α changes continuously as the function of σ
+and changes sign at σ = 0.5. That means that the state gen-
+erated with σ = 1/2 is very near to the t → ∞ steady state
+limit [20].
+
+Mask for 2-kink annihilation:
+
+1
+
+Random G. field
+
+1
+
+1
+
+1
+
+APE i-1
+
+APE i
+
+APE i+1
+
+1
+
+1
+
+0
+
+1
+
+0
+
+1
+
+A
+
+B
+
+C
+
+Tr1
+
+1
+
+T
+a
+g
+b
+i
+t
+
+  Bit:    ...8      7      6       5      4       3      2       1       0
+DATA REGISTERS
+
+Random bit
+
+Flipped bit = 
+
+(Tagbit & 
+
+Random bit  & B) + Original bit
+
+i
+
+y
+t
+s
+n
+e
+d
+ 
+k
+n
+k
+
+i
+
+0.1
+
+0.01
+
+0.001
+
+100
+
+1000
+
+10000
+
+t
+
+Figure 6.
+log(ρkink(t)) versus log(t) in the
+NEKIM simulations at for σ = 0, 0.1, 0.2..., 1 ini-
+tial conditions (from bottom to top curves).
+
+6 Monte Carlo simulation algorithm
+
+The low-level ASP part of the simulation is similar to
+what was described in [19]. We map the 1d system onto
+a non-segmented string (left and right ends of the string
+are connected) (but in case of random generation steps we
+re-segment it to 160 PE substrings to avoid long commu-
+nications). The left and right neighbour informations are
+shifted simultaneously to each APE and we apply the tran-
+sition rules with ternary masks and the random threshold
+conditions. Since we update in two (and three) sub-lattices
+every second and third APE are marked by Activity bits
+(A,B,C) that is ﬁxed from the beginning of the simulations
+and we take into account these Activity bit conditions as
+well when doing spin-ﬂip (by the ’Add’ operation) or the
+spin exchange. See Figure 7 for the APE representation of
+the kink annihilation process. For kink random walk the
+only difference is that we use different masks (100 or 110
+... etc.). In case of the ﬁnite temperature spin-exchange we
+have to take into account even more conditions (i.e. four
+spin states) as shown on Fig. 8. The spin state is trans-
+formed to kink state within a single (Shift+Add) operation
+
+Figure 7. Data processing in memories of
+APEs corresponding to a sub-lattice ’B’ up-
+date.
+The kink-s between different spins
+(’101’) are annihilated with probability wA =
+Γ/2(1 + δ) (’111’). First the spins are propa-
+gated to the left and right neighbours, than
+a global mask (’101’) is compared with B
+tagged APEs and which are set with proba-
+bility wA. The spin ﬂipping is done by binary
+adding and the result is written back to the
+original bit.
+
+cycle and an internal ”Global Match reply” mechanism ex-
+amines if the system evolves to the kink-free ordered state.
+If it is in the ordered state the whole time development cy-
+cle stops, because in the absorbing state there are no more
+changes take place. The entire kink state is dumped by the
+efﬁcient PDX exchange within a few clock cycles to the
+PDS where a built in hardware mechanism counts the num-
+ber of ’1’-s overlapped in time with the MC updates. We
+invoke this dumping in every 8 MC updates only to keep a
+time balance with the counting.
+
+The site update time in this case slightly smaller than in
+case of the ﬁnite temperature NEKIM : 10−8 second. The
+serial version of the program run on a SUN station with Ul-
+traSparc 300 MHz processors achieved 8 × 10−7 site update
+speed. That means that the System-V algorithm is 80 faster.
+We made a test run on the FUJITSU AP3000 parallel super-
+computer with n = 16 nodes as well where the parallelism
+has been exploited on the level of trial samples. We found
+that the System-V program is a factor of 5 faster than the
+simulation on the AP3000.
+
+7 Conclusions
+
+In this work we have shown that the System-V image
+processing architecture is capable for Monte Carlo simula-
+tion with a performance far most exceeding present super-
+computing technologies if an effective on-processor random
+generator is invented. This high performance is possible
+
+Mask for kink -> 3 kink branching:
+
+1
+
+1
+
+0
+
+0
+
+Random G. field
+
+1
+
+1
+
+1
+
+0
+
+APE i-1
+
+APE i
+
+APE i+1
+
+APE i+2
+
+Tr1
+
+1
+
+T
+a
+g
+b
+i
+t
+
+C
+
+A
+
+B
+
+C
+
+0
+
+0
+
+1
+
+1
+
+effectively coded. There are built in hardware and software
+tools for cutting the data to patches and loading dumping
+and rotating them in parallel with the string processing.
+
+Therefore we think that this kind of MPC SIMD mod-
+ules are good candidates for building blocks in large scale,
+”Grand Challenge” simulation architectures.
+
+  Bit:    ...8      7      6       5      4       3      2       1       0
+DATA REGISTERS
+
+Original bits
+
+Spin exchange:
+
+(Tagbit & 
+
+Random bit &A)
+
+8 Acknowledgements
+
+Figure 8. Data processing in memories of
+APEs corresponding to a sub-lattice ’A’ up-
+date. The kink offsprings are created with
+probability wC = 4pexpT /(1 + pT ). First the
+spins are propagated to the left and right
+neighbours, than a global mask (’1100’) is
+compared with all ’A’ tagged APEs and which
+are set with probability wC . The spin ex-
+change is performed by overwriting the ASP
+Data Register bit column containing the orig-
+inal state.
+
+System-V ALPHA 2000 U-Sparc 300 AP3000
+5 × 10−8
+
+8 × 10−7
+
+2 × 10−6
+
+10−8
+
+Table 1. Site update times in seconds of the NEKIM
+simulation
+
+owing to the data movement minimisation of the content
+addressable, associative string processing. That means that
+inside the most time consuming core of the algorithm are no
+processor - memory communications via buses but each PE
+acts on its local data. This can be achieved by ﬁne grain par-
+allelism: one processor per system site mapping. Of course
+the technology limits the number of PE-s and local memo-
+ries on a single chip but the modular building structure en-
+ables to build systems with more and more (even millions
+in the next generations) APEs.
+
+Even if input-output is required during the algorithm
+(like measurements on the state at time to time) the fast and
+parallel data exchanger PDX does not interrupts the internal
+loops considerably. Other applications like surface growth
+model simulations are in progress and preliminary ratings
+has already shown similar high performances [9, 8].
+
+We have implemented one-dimensional system simula-
+tions here but we note that since the whole architecture is
+primarily designed for vision and image processing we ex-
+pect that two or more dimensional simulations can also be
+
+We thank N´ora Menyh´ard for the stimulating discussions
+and R. Bishop for the help in programming System-V. G. ´O.
+thanks ASPEX for the hospitality on the System-V training
+course and the access to the machine.
+
+References
+
+[1] J. L. Cardy and R. L. Sugar.
+
+J. Phys. A: Math. Gen.,
+
+13:L423, 1980.
+
+[2] J. L. Cardy and U. Tauber. Phys. Rev. Lett, 77:4780, 1996.
+[3] M. Droz, Z. R´acz, and J. Schmidt. Phys. Rev. A 39, 39:2141,
+
+1989.
+
+1979.
+
+[4] R. J. Glauber. Phys. Rev. Lett, 68:3060, 1992.
+[5] P. Grassberger. Z. Phys. B, 47:365, 1982.
+[6] P. Grassberger and A. de la Torre. Ann. of Phys, 122:373,
+
+[7] H. Hinrichsen and G. ´Odor. Correlated initial conditions in
+
+directed percolation. Phys. Rev. E, 58:311, 1998.
+
+[8] H. Hinrichsen and G. ´Odor. Critical behavior of roughening
+transitions in parity-conserving growth processes. Phys. Rev.
+E, 60(4), October 1999.
+
+[9] H. Hinrichsen and G. ´Odor. Roughening transition in a
+model for dimer adsorption and desorption. Phys. Rev. Lett.,
+82:1205, 1999.
+
+[10] H. K. Janssen. Z. Phys. B, 42:151, 1981.
+[11] D. Kastenbaum. A perfect match. New Scientist, April 1998.
+[12] K. Kawasaki. Phase Transiton and Critical Phenomena,
+
+2:443, 1972.
+
+[13] A. Krikelis and R. M. Lea. A modular massively parallel
+computing approach to image-related processing. proceed-
+ings of IEEE, 84(7), July 1996.
+
+[14] R. M. Lea. Asp: a cost effective parallel microcomputer.
+
+IEEE Micro, October 1988.
+
+[15] N. Menyh´ard. privat communication.
+[16] N. Menyh´ard. J. Phys. A : Math. Gen., 27:6139, 1994.
+[17] N. Menyh´ard and G. ´Odor. Non-equilibrium phase transi-
+tions in one-dimensional kinetic ising models. J. Phys. A :
+Math. Gen., 28:4505, 1995.
+
+[18] N. Menyh´ard and G. ´Odor. Phase transitions and critical
+behaviour in one-dimensional non-equilibrium kinetic ising
+models with branching annihilating random walk of kinks.
+J. Phys. A : Math. Gen., 29:7739, 1996.
+
+[19] G. ´Odor, G.Vesztergombi, and F.Rohrbach. Parallel simula-
+tion of 1d probabilistic cellular automata. Proc. of the Fifth
+Euromicro Workshop on Parallel and Distributed Process-
+ing, pages 149–154, 1997.
+
+[20] G. ´Odor and N. Menyh´ard. in preparation.
+[21] F. Rohrbach. The mppc project : ﬁnal report. CERN
+
+preprint, 93(7), 1993.
+
+

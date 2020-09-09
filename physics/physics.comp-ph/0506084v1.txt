@@ -1,0 +1,1798 @@
+5
+0
+0
+2
+ 
+n
+u
+J
+ 
+9
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+4
+8
+0
+6
+0
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+IFJPAN-V-05-04
+CERN-PH-TH/2005-094
+
+mFOAM-1.02: A Compact Version
+of the Cellular Event Generator FOAM⋆
+
+S. Jadach
+Institute of Nuclear Physics, Academy of Sciences,
+ul. Radzikowskiego 152, 31-342 Cracow, Poland,
+and
+CERN Department of Physics, Theory Division
+CH-1211 Geneva 23, Switzerland
+and
+P. Sawicki
+Institute of Nuclear Physics, Academy of Sciences,
+ul. Radzikowskiego 152, 31-342 Cracow, Poland
+
+Abstract
+
+The general-purpose self-adapting Monte Carlo (MC) event generator/simulator
+mFOAM (standing for mini-FOAM) is a new compact version of the FOAM program, with
+a slightly limited functionality with respect to its parent version. On the other hand,
+mFOAM is easier to use for the average user. This new version is fully integrated with the
+ROOT package, the C++ utility library used widely in the particle physics community.
+The internal structure of the code is simpliﬁed and the very valuable feature of the
+persistency of the objects of the mFOAM class is improved. With the persistency at hand,
+it is possible to record very easily the complete state of a MC simulator object based on
+mFOAM and ROOT into a disk-ﬁle at any stage of its use: just after object allocation,
+after full initialization (exploration of the distribution), or at any time during the
+generation of the long series of MC events. Later on the MC simulator object can be
+easily restored from the disk-ﬁle in the “ready to go” state. Objects of TFoam class
+can be used as a stand-alone solution to many everyday problems in the area of the
+Monte Carlo simulation, or as building blocks in large-scale MC projects, taking full
+advantage of the object-oriented technology and persistency.
+
+To be submitted to Computer Physics Communications
+
+Keywords: Monte Carlo (MC) simulation and generation, particle physics, phase space.
+
+IFJPAN-V-05-04
+CERN-PH-TH/2005-094
+June 2005
+⋆Supported in part by EU grant MTKD-CT-2004-510126, in partnership with CERN PH/TH Division.
+
+1
+
+PROGRAM SUMMARY
+
+Title of the program:
+mFOAM (mini FOAM), version 1.02.
+Computer:
+Most Unix workstations, supercomputers and PC.
+Operating system:
+Most UNIX systems, Linux and Windows.
+Application programs were thoroughly tested under Red Hat Linux 7.x, CERN Scientiﬁc
+Linux 3.02, Fedora Linux FC3, UNIX IRIX-6.5.
+At present mFOAM is distributed with the ROOT package (version 4.04 and later).
+Programming languages used:
+ANSI C++.
+High-speed storage required:
+Depends on the complexity of the problem. For the default 2000 cells it is about 25 MB
+while for 100,000 cells it allocates about 35 MB. These data are for running from CINT
+command line and include also memory consumption by CINT itself.
+No. of lines in combined program and test deck:
+mFOAM-1.02 2776 lines of C++ code.
+Nature of the physical problem:
+Monte Carlo integration or generation of unweighted (weight equals 1) events with a given
+probability distribution is a standard problem in many areas of research, ranging from high-
+energy physics to economy. In any library of general utilities it is highly desirable to include
+a general-purpose numerical tool (program) with the MC generation algorithm featuring the
+built-in capability of automatically adjusting generation procedure to an arbitrary pattern
+of singularities in the generated distribution. Our primary goal is the simulation of the
+diﬀerential distribution in the multiparticle Lorentz-invariant phase space for the purpose of
+comparison between Quantum Field Theory prediction, and experiments in the high-energy
+experiments. However, the solution may have a much wider area of applications.
+Method of solution:
+In the algorithm, a grid of cells, called “foam”, is built in the process of the binary split of
+the cells. The resulting foam is adapted automatically to the shape of the integrand in such
+a way that the resulting ratio of the average weight to maximum weight or the variance to
+average weight is minimized.
+Restrictions on the complexity of the problem:
+Consumption of computer resources depends on the complexity of the problem. The use of
+the program is limited to about a million of cells for a relatively small number of dimensions
+(≤ 20) in view of the memory and CPU time restrictions of a modern desktop computer.
+Typical running time:
+The CPU time necessary to build up a foam of cells depends strongly on the number of
+dimensions and the requested number of cells. On the PC with a 1.6 GHz Intel processor,
+it takes about 10 seconds to build a hyperrectangular grid of 10,000 cells for simple 3-
+dimensional distribution.
+
+2
+
+1
+
+Introduction
+
+The present program mFOAM, and the FOAM program of Refs. [1, 2], from which mFOAM
+is derived, are both examples of a general-purpose self-adapting Monte Carlo simula-
+tor/integrator. Let us brieﬂy recapitulate main features of FOAM, which are shared with
+the present project. In the cellular algorithm of FOAM, points are generated randomly in the
+multi dimensional space according to an arbitrary, user-deﬁned, unnormalized probability
+distribution function (PDF) ρ(x). The algorithm works in two stages: exploration and gen-
+eration. In the exploration stage the shape of the distribution function is explored using MC
+methods, dividing the integration domain into a system of cells referred to as “foam”. The
+foam of cells is produced in a recursive process of binary splittings of the cells starting from
+the root cell, which can be a single k-dim hyperrectangle, an n-dim simplex or a Cartesian
+product of both. In mFOAM we restrict ourselves to hyperrectangles. The PDF ρ(x) is ap-
+proximated by another PDF ρ′(x), which is equal to a constant within each cell. The main
+aim of the process of the foam evolution through binary splittings is to minimize either the
+ratio of the variance of the weight distribution to the average weight σ/hwi, or the ratio of
+(x) is the Monte
+the maximum weight to the average weight wmax/hwi, where w = ρ(x)/ρ
+Carlo weight.
+
+′
+
+In the generation stage every single MC weighted event is generated as follows: ﬁrst a cell
+is chosen randomly and next, within this cell, a point (MC event) is generated according to
+an uniform distribution equal to ρ′ and ﬁnally the MC weight w = ρ(x)/ρ′(x) is evaluated.
+As usual, the rejection method may turn these weighted events into weight-one events, with
+a certain rejection rate (ineﬃciency). The main aim of the rather sophisticated cell-splitting
+algorithm of FOAM (exploration phase) is the reduction of wmax/hwi, assuring a low rejection
+rate. Another option is the variance-reduction providing for self-adapting MC method of
+precise evaluation of the integrals. In either case, the value of the integrand is already known
+approximately from the exploration stage and can be estimated with even better precision
+in the generation phase.
+
+It is instructive to compare the cellular algorithm of FOAM to algorithms used by two older
+programs in the family of self-adapting MC tools: VEGAS [3] and MISER [4]. VEGAS
+primarily implements the so-called importance sampling (variance-reducing) method.
+It
+approximates the exact distribution by a multidimensional sampling function g. The function
+g is separable by construction, i.e. g(x1, x2, . . . , xn) = g1(x1)g2(x2), . . . , gn(xn). Owing to this
+feature, the function g can be stored eﬀectively in the computer memory as a collection of n
+(one for each dimension) histograms with K bins, without an explosion in the total number
+of bins, which would in general grow like K n. The sampling distribution is constructed
+iteratively, step by step, by means of making a number of Monte Carlo explorations over
+the integration region, while inspecting n 1-dimensional histograms of the projections the
+distribution function, each for one dimension. These histograms are used to deﬁne the new
+improved function gi, which in turn are used to generate MC points in the next iteration. In
+principle, after a few iterations, one obtains the reference distribution g approximating the
+PDF. An estimated of the value of the integral over PDF is also obtained. In practice the
+performance of VEGAS depends heavily on the goodness of the factorizability assumption
+
+3
+
+for a given PDF. Generally, VEGAS turns out to be quite eﬃcient for many distributions
+(integrands) featuring a single well localized peak.
+
+The MISER program1 is based on the idea of the “recursive stratiﬁed sampling” and
+employs the technique of variance reduction similar to that in FOAM. It explores the PDF
+until a ﬁxed maximal number of available function evaluations N is exhausted. In the very
+beginning N is allocated to the root cell being a hypercube and later on redistributed among
+the daughter cells. In the simplest variant the starting hypercube is divided by bisecting
+it across one of the edges into two sub-cells of equal volume2. The division plane is chosen
+by examining all possible n bisections of the n-dimensional cell and selecting the one that
+minimizes the resulting total variance of the two cells. Similarly as in FOAM, the variances
+are estimated cell by cell during a short MC survey with a small fraction of “allocated”
+events for this cell. The remaining pool of unexploited function calls is allocated to the
+resulting sub-cells in a proportion that fulﬁlls the condition for minimum variance. The
+whole procedure is repeated for each of the two sub-cells and continues recursively until the
+number of “allocated function calls” in a given cell falls below some predeﬁned limit. In each
+cell the estimation of the integral is obtained by means of the plain MC method. At the
+end, the results for all cells are combined together to obtain the ﬁnal value of the integrand
+and the error estimate.
+
+FOAM employs a combination of both techniques:
+
+importance and stratiﬁed sampling.
+Contrary to VEGAS, there is no assumption in the FOAM algorithm about the factorizability
+In the variance reduction mode FOAM resembles MISER,
+of the distribution (integrand).
+but it employs a diﬀerent, far more sophisticated cell division algorithm; the division plane
+of the cell is not at the half-point of the edge, but is optimized. The algorithm of FOAM
+has passed many practical tests and proved its eﬃciency in several problems in high-energy
+physics; see for instance [6, 7]. The foundations of the FOAM algorithm are well consolidated
+and our current work concentrates mainly on the updates of earlier implementations and
+improvements of the eﬃciency and functionality. For a detailed description of the algorithm
+of FOAM version 2.05 we refer the interested reader to Refs. [1] and [2].
+
+The use of the original FOAM program [2] has been mainly limited by the memory con-
+sumption. FOAM v.2.05 divides the n-dimensional parameter space into hyperrectangular or
+simplical cells. Final MC eﬃciency increases mainly with the requested maximum number
+of cells Nc, so it is very important to economize on the memory used by single cell in or-
+der reach a higher number of cells. For the hyperrectangular grid of cells a memory saving
+arrangement algorithm of coding cells in the memory was found [1]. It reduces memory con-
+sumption down to a mere 80 bytes/cell, independently of space dimension n. The present
+version, limited to hyperrectangles, proﬁts from this memory-saving algorithm of recording
+the cell parameters. We would like to mention, that in the mean-time a similar memory-
+saving algorithm has been also found and implemented for simplices. It will be included in
+the forthcoming version 2.06 of the FOAM [8].
+
+The unspoken assumption in mFOAM is that the calculation of the PDF is cheap in terms
+1Unfortunately, the MISER algorithm was overlooked in the previous papers on the FOAM project.
+2A quite similar 2-dimensional algorithm is also present in the MC program LESKO, of ref. [5], and in
+
+other programs; see ref. [2] for more references.
+
+4
+
+of CPU time. This is often true in practice. If not, then mFOAM may be used to model the
+main features of the singularities in the PDF and the ﬁne details, which can be CPU-costly,
+are then added by extra MC weight during the MC run, after the exploration. However, in
+order to deal better with the cases of PDFs which are costly in terms of CPU and feature
+relatively mild peaks, one should introduce in the future development of mFOAM the possibility
+to limit the total number of PDF calls, in addition to limiting the number of cells.
+
+The paper is organized as follows: Section 2 describes changes in basic classes and their
+functionality. Section 3 describes the conﬁguration of mFOAM. Section 4 discusses the usage
+of mFOAM classes under the ROOT system. Conclusions follow.
+
+2 Description of mFOAM code
+
+mFOAM (mini FOAM) is a new version of FOAM with slightly limited functionality, well in-
+tegrated with ROOT [9]. Our principal aim is to provide a compact and easy to use tool,
+for numerical Monte Carlo generation and integration of PDFs with arbitrarily complicated
+structure of peaks, in the number dimensions limited up to say 20. With the increasing
+popularity of ROOT in high-energy community we believe that this implementation tied up
+with ROOT will attract the interest of the new users who already exploit ROOT in their
+daily work.
+
+Let us comment on our decision of removing the simplical cells from the mFOAM algorithm
+and the code. It was done because of an empirical observation (based on practical experience
+with the wide range of the distributions) that the use of simplical cells was usually giving
+rise to worse MC eﬃciency than that of hyperrectangular cells. In addition, maintaining
+simplical cells increases complexity of the source code.
+
+The main motivation for the closer integration of mFOAM with the ROOT system was to
+proﬁt fully from the persistency mechanism for its objects and help users who already use
+ROOT daily. Also, thanks to the closer integration with ROOT, the code of mFOAM gets
+more compact, since the internal histogramming and other low-level structures are replaced
+by the well tested ROOT facilities. Altogether, we have managed to reduce signiﬁcantly the
+total size of code (by about 50%) and its complexity as well, with respect to the original
+FOAM, at the same time improving its stability.
+
+Obviously, the above improvements and gains are purely technical, nevertheless they are
+very important, if object of the mFOAM class are to be used as “rock solid” building blocks in
+any more complex, large scale, Monte Carlo projects.
+
+mFOAM, like its ancestor, is written fully in the object-oriented programming (OOP) style
+in the C++ programming language. The classes of the mFOAM program are listed in Table 1.
+Some classes present in FOAM-2.05 have been removed, because they are needed only for
+the simplical cells. The remaining classes changed their names to comply with the ROOT
+naming conventions. For the same reason, names of preserved data members now begin
+with the letter “f”. Two basic classes, TFoam and TFoamCell, are greatly simpliﬁed by the
+removing all of simplical structure. All other remaining classes have the same functionality
+as in FOAM version 2.05. In particular, an abstract base class TFoamIntegrand provides the
+
+5
+
+Short description
+
+Class
+TFoamIntegrand Abstract class for the integrand function
+TFoamVect
+TFoamCell
+TFoam
+TFoamMaxwt
+
+Utility class of vectors with dynamic allocation of memory
+Class representing the single-cell object
+Main class of mFOAM. The entire MC generator
+Monitors MC weight, measures performance of the MC run
+
+Table 1: Summary on C++ classes of mFOAM.
+
+user interface to any user-provided PDF. Classes TFoamVect and TFoamMaxwt are unmodiﬁed
+auxiliary utility classes. In mFOAM we use the library of random generators of ROOT; the
+TPSEMAR class of FOAM is removed. All classes of mFOAM inherit I/O capabilities from ROOT’s
+TObject class.
+
+As already advertised, we have payed special attention to the persistency issue. Generally,
+it is not trivial to get full persistency for the mFOAM and FOAM classes, mainly because of the
+intensive use of the pointers in the coding of the linked binary trees of the foam cells.
+All these problems are now solved eﬃciently with the help of the ROOT pointer classes.
+Consequently, any object of the mFOAM class can be written more easily at any time into disk
+and restored later on, with the help of the “automatic streamers” generated by ROOT. In
+this way, generation of the MC events can be easily stopped and resumed. When the MC
+generation of the series of events is resumed, then MC generation continues as if there was
+no disk-read and disk-write in the meantime.
+
+A simple persistent abstract class (interface) representing any user-deﬁned PDF is avail-
+able. We refer the reader to Section 4 for a number of explicit examples/templates how to
+exploit it.
+
+Let us now characterize brieﬂy the role of most important classes in the implementation
+
+of the mFOAM algorithm.
+
+2.1
+
+TFoam class
+
+TFoam is the main class. Each instance of the TFoam class is a separate, independent MC
+generator. In Tables 2 and 3, we provide a full list of data members of the class TFoam and
+their short description. Most of the methods (procedures) of the class TFOAM are listed in
+Table 4. We omitted in this table “setters” and “getters”, which provide access to some data
+members, and simple inline functions, such as sqr for squaring a Double t variable. Data
+members that are served by the setters and getters are marked in Tables 2 and 3 by the
+superscripts “s” or/and “g”. We followed closely the ROOT naming conventions and decided
+to use appropriate ROOT types instead of raw C number types. In this way we assure the
+portability of our code to the forthcoming generation of inexpensive 64-bit processors.
+
+Below we brieﬂy describe the functionality of the most important methods in the TFoam
+
+class.
+
+6
+
+TFoam member
+TString fVersiong
+TString fDate
+TString fName
+Int t fDims,g
+Int t fNCellss
+Int t fRNmax
+Int t fOptDrives
+Int t fChats
+Int t fOptRejs
+
+Short description
+Actual version of the mFOAM (like 1.02m)
+Release date of the mFOAM
+Name of a given instance of the TFoam class
+Dimension of the integration space
+Maximum number of cells
+Maximum number of random numbers generated at once
+Optimization =1,2 for variance or maximum weight reduction
+=0,1,2 chat level in output; =1 for normal output
+=0 for weighted events; =1 for unweighted events in MC genera-
+tion
+Int t fNBins
+No. of bins in edge histogram for cell MC exploration
+Int t fNSampls
+No. of MC events, when dividing (exploring) cell
+Maximum number of eﬀective (w = 1) events per bin
+Int t fEvPerBins
+Double t fMaxWtRejs; Maximum weight in rejection for getting w = 1 events
+
+Table 2: Data members of the TFoam class. Associated setters and getters marked as superscripts
+s and g.
+
+2.1.1 Constructor
+
+The TFoam(const Char t *) constructor creates the TFoam object whose name is given by
+its argument. For example the following line of code creates an instance of mFOAM generator
+named FoamX:
+
+TFoam
+
+*FoamX
+
+= new TFoam("FoamX");
+
+// Create Simulator
+
+The main role of the constructor is to initialize data members to their default values – no
+memory allocation is done at this stage. The principal conﬁguration parameters can be
+optionally changed by using setter methods (this is described in Sect. 3 ).
+
+2.1.2 Setting distribution function and random number generator
+
+The user should also provide her/his own unintegrated non-negative probability distribution
+function (PDF). Note that the PDF may be discontinuous. mFOAM can cope with integrable
+inﬁnite singularities in the PDF. However, we do not really recommend to use it for such
+cases.
+
+Two methods were available for providing a PDF object to an mFOAM object:
+SetRho(TFoamIntegrand *) sets the pointer of the PDF object through the abstract class
+TFoamIntegrand pointer (interface). The user can also provide a global PDF, making it
+available to the mFOAM object by calling the method SetRhoInt(void *). A detailed de-
+scription of how to implement all kinds of PDFs is given in Sect. 4.1.
+
+The random number generator (RNG) object is created by the user and set as a pointer
+
+in the SetPseRan (TRandom *) method; see explicit examples in Sect. 4.
+
+7
+
+TFoam member
+
+Short description
+
+Provision for the multibranching
+
+Int t *fMaskDiv
+Int t *fInhiDiv
+Int t fOptPRD
+TFoamVect **fXdivPRD
+
+Int t fNoAct
+Int t fLastCe
+TFoamCell **fCells
+
+TFoamMaxwt *fMCMonit;
+TRefArray *fCellsAct
+Double t *fPrimAcu
+TObjArray *fHistEdg
+TObjArray *fHistDbg
+TH1D *fHistWt;
+
+![fDim] Dynamic mask for cell division
+![fDim] Flags inhibiting cell division
+Option switch for predeﬁned division, for quick check
+!Lists of division values encoded in one vector per di-
+rection
+
+Geometry of cells
+Number of active cells
+Index of the last cell
+[fNCells] Array of ALL cells
+Monte Carlo generation
+Monitor of the MC weight for measuring MC eﬃciency
+Array of pointers to active cells.
+[fNoAct] Array of cumulative P
+Histograms of w, one for each edge
+Histograms for debug
+Histograms of MC weight
+
+i=1 R′
+
+k
+
+i
+
+Externals
+
+TMethodCall* fMethodCalls
+TFoamIntegrand *fRhog,s
+TRandom *fPseRang,s
+
+!ROOT’s pointer to global distribution function
+Pointer to class with distribution function
+Generator of the uniform pseudo-random numbers
+
+Statistics and MC results
+Number of function calls
+Total No. of eﬀective w = 1 events in build-up
+Sum of overweighted events
+
+Long t fNCallsg
+Long t fNEﬀevg
+Double t fSumOve
+Double t fSumWt, fSumWt2 Sum of weight w and squares w2
+Double t fNevGen
+Double t *fMCvect
+Double t fMCwt
+Double t fWtMax, fWtMin Maximum/Minimum weight (absolute)
+Double t fPrimeg
+Double t fMCresult
+Double t fMCerror
+Double t *fRvec
+
+Primary integral R′, (R = R′hwi)
+True integral R from the cell exploration MC
+and its error
+[fRNmax] random number vector
+
+No. of MC events
+[fDim] MC vector
+MC weight
+
+Double t *fAlpha
+
+Working space for cell exploration
+
+[fDim] Internal parameters of the h-rectangle: 0 <
+αi < 1
+
+Table 3: Data members of the TFoam class. Cont.
+
+How to organize the interrelation between the RNG and PDF objects of TRandom and
+TFoamIntegrand classes, serving several objects of the mFOAM class without destroying the
+persistency, will be discussed in Sect. 4.2.
+
+8
+
+TFoam method
+
+Short description
+
+Constructors and destructors
+
+TFoam()
+TFoam(const Char t *)
+˜TFoam()
+TFoam(const TFoam&)
+TFoam& operator=(const TFoam& )
+
+Default constructor (for ROOT streamer)
+User constructor
+Explicit destructor
+Copy Constructor NOT USED
+Substitution NOT USED
+
+Initialization, foam build-up
+
+void Initialize()
+void SetRho(TFoamIntegrand *)
+void ResetRho(TFoamIntegrand *)
+void SetRhoInt(void *)
+void SetPseRan(TRandom*)
+void ResetPseRan(TRandom*)
+void InitCells(void)
+
+Initialization, allocation of memory
+Sets the pointer to distribution function
+Resets the pointer to distribution function
+Sets the pointer to user-deﬁned global function
+Sets the pointer to r.n.g.
+Resets the pointer to r.n.g.
+Initializes memory for cells and starts explo-
+ration
+void Grow(void)
+Adds new cells to foam, until buﬀer is full
+Int t Divide(TFoamCell *)
+Divides cell into two daughters
+void Explore(TFoamCell *Cell)
+MC exploration of cell main subprogram
+void Carver(Int t&,Double t&,Double t&) Determines the best edge, wmax reduction
+void Varedu (Double t[ ],
+Int t&,Double t&,Double t&)
+Long t PeekMax(void)
+void MakeAlpha(void)
+Int t CellFill(Int t, TFoamCell*)
+void MakeActiveList(void)
+void SetInhiDiv(Int t, Int t )
+void SetXdivPRD(Int t, Int t, Double t[]); Sets predeﬁned division points
+Double t Eval(Double t *)
+
+Determines the best edge, σ reduction
+Chooses one active cell, used in Grow
+Generates rand. point inside h-rectangle
+Fills next cell and returns its index
+Creates table of all active cells
+Sets inhibition of cell division along certain edge
+
+Evaluates value of the distribution function
+
+Generation
+
+void MakeEvent(void)
+void GetMCvect(Double t *)
+Double t GetMCwt(void)
+Double t MCgenerate(Double t *MCvect) All the above in single method
+void GenerCel2(TFoamCell *&)
+
+Makes (generates) single MC event
+Provides generated random MC vector
+Provides MC weight
+
+Chooses one cell with probability ∼ R′
+j
+
+Finalization, reinitialization
+
+void Finalize(Double t&, Double t&)
+void GetIntegMC(Double t&, Double t&)
+void GetIntNorm(Double t&, Double t&)
+void GetWtParams(const Double t,
+
+Prints summary of MC integration
+Provides MC integral
+Provides normalization
+
+Double t&, Double t&, Double t&)
+
+Provides MC weight parameters
+
+void CheckAll(const Int t)
+void PrintCells(void)
+
+Checks correctness of the data structure
+Prints all cells
+
+Table 4: Methods of the TFoam class.
+
+Debug
+
+9
+
+2.1.3
+
+Initialization step methods
+
+To begin the process of the foam build-up, the user should invoke the Initialize() method.
+The method InitCells initializes the memory storage for cells and begins the exploration
+process starting from the root cell. The empty cells are allocated/ﬁlled using CellFill. The
+procedure Grow which loops over cells, picks up the cell with the biggest “driver integral”
+(see Ref. [1] for explanations) with the help of the PeekMax procedure. The chosen cell is
+split using the Divide procedure.
+
+Subsequently, the procedure Explore called by Divide (and by InitCells for the root
+cell) does the most important job in the mFOAM build-up:
+it performs a low statistics MC
+exploration run for each newly allocated daughter cell. It calculates how proﬁtable the future
+split of the cell will be and deﬁnes the optimal cell division geometry with the help of the
+Carver or Varedu procedures, for maximum weight or variance optimization respectively.
+All essential results of the exploration are written into the explored cell object. At the very
+end of the foam build-up, MakeActiveList is invoked to create a list of pointers to all active
+cells, for the purpose of the quick access during the MC generation. The procedure Explore
+uses MakeAlpha, which provides random coordinates inside a given cell with the uniform
+distribution. The above sequence of the procedure calls is depicted in Fig. 1.
+
+Initialize
+
+MakeActiveList
+
+InitCells
+
+Grow
+
+PeekMax
+
+Divide
+
+CellFill
+
+Explore
+
+Figure 1: Calling sequence of the mFOAM procedures during the foam build-up (initialization).
+
+2.1.4 MC event generation step methods
+
+The MC generation of a single MC event is done by invoking MakeEvent, which chooses
+randomly a cell with the help of the method GenerCell2 and, next, the internal coordinates
+of the point within the cell using MakeAlpha.
+
+10
+
+The absolute coordinates of the MC event are calculated and stored in the data member
+double-precision vector fMCvect. The MC weight is calculated using the procedure Eval,
+which provides the density distribution ρ(x).
+
+The MC event (double-precision vector) and its weight are available through getters
+
+The user may alternatively call MCgenerate, which invokes MakeEvent and provides a
+
+GetMCvect and GetMCwt.
+
+MC event and its weight simultaneously.
+
+2.1.5 Finalize step methods
+
+The use of the method Finalize is not mandatory. It prints statistics and calculates the
+estimate of the integral using the average weight from the MC run. The amount of printed
+information depends on the values of fChat. For the normalization of the plots and integrals,
+the user needs to know the exact value of R′ = R ρ′(x)dx, which is provided by the method
+GetIntNorm or Finalize.
+
+The actual value of the integrand from the MC series is provided by GetIntegMC. Note
+that, for the convenience of the user, GetIntNorm provides R′ or an MC estimate of R =
+R ρ(x)dx, depending on whether the MC run was with variable weight or weight = 1 events.
+
+Another useful ﬁnalization procedure
+
+GetWtParams(const Double_t eps, Double_t &AveWt, Double_t &WtMax, Double_t &Sigma)
+
+provides three parameters that characterize the MC weight distribution: the average weight
+AveWt, the “intelligent” maximum weight3 WtMax = wε
+max, for a given value of eps = ε and
+the variance sigma = σ. In particular, in the case of w = 1 events, wε
+max can be used as an
+input for the next MC run.
+
+2.1.6 Debug facility
+
+The TFoam class includes method CheckAll for the debugging purposes. It checks the cor-
+rectness of the pointers in the doubly linked tree of cells (this can take time for large Nc).
+Another debugging method PrintCells can be used at any stage of the calculation in order
+to print the list of all cells.
+
+2.2 TFoamCell class
+
+The TFoamCell class contains data and methods relevant to a single cell object. Data
+members of the class are listed in Table 5. In comparison with FOAM the number of data
+members is signiﬁcantly reduced. Most of the methods of the TFoamCell class are setters and
+getters. The non-trivial methods are GetHcub and GetHSize, which calculate the absolute
+position and size of hyperrectangles, and CalcVolume, which calculates the Cartesian volume
+of the cell.
+
+3The ε-dependent maximum weight is deﬁned such that events with w > wε
+
+max contribute an ε-fraction
+to the total integral. It is numerically more stable in the numerical evaluation than the one deﬁned as the
+largest weight in the MC run.
+
+11
+
+TFoamCell member Short description
+
+Short t fDim
+
+Dimension of integration space
+
+“Static” member, the same for all cells!
+
+Int t fSerial
+Int t fStatus
+TRef fParent
+TRef fDaught0
+TRef fDaught1
+
+Double t fXdiv
+Int t fBest
+
+Linked tree organization
+
+Serial number (index in fCells from TFoam class)
+Status (active or inactive)
+Pointer to parent cell
+Pointer to daughter 1
+Pointer to daughter 2
+
+The best split geometry from the MC exploration
+
+Factor x of the cell split
+The best edge candidate for the cell split
+Integrals of all kinds
+
+Double t fVolume
+Double t fIntegral
+Double t fDrive
+Double t fPrimary
+
+Cartesian volume of this cell
+Integral over cell (estimate from exploration)
+Driver integral Rloss for cell build-up
+Primary integral R′ for MC generation
+
+Table 5: Data members of the TFoamCell class.
+
+The linked tree structure of TFoamCell objects was not properly treated by the ROOT
+automatic streamers, hence in the previous version of FOAM the persistency has been achieved
+with the help of some workarounds – namely pointers to cells in the linked list of cells were
+replaced in FOAM by the integer indexes4. In mFOAM we go back to the pointers, but instead
+of the raw C++ pointers we employ objects of the special class of persistent pointers TRef
+of ROOT. This solution works very well, and as a consequence the method LinkCells5
+from TFOAM class became obsolete. However, in the present implementation the memory
+consumption is increased with respect to indexing using integers; one cell now occupies 116
+bytes of memory, simply because objects of the TRef class are composite objects.
+
+2.3 TRandom – ROOT’s collection of random-number generators
+
+The full version 2.05 of FOAM uses its own internal random-number generator called
+RANMAR [10]. In mFOAM it is replaced by the TRandom class interfacing to ROOT’s internal
+library of the three random-number generators. Two of them are rather simple generators,
+and we do not recommend their use in any serious applications. We recommend to use its
+Mersenne Twister generator TRandom3, which has huge period 219937 − 1 and generally very
+good quality [11]. At the present moment the TRandom package does not include any random-
+number generator with the perfect (controllable) “randomness”, such as RANLUX [12] [13],
+4This workaround will be unnecessary after certain bugs have been corrected in the future implementation
+
+of the ROOT streamers.
+
+5LinkCells and integer pointers in the TFoamCell class were introduced in FOAM as a “workaround”
+solution for certain problems with persistency of pointers in ROOT. It is still implemented in FOAM as a void
+function in for the purpose of the backward compatibility in the user applications.
+
+12
+
+which is necessary for certain applications6. Generally, we have decided to use TRandom,
+because it meets our set of the minimal requirements for the library of random-number
+generators, which can be characterized as follows:
+
+• Possibility to set (and reset) initial “seed” in the form of just one integer.
+
+• Availability of a method generating single uniform random number.
+
+• Presence of a method generating series of uniform random numbers in a single call.
+
+• Possibility to record (disk-write) the complete status of the random-number genera-
+tor and restart it using this record. (This, of course, is assured by the persistency
+mechanism of the ROOT.)
+
+An advanced user of ROOT can also easily add his favourite random-number generator with
+the same standardized interface (using inheritance from TRandom).
+
+The use of TRandom is rather simple. As an example lets us show the following line of
+
+code:
+
+TRandom *PseRan
+
+= new TRandom3(4357);
+
+// Create random number generator
+
+which creates an instance of Mersenne Twister generator with the seed = 4357. Note that
+the TRandom class includes many “utility methods”, however, only a small subset of them
+are used in mFOAM. For the detailed description of the TRandom, class we refer the interested
+reader to the online ROOT documentation.
+
+How to use a single TRandom object for serving several objects of the TFoam class is
+
+described in Section 4.2.
+
+3 Conﬁguring mFOAM
+
+At present mFOAM has nine principal conﬁguration parameters. In addition, the user may
+optionally (re)deﬁne certain internal conﬁguration parameters of mFOAM in order to inhibit
+and/or predeﬁne the division geometry in the cell split. All of the nine principal parameters
+are listed in Table 6. They control all essential features of the program and are preset to
+some meaningful default values, appropriate for the generation of unweighted events. The
+new inexperienced user of mFOAM usually does not need to reset them. The only exception is
+the dimension of integration space kDim. It is mandatory to set kDim to a non-zero integer
+value before invoking Initialize.
+
+In comparison with FOAM-2.05 two steering parameters were completely removed: nDim,
+OptOrd, as relevant only for simplical cells. The other three are hidden from the users eyes,
+because their usefulness is rather limited. Functionality of the program was frozen for the
+following choice: OptPeek=0, OptEdge=0 and OptMCell=1. Finally, the default value of
+another optional input parameter OptRej switch is now set to 1 (weight = 1 events), instead
+of 0.
+
+6However, the authors of ROOT are planning to include RANLUX in the near future.
+
+13
+
+Param.
+kDim
+nCells
+nSampl
+nBin
+OptRej
+OptDrive
+
+EvPerBin
+
+Chat
+MaxWtRej
+
+Dimension of the integration space
+
+Value Meaning
+0∗
+1000∗ Maximum number of cells
+200∗
+8∗
+1∗
+2∗
+1
+25∗
+0
+1∗
+1.1∗
+
+No. of MC events in the cell MC exploration
+No. of bins in edge-histogram in cell exploration
+OptRej = 0, weighted; =1, w = 1 MC events
+Maximum weight reduction
+or variance reduction
+Maximum number of eﬀective w = 1 events/bin
+or counting of number of eﬀective events/bin is inactive
+=0,1,2 is the “chat level” in the standard output
+Maximum weight used to get w = 1 MC events
+
+Table 6: Nine principal conﬁguration parameters and switches of the mFOAM program. The default
+values are marked with the superscript star.
+
+If the user wants to redeﬁne conﬁguration parameters according to his needs, then the
+
+relevant piece of code will look as follows:
+
+kDim);
+nCells);
+nSampl);
+nBin);
+OptRej);
+
+FoamX->SetkDim(
+FoamX->SetnCells(
+FoamX->SetnSampl(
+FoamX->SetnBin(
+FoamX->SetOptRej(
+FoamX->SetOptDrive( OptDrive);
+FoamX->SetEvPerBin( EvPerBin);
+FoamX->SetMaxWtRej( MaxWtRej);
+FoamX->SetChat(
+
+Chat);
+
+The user of mFOAM can decide to inhibit the division in some variables. This can be done
+with the method SetInhiDiv(Int t iDim, Int t InhiDiv) of the class TFoam, where iDim
+is the index of the variable for which the inhibition is done and InhiDiv is the inhibition
+switch. This method should be used before invoking Initialize, after setting kDim. The
+relevant code may look as follows:
+
+FoamX->SetInhiDiv(0, 1); //Inhibit division of x_1
+FoamX->SetInhiDiv(1, 1); //Inhibit division of x_2
+
+The allowed values are InhiDiv=0,1 and the default value is InhiDiv=0. Note that the
+numbering of integration variables with the index iDim starts from zero. The inhibited
+variables are generated uniformly.
+
+The user may also predeﬁne divisions of the root cell in certain variables using the method
+SetXdivPRD(Int t iDim, Int t len, Double t xDiv[]). The relevant piece of the user
+code may look as follows:
+
+14
+
+Double_t xDiv[3];
+xDiv[0]=0.30; xDiv[1]=0.40; xDiv[2]=0.65;
+FoamX->SetXdivPRD(0, 3, xDiv);
+
+Again, this should be done before invoking Initialize, after setting kDim.
+
+4 Usage of the mFOAM package
+
+To begin work with the mFOAM package, a user should have basic knowledge of ROOT and
+the CINT interpreter. Very good documentation of ROOT is available. At this moment
+mFOAM is already included in the ROOT standard distribution (beginning from version 4.04).
+The ROOT package can be obtained from ROOT’s web page7. Precompiled binaries are also
+available as tar archive ﬁles for many major platforms: PC computers with both Linux and
+MS Windows systems and workstations under UNIX. All supported operating systems can
+be found on ROOT’s home page. The installation process is straightforward and on most
+UNIX-like systems amounts to unpacking the tarball ﬁle and setting environment variables:
+ROOTSYS, which should point to the ROOT main directory and LD LIBRARY PATH locating
+ROOT libraries.
+
+We strongly recommend to use binaries, which exactly match the user operating system.
+If precompiled binaries for user system are not available, then a direct installation from source
+code is necessary. Source code can be obtained as a tarball or through the CVS repository. A
+detailed description of the conﬁguration and compilation of the ROOT package is beyond the
+scope of this article. Therefore we refer the interested user to ROOT’s online documentation.
+in the
+$ROOTSYS/lib directory. This library can be loaded directly to ROOT by issuing the fol-
+lowing command from CINT command line8:
+
+the shared library libFoam.so is present
+
+installation,
+
+successful
+
+After
+
+root [0] .L $ROOTSYS/lib/libFoam.so
+
+From now on, the user will get an access to all mFOAM classes while interpreting/executing
+C++ scripts/programs under the CINT interpreter of ROOT, or simply working interactively
+from the command line.
+
+4.1 Demonstration programs
+
+The user application program can be compiled/run using one of the following three methods:
+
+1. The user program is interpreted by CINT of ROOT. This simple method might be too
+
+slow in execution and will inhibit the use of the persistency of the mFOAM class.
+
+7See http://root.cern.ch for more information.
+8Explicit loading of the mFOAM library is really needed in rare cases, when valid system.rootmap ﬁle was
+
+not created after the compilation of source code with the help of make map command.
+
+15
+
+2. The user program is compiled/linked in ﬂight employing the Automatic Compiler of
+Libraries (ACLiC) facility of CINT. This automatizes the process of compilation and
+linking and the persistency of the mFOAM class is available. It is the preferred mode of
+work for medium and small-size applications.
+
+3. Standard compile-link-run method. This method is well suited for large MC projects,
+
+which are run in the batch mode.
+
+We tried to provide the user with examples of all possible compile/run methods.
+Demonstration scripts in the $ROOTSYS/tutorials directory cover the ﬁrst two methods
+and show the basic features of mFOAM. In addition there is a collection of simple pro-
+grams showing how to build and run stand-alone applications. They are distributed as
+a mFoam-examples-1.2.tar ﬁle which is available from the authors web page.
+
+4.1.1 Examples in $ROOTSYS/tutorials directory
+
+Let us now describe in more detail some demonstration scripts in the tutorials subdirectory
+of the ROOT distribution directory. There are 3 demonstration programs there.
+
+The ﬁrst of them, foam demo.C, demonstrates the full power of the mFOAM compiled by
+ACLiC facility (scenario 2 above), showing all essential phases of its usage: initialization, the
+setting up of random-number generator a the distribution to be generated/integrated. The
+examples of setting up optional input parameters are also shown. Finally, MC generation
+and getting the value of the integral and other parameters after MC generation are also
+demonstrated. This example is a slightly modiﬁed version of the analogous program in the
+FOAM distribution [1]. Let us explain the content of the foam demo.C script. After collection
+of headers we see the deﬁnition of the distribution to be generated/integrated:
+
+class TFDISTR: public TFoamIntegrand {
+public:
+
+TFDISTR();
+Double_t Density(Int_t, Double_t *){
+......................
+}
+ClassDef (TFDISTR,1) //Class of testing functions for FOAM
+
+};
+ClassImp(TFDISTR)
+.....................
+TFoamIntegrand
+FoamX->SetRho(rho);
+
+*rho= new TFDISTR();
+
+Class TFDISTR inherits from the abstract class TFoamIntegrand. Note the presence of the
+ClassImp and ClassDef statements, which tell ROOT to create an automatic streamer for
+this class.
+
+The subsequent piece of the code creates the objects of the random-number generator,
+
+the integrand distribution and the mFOAM object itself:
+
+16
+
+*PseRan
+
+TRandom
+PseRan->SetSeed(4357);
+TFoamIntegrand *rho= new TFDISTR();
+TFoam
+
+*FoamX
+
+= new TFoam("FoamX");
+
+= new TRandom3();
+
+// Create random number generator
+// Set seed
+// Create integrand distribution
+// Create MC simulator/generator
+
+Next, some conﬁguration parameters of the TFoam object FoamX are redeﬁned before it is
+initialized (exploration):
+
+FoamX->SetkDim(kDim);
+FoamX->SetnCells(nCells);
+FoamX->SetRho(rho);
+FoamX->SetPseRan(PseRan)
+FoamX->Initialize();
+
+// mandatory!
+// optional
+// mandatory!
+// mandatory!
+// Initialize MC simulator/generator
+
+At this point the attention should be payed to the fact that just after the exploration phase
+the object of the mFOAM class is written to ﬁle rdemo.root:
+
+TFile RootFile("rdemo.root","RECREATE","histograms");
+.............
+FoamX->Write("FoamX");
+.............
+RootFile.Write();
+RootFile.Close();
+
+// Writing mFOAM object on the disk
+
+Finally, the series of MC events are generated:
+
+for(loop=0; loop<NevTot; loop++)
+{
+
+FoamX->MakeEvent();
+FoamX->GetMCvect( MCvect);
+MCwt=FoamX->GetMCwt();
+..........
+
+}
+
+// generate MC event
+// get MC point
+// get MC weight
+
+The code ends up with the printouts of the value of the integral over PDF and some other
+statistics concerning the MC run. The user is invited to manipulate the conﬁguration pa-
+rameters of mFOAM. In particular we recommend to switch to weighted events (OptRej=0)
+and change the number of cells nCells in the initialization.
+
+The foam demo.C program is compiled, linked and executed from the CINT shell by
+
+issuing the following commands:
+
+$ root
+root [0] .L ../lib/libFoam.so
+root [1] .x foam demo.C+
+
+17
+
+Note that the suﬃx “+” instructs CINT to use the Automatic Compiler of Libraries (ACLiC)
+facility. In such a case the process of compilation and linking is completely automatized.
+During the compilation phase the shared library foam demo C.so is created, which contains
+the deﬁnition of the TFDISTR class, together with its automatic streamers. This is exactly
+what we need for testing persistency. In the stand-alone application the class of the PDF
+would have to be directly compiled and put in the shared library for further use. Here it is
+done in a simpliﬁed way.
+
+The second small program, foam demopers.C, demonstrates the use of the persistency of
+the mFOAM class. It reads the mFOAM object from the disk, checks its consistency, prints out
+geometry of cells and starts generation of events. It can be interpreted directly by CINT:
+
+$ root
+root [0] .x foam demopers.C
+
+The demo C.so library, deﬁning the TFDISTR class, is loaded at the run-time with the help
+of
+
+gROOT->ProcessLine(".L foam_demo.C+")
+
+in the code. The user may verify that the output from it is exactly the same as the analogous
+output of foam demo.C. This illustrates the fact that the mFOAM object, the MC simulator,
+can be dumped into the disk at any moment and it resumes its functioning after reloading
+it from the disk, as if there was no disk-write and disk-read at all.
+
+The other macro foam kanwa.C is a simpliﬁed shorter version of foam demo.C, without
+any unnecessary modiﬁcation of the conﬁguration parameters of the mFOAM (they are inter-
+nally set to sensible default values). This macro might be useful for the ﬁrst-time user of
+the mFOAM. On the other hand, this program adds a simple example of the graphics using
+ROOT; the 2-dimensional distribution of the produced MC events is shown dynamically on
+the screen, as the accumulated MC statistics grows. Notice the use of the TApplication
+object, in order to stabilize the picture on the screen in the execution. This macro can be
+executed/interpreted (scenario 1) directly by means of typing:
+
+$ root
+root [0] .x foam kanwa.C
+
+The example output from running foam kanwa.C is reproduced in the appendix. Simulation
+will start and then a plot of the distribution function will pop-up on the graphical canvas
+on the screen. The execution is noticeably slower, as is always the case for the interpreted
+programs. The main diﬀerence with the foam kanwa.C is in the distribution function, which
+is now deﬁned simply as a global function Camel2. It is made accessible to the mFOAM object
+FoamX in the following line of code:
+
+FoamX->SetRhoInt(Camel2);
+
+Another diﬀerence is that the shared library of mFOAM is loaded with the following explicit
+instruction:
+
+18
+
+gSystem->Load("libFoam.so");
+
+instead of the linking procedure. This instruction is not really needed if ROOT is already
+aware of the location of the mFOAM library.
+
+In some of the above examples we could not exploit the persistency of the ROOT objects.
+This is because of the restrictions in CINT, which does not allow an interpreted function
+to inherit from the TObject class. This is the reason why, in these examples where PDF is
+the global function, the automatic streamer cannot be generated. Even if one would write
+the mFOAM object on the disk, the information about the PDF will be lost. Of course, the
+user may always go back to one of the compilation methods and enjoy full persistency of
+the mFOAM objects.
+In addition to better persistency, the compiled applications have the
+advantage of being signiﬁcantly faster in the execution.
+
+4.1.2 More advanced examples of the use of mFOAM
+
+Let us now describe in more detail some examples of the use of mFOAM classes in stand-alone
+applications (scenario 3). It may be of interest to more advanced users, who plan to use
+mFOAM as part of their large-scale Monte Carlo projects. It is assumed that ROOT is installed
+and the environment variable ROOTSYS is properly set.
+
+After unpacking the distribution ﬁle mFoam-examples-1.2.tar one should execute the
+
+configure script:
+
+$ cd mFoam-examples-1.2
+$ ./configure
+
+which inspects the system conﬁguration and looks up for the ROOT library, then generates the
+Makefile ﬁle. Version 4.04 of ROOT or later is required. The configure script can fail for
+many reasons. In that case the user should ﬁrst check if the ROOTSYS environment variable
+indeed points to ROOT installation location. The default behaviour of the configure script
+can be changed by additional command line parameters and environment variables. It may
+be useful if the computer is equipped with a compiler other than gcc. A full list of available
+options is displayed by the ’configure -h’ command.
+
+The configure script and the accompanying conﬁguration ﬁles were generated9 using
+automake tools version 1.91. In case the user wants to re-create the configure script and
+the accompanying ﬁles, version 1.61 or later of automake is needed.
+To compile and link these codes one should type the following:
+
+$ make
+$ make install
+
+We have successfully tested the installation of mFOAM-examples on computers with several
+variants of the Linux operating system: CERN Scientiﬁc Linux SLC3, Red Hat Linux 7.3,
+Fedora Linux FC3. The code is highly portable and we think that it should compile without
+9The distribution directory with the configure script was created with the command sequence
+(autoreconf -i; ./configure; make dist), activating the directive AM MAINTAINER MODE in config.in.
+
+19
+
+any problems on all other systems supported by ROOT developers.
+minor modiﬁcations of the source code may be necessary.
+
+In rare case, certain
+
+After successful compilation one can run demonstration programs with the following
+
+commands:
+
+make kanwa
+make demo
+make testpers
+
+The content and functionality of the programs demo.cxx and kanwa.cxx are the same
+as those of their macro counterparts foam demo.C and foam kanwa.C described above. The
+code of these programs can serve as a useful template for the user applications.
+
+The command make testpers runs an advanced test of persistency with two generator
+objects served by one central random generator. In this example two classes of MC event
+generators TGenMC and TGenMC2 are deﬁned and the corresponding library libTGenMC.so is
+created. An object of each MC event generator uses one own object of mFOAM class and one
+external object of the class TRandom – the central RNG.
+
+In the program Main.cxx, two objects of the class TGenMC and TGenMC2 are created. Also
+a single central RNG object is allocated and made available to both MC generators. All
+three objects are written into a disk ﬁle and used to generate 200k MC events, using each
+of the two MC generators.
+
+The other program MainW.cxx reads all three objects from the disk ﬁle, reassigns the
+central RNG to mFOAM objects inside the two MC event generators; again, 200k MC events
+are generated, using each of the two MC generators. Since the disk-write in Main was done
+after initialization and before MC generation, the MC series of the events from MainW should
+be the same as from Main. This is checked by “diﬃng” two ﬁles which record ﬁrst 15 events
+from Main and MainW correspondingly. We ﬁnd that their content is identical, and this
+provides an empirical proof that this complicated setup of the two MC event generators
+using two mFOAM objects and single central RNG is surviving the disk-write and disk-read
+operations without any loss of its functionality.
+
+The compile–link–execute chain for the tandem of Main and MainW programs and “diﬃng”
+
+output ﬁles is realized by the single command ‘make testpers’.
+
+The above example of organization with the single central RNG is well suited for any
+large Monte Carlo projects with many mFOAM objects and many Monte Carlo sub-generators
+served by the single central RNG.
+
+The other interesting feature of the above examples is the implementation of the PDF
+as the Density method of the TGenMC2 class.
+In our example the TGenMC2 class inherits
+from TFoamIntegrand. Consequently, the Density function is provided to the mFOAM object
+(which is the member of the TGenMC2 class) as this. In the other MC generator of the class
+TGenMC, the PDF is deﬁned in an object of the separate class TFDISTR and the PDF of this
+class is allocated and its pointer is assigned to the mFOAM object in the TGenMC object during
+its initialization.
+
+The above test demonstrates a few fairly complicated examples of how to organize the
+relation between several mFOAM objects, RNGs and PDFs within the MC project. However,
+
+20
+
+it does not cover all possible situations. In the next section we shall discuss this issue in
+a general case and we shall argue that object of the mFOAM class are able to cope with all
+possible scenarios in an eﬃcient and transparent way.
+
+4.2 External RNG and PDF objects and
+
+the implementation of persistency
+
+Persistency is undoubtedly a very valuable feature of the objects of the class TFoam, and
+It is therefore worthwhile to clarify certain features of its
+of ROOT objects in general.
+implementation, which the user should know and consider before attempting to exploit the
+persistency of mFOAM objects in any advanced/sophisticated applications.
+
+As we have seen in the explicit examples of the previous section, the critical issue in this
+context is the treatment of the two external objects, which every given object of the class
+TFoam needs in order to function properly: the object of random number generator (RNG)
+and the object providing the probability distribution function (PDF). These two objects
+have to be provided to the object of the class TFoam. In the previous section, we have shown
+most typical case, when one deals with only one instance (object) of the above classes – this
+was quite straightforward to organize.
+
+In more advanced applications we have to be prepared to deal with the situations in
+which we deal with many (hundreds) of objects of the class TFoam, all of them using single
+central RNG object (or a few of them) and possibly generating many diﬀerent PDFs. In this
+case if one wants to proﬁt fully from the persistency, such a complicated set of interrelated
+objects of the three types has to emerge fully operational after the disk-write and disk-read
+operations. This turns out to be a nontrivial task to realize in practice.
+
+We claim that the way we interface an object of the class TFoam with the two “satel-
+lite” RNG and PDF objects of the TRandom and TFoamIntegrand classes allows us to deal
+with any arbitrarily complicated set of interrelated object, while correctly implementing the
+persistency in all such situations.
+
+First of all, the two external objects, RNG and PDF, are external in this sense that the
+new operator allocating them is placed outside the TFoam code and the object of the class
+TFoam knows only their pointers. Hence, the important question related to the persistency
+implementation using ROOT (the problem is however more general) can be immediately
+formulated: Whose responsibility is to re-create these two objects in the process of the disk-
+read? First possible solution is that this task is handled by the automatic streamer of the
+object of the class TFoam, which would re-create the objects RNG and PDF10. Their actual
+pointer should then be exported to any other objects, which need legitimately an access to
+them. This second possibility is to inhibit the re-creation of the objects RNG and PDF by
+the streamers of the class TFoam. ROOT allows this to be done11. In the latter case it would
+be the sole responsibility of the user to store the two external objects RNG and PDF into
+
+10With the help of their own streamers.
+11It is done by means of adding the comment \\! at the end of the line in which the pointer to an object
+
+is deﬁned.
+
+21
+
+disk separately, read them separately, and provide their pointers to the object of the class
+TFoam after the disk-read operation.
+
+The ﬁrst option looks attractive because of its simplicity.
+
+It is deﬁnitely an optimal
+one in the most common case of just three objects – hence we would like to implement
+this scenario as the basic one. However, this solution will fail when several objects of the
+TFoam class are served by the single RNG object, a quite common case in any bigger MC
+projects. In this case, the disk-read operation (done by ROOT streamers) will clone many
+independent identical RNG objects, each one for every object of the class TFoam. This is
+clearly undesirable.
+
+The situation with a set of several PDF objects serving one or more TFoam objects is even
+more subtle. On the one hand, one may argue that since the distribution of a given PDF
+object is essentially memorized inside a given TFoam object, a genuine one-to-one association
+among them should be maintained. Hence, the PDF object should be “owned” by the TFoam
+object, during the disk-write and disk-read, as in the ﬁrst scenario. On the other hand,
+we shall sometimes deal with the situations with a single PDF object serving several TFoam
+objects; either because it needs huge memory, or it is very slow in execution (its execution
+is a two-step process), or it is not a genuine C++ object, but rather a “wrapper” to another
+non-OOP (Fortran) program.
+In such a case it is better to handle PDF objects outside
+the TFoam object, as in the second scenario. Summarizing, the treatment of the RNG and
+PDF objects should be quite similar, and the possibility of keeping/controlling both of them
+outside the TFoam object should be optionally available. In other words, we would ideally
+need both above solution for both RNG and PDF objects: The ﬁrst solutions, for simple
+applications and the second one for advanced applications.
+
+The actual method of handling the RNG and PDF external objects in the TFoam class
+allows the user to implement both above scenarios.
+It is done in the following way: the
+RNG and PDF objects are always created for the ﬁrst time outside the TFoam object, as
+already described. Their pointers are transferred into the TFoam object as the arguments of
+Initialize(RNG,PDF). Alternatively it is done with the help of the two dedicated setters
+SetPseRan(RNG) and SetRho(PDF), before invoking Initialize(). At ﬁrst sight, it seems
+that we follow the ﬁrst solution, especially that we do not inhibit the re-creation of the
+“private copy” of the objects RNG and PDF by the TFoam object (by its streamer) during
+the disk-read. Indeed the ﬁrst solution is available in this way. Restricting the discussion
+to RNG objects, the second scenario can be implemented as follows: ﬁrst, disk-write and
+disk-read of the RNG object is done by the user, then, after the disk-read of all TFoam
+objects, the pointers of the RNG object inside TFoam objects are reassigned to the RNG
+object, using a dedicated setter method, see also the examples of section 4.1.2. In order to
+avoid a memory leak, the setter which is used to reassign the pointer to external RNG has to
+destroy the existing “ghost” RNG object, which has been unnecessarily created during the
+disk-read operation of every TFoam object. The method ResetPseRan(RNG) is introduced
+exactly for this purpose. The analogous setter method of destroying the existing PDF object
+and reassigning its pointer is the method ResetRho(PDF) of the TFoam class. Obviously, the
+RNG and PDF objects are treated in the same way.
+
+The above solution is eﬃcient, transparent and useful in almost all cases. It will not be
+
+22
+
+satisfactory in the case where creating and destroying a PDF object takes an extremely long
+time and/or huge memory (no such problem with the RNG objects). In such a case a simple
+modiﬁcation of the source code of the TFoam class (inhibiting the storage of the PDF object)
+will be a more economic solution; however, it requires recompiling the TFoam library.
+
+5 Conclusions
+
+We present all users of the FOAM package with its new version mFOAM. We have payed special
+attention to making it more user-friendly, so that it provides with less eﬀort solutions of
+many every-day problems in the MC simulation. This may, hopefully, attract new users,
+especially those who already use ROOT in their work. We also hope for feedback from
+them, to be used in the further improvements in the user interface to both FOAM and mFOAM.
+
+Acknowledgements
+
+We are very grateful to R. Brun and F. Rademakers for their help in achieving better integra-
+tion of the mFOAM code with ROOT, and many related discussions. We warmly acknowledge
+the help of Piotr Golonka in setting up the example distribution directory. We thank to ACK
+Cyfronet AGH Computer Center for granting us access to their supercomputers and PC
+clusters funded by computational grants: MNiI/SGI2800/IFJ/009/2004, MNiI/HP K460-
+XP/IFJ/009/2004, EU project CrossGrid IST-2001-32243, and KBN Grant SPUB-M 620/E-
+77/SPB/5PR UE/DZ 224/2002-2004, which were helpful while testing mFOAM.
+
+References
+
+[1] S. Jadach, Comput. Phys. Commun. 152 (2003) 55, physics/0203033.
+
+[2] S. Jadach, Comput. Phys. Commun. 130 (2000) 244, physics/9910004.
+
+[3] G. P. Lepage, J. Comput. Phys. 27 (1978) 192.
+
+[4] W. H. Press and G. R. Farrar, Computers in Physics 4 (1990) 190, CFA-3010.
+
+[5] S. Jadach and W. Placzek, Comput. Phys. Commun. 72 (1992) 221–237.
+
+[6] W. Placzek and S. Jadach, Eur. Phys. J. C29 (2003) 325, hep-ph/0302065.
+
+[7] S. Jadach and M. Skrzypek, “Solving constrained Markovian evolution in QCD with
+
+the help of the non-Markovian Monte Carlo”, hep-ph/0504263.
+
+[8] S. Jadach and P. Sawicki, “Upgrade of the cellular general purpose Monte Carlo tool
+
+FOAM to version 2.06”, in preparation.
+
+23
+
+[9] R. Brun and F. Rademakers, Nucl. Inst. Meth. in Phys. Res. A389 (1997) 81, Proceed-
+ings AIHENP’96 Workshop, Lausanne, Sept. 1996, See also http://root.cern.ch/.
+
+[10] G. Marsaglia, B. Narasimhan, and A. Zaman, Comput. Phys. Commun. 60 (1990) 345.
+
+[11] M. Matsumoto and T. Nishimura, ACM Transactions on Modeling and Computer Sim-
+
+ulation 8 (1998) 3.
+
+[12] M. Luscher, Comput. Phys. Commun. 79 (1994) 100, hep-lat/9309020.
+
+[13] F. James, Comput. Phys. Commun. 79 (1994) 111.
+
+24
+
+A APPENDIX
+
+The code of the example macro foam kanwa.C looks like:
+//
+// This program can be executed from the command line:
+//
+//
+//_____________________________________________________________________________
+Int_t kanwa(){
+
+root -l foam_kanwa.C
+
+*PseRan
+
+cout<<"--- kanwa started ---"<<endl;
+gSystem->Load("libFoam.so");
+TH2D *hst_xy = new TH2D("hst_xy" , "x-y plot", 50,0,1.0, 50,0,1.0);
+Double_t *MCvect =new Double_t[2]; // 2-dim vector generated in the MC run
+TRandom
+= new TRandom3(); // Create random number generator
+PseRan->SetSeed(4357);
+TFoam
+*FoamX
+FoamX->SetkDim(2);
+FoamX->SetnCells(500);
+FoamX->SetRhoInt(Camel2); // Set 2-dim distribution, included below
+FoamX->SetPseRan(PseRan); // Set random number generator
+FoamX->Initialize();
+// From now on FoamX is ready to generate events according to Camel2(x,y)
+for(Long_t loop=0; loop<100000; loop++){
+
+// No. of dimensions, obligatory!
+// No. of cells, can be omitted, default=2000
+
+// Initialize simulator, may take time...
+
+= new TFoam("FoamX");
+
+// Create Simulator
+
+// Set seed
+
+FoamX->MakeEvent();
+FoamX->GetMCvect( MCvect);
+Double_t x=MCvect[0];
+Double_t y=MCvect[1];
+if(loop<10) cout<<"(x,y) =
+hst_xy->Fill(x,y);
+
+// generate MC event
+// get generated vector (x,y)
+
+( "<< x <<", "<< y <<" )"<<endl;
+
+}// loop
+Double_t MCresult, MCerror;
+FoamX->GetIntegMC( MCresult, MCerror); // get MC integral, should be one
+cout << " MCresult= " << MCresult << " +- " << MCerror <<endl;
+// now hst_xy will is plotted, visualizing generated distribution
+TCanvas *cKanwa = new TCanvas("cKanwa","Canvas for plotting",600,600);
+cKanwa->cd();
+hst_xy->Draw("lego2");
+cout<<"--- kanwa ended ---"<<endl;
+
+}//kanwa
+//_____________________________________________________________________________
+Double_t sqr(Double_t x){return x*x;};
+Double_t Camel2(Int_t nDim, Double_t *Xarg){
+// 2-dimensional distribution for Foam, normalized to one (within 1e-5)
+
+Double_t x=Xarg[0];
+Double_t y=Xarg[1];
+Double_t GamSq= sqr(0.100e0);
+Double_t Dist= 0;
+Dist +=exp(-(sqr(x-1./3) +sqr(y-1./3))/GamSq)/GamSq/TMath::Pi();
+Dist +=exp(-(sqr(x-2./3) +sqr(y-2./3))/GamSq)/GamSq/TMath::Pi();
+return 0.5*Dist;
+
+}// Camel2
+//_____________________________________________________________________________
+
+25
+
+Macro foam kanwa.C produces the following output:
+
+=
+
+=
+
+1.1
+
+1.02M
+
+******
+
+TFoam::Initialize
+
+=1,2 for Sigma,WtMax
+
+2 = Dimension of the hyper-cubical space
+
+25 = Maximum No effective_events/bin, MC exploration
+
+2 = Type of Driver
+1 = MC rejection on/off for OptRej=0,1
+
+Version =
+kDim =
+nCells =
+nSampl =
+nBin =
+EvPerBin =
+OptDrive =
+OptRej =
+MaxWtRej =
+
+500 = Requested number of Cells (half of them active)
+200 = No of MC events in exploration of a cell
+
+****************************************
+******
+****************************************
+FoamX
+
+--- kanwa started ---
+FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+F
+F
+F
+F
+F
+F
+F
+F
+F
+F
+Release date: 2005.04.10 F
+F
+F
+F
+F
+F
+F
+F
+8 = No of bins in histograms, MC exploration of cell F
+F
+F
+F
+F
+F
+F
+F
+Maximum wt in rejection for wt=1 evts F
+F
+F
+F
+FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+2222222222222222222222222222222222222222222222222
+FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+F
+F
+F
+F
+F
+F
+F
+F
+F
+F
+F
+F
+F
+F
+FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+(x,y) =
+(x,y) =
+(x,y) =
+(x,y) =
+(x,y) =
+(x,y) =
+(x,y) =
+(x,y) =
+(x,y) =
+(x,y) =
+
+( 0.26506687, 0.37983892 )
+( 0.65874831, 0.76719268 )
+( 0.6405293, 0.73329734 )
+( 0.29933616, 0.37537068 )
+( 0.31228105, 0.39614503 )
+( 0.71258758, 0.64969589 )
+( 0.34830539, 0.38099167 )
+( 0.26990382, 0.42078097 )
+( 0.35661486, 0.41847364 )
+( 0.5557375, 0.62757837 )
+
+Total number of function calls
+Primary total integral
+Driver total integral
+Estimate of the true MC Integral
+
+nCalls =
+XPrime =
+XDiver =
+MCresult =
+
+*** TFoam::Initialize FINISHED!!! ***
+
+1.3922344
+0.39314276
+0.99909163
+
+99800 =
+
+=
+=
+=
+
+MCresult= 1.0004446 +- 0.00080837425
+
+--- kanwa ended ---
+
+26
+
+In addition the same script foam kanwa.C produces the following plot (canvas), which
+
+pops up on the screen.
+
+hst_xy
+hst_xy
+Entries   100000
+Entries   100000
+
+Mean x 
+Mean x 
+
+ 0.4995
+ 0.4995
+
+Mean y 
+Mean y 
+
+ 0.4999
+ 0.4999
+
+RMS x  
+RMS x  
+RMS y  
+RMS y  
+
+ 0.1811
+ 0.1811
+
+ 0.1809
+ 0.1809
+
+x-y plot
+
+700
+
+600
+
+500
+
+400
+
+300
+
+200
+
+100
+
+0
+1
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+1
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0.2
+
+0.1
+
+0
+
+0
+
+27
+
+

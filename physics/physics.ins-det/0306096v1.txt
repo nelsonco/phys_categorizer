@@ -1,0 +1,633 @@
+2003 Conference for Computing in Nuclear and High Energy Physics, La Jolla, California, 24-28 March 2003 1
+
+Calibration Infrastructure for the GLAST LAT
+
+J. Bogart
+SLAC, Stanford, CA 94025, USA
+
+3
+0
+0
+2
+ 
+n
+u
+J
+ 
+2
+1
+ 
+ 
+]
+t
+e
+d
+-
+s
+n
+i
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+6
+9
+0
+6
+0
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+The GLAST LAT [1] calibration infrastructure is designed to accommodate a wide range of time-varying data
+types, including at a minimum hardware status bits, conversion constants, and alignment for the GLAST LAT
+instrument and its prototypes. The system will support persistent XML and ROOT data to begin with; other
+physical formats will be added if necessary. In addition to the ”bulk data”, each data set will have associated
+with it a row in a rdbms table containing metadata, such as timestamps, data format, pointer to the location of
+the bulk data, etc., which will be used to identify and locate the appropriate data set for a particular application.
+As GLAST uses the Gaudi framework for event processing, the Calibration Infrastructure makes use of several
+Gaudi elements and concepts, such as conversion services, converters and data objects and implements the
+prescribed Gaudi interfaces (IDetDataSvc, IValidity, ..). This insures that calibration data will always be valid
+and appropriate for the event being processed. The persistent representation of a calibration dataset as two
+physical pieces in diﬀerent formats complicates the conversion process somewhat: two cooperating conversion
+services are involved in the conversion of any single dataset.
+
+1. Introduction
+
+2. Requirements
+
+A calibration dataset as used here is information
+describing some aspect of the state of the the GLAST
+LAT which may change with time. Examples include
+hardware status bits, electronics gains and alignment
+information. The Calibration Infrastructure pro-
+vides services to write and access such datasets, par-
+ticularly those needed for the earliest stages of event
+processing. Information collectively known as IRFs
+(instrument response functions) used in higher-level
+analyses will be managed by a diﬀerent facility.
+
+1.1. The Instrument
+
+instrument,
+
+The GLAST LAT is scheduled for launch in 2006.
+Although an astronomical
+it consists
+of active components familiar to high-energy physi-
+cists: a silicon strip tracker, a cesium iodide crystal
+calorimeter, and an ACD (anti-coincidence detector)
+consisting of scintillating tiles. However, unlike the
+prototypical HEP detector of today,
+
+• There is no signiﬁcant ambient magnetic ﬁeld.
+
+• There is no beamline, hence no reason for circu-
+lar symmetry. Detector components are almost
+all box-like and aligned along orthogonal axes.
+
+• The detetector is small, both in size and, except
+for silicon strips, in number of components.
+
+Although storage and cpu resources required for
+LAT data processing are relatively modest, the pro-
+cessing pipeline is no simpler than for standard HEP
+experiments; we still need “one of everything” as well
+as considerable ﬂexibility both for developers and for
+end-users. In particular, the calibration infrastructure
+• must support prototypes as well as ﬂight instru-
+ment (but can assume that no job will concern
+itself with more than one instrument).
+
+• must support remote use, even disconnected use.
+• must provide transparent access to appropriate
+calibration data for event analysis.
+In partic-
+ular, each calibration data set has a validity
+time interval associated with it. If the times-
+tamp of the event being analyzed is outside the
+validity interval of the in-memory calibration, a
+new calibration whose validity interval includes
+the timestamp must be fetched without special
+intervention by the client.
+
+• must provide comprehensive, even if primitive,
+access for clients with a more diagnostic slant.
+
+Like any other component of standard processing, the
+calibration infrastructure software must be robust.
+Performance and resource requirements are not strin-
+gent, but they cannot be ignored, either. The calibra-
+tion infrastructure should in no respect be a bottle-
+neck.
+
+The last especially has impact on the calibration in-
+frastructure design. The amount and complexity of
+data to be managed is much less than in a typical HEP
+experiment, so much less that we need pay only min-
+imal attention to eﬃcient use of storage and have no
+need for especially clever organizational and searching
+schemes.
+
+2.1. Software Environment
+
+All oﬄine software must build and run in at least
+two environments: Linux with gcc and Windows with
+Visual Studio. Developers are split between the two.
+Pipeline processing takes place on the SLAC Linux
+farm.
+
+MOKT001
+
+2 2003 Conference for Computing in Nuclear and High Energy Physics, La Jolla, California, 24-28 March 2003
+
+We prefer to use, and almost universally do use,
+tools which are both free and open source:
+free be-
+cause we cannot ask collaborators to pay exorbitant
+per-seat charges and open source so that we can make
+patches immediately ourselves if necessary. Several
+of our most critical tools have come from elsewhere
+within the high-energy physics community. One such
+is the Gaudi framework. [2] The calibration infrastruc-
+ture adheres to the Gaudi model of conversion from
+persistent to in-memory (“transient”) data.
+
+3. Data and Metadata
+
+It is extremely important that the collection of cali-
+brations be readily searchable by various criteria: type
+of calibration, validity interval, instrument calibrated,
+ﬂavor,1 etc. However, once the desired calibration
+data set is found, the chief clients of calibration typi-
+cally want access to the complete calibration data set,
+not just some extracted piece. In essence each cali-
+bration data set is comprised of two components with
+diﬀerent functional requirements. One is the bulk
+data, the calibration information about the instru-
+ment, such as a collection of pedestals. Since the en-
+tire collection will be read into memory before use
+by most applications, the internal organization does
+not have to be particularly well-matched to access
+patterns of the applications, but it should be self-
+describing and, for large data sets, reasonably com-
+pact. The other component is metadata, informa-
+tion about the bulk data. The amount of metadata
+per calibration is small and its structure is uniform
+across all calibration types so that it can be readily
+searched.
+
+3.1. Metadata
+
+A natural storage format for the metadata is in a
+relational database table. MySQL satisﬁes our func-
+tional requirements and is moreover free, open-source
+and straightforward to use. Each calibration is reg-
+istered by entering a new row in the table. The
+columns in the table fall into three categories: those
+used primarily in searching (calibration type, start
+and end of validity interval, and several others), those
+used to access the bulk data (such as a ﬁlename and
+an indicator of format), and those which contain in-
+formation primarily intended for human readers, such
+as a text description of the conditions under which the
+calibration was done. See Table I for the complete list
+
+1An application-deﬁned string associated with the calibra-
+tion which may, for example, indicate intended use, such as
+“digi”. Defaults to “vanilla”.
+
+MOKT001
+
+3.2. Data formats
+
+Currently only XML is used for bulk data; support
+for ROOT is in development. Using a human-readable
+format has been an aid in debugging the new system,
+but XML is not well-suited to data sets involving large
+numbers of ﬂoating-point values. New calibrations of
+this nature will be written as ROOT ﬁles as soon as
+full support is available. There will be no need to
+convert old ﬁles since the ﬁle format is discovered dy-
+namically from the metadata for each data set.
+
+Another potential drawback of XML ﬁles compared
+to a binary format like ROOT is their bulk. If space
+becomes a problem support for a third format, com-
+pressed XML, will be added. Typical calibration ﬁles
+now in use are reduced by about a factor of 100 by
+standard compression techniques.
+
+4. Analysis Client Interface
+
+4.1. Standard Gaudi Model
+
+The Gaudi Detector Data Service, Persistency Ser-
+vice, and Conversion Service paradigms provide much
+of what is needed to meet the requirements of GLAST
+analysis clients, though only the Persistency Service
+could be used untouched. The most straightforward
+use of these services might go something like this:
+
+• The client asks the Data Service for calibration
+
+information while processing an event
+
+• If data is present and current, we’re done.
+
+• Otherwise the Data Service requests data from
+
+the Persistency Service
+
+• The Persistency Service determines the appro-
+priate Conversion Service for data in question
+and makes a request
+
+• The Conversion Service ﬁnds the correct Con-
+verter for this type of calibration data and in-
+vokes it
+
+• The Converter ﬁnds persistent form of correct
+data and reconstitutes it to the appropriate in-
+memory location
+
+The collaborating services pass a data structure
+known as an opaque address among themselves
+which contains whatever information is needed to
+identify and convert the persistent form of the dataset.
+This data structure must be retrievable from the ini-
+tial client request, which typically identiﬁes a dataset
+by its location in the data hierarchy known as the
+TDS (Transient Data Store). The correct dataset is
+further implicitly determined by the timestamp of the
+event currently being processed.
+
+2003 Conference for Computing in Nuclear and High Energy Physics, La Jolla, California, 24-28 March 2003 3
+
+Field name Category
+
+Notes
+
+serNo
+instrument
+calibType
+ﬂavor
+vstart
+vend
+completion
+procLevel
+prodStart
+prodEnd
+locale
+enterTime
+creator
+uid
+inputDesc
+notes
+dataIdent
+dataFmt
+fmtVersion
+
+unique index, automatically assigned
+identify prototype or ﬂight instrument
+alignment, hot channels, etc.
+normally “vanilla”
+timestamp start of validity for this calibration
+timestamp end of validity for this calibration
+one of ok, incomplete, abort
+production, development, test or superseded
+timestamp when calib. became production
+timestamp when calib. was superseded
+
+search
+search
+search
+search
+search
+search
+search
+search
+search, info
+search, info
+info, possibly search location of instrument when calibration was done
+info
+info
+info
+info
+info
+access
+access
+access
+
+time at which entry was registered (automatic)
+procedure creating this entry
+human responsible for this entry
+comments concerning data input to calib. procedure
+any other comments
+ﬁlename or analogous access information
+support XML and soon also ROOT
+allows schema evolution of bulk data format
+
+Table I Metadata Table Fields
+
+4.2. Double Conversion
+
+The two constituents of a GLAST LAT calibration
+dataset are each converted more or less according to
+the above scheme. First the metadata is converted.
+Since there is only one kind of metadata, there is no
+need for separate converters; the conversion is han-
+dled directly by the MySQL Conversion Service. The
+result of this conversion is to determine the physical
+form of the bulk data (e.g., XML), form a suitable
+opaque address incorporating the access information
+from the metadata, and invoke the Persistency Service
+again with this address. The conversion service ﬁnds
+the correct converter. In the case of XML bulk data,
+a base converter class parses the XML into a DOM
+in-memory representation, handles conversion of data
+common to all calibration types, such as certain ﬁelds
+from the metadata, then invokes a method which has
+been overridden by derived classes in order to handle
+the calibration type-speciﬁc data.
+
+4.3. Transient Data Store (TDS)
+Organization
+
+Since analysis clients generally need access to an
+entire calibration dataset the TDS hierarchy (some-
+times referred to as /bf TCDS, for Transient Calibra-
+tion Data Store, to distinguish it from the event TDS)
+is simple and uniform, with all the data stored only in
+leaf nodes, as shown in Figure 1. There is a root node,
+
+MOKT001
+
+a second level corresponding to calibration type, and
+a third level, the leaves, representing ﬂavor. This or-
+ganization allows multiple ﬂavors of a single calibra-
+tion type to be accessible concurrently. A “vanilla”
+leaf node is always present for each calibration type.
+Other ﬂavor nodes are determined at run time from
+job options parameters.
+
+5. An Example Analysis Client
+
+The ﬁrst calibration types to be supported were
+dead and hot channel lists for the tracker. Tracker
+utility software already included several Gaudi ser-
+vices; adding a Bad Strips Service was a natural ex-
+tension.
+
+Hot channels and dead channels are kept as sepa-
+rate datasets by the Calibration Infrastructure; it is
+not even necessarily the case that they are generated
+at the same time or from the same input. However
+analysis applications typically want a single merged
+list of bad channels. The Bad Strips Service and an
+associated Gaudi algorithm, TkrCalibAlg, are respon-
+sible for the merging and for insuring that the list is
+kept up to date. Active elements and the ﬂow of data
+in this process can be seen in Figure 2. For each new
+event,
+
+• The algorithm veriﬁes that dead and hot chan-
+nel data are in the TCDS and causes them to
+be updated (to datasets whose validity interval
+
+4 2003 Conference for Computing in Nuclear and High Energy Physics, La Jolla, California, 24-28 March 2003
+
+Calib
+
+...
+
+...
+
+...
+
+TKR_HotChan
+
+CAL_LightAtt
+
+Vanilla
+
+Digi
+
+Vanilla
+
+/Calib/TKR_HotChan/Vanilla
+
+/Calib/TKR_HotChan/Digi
+
+/Calib/CAL_LightAtt/Vanilla
+
+Figure 1: Part of node hierarchy in TCDS. Only the bottom nodes have associated calibration data.
+
+includes the timestamp of the current event) if
+necessary
+
+• It checks to see if the serial number (here just
+the serial number entry for the corresponding
+MySQL row, but any unique identiﬁer would do)
+of either dataset has changed.
+
+• If so, it asks the Bad Strips Service to merge the
+
+new datasets.
+
+• Analysis algorithms may now use the Bad Strips
+Service to access the merged and updated bad
+strips list.
+
+An additional beneﬁt of this design, incorporating a
+separate tracker utility layer, is that the full machin-
+ery of the Calibration Infrastructure may be bypassed
+in case it is not needed, for example with MC data.
+
+5.1. Other clients
+
+The initial focus has been on supporting analysis
+clients in the Gaudi environment. For non-Gaudi
+clients, tools for access to the Calibration Infrastruc-
+ture and the data it maintains are so far rudimen-
+tary, but comprise a suitable base for more complete
+and formalized services, particularly for access to the
+metadata, as the project matures.
+
+Creation of new bulk datasets typically happens
+outside Gaudi and is not a function of the Calibration
+Infrastructure.
+It is the responsibility of the detec-
+tor subsystems to provide such data in a supported
+format; that is, one which the Infrastructure conver-
+sion services can convert. A new dataset becomes
+generally available after it has been registered (which
+is an Infrastructure function) by writing a new row
+
+in the metadata table. Similarly, non-Gaudi applica-
+tions may use callable Infrastructure services to read
+or search the metadata database (or may use SQL
+queries directly), but in most cases the public API for
+bulk data for such applications is just the format of
+the data.
+
+6. Improvements and Extensions
+
+6.1. Metadata management
+
+For a robust production environment, additional
+tools to access and manage the metadata will be nec-
+essary. Write access to the database is already re-
+stricted, but even legitimate writers can make mis-
+takes. Several kinds of errors can and should be
+caught. Consistency and completeness checks can
+catch more subtle problems involving more than one
+row.
+
+6.2. Production database alternatives
+
+The production MySQL database and bulk data at
+SLAC are not conveniently accessible for all users.
+We plan to provide mirrors for production European
+Since the dataIdent ﬁeld of the metadata
+users.
+(which identiﬁes the bulk data belonging to a partic-
+ular calibration) may and typically does contain en-
+vironment variables, the metadata itself may be left
+untouched in the mirrors.
+
+Isolated developers present a somewhat diﬀerent
+problem. They may be disconnected from the net-
+work entirely, but their needs are typically less: they
+don’t need access to all calibrations. One way, already
+
+MOKT001
+
+2003 Conference for Computing in Nuclear and High Energy Physics, La Jolla, California, 24-28 March 2003 5
+
+TCDS:
+hot channels,
+dead channels
+
+Calibration
+conversion
+services,
+converters
+
+Metadata
+  rdbms
+
+XML
+files
+
+Tkr Services:
+updated, merged
+bad channels
+
+algorithm
+algorithm
+
+algorithm
+
+Figure 2: Flow of tracker calibration data.
+
+successfully demonstrated, to provide a fully-local cal-
+ibration infrastructure is to install a MySQL server on
+the user’s machine, ﬁll it with a dump of the contents
+of the production database, and copy over bulk data
+ﬁles as needed. Another possibility which avoids the
+complex process of MySQL installation would be to
+provide an alternate implementation of the metadata
+storage and access, such as a simple ascii ﬁle repre-
+sentation of the metadata for a minimal collection of
+calibrations.
+
+6.3. Additional calibration types and
+formats
+
+So far only a fraction of the total number of ex-
+pected calibration types are supported by the Cali-
+bration Infrastructure; others will be implemented as
+required by clients.
+
+ROOT is the preferred choice for calibration ﬁles
+involving many ﬂoating point numbers, both because
+it is a compact binary format and because it is already
+heavily used for persistent event data and as an anal-
+ysis platform. A ROOT Conversion Service is under
+development.
+
+The Calibration Infrastructure or a near-clone could
+be used for this purpose.
+
+7. Conclusions
+
+The Calibration Infrastructure is in active use for
+several tracker and calorimeter calibrations. There is
+much to do before the full facility as envisioned is in
+place, and certain features of even the current limited
+implementation have not been thoroughtly exercised,
+but there is no reason to doubt that the design will
+accommodate all currently-anticipated future needs.
+
+Acknowledgments
+
+The author wishes to thank Andrea Valassi (CERN)
+for guidance in the design of the two-stage conversion
+process and Leon Rochester (SLAC) for suggesting the
+concept of ﬂavor and for contributing to the design
+and implementation of the bad strips architecture.
+
+Work supported by Department of Energy contract
+
+DE-AC03-76SF00515.
+
+6.4. Parameters database
+
+References
+
+GLAST oﬄine has as yet no formal mechanism for
+keeping track of the many parameters that go into a
+particular software run. Blessed collections of such
+parameters share many attributes with calibrations.
+
+[1] GLAST
+
+mission
+
+statement,
+http://www-glast.stanford.edu/mission.html
+page,
+http://proj-gaudi.web.cern.ch/proj-gaudi/
+
+project
+
+home
+
+[2] Gaudi
+
+MOKT001
+
+

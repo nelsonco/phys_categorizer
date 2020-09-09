@@ -1,0 +1,1087 @@
+4
+0
+0
+2
+ 
+r
+a
+
+M
+ 
+5
+2
+ 
+ 
+]
+h
+p
+-
+o
+e
+g
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+3
+2
+1
+3
+0
+4
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+The “Yin-Yang Grid”: An Overset Grid in Spherical Geometry
+
+Akira Kageyama∗ and Tetsuya Sato
+Earth Simulator Center, Japan Agency for Marine-Earth Science and Technology, Yokohama 236-0001, Japan
+
+A new kind of overset grid, named Yin-Yang grid, for spherical geometry is proposed. The Yin-
+Yang grid is composed of two identical component grids that are combined in a complemental way
+to cover a spherical surface with partial overlap on their boundaries. Each component grid is a
+low latitude part of the latitude-longitude grid. Therefore the grid spacing is quasi-uniform and
+the metric tensors are simple and analytically known. One can directly apply mathematical and
+numerical resources that have been written in the spherical polar coordinates or latitude-longitude
+grid. The complemental combination of the two identical component grids enables us to make
+eﬃcient and concise programs. Simulation codes for geodynamo and mantle convection simulations
+using ﬁnite diﬀerence scheme based on the Yin-Yang grid are developed and tested. The Yin-Yang
+grid is suitable for massively parallel computers.
+
+I.
+
+INTRODUCTION
+
+Since the Earth is composed of spherical layers, computer simulations of the Earth’s interior, such as geodynamo and
+mantle convection simulations, need eﬃcient spatial discretization schemes in spherical shell geometry. The spectral
+method [15] has been the major tool in the geodynamo simulation; all six codes [9, 11, 42, 46, 47] in the benchmark
+test in Christensen et al. [10] and other codes [e.g., 20, 28] use the spherical harmonics expansion method in the
+horizontal space. However, the importance of non-spectral (or point-based) approaches in the dynamo simulation
+is now increasingly recognized to simulate more realistic geodynamo regime with smaller Ekman numbers [7]. The
+pursuit of point-based approaches started earlier in the mantle convection simulations, because the mantle’s intense
+spatial variation of viscosity and the phase transitions makes the spectral approach not ﬁt to the problem. Although
+the spectral method for the mantle convection prospered in 1980s and 90s [2, 16, 18, 30, 49], the ﬁnite element method
+is rapidly growing in this ﬁeld [1, 4, 39, 45, 50]. There are also a couple of codes that uses the ﬁnite element method in
+the geodynamo simulation [7, 31]. The ﬁnite diﬀerence or ﬁnite volume method is applied for the mantle convection
+by Hernlund and Tackley [19], Iwase [21], Ratcliﬀ et al. [38]. The ﬁnite diﬀerence method has been used for the core
+convection and the geodynamo simulation by the authors from 1990s [22, 23, 24, 25, 26, 27, 29, 34], in which the
+π),
+latitude-longitude grids in the spherical polar coordinates is used with radius r (ri ≤
+and longitude φ (0
+φ < 2π). Since the ﬁnite diﬀerence method enables us to make highly optimized programs for
+massively parallel computers, especially massively parallel vector supercomputers like the Earth Simulator [17], we
+further exploit the possibility of the ﬁnite diﬀerence method for simulations in spherical shell geometry by improving
+the base grid system.
+
+ro), colatitude θ (0
+
+≤
+
+≤
+
+≤
+
+≤
+
+θ
+
+r
+
+It is known that the latitude-longitude grid has two numerical problems; the coordinate singularity and the grid
+convergence near the poles. Since the coordinate singularity is not a real singularity (the pole is not singular point of
+physical functions), one can solve the basic equations on the poles by applying the l’Hospital’s rule on the pole grids
+[e.g., 26]. The computational cost for this pole grid solver is negligible.
+
+The problem of the grid convergence is more serious. In order to relax the severe restriction on the time step,
+one has to apply a ﬁlter so that the grid spacing on the sphere becomes eﬀectively quasi-uniform. The amount of
+information abandoned by the ﬁlter is estimated by the number of grid points that are eﬀectively present and that
+actually present in the computational space; suppose one has a latitude-longitude grid of a spherical surface of unit
+radius with inter mesh angles ∆ in both colatitude (θ) and longitude (φ). The azimuthal grid spacing, which is ∆ in
+the equator, converges in higher latitudes. When a ﬁlter enables an eﬀectively quasi-uniform grid with spacing ∆ on
+2π
+π
+0 dφ)/∆2 = 4π/∆2. While the number
+the sphere, the number of eﬀective grid points is estimated by (
+0 sin θdθ
+R
+R
+2π
+π
+0 dφ)/∆2 = 2π2/∆2. Therefore sizeable ratio
+of actual grid points in the computational space is given by (
+0 dθ
+R
+of information, (2π2
+36% of the latitude-longitude grid, is abandoned in vain by the ﬁltering at each
+simulation step. In addition to this computational ineﬃciency, the ﬁlter has non-negligible computational costs. In
+our geodynamo simulation code using latitude-longitude grid, in which a Fast Fourier Transform (FFT)-based ﬁltering
+procedure is applied, the ﬁlter routine can take more than 30% of the total execution time.
+
+4π)/2π2
+
+× R
+
+−
+
+∼
+
+∗Electronic address: kage@jamstec.go.jp
+
+Note that the above problem of the grid redundancy in the latitude-longitude grid comes only from the region of
+high latitudes. The remaining part of the latitude-longitude grid—the low latitude region–has rather desirable feature
+for numerical simulations; it is an orthogonal grid, it has simple metric tensors, and it has quasi-uniform grid spacings.
+This observation leads us to the idea of a new spherical grid proposed in this paper.
+
+Since there is no grid mesh that is orthogonal all over the spherical surface and, at the same time, free of coordinate
+singularity or grid convergence, we decompose the spherical surface into subregions. The decomposition, or dissection,
+enables us to cover each subregion by a grid system that is individually orthogonal and singularity-free. This divide-
+and-rule approach has been used with good success in the computational aerodynamics that incorporates complex
+geometry of aircraft’s body with wings/stores/blades.
+
+The dissection of the computational domain generates internal border or boundary between the subregions. There
+are two diﬀerent approaches to handle the internal boundaries. One is the patched grid method [37] and the other is
+the overset grid method [8]. In the patched grid approach, the subdomains contact one another without any overlap
+on their borders. In the overset grid method, on the other hand, the subdomains partially overlap one another on
+their borders. The overset grid is also called as overlaid grid, or composite overlapping grid, or Chimera grid [44].
+The validity and importance of the overset approach in the aerodynamical calculations was pointed out by Steger
+[43]. Since then this method is widely used in this ﬁeld. It is now one of the most important grid techniques in the
+computational aerodynamics; for example, whole aircraft with wing and store [32], tiltrotor aircraft [33], Boeing 747
+[6, 40], Space Shuttle [5], helicopter [13], and others.
+
+In the computational geosciences, the idea of the overset grid approach appeared rather early. Phillips proposed
+a kind of composite grid in 1950’s to solve partial diﬀerential equations on a hemisphere, in which the high latitude
+region of the latitude-longitude grid is “capped” by another grid system that is constructed by a stereographic
+projection to a plane on the north pole [3, 35, 36]. After a long intermission, the overset grid method seems to attract
+growing interest in geoscience these days. The “cubed sphere” [41] is an overset grid that covers a spherical surface
+with six component grids that correspond to six faces of a sphere. The “cubed sphere” is recently applied to the
+mantle convection simulation [19]. In the atmospheric research, other kind of spherical overset grid is used in a global
+circulation model [12], in which the spherical surface is covered by two component grids—improved stereographic
+projection grids—in northern and souther hemispheres that overlap in the equator. A successful test of 100-day
+integration of global circulation is demonstrated with this overset grid.
+
+The overset grid proposed in this paper is named “Yin-Yang grid” after the symbol for yin and yang of Chinese
+philosophy of complementarity. The Yin-Yang grid is composed of two identical and complemental component grids.
+Compared with other spherical overset grids, the Yin-Yang grid is simple in its geometry and metric tensors. A
+remarkable feature of this overset grid is that the two identical component grids are combined in a complemental way
+with a special symmetry.
+
+II. BASIC YIN-YANG GRID
+
+The Yin-Yang grid in its most basic shape is shown in Fig. 1. It has two component grids that are geometrically
+identical (exactly the same shape and size); see Fig. 1(a). We call the two component grids “Yin grid” (or n-grid)
+and “Yang grid” (or e-grid). They are combined to cover a spherical surface with partial overlap on their borders as
+shown in Fig. 1(b). Each component grid is in fact a part of the latitude-longitude grid: A component grid, say Yin
+grid, is deﬁned in the spherical polar coordinates by
+
+(π/4
+
+δ
+
+θ
+
+3π/4 + δ)
+
+3π/4
+
+δ
+
+φ
+
+3π/4 + δ),
+
+(
+−
+
+∩
+
+−
+
+≤
+
+≤
+
+−
+
+≤
+
+≤
+
+where δ is a small buﬀer, which is proportional to grid spacing, required for minimum overlap in the overset method-
+0), the area of the above part of the sphere with unit
+ology (see Fig. 1(b)). In the limit of inﬁnitesimal grid (δ
+radius is given by
+sin θdθ
+2.12π, i.e., roughly a half of the whole spherical surface (2π).
+Another component grid, Yang grid, is deﬁned by the same rule of eq. (1) but in diﬀerent spherical coordinates that
+is perpendicular to the original one; see the green- and blue-colored spherical mesh in Fig. 2. The axis of the Yang
+grid’s coordinates (blue mesh in Fig. 2), is located in a equator of the Yin grid’s coordinates (green mesh in Fig. 2).
+The relation between Yin coordinates and Yang coordinates is denoted in the Cartesian coordinates by
+
+3π/4
+−3π/4 dφ = 3π/√2
+R
+
+3π/4
+π/4
+R
+
+→
+
+∼
+
+where (xn, yn, zn) is Yin’s Cartesian coordinates and (xe, ye, ze) is Yang’s. In a matrix form,
+
+(xe, ye, ze) = (
+
+xn, zn, yn),
+
+−
+
+xe
+ye
+ze
+
+
+
+
+
+
+
+
+
+= M 
+
+
+xn
+zn
+yn
+
+,
+
+
+
+
+
+2
+
+(1)
+
+(2)
+
+(3)
+
+3
+
+(4)
+
+(5)
+
+(6)
+(7)
+(8)
+(9)
+
+(10)
+
+(11)
+
+(12)
+(13)
+
+where
+
+Note that
+
+with
+
+which indicates that the transformations between Yin and Yang coordinates are symmetric. This is a reﬂex of the
+complemental relation between Yin and Yang.
+In the spherical coordinates, eq. (2) reads
+
+where (rn, θn, φn), and (re, θe, φe) are the coordinates of Yin and Yang, respectively. The idea of two perpendicular
+spherical coordinates is used in the global ocean simulation [14] to avoid the grid convergence in the Arctic, however,
+the second spherical coordinates is used in a sort of auxiliary way for the main (usual) spherical polar coordinates in
+their method. On the other hand, we make the best use of the symmetry between two coordinates.
+
+For spatial discretization, we deﬁne mesh point at j-th colatitude θℓ
+
+j and k-th longitude φℓ
+
+k on Yin grid (for ℓ = n)
+
+and on Yang grid (for ℓ = e) as
+
+M = 
+
+
+1 0 0
+−
+0 0 1
+0 1 0
+
+.
+
+
+
+
+
+M
+
+−1 = M,
+
+re = rn,
+
+sin θe cos φe =
+sin θe sin φe = cos θn,
+
+−
+
+sin θn cos φn,
+
+cos θe = sin θn sin φn,
+
+θℓ
+j = θmin + j ∆θ,
+φℓ
+k = φmin + k ∆φ,
+
+1),
+
+(j = 0, Nθ −
+(k = 0, Nφ −
+
+1),
+
+∆θ = (θmax
+∆φ = (φmax
+
+θmin)/(Nθ −
+φmin)/(Nφ −
+
+1),
+1),
+
+−
+−
+
+where the grid distribution ranges from θmin = π/4
+to φmax = 3π/4 + δ in longitude. We set ∆θ = ∆φ = 2δ in Fig. 1, as an example.
+
+δ to θmax = 3π/4 + δ in colatitude, and from φmin =
+
+−
+
+−
+
+3π/4
+
+δ
+
+−
+
+j , φn
+
+An important feature of the Yin-Yang grid as a spherical overset grid is that the two component grids are identical
+and their geometrical positions are complemental. This enables us to make concise programs: Suppose a grid point
+(θn
+k ) on Yin grid’s horizontal border at index position (j, k) (e.g., j = 1). Its value should be determined by an
+interpolation from its neighbor points, or stencils, of Yang grid with interpolation coeﬃcients that are determined by
+relative position of (θn
+k ) in the stencils. Note that exactly the same interpolation coeﬃcients and relative stencils
+are used to set the value of corresponding grid point (θe
+k) at (j, k) of Yang’s border, since the geometrical relations
+between Yin grid and Yang grid are symmetric. In other words, we can make use of one interpolation routine for two
+times (for Yin grid and for Yang grid) to set the horizontal boundary conditions. Note also that the metric tensors at
+a bulk grid point at (j, k) of Yin grid is a function of its position (θn
+k ) in Yin’s coordinates, and the metric tensors
+at corresponding point (θe
+j , φe
+k) in Yang grid are exactly the same. Therefore we can call one subroutine of ﬂuid solver
+and others for two times for Yin grid and Yang grid.
+
+j , φn
+
+j , φn
+
+j , φe
+
+Another advantage of the Yin-Yang grid resides in the fact that the component grid is nothing but the (part of )
+latitude-longitude grid. We can directly deal with the equations to be solved with the vector form in the usual spherical
+polar coordinates,
+. The analytical form of metric tensors are familiar in the spherical coordinates. We
+can directly code the basic equations in the program as they are formulated in the spherical coordinates. We can
+make use of various resources of mathematical formulas, program libraries, and tools that have been developed in the
+spherical polar coordinates.
+
+vr, vθ, vφ}
+
+{
+
+To conclude this section, we point out that the construction of three-dimensional Yin-Yang grid for spherical shell
+geometry is straightforward, by piling up the basic (two-dimensional) Yin-Yang grids in radial direction. See Fig. 3.
+
+III. VECTOR TRANSFORMATION FORMULA BETWEEN YIN AND YANG GRIDS
+
+Following the general overset methodology [e.g., 8], interpolations are applied on the boundary of each component
+grid to set the boundary values, or internal boundary condition. When one deals with scalar variables, the interpolation
+
+r , vn
+vn
+
+is simple. For vector ﬁelds, a care is needed for vector components, since expressions of a vector in the Yin’s spherical
+r, ve
+ve
+coordinates,
+Because the Yin-Yang transformation denoted by eq. (2) is a rotation about the origin (r = 0), the radial component
+r), and horizontal components are mapped by local rotation transforms, as shown in
+
+of the vector is invariant (vn
+Fig. 4, where the rotation angle ψ is a function of latitude and longitude;
+
+, and in the Yang’s coordinates,
+
+, are diﬀerent.
+
+θ , vn
+φ }
+
+θ, ve
+φ}
+
+r = ve
+
+{
+
+{
+
+To ﬁnd the expression of ψ, we consider unit vectors in θ and φ directions on the Yin and Yang coordinates. From
+Fig. 4, we see
+
+where ˆθℓ and ˆφℓ are unit vectors in θ and φ directions in the component grid ℓ, with ℓ = n for Yin grid, and ℓ = e for
+Yang grid. The unit vectors
+
+in the Cartesian coordinates are related to
+
+ˆxℓ, ˆyℓ, ˆzℓ
+
+ˆθℓ, ˆφℓ
+
+by
+
+{
+
+}
+
+ve
+r
+ve
+θ
+ve
+φ
+
+
+
+
+
+
+
+
+
+= 
+
+
+0
+
+0
+1
+0 cos ψ
+sin ψ
+0 sin ψ cos ψ
+
+−
+
+vn
+r
+vn
+θ
+vn
+φ
+
+.
+
+
+
+
+
+
+
+
+
+
+
+
+
+cos ψ = ˆφn
+sin ψ =
+
+·
+ˆφn
+
+ˆφe,
+
+ˆθe,
+
+−
+
+·
+
+{
+
+}
+ˆφe =
+ˆφn =
+
+−
+
+−
+
+sin φe ˆxe + cos φe ˆye,
+sin φn ˆxn + cos φn ˆyn
+
+= sin φn ˆxe + cos φn ˆze,
+
+Substituting eqs. (17) and (18) into (15), we get
+
+ˆθe = cos θe cos φe ˆxe + cos θe sin φe ˆye
+
+sin θe ˆze.
+
+−
+
+Substituting eqs. (18) and (19) into (16), we get
+
+sin ψ = cos θe cos φe sin φn
+
+sin θe cos φn
+
+−
+
+cos ψ =
+
+sin φe sin φn.
+
+−
+
+cos θe (sin θe cos φe) (sin θn sin φn)
+
+2
+sin
+
+−
+
+θe (sin θn cos φn)
+(cid:9)
+
+1
+sin θe sin θn (cid:8)
+
+=
+
+=
+
+=
+
+cos φe
+sin θn
+−
+cos φn
+sin θe .
+
+Here we have used eqs. (7)–(9).
+
+by
+
+From eqs. (20), (21), (15), (16) and (14), we obtain the transformation formula of the vector components (vr, vθ, vφ)
+
+with the transformation matrix
+
+ve
+r
+ve
+θ
+ve
+φ
+
+
+
+
+
+
+
+
+
+= P 
+
+
+vn
+r
+vn
+θ
+vn
+φ
+
+,
+
+
+
+
+
+P = 
+
+
+0
+1
+sin φe sin φn
+0
+0 cos φn/ sin θe
+
+−
+
+0
+cos φn/ sin θe
+sin φe sin φn
+
+.
+
+
+
+
+
+−
+−
+
+P
+
+−1 = 
+
+
+0
+1
+sin φn sin φe
+0
+0 cos φe/ sin θn
+
+−
+
+0
+cos φe/ sin θn
+sin φn sin φe
+
+.
+
+
+
+
+
+−
+−
+
+Since Yin and Yang coordinates are symmetric, the inverse transformation from Yang into Yin is given by the
+interchange of the suﬃxes:
+
+4
+
+(14)
+
+(15)
+
+(16)
+
+(17)
+
+(18)
+
+(19)
+
+(20)
+
+(21)
+
+(22)
+
+(23)
+
+(24)
+
+5
+
+(25)
+
+Note also that
+
+P 2 = 1,
+
+which indicates the complemental relation between Yin and Yang coordinates.
+
+∼
+
+−
+
+2π)/2π
+
+0 and δ
+
+When we see the component grid of the basic Yin-Yang grid shown in Fig. 1 in the Mercator projection, it is a
+rectangle; the four corners intrude most into the other component grid (see Fig. 1(b)). Even if the grid mesh is
+0, the overlapping area has still non-zero ratio of about 6%;
+taken to be inﬁnitesimal, i.e., ∆θ = ∆φ
+(3/√2π
+0.061. This overlapped area can be minimized by modifying the component grid’s shape from
+the rectangle. It is obvious that a Yin-Yang grid with minimum overlap region can be constructed by a division, or
+dissection, with a closed curve on a sphere that cuts the sphere into two identical parts. There are inﬁnite number of
+such dissections of a sphere. Fig. 5 shows two examples among them. When we cut along the curve that is colored
+with red and blue in Fig. 5(a) or (b), we get two separated parts of the spherical surface that are identical. Although,
+it is not apparent that the two parts separated by the blue-red curve in each panel of Fig. 5 are identical from this
+ﬁgure, the corresponding three-dimensional view (Fig. 6) would show more convincingly. The cutoﬀ curve of Fig. 6(a)
+reminds us a baseball, while the cutoﬀ curve of Fig. 6(b) resembles a cube.
+
+→
+
+→
+
+Based on these spherical dissections, we can construct spherical overset grids with two identical component grids
+that has minimum overlapping area; Fig. 7 shows a Yin-Yang grid that corresponds to the baseball type dissection
+of a sphere (panels labeled (a) in Figs. 5 and 6). Fig. 8 is for the cube type dissection (panels (b) of Figs. 5 and 6).
+When minimizing the computational cost is strongly required, the Yin-Yang grid of the baseball type (Fig. 7) or cube
+type (Fig. 8) would be worth trying.
+
+However, the non-rectangle geometries of the component grid of Fig. 7 or Fig. 8 imply that special cares should be
+taken to mask some grid points. The number of the mask is the same for both the Yin-Yang grids of Figs. 7 and 8,
+since the non-masked area of a component grid is just a half of the spherical surface (2π) in the limit of the negligibly
+small overlap area.
+
+IV. SUMMARY
+
+For numerical simulations of the Earth’s interior, we have developed a new spherical grid based on the overset grid
+methodology. Our motivation is to devise an spherical grid system that is suitable for ﬁnite diﬀerence scheme on
+massively parallel vector supercomputers. The spherical overset grid proposed in this paper, named Yin-Yang grid,
+is composed of two component grids. They have the same shape and size and combined to cover a spherical surface
+with partial overlap on their borders. Each component grid is nothing but low latitude region of the usual latitude-
+longitude grid; it is 90◦ about the equator and 270◦ in the longitude. Therefore the grid spacing is quasi-uniform and
+the metric tensors are simple and analytically known. One can directly apply mathematical and numerical resources
+that have been written in the spherical polar coordinates or latitude-longitude grid system. Since the two component
+grids are identical and combined in a complemental way, various routines for solvers and interpolation can be recycled
+for two times for each component grid at every simulation time step.
+
+We have developed ﬁnite diﬀerence codes of the mantle convection and dynamo simulation using the basic Yin-Yang
+grid for spherical shell geometry (see Figs. 1 and 3). We have conﬁrmed that the Yin-Yang grid is successfully applied
+to both cases. The mantle convection code is newly developed from scratch. Details of the code and simulation
+results are reported in other paper [48]; we solved the time development of thermal convection motion in a spherical
+shell of a Boussinesq ﬂuid with inﬁnite Prandtl number for uniform and variable viscosity cases. We have performed
+standard benchmark tests of the mantle convection [39], and conﬁrmed that the results of our Yin-Yang mantle
+convection code successfully reproduced previously published results. The numerical values of Nusselt number and
+the mean velocity coincides with other benchmark values within a few percent or even better [48]. We have also
+applied the Yin-Yang grid to the geodynamo simulation code. The magnetohydrodynamic (MHD) equations with
+ﬁnite viscosity, thermal diﬀusivity, and electrical conductivity are solved. The Yin-Yang geodynamo code has been
+converted from our previous geodynamo code which was based on the latitude-longitude grid. We found that the
+code conversion was straightforward and rather easy since the base grid is common. We could reproduce our previous
+(latitude-longitude grid based) results of geodynamo simulation by our newly developed Yin-Yang geodynamo code
+with shorter calculation time. The details of the code will be reported in other paper.
+
+The Yin-Yang grid is suitable for parallel programming. Since the number of the component grid is two, we are
+naturally lead to make parallel programs with domain decomposition of even number: We ﬁrst decompose whole
+computational region into two—Yin component and Yang component—then apply further domain decomposition in
+each component.
+
+Finally, we point out another possible spherical overset grid that has an odd number of component grids. Fig. 9
+shows a spherical overset grid that consists of three identical component grids. In this case, the component grid is
+
+deﬁned as a part (about 1/3) of the spherical surface by (π/4
+eﬀective when the processor number is multiple of three.
+
+θ
+
+3π/4)
+
+≤
+
+≤
+
+π/2
+
+(
+−
+
+∩
+
+≤
+
+φ
+
+≤
+
+π/2). This grid could be
+
+Acknowledgments
+
+We would like to acknowledge helpful discussion with: Masanori Kameyama, Kenji Komine, Hideaki Miura, Keiko
+Takahashi, and Masaki Yoshida. The development and benchmark test of the mantle convection code using the
+Yin-Yang grid was done by Masaki Yoshida. All simulations were performed by Earth Simulator, Japan Agency for
+Marine-Earth Science and Technology.
+
+6
+
+[1] Baumgardner, J. (1985), Three-dimensional treatment of convective ﬂow in the earth’s mantle, J. Statis. Phys., 39, 501–511.
+[2] Bercovici, D., G. Schubert, G. A. Glatzmaier, and A. Zebib (1989), Three dimensional thermal convection in a spherical
+
+shell, J. Fluid Mech., 206, 75–104.
+
+[3] Browning, G. L., J. J. Hack, and P. N. Swarztrauber (1989), A comparison of three numerical methods for solving diﬀerential
+
+equations on the sphere, Month. Weath. Rev., 117, 1058–1075.
+
+[4] Bunge, H.-P., and J. R. Baumgardner (1995), Mantle convection modeling on parallel virtual machines, Comput. Phys., 9,
+
+207–215.
+
+402–409.
+
+25–34.
+
+2989–3007.
+
+[5] Buning, P. G., I. T. Chiu, S. Obayashi, Y. M. Rizk, and J. L. Steger (1988), Numerical simulation of the integrated space
+
+shuttle vehicle in ascent, AIAA Paper, 88-4359-Cp, 265–283.
+
+[6] Cao, H. V., T. Y. Su, and S. E. Rogers (1998), Navier-stokes analysis of a 747 high lift conﬁguration, AIAA, 98-2623,
+
+[7] Chan, K. H., K. Zhang, J. Zou, and G. Schubert (2001), A non-linear, 3-D spherical α2 dynamo using a ﬁnite element
+
+method, Phys. Earth Planet. Inter., 128, 35–50.
+
+[8] Chesshire, G., and W. D. Henshaw (1990), Composite overlapping meshes for the solution of partial diﬀerential equations,
+
+J. Comput. Phys., 90, 1–64.
+
+study, Geophys. J. Int., 138, 393–409.
+
+[9] Christensen, U., P. Olson, and G. A. Glatzmaier (1999), Numerical modelling of the geodynamo: a systematic parameter
+
+[10] Christensen, U. R., et al. (2001), A numerical dynamo benchmark, Physics of the Earth and Planetary Interiors, 128,
+
+[11] Dormy, E., P. Cardin, and D. Jault (1998), MHD ﬂow in a slightly diﬀerentially rotating spherical shell, with conducting
+
+inner core, in a dipolar magnetic ﬁeld, Earth Planet. Sci. Lett., 160, 15–30.
+
+[12] Dudhia, J., and J. F. Bresch (2002), A global version of the PSU-NCAR mesoscale model, Month. Weather Rev., 130,
+
+[13] Duque, E. P. N., R. C. Strawn, J. Ahmad, and R. Biswas (1996), An overset grid navier-stokes kirchhoﬀ-surface method
+
+for rotorcraft aeroacoustic predictions, AIAA, 96-0152, 1–13.
+
+[14] Eby, M., and G. Holloway (1994), Grid transformation for incorporating the Arctic in a global ocean model, Climate
+
+[15] Glatzmaier, G. (1984), Numerical simulations of stellar convective dynamos. I. the model and method, J. Comput. Phys.,
+
+Dynamics, 10, 241–247.
+
+55, 461–484.
+
+[16] Glatzmaier, G. (1988), Numerical simulations of mantle convection: time-dependent, three-dimensional, compressible,
+
+spherical shell, Geophys. Astrophys. Fluid Dyn., 43, 223–264.
+
+[17] Habata, S., M. Yokokawa, and S. Kitawaki (2003), The earth simulator system, NEC Res. & Develop., 44 (1), 21–26.
+[18] Harder, H., and U. R. Christensen (1996), A one-plume model of martian mantle convection, Nature, 380, 507–509.
+[19] Hernlund, J. W., and P. J. Tackley (2003), Three-dimensional spherical shell convection at inﬁnite Prandtl number using
+the ‘cubed sphere’ method, proceedings of the Second MIT Conference on Computational Fluid and Solid Mechanics.
+[20] Ishihara, N., and S. Kida (2002), Dynamo mechanism in a rotating spherical shell: Competition between magnetic ﬁeld
+
+[21] Iwase, Y. (1996), Three-dimensional inﬁnite Prandtl number convection in a spherical shell with temperature-dependent
+
+and convection vortices, J. Fluid Mech., 465, 1–32.
+
+viscosity, J. Geomag. Geoelectr., 48, 1499–1514.
+
+[22] Kageyama, A., and T. Sato (1997), Generation mechanism of a dipole ﬁeld by a magnetohydrodynamic dynamo, Phys.
+
+[23] Kageyama, A., and T. Sato (1997), Velocity and magnetic ﬁeld structures in a magnetohydrodynamic dynamo, Phys.
+
+Rev. E, 55, 4617–4626.
+
+Plasmas, 4, 1569–1575.
+
+[24] Kageyama, A., and T. Sato (1997), Dipole ﬁeld generation by an MHD dynamo, Plasma Phys. Contr. Fusion, 39, A83–A91.
+[25] Kageyama, A., K. Watanabe, and T. Sato (1993), Simulation study of a magnetohydrodynamic dynamo: Convection in a
+
+rotating spherical shell, Phys. Fluids B, 5, 2793–2805.
+
+[26] Kageyama, A., T. Sato, K. Watanabe, R. Horiuchi, T. Hayashi, Y. Todo, T. Watanabe, and H. Takamaru (1995), Computer
+
+simulation of a magnetohydrodynamic dynamo. II, Phys. Plasmas, 2, 1421–1431.
+
+7
+
+333–345.
+
+472–503.
+
+plate tectonics:
+2000GC000115.
+
+[27] Kageyama, A., M. M. Ochi, and T. Sato (1999), Flip-ﬂop transitions of the magnetic intensity and polarity reversals in
+
+the magnetohydrodynamic dynamo, Phy. Rev. Lett., 82, 5409–5412.
+
+[28] Kuang, W., and J. Bloxham (1999), Numerical modeling of magnetohydrodynamic convection in a rapidly rotating spherical
+
+shell: Weak and strong ﬁeld dynamo action, J. Comput. Phys., 153, 51–81.
+
+[29] Li, J., T. Sato, and A. Kageyama (2002), Repeated and sudden reversals of the dipole ﬁeld generated by a spherical
+
+[30] Machetel, P., M. Rabinowicz, and P. Bernardet (1986), Three-dimensional convection in spherical shells, Geophys. Astro-
+
+dynamo action, Science, 295, 1887–1890.
+
+phys. Fluid Dyn., 37, 57–84.
+
+Inter. J. Comput. Fluid Dyn., in press.
+
+92-4568-CP, 564–580.
+
+576–588.
+
+[31] Matsui, H., and H. Okuda (2002), Development of a simulation code for MHD dynamo processes using the geofem platform,
+
+[32] Meakin, R. L. (1992), Computations of the unsteady ﬂow about a generic wing/pylon/ﬁnned-store conﬁgurations, AIAA,
+
+[33] Meakin, R. L. (1993), Moving body overset grid methods for complete aircraft tiltrotor simulations, AIAA, 93-3350-CP,
+
+[34] Ochi, M. M., A. Kageyama, and T. Sato (1999), Dipole and octapole ﬁeld reversals in a rotating spherical shell: Magne-
+
+tohydrodynamic dynamo simulation, Physics of Plasmas, 6, 777–787.
+
+[35] Phillips, N. (1957), A map projection system suitable for large-scale numerical weather prediction, J. Meteor. Soc. Japan,
+
+75th Anniversary Volume, 262–267.
+
+[36] Phillips, N. A. (1959), Numerical integration of the primitive equations on the hemisphere, Month. Weather Rev., 87,
+
+[37] Rai, M. M. (1986), A conservative treatment of zonal boundaries for Euler equation calculations, J. Comput. Phys., 62,
+
+[38] Ratcliﬀ, J., G. Schubert, and A. Zebib (1996), Steady tetrahedral and cubic patterns of spherical shell convection with
+
+temperature-dependent viscosity, J. Geophys. Res., 101, 25,473–25,484.
+
+[39] Richards, M. A., W.-S. Yang, J. R. Baumgardner, and H.-P. Bunge (2001), Role of a low-viscosity zone in stabilizing
+Implications for comparative terrestrial planetology, Geochem. Geophys. Geosyst., 2 (8), doi:10.1029/
+
+[40] Rogers, S. E., H. V. Cao, and T. Y. Su (1998), Grid generation for complex high-lift conﬁgurations, AIAA, 98-3011, 1–11.
+[41] Ronchi, C., R. Iacono, and P. S. Paolucci (1996), The “cubed sphere”: A new method for the solution of partial diﬀerential
+
+equations in spherical geometry, J. Comput. Phys., 124, 93–114.
+
+[42] Sakuraba, A., and M. Kono (1999), Eﬀect of the inner core on the numerical solution of the magnetohydrodynamic dynamo,
+
+Phys. Earth Planet. Inter., 111, 105–121.
+
+[43] Steger, J. L. (1982), On application of body conforming curvilinear grids for ﬁnite diﬀerence solution of external ﬂow, in
+
+Numerical Grid Generation, J.F. Thomposon, ed., North-Holland, New York, 295–316.
+
+[44] Steger, J. L., F. C. Dougherty, and J. A. Benek (1983), A chimera grid scheme, Advances in Grid Generation, edited by
+
+K.N. Ghia and U. Ghia, 59–69.
+
+[45] Tabata, M., and A. Suzuki (2000), A stabilized ﬁnite element method for the rayleigh-benard equations with inﬁnite
+
+Prandtl number in a spherical shell, Comp. Meth. Appl. Mech. Engrg., 190, 387–402.
+
+[46] Takahashi, F., J. S. Katayama, M. Matsushima, and Y. Honkura (2001), Eﬀects of boundary layers on magnetic ﬁeld
+
+behavior in an MHD dynamo model, Phys. Earth Planet. Inter., 128, 149–161.
+
+[47] Tilgner, A. (1999), Spectral methods for the simulation of incompressible ﬂow in spherical shells, Int. J. Num. Meth.
+
+Fluids, 30, 713–724.
+
+[48] Yoshida, M., and A. Kageyama (2004), Application of the yin-yang grid to a thermal convection of a Boussinesq ﬂuid with
+
+inﬁnite Prandtl number in a three-dimensional spherical shell, Geophys. Res. Lett., submitted.
+
+[49] Zhang, S., and D. A. Yuen (1995), The inﬂuences of lower mantle viscosity stratiﬁcation on 3D spherical-shell mantle
+
+convection, Earth Planet. Sci. Lett., 132, 157–166.
+
+[50] Zhong, S., M. T. Zuber, L. Moresi, and M. Gurnis (2000), Role of temperature-dependent viscosity and surface plates in
+
+spherical shell models of mantle convection, J. Geophys. Res., 105, 11,063–11,082.
+
+8
+
+FIG. 1: Basic Yin-Yang grid. (a) It is a spherical overset grid composed of two identical component grids, named Yin and
+Yang. (b) The Yin grid and Yang grid are combined to cover a spherical surface with partial overlap.
+
+9
+
+FIG. 2: The component grid of the Yin-Yang grid is a part of the latitude-longitude grid. The axes of two spherical polar
+coordinates for Yin grid (green mesh) and Yang grid (blue mesh) are perpendicular.
+
+FIG. 3: Three-dimensional Yin-Yang grid for spherical shell geometry. This is constructed by piling up the basic Yin-Yang
+grid shown in Fig. 1 in the radial direction.
+
+10
+
+FIG. 4: Unit horizontal vectors of Yin and Yang coordinates. They are mapped one another by a local rotation transform with
+angle ψ.
+
+11
+
+FIG. 5: Curves that divide a spherical surface into two identical areas. If one cuts along the blue-red curve of the panel (a) or
+(b), the spherical surface is divided into two parts (denoted by Yin and Yang in the pictures) that are exactly the same shape
+and size. The blue part of the curve and red part of the curve are in the complemental relation; The blue curve of Yin is red
+curve of Yang, and vice versa.
+
+12
+
+FIG. 6: Curves that divide a spherical surface into two identical areas. These are corresponding three-dimensional views of the
+red-blue curves in (a) and (b) of Fig. 5.
+
+13
+
+FIG. 7: A Yin-Yang grid with minimum overlap that has the baseball-like border curve between Yin and Yang grids. Corre-
+sponding spherical dissection is Figs. 5(a) and 6(a).
+
+14
+
+FIG. 8: Another Yin-Yang grid with minimum overlap. The border curve between Yin and Yang grids is cube-like. Corre-
+sponding spherical dissection is Figs. 5(b) and 6(b).
+
+15
+
+FIG. 9: Another possible spherical overset grid that is composed of three identical component grids.
+
+

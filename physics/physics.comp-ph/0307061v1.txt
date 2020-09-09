@@ -1,0 +1,2145 @@
+3
+0
+0
+2
+ 
+l
+u
+J
+ 
+1
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+1
+6
+0
+7
+0
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Steering in computational science:
+mesoscale modelling and simulation
+
+J. Chin, J. Harting, S. Jha, P. V. Coveney1
+
+Centre for Computational Science
+Christopher Ingold Laboratories
+University College London
+20 Gordon Street
+London WC1H 0AJ
+U.K.
+
+A. R. Porter, S. M. Pickles
+
+Manchester Computing
+Kilburn Building
+The University of Manchester
+Oxford Road
+Manchester M13 9PL
+U.K.
+
+February 2, 2008
+
+Abstract
+
+This paper outlines the beneﬁts of computational steering for high performance
+computing applications. Lattice-Boltzmann mesoscale ﬂuid simulations of binary
+and ternary amphiphilic ﬂuids in two and three dimensions are used to illustrate the
+substantial improvements which computational steering offers in terms of resource
+efﬁciency and time to discover new physics. We discuss details of our current steer-
+ing implementations and describe their future outlook with the advent of computa-
+tional grids.
+
+1<P.V.Coveney@ucl.ac.uk>
+
+1 Introduction
+
+Many phenomena in condensed matter physics operate at length and time scales which
+are too large for detailed microscopic modelling. In microscopic models, based on clas-
+sical molecular dynamics, usually every atom or molecule within a system is considered,
+resulting in rapidly increasing complexity for increasing problem sizes. This tends to
+restrict the currently treatable length scales to the order of several nanometres and the
+timescales to the order of nanoseconds since the computing power required for larger
+length and timescales is unavailable today. For example, a microscopic description of a
+ﬂuid would track the position, momentum, and energy of every single ﬂuid molecule. At
+room temperature, a microscopic model of a single cubic millimetre of monatomic gas
+would have to deal with around 1017 variables. Macroscopic models, on the other hand,
+usually deal with a smaller number of variables, often more closely related to physical
+observables. For example, a macroscopic model of a ﬂuid would describe its velocity,
+density and temperature at various points.
+
+Statistical mechanics is used to extract macroscopic, thermodynamic descriptions
+from the underlying microscopic representation. While standard methods exist for per-
+forming this contraction of description for systems at thermodynamic equilibrium [1], we
+shall be primarily interested in time-dependent, non-equilibrium systems for which there
+is less widespread agreement about their statistical mechanical description. In addition,
+comparatively few established methods exist for the treatment of complex systems which
+contain processes operating on several length and time scales. This situation presents a
+general problem for both microscopic and macroscopic models. Whereas in microscopic
+descriptions, a vast amount of computational effort is required to model mesoscopic sys-
+tems spanning several length and time scales, macroscopic treatments omit ﬁne details
+which may give rise to the characteristic behaviour of the system.
+
+Because of the shortcomings of microscopic and macroscopic descriptions, and the
+tremendous importance of ﬂuid dynamics, there is currently considerable interest in meso-
+scale models. These models coarse grain most of the atomic or molecular details but
+retain enough of the essential physics to describe the phenomena of interest. They are
+intended to treat systems at intermediate length scales between several nanometres and
+a few millimetres, and processes operating on multiple length and time scales. Exam-
+ples of such systems can be found in everyday life: detergents, shampoos, milk, blood,
+and paint are materials whose macroscopic behaviour is induced by their microscopic
+and/or mesoscopic properties. A very descriptive example can be observed in the kitchen
+and can easily be reproduced by the reader: due to the microscopic interactions between
+starch molecules in cornﬂour, as the starch molecules jam into one another, a mixture of
+cornﬂour and water becomes more difﬁcult to stir if one stirs it quickly.
+
+Computer modelling forms a valuable tool in understanding the behaviour of mesoscale
+
+1
+
+systems [2, 3, 4, 5], and much time and effort is currently being invested in such tech-
+niques. In this article, we provide a brief overview of a few such mesoscale modelling
+techniques, and focus in particular on the lattice-Boltzmann ﬂuid dynamical method. We
+describe its implementation, and the problems which arise when the computer implemen-
+tation is run ‘statically’, without interaction with either the user or other computational
+components. These problems may be solved by adding extra functionality which permits
+the interoperation of the lattice-Boltzmann code with other programs, such as separate
+code to monitor and readjust the simulation in real-time, or a user interface to permit a
+human to ‘steer’ the simulation as it runs. We give examples of two such functionalities:
+in one, the functionality of the simulation code is made available, through the use of a
+wrapper layer, to a high-level language, which permits versatile control of simulations; in
+the other, the code is connected to a general-purpose steering library which permits users
+to remotely control many kinds of simulation as they run.
+
+Mesoscale simulations often require access to high-end computational and visualisa-
+tion resources; we therefore proceed to discuss computational steering in such a general
+context, and how it may permit much more efﬁcient use of such resources.
+
+The literature on computational steering is quite substantial [6]. However, most pa-
+pers [7, 8] have focussed on the design and architectural details of computational steering
+and then go on to give a prototype implementation of their steering system. Our paper
+represents a different approach, in that our motivation is a scientiﬁc problem for which
+computational steering is shown to be an effective tool. We do this by highlighting the
+advantages that computational steering brings over traditional non-steered simulations.
+
+Computational grids are an increasingly popular paradigm of computation, somewhat
+akin to traditional distributed computing, yet with a major extension in that they enable
+the transparent sharing and collective use of resources (anything from spare PC CPUs
+to databases or high-end hardware), which would otherwise be individual and isolated
+facilities. Therefore, we discuss how the advent of computational grids is expected to
+considerably facilitate modelling with high-performance computers in general, and com-
+putational steering in particular.
+
+2 Mesoscale modelling and simulation methods
+
+Many mesoscale situations of interest involve ﬂuids, particularly mixtures of ﬂuids which
+exhibit complicated behaviour due to the interactions of their individual molecules. When
+attempting to model such systems, one must treat both the bulk ﬂow, or hydrodynamic be-
+haviour, and the interactions. Hydrodynamic behaviour is very difﬁcult and expensive to
+treat by atomistic methods, but relatively straightforward to handle at the continuum level;
+conversely, the ﬂuid interactions can be examined at the atomistic level, but are usually
+
+2
+
+not straightforward to incorporate at the continuum level. There are some cases where in-
+teractions between microscopic particles may give rise to macroscopic ﬂow behaviour –
+for example, Marangoni ﬂow[9], where gradients in surface tension (due to, for example,
+uneven distribution of surfactant at an interface[10]) induce macroscopically observable
+ﬂuid ﬂow.
+
+Many mesoscale methods start by exploiting the surprising and convenient fact that
+it is not necessary to keep track of every single molecule of a ﬂuid in order to repro-
+duce its hydrodynamic behaviour. Instead, it is sufﬁcient to group very large numbers
+of molecules into Lagrangian ‘packets of ﬂuid’, and treat these packets as self-contained
+particles themselves; interactions can take place between these mesoscopic groupings of
+particles, rather than their constituent molecules. Provided that certain restrictions, such
+as isotropy and conservation of mass and momentum, are adhered to, then the resulting
+large-scale behaviour is extremely similar to, and can often be related to, that which would
+result from treating each molecule individually [11, 12].
+
+The technique of dissipative particle dynamics (DPD) [13, 14] tracks the position ri
+and momentum pi of each mesoscopic particle i. The algorithm consists of two stages: in
+the ﬁrst, particle positions are advected according to their momenta, so ri → ri + piδt. In
+the second stage, the momentum of each particle is updated according to the force acting
+j6=i FD
+upon it, so pi → pi +
+ij is a conservative
+ij +
+interaction force between different particles, FD
+ij is
+a random force to introduce stochastic ﬂuctuations. An extra force may be introduced to
+allow interactions between different particles [15].
+
+ij is a dissipative, viscous force, and FR
+
+ij, where FC
+
+j6=i FR
+
+j6=i FC
+
+ij +
+
+P
+
+P
+
+P
+
+While DPD permits a continuous range of values for ri and pi, realistic models may
+be created which discretize the position, the momentum, or both. In the Lattice Gas Au-
+tomaton (LGA) method [16, 17], mesoscopic particles are only permitted to occupy points
+on a Bravais lattice, discretizing space, and are only permitted to travel along the lattice
+vectors, discretizing momentum. The update algorithm also consists of two steps: during
+the “advection” step, particles travel along their velocity vectors to adjacent lattice sites;
+in the “collision” step, particles at each individual lattice site undergo collisions during
+which their velocities are redistributed in a manner which conserves the total mass and
+momentum at each site. Provided the lattice is carefully chosen to ensure isotropy of the
+ﬂuid, the large-scale behaviour will be hydrodynamically correct. A substantial advantage
+of this algorithm is that it only requires Boolean operations, and that it is unconditionally
+numerically stable [18].
+
+Fluid mixtures may be simulated by introducing different species onto the lattice,
+often denoted by colour: red particles may represent oil, and blue particles water. Inter-
+actions between the different species may then be introduced by imagining that particles
+carry a ‘colour charge’, and experience a force due to the colour ﬁeld generated by sur-
+rounding particles [19].
+
+3
+
+The red and blue ﬂuids may be made immiscible by introducing a force which compels
+red particles to travel up the colour-ﬁeld gradient towards regions of higher red density,
+and compels blue particles to travel towards regions of higher blue density; a mixture of
+red and blue particles will then separate into separate single-colour regions.
+
+Porous media may be simulated by blocking off some lattice sites: any particles which
+would travel into the blocked sites during the advection step are bounced back to travel
+in the opposite direction, producing a no-slip boundary. The ﬂow of oil-water mixtures in
+porous media has been successfully modelled using this technique [20].
+
+An amphiphilic particle, such as a detergent molecule, typically contains two parts: a
+water-loving head, and an oil-loving tail. The behaviour of such molecules can be very
+complicated. In a mixture of oil and water, such a particle will seek out regions of oil-
+water interface, and reduce the interfacial tension. Solutions of amphiphile in water may
+spontaneously assemble to produce a variety of different phases, ranging from simple
+spherical or wormlike clusters called “micelles”, to extensive sponge-like phases [21].
+
+The ‘coloured particle’ description may be extended to cover the case of amphiphiles,
+by introducing a new species of mesoscopic particle, which has an orientational degree
+of freedom. A single such mesoscopic particle can be regarded as consisting of a red
+particle and a blue particle bolted together, so that the whole particle possesses no net
+colour charge, but will tend to align itself with the colour ﬁeld; the orientation of the
+mesoscopic particle represents some sort of average of the orientations of its constituent
+molecules. Lattice gas models with amphiphile particles have been used to simulate the
+effect of surfactants on oil-water mixtures in porous media [22], and the self-assembly of
+micelles [23, 24].
+
+In the model proposed by Malevanets and Kapral [25], sometimes called the ‘Real-
+coded Lattice Gas’, or ‘Discrete Simulation Automaton’ (DSA) model, the mesoscopic
+particles occupy discrete cells in space, but are permitted to have real-valued velocities.
+During the collision step of the algorithm, the velocities of the particles in each cell are
+transformed according to
+
+vi → V + ω[vi − V ],
+
+(1)
+
+where ω is a random rotation and V the centre of mass velocity of particles in a cell. The
+total momentum in each cell remains unchanged, producing hydrodynamic behaviour,
+while the randomization of the velocities produces dissipative behaviour. Particles then
+travel along their velocity vectors to nearby cells. This model may be generalized to treat
+immiscible ﬂuid mixtures [26] and amphiphiles [27] in much the same manner as with
+LGA models.
+
+The lattice Boltzmann (LB) method is a simpliﬁcation of LGA: particles have dis-
+cretized positions and momenta, but rather than individual Boolean particles being tracked
+around a lattice, their real-valued population is stored, resulting in a less noisy method.
+We examine LB in more detail in Section 3.
+
+4
+
+3 Lattice Boltzmann models of immiscible and amphiphilic
+
+ﬂuids
+
+The lattice Boltzmann algorithm is a powerful method for simulating ﬂuid ﬂow. Much
+of this power lies in the ease with which boundary conditions can be imposed, and with
+which the model may be extended to describe mixtures of interacting complex ﬂuids.
+Rather than tracking the state of individual atoms and molecules, as is done in molecular
+dynamics, or tracking individual discrete mesoscopic ‘packets of ﬂuid’, as in LGA or
+DSA algorithms, the lattice Boltzmann method describes the dynamics of the single-
+particle distribution function of mesoscopic ﬂuid packets.
+
+3.1 The Continuum Boltzmann Equation
+
+In a continuum description, the single-particle distribution function f1(r, v, t) represents
+the density of ﬂuid particles with position r and velocity v at time t, such that the density
+and velocity of the macroscopically observable ﬂuid are given by ρ(r, t) =
+f1(r, v, t)dv
+and u(r, t) =
+f1(r, v, t)vdv respectively. In the non-interacting, long mean free path
+limit, with no externally applied forces, the evolution of this function is described by the
+R
+famous Boltzmann equation,
+
+R
+
+(∂t + v · ∇) f1 = Ω[f1].
+
+(2)
+
+The left hand side of the equation describes changes in the distribution function due to free
+particle motion; the right hand side contains the collision operator Ω, describing changes
+due to pairwise collisions. Typically, this is an integral expression which can be hard to
+work with, so it is often simpliﬁed [28] to the linear Bhatnagar-Gross-Krook, or BGK
+form:
+
+Ω[f ] ≃ −
+
+f − f (eq)
+
+1
+τ
+(cid:2)
+The BGK collision operator describes the relaxation, at a rate controlled by a character-
+istic time τ , towards a Maxwell-Boltzmann equilibrium distribution f (eq). While this is a
+drastic simpliﬁcation, it can be shown that distributions governed by the Boltzmann-BGK
+equation conserve mass, momentum, and energy, and obey a non-equilibrium form of the
+Second Law of Thermodynamics [29]. Moreover, it can be shown [30, 29] that the well-
+known Navier-Stokes equations for macroscopic ﬂuid ﬂow are obeyed on coarse length
+and time scales by such distributions.
+
+(3)
+
+(cid:3)
+
+5
+
+Figure 1: A lattice on which the Boltzmann equation may be discretized. Particles are
+only permitted to occupy positions shown by circles. Particles occupying the central point
+are permitted to be either at rest, or to have one of the eight possible discrete velocities ci
+indicated by the grey arrows.
+
+3.2 The Lattice Boltzmann Equation
+
+In a lattice Boltzmann formulation, the single-particle distribution function is discretized
+in time and space. The positions r on which f1(r, v, t) is deﬁned are restricted to points
+ri on a lattice, and the velocities v are restricted to a set ci joining points on the lattice;
+hence, fi(r, t) = f (r, ci, t) represents the density of particles at lattice site r travelling
+with velocity ci, at timestep t. The density and velocity of the simulated ﬂuid are now
+given by
+
+ρ(r) =
+
+fi(r)
+
+i
+X
+
+u(r) =
+
+fi(r)ci
+
+(4)
+
+(5)
+
+i
+X
+The lattice must be chosen carefully [31] to ensure isotropic behaviour of the simulated
+ﬂuid. It can be shown [32] that the lattice Boltzmann equation may be rigorously derived
+by discretizing the continuum Boltzmann equation; alternatively, it may be regarded as a
+Boltzmann-level approximation of its ancestor, the LGA [33].
+
+The discretized Boltzmann-level description of the ﬂuid may now be evolved accord-
+ing to a two-step procedure. In the collision step, particles at each lattice site are redis-
+tributed across the velocity vectors: this process corresponds to the action of the collision
+
+6
+
+operator, and usually takes the BGK form:
+
+1
+τ
+where Ni = Ni (ρ(r), u(r)) is a polynomial function of the local density and velocity,
+which may be found by discretizing the well-known Maxwell-Boltzmann equilibrium
+distribution.
+
+fi ← fi −
+
+[fi − Ni] ,
+
+(6)
+
+In the advection step, values of the post-collisional distribution function are propa-
+gated to adjacent lattice sites: this corresponds to particles streaming along their velocity
+vectors, and is the discretized equivalent of the left-hand side of the continuum Boltzmann
+equation:
+
+fi(r + ci) ← fi(r)
+
+Overall, the system obeys the lattice Boltzmann equation (LBE), produced by combining
+the two evolution steps:
+
+fi(r, t + 1) − fi(r, t) = Ω[f ] = −
+
+[fi(r, t) − Ni (ρ, u)]
+
+1
+τ
+
+It can be shown that the resulting macroscopic density and velocity ﬁelds obey the Navier-
+Stokes equations [34].
+
+A well-known drawback of the lattice Boltzmann method is that it is typically not
+guaranteed to be numerically stable, and will crash or produce physically unreasonable
+results if, for example, the forcing rate applied to a ﬂuid is too high or if the interparticle
+interaction strength is set too high.
+
+(7)
+
+(8)
+
+3.3 Multicomponent Interacting lattice Boltzmann Scheme
+
+There are several schemes for generalizing the lattice Boltzmann algorithm to treat mul-
+ticomponent ﬂuids, including analogies with LGA [5], imposition of free-energy func-
+tionals [35], discretization of a modiﬁed form of the continuum Boltzmann equation [36],
+or inclusion of an explicit forcing term in the collision operator. The lattice Boltzmann
+algorithms described in this paper use the last approach, due to Shan and Chen [37].
+The single-particle distribution function fi may be extended to the form f σ
+
+i , where
+each component is denoted by a different value of the superscript σ, so that the density
+and momentum of a single component σ are given by ρσ =
+i ci
+respectively. The lattice BGK equation (8) now takes the form
+P
+
+i and ρσuσ =
+
+i f σ
+
+i f σ
+
+P
+
+i (r, t + 1) − f σ
+f σ
+
+i (r, t) = −
+
+i − Ni(ρσ, vσ)]
+
+(9)
+
+1
+τ σ [f σ
+
+7
+
+(10)
+
+(11)
+
+(12)
+
+The velocity vσ is found by calculating a weighted average velocity
+
+u′ =
+
+ 
+
+ρσ
+τ σ
+
+uσ
+
+/
+
+!
+
+ 
+
+ρσ
+τ σ
+
+,
+
+!
+
+σ
+X
+and then adding a term to account for external forces,
+
+σ
+X
+
+vσ = u′ +
+
+Fσ.
+
+τ σ
+ρσ
+
+The force term Fσ can take the form gρσˆz to produce a gravitational force acting in the
+z-direction. In order to produce nearest-neighbour interactions between components, it
+assumes the form
+
+Fσ = −ψσ(x)
+
+gσ¯σ
+
+ψ¯σ (x + ci) ci,
+
+¯σ
+X
+
+i
+X
+
+where ψσ(x) = ψσ(ρσ(x)) is an effective charge for component σ; gσ¯σ is a coupling
+constant controlling the strength of the interaction between two components σ and ¯σ. If
+gσ¯σ is set to zero for σ = ¯σ, and a positive value for σ 6= ¯σ then, in the interface between
+bulk regions of each component, particles experience a force in the direction away from
+the interface, producing immiscibility. In two-component systems, it is usually the case
+that gσ¯σ = g¯σσ = gbr.
+
+Amongst other things, this model has been used to simulate spinodal decomposi-
+tion [38, 39], polymer blends [40], liquid-gas phase transitions [41], and ﬂow in porous
+media [42].
+
+3.4 Amphiphilic lattice Boltzmann
+
+As with many other mesoscale ﬂuid methods, amphiphilic ﬂuids may be treated in the
+LB framework by introducing a new species of particle with an orientational degree of
+freedom [43]. The particles of this species are each given a vector dipole moment d
+which has maximum magnitude d0, corresponding to complete alignment of the con-
+stituent molecules. This is represented in the model by a dipole ﬁeld d(x, t) representing
+the average orientation of any amphiphile present at site x. In the advection step, values
+of d(x, t) are propagated around the lattice according to
+
+ρs(x, t + 1)d(x, t + 1) =
+
+i (x − ci, t)˜d(x − ci, t),
+˜f s
+
+(13)
+
+i
+X
+
+8
+
+where tildes denote post-collision values. During the collision step itself, the dipole mo-
+ments evolve in a BGK process controlled by a dipole relaxation time τd:
+
+(14)
+
+(15)
+
+(16)
+
+˜d(x, t) = d(x, t) −
+
+d(x, t) − d(eq)(x, t)
+
+.
+
+The equilibrium dipole moment d(eq) is aligned with the colour ﬁeld h:
+
+(cid:3)
+
+1
+τd
+
+(cid:2)
+
+d(eq) ≃
+
+βd0
+3
+
+h
+
+The colour ﬁeld contains a component hc due to coloured particles such as oil and water,
+and a part hs due to dipoles. The former can be found from the populations of surrounding
+lattice sites,
+
+hc =
+
+qσ
+
+ρσ(x + ci)ci,
+
+i
+X
+where qσ is a colour charge, such as +1 for red particles, −1 for blue particles, and 0 for
+amphiphile particles. The ﬁeld due to other dipoles turns out to be given by
+
+σ
+X
+
+hs(x, t) =
+
+i (x + ci, t)θj · di(x + cj, t) + f s
+f s
+
+i (x, t)di(x, t)
+
+,
+
+(17)
+
+#
+
+i "
+
+X
+
+j6=0
+X
+
+where the second-rank tensor θj is deﬁned in terms of the unit tensor I and lattice vector
+cj as
+
+θj = I −
+
+D
+c2
+In the presence of an amphiphilic species, the force on an oil or water particle includes
+an additional term Fσ,s to account for the colour ﬁeld due to the amphiphiles. By treating
+an amphiphilic particle as a pair of oil and water particles with a very small separation d,
+and Taylor-expanding in d, it can be shown that this term is given by
+
+cjcj.
+
+(18)
+
+Fσ,s(x, t) = −2ψσ(x, t)gσs
+
+˜d(x + ci, t) · θiψs(x + ci, t),
+
+(19)
+
+i6=0
+X
+where gσs is a constant controlling the strength of the interaction between amphiphiles
+and non-amphiphiles.
+
+While they do not possess a net colour charge, the amphiphiles also experience a force
+due to the colour ﬁeld, consisting of a part Fs,c due to ordinary species, and a part Fs,s
+
+9
+
+due to other amphiphiles. These terms are given by
+
+Fs,c = 2ψs(x, t)˜d(x, t) ·
+
+gσs
+
+θiψσ(x + ci, t)
+
+σ
+X
+
+i6=0
+X
+
+Fs,s = −
+
+4D
+c2 gssψs(x)
+i n
+X
+˜d(x + ci)˜d(x) + ˜d(x)˜d(x + ci)
+h
+
++
+
+˜d(x + ci) · θi · ˜d(x)ci
+
+i
+
+o
+
+· ci
+
+ψs(x + ci).
+
+(20)
+
+(21)
+
+To summarize, the interactions between ﬂuid components are governed by the cou-
+pling constants gbr, gcs, and gss, controlling the interaction between different sorts of
+coloured particles, between coloured particles and amphiphiles, and between the am-
+phiphiles.
+
+While the form of the interactions seems straightforward at a mesoscopic level, it
+is essentially phenomenological, and it is not necessarily easy to relate the interaction
+scheme or its coupling constants to either microscopic molecular characteristics, or to
+macroscopic phase behaviour. Some theoretical progress has been made in relating LGA
+amphiphile models to an underlying microscopic model [44], although macroscopic be-
+haviour is very sensitive not only to the values of the coupling constants, but to the con-
+centrations of each species present, inter alia. Different values of these parameters will
+give rise to a wide variety of different phases [21], such as spherical and wormlike mi-
+celles, sponges, lamellae, or droplets: the phase behaviour can be very difﬁcult to predict
+beforehand from the simulation parameters, and brute-force parameter searches are often
+resorted to [24].
+
+4 The practicalities of the lattice Boltzmann method
+
+If the sites of a lattice Boltzmann grid are evolved according to the algorithm described
+in Section 3, then the state of each site at a given timestep depends only on its state and
+the state of the neighbouring cells at the previous timestep, so that LB can be considered
+a form of cellular automaton [4, 3]. This spatial locality of the algorithm translates into
+memory locality in implementation, allowing for efﬁcient performance on contemporary
+commodity computer architectures which use caching techniques to improve the speed of
+memory access, but also enables extremely efﬁcient implementation on massively parallel
+computer architectures since, for a lattice split across CPUs (spatial domain decomposi-
+tion), only the state of the lattice sites at the edge of each CPU’s chunk of the lattice must
+
+10
+
+be communicated to other CPUs. A more detailed examination of LB performance and a
+comparison with LGA is available in [45].
+
+The following sections describe how two existing lattice Boltzmann codes were mod-
+iﬁed to allow for different forms of computational steering. One code, LB2D, is a light-
+weight, single-CPU solver for two-dimensional problems; steering was not directly bolted
+on to this code, but instead a high-level scripting interface was added to allow simulations
+to be controlled at runtime, either through high-level scripts, interactive manipulation, or
+other processes. The other code, LB3D, is a solver for three-dimensional problems in-
+volving ternary amphiphilic ﬂuids, designed for use on distributed-memory parallel pro-
+cessing architectures; steering was added by interfacing the code to a separate steering
+library.1
+
+4.1 Design of a typical lattice Boltzmann code
+
+The lattice Boltzmann codes we examine in this article each revolve around a single data
+structure, which encapsulates the entire state of a simulation at a single instant in time.
+Speciﬁcally, this data structure contains the complete state of the lattice, with the value of
+f σ
+i (x) for all values of σ, i, and x; and also a set of simulation parameters. These param-
+eters may be divided into two categories: parameters which are static and unchanging,
+such as the dimensions of the simulation lattice or parameters describing the initial state
+of the system, and parameters which could conceivably be changed during the course of
+the simulation, such as coupling constants and forcing rates. The code is then structured
+as a set of methods which act upon the data in this structure.
+
+These methods can be loosely grouped into categories. ‘Constructor’ and ‘destruc-
+tor’ methods allocate new simulation objects and free the memory associated with old
+ones; initialization methods initialize the state of a simulation object before commencing
+a given simulation run. IO methods write simulation data to disk, and also modify simu-
+lation data according to data saved on disk. These methods can load and save complete
+simulation states to and from disk, as well as loading, for example, porous media data,
+and saving information such as the ﬂuid density ﬁeld to disk. The save-data methods con-
+sist of two parts: one generic routine which produces a block of data corresponding to a
+physical ﬁeld (such as density or pressure), and another routine which saves this block of
+data to disk in a speciﬁc format (such as raw binary, a portable binary format known as
+XDR[46], or a portable image format known as PNG).
+
+Evolution methods perform advection or collision processes on a simulation object,
+and generally consume the majority of the CPU time in a given simulation run. Finally,
+
+1LB3D was recently awarded the gold-star rating for its excellent scaling properties with large models
+
+running on 1024 processors on HPCx, the UK’s fastest supercomputer.
+
+11
+
+boundary condition methods alter the lattice, for example, to maintain a constant ﬂuid
+density or composition at the edges of the simulated region.
+
+4.2 Traditional simulation methodology and its drawbacks
+
+Traditionally, large, compute-intensive simulations are run non-interactively. A text ﬁle
+describing the initial conditions and parameters for the course of a simulation is prepared,
+and then the simulation is submitted to a batch queue, to wait until there are enough
+resources available to run the simulation. The simulation runs entirely according to the
+prepared input ﬁle, and outputs the results to disk for the user to examine later.
+
+This mode of working is sufﬁcient for many simple investigations of mesoscale ﬂuid
+behaviour; however, it has several drawbacks. Firstly, consider the situation where one
+wishes to examine the dynamics of the separation of two immiscible ﬂuids:
+this is a
+subject which has been of considerable interest in the modelling community in recent
+years [39, 47]. Typically, a guess is made as to how long the simulation must run before
+producing a phase separation, and then the code is run for a ﬁxed number of timesteps.
+If a phase transition does not occur within this number of timesteps, then the job must
+be resubmitted to the batch queue, and restarted. However, if a phase transition occurs
+in the early stages of the simulation, then the rest of the compute time will be spent
+simulating an equilibrium system of very little interest; worse, if the initial parameters of
+the system turn out not to produce a phase separation, then all of the CPU time invested
+in the simulation will have gone to waste.
+
+Secondly, the input ﬁle often takes the simple form of a list of parameters and their
+values, but this may not be sufﬁciently expressive to describe the boundary conditions one
+may wish to apply, or the conditions under which they are to be applied. For example, to
+simulate the ﬂow of a ﬂuid mixture through a porous medium, it is necessary to equilibrate
+the ﬂow of a single component through the medium ﬁrst, before introducing the ﬂuid
+mixture, in order to prevent the behaviour of the mixture from being affected by transients
+present as the ﬂow ﬁeld develops.
+
+4.3 High-level control of simulation codes: scripting
+
+For every new and complicated boundary condition one wishes to impose, it is in principle
+possible to write a corresponding new subroutine in the simulation code, add an option
+in the input ﬁle to switch this boundary condition on or off, and recompile the simulation
+code. However, in practice this leads to redundancy and overcomplication, or “bloat”, in
+the simulation code, and also to excessively complicated or verbose input ﬁles. Bloated
+code will, in the long term, become difﬁcult to maintain or change, and more complicated
+input ﬁle syntax makes it harder for new users to learn how to use the code.
+
+12
+
+An alternative strategy is to abandon the concept of an input ﬁle altogether, and instead
+to control the simulation from a script written in a high-level language. This has several
+advantages.
+
+Firstly, provided that enough access to the simulation data structures is provided to the
+scripting layer, new boundary conditions may be formulated, tested, and run with ease,
+without requiring the code to be recompiled. The core of the number-crunching code
+stays small and maintainable as a result.
+
+Secondly, a high-level language provides conditional and loop structures, so simula-
+tions may be given much more detailed instructions than simply to run for a ﬁxed number
+of timesteps: for example, a simulation of ﬂuid phase separation could be instructed to
+run until the ﬂuid components have separated to a certain degree, and to then stop.
+
+Thirdly, writing the core of the simulation code in a language like C or Fortran but
+controlling its behaviour through a higher-level language allows the programmer to easily
+interface the simulation code with other components (such as image generation libraries)
+via the high-level language, which avoids the necessity of dealing with tedious low-level
+details of interfacing to many third-party libraries. This strategy also avoids incurring
+the performance penalty that would result from writing the entire simulation code in a
+higher-level language.
+
+The approach of making a piece of code such as the simulation solver available as a
+self-contained reusable object to some higher-level “glue” layer is often termed “compo-
+nentization”. In this case, the glue layer is the high-level language; in the more general
+case, it could be a Grid fabric layer such as Web Services, allowing interoperation across
+the network of components running on different machines.
+
+The high-level language chosen to script LB2D was Perl, a powerful language popular,
+amongst other things, for its ability to interface with, or ‘glue’, external components,
+and also for the wide variety of freely-available Perl code which can be easily accessed
+from scripts written in the language [48]. Constructing a functional Perl interface to the
+simulation code required little more than writing a formal description of the C subroutines
+comprising the simulation code [49]; interfacing code to other popular scripting languages
+such as TCL, Python, or Ruby is typically just as easy.
+
+4.4 Parameter space exploration using high-level scripting facility
+
+For an algorithm which runs the risk of encountering numerical instabilities, it is desir-
+able to know the regions of parameter space in which one can operate without expecting
+to encounter such problems: for example, when studying the behaviour of an interface
+between two ﬂuid components, it is useful to know how high the surface tension can be
+set before numerical instabilities are introduced, resulting in a simulation crash.
+
+A crude approach to map out this region is to guess the size and location of a region
+
+13
+
+333
+
+33
+
+3
+
+3
+
+3
+
+3
+
+3
+
+3
+
+0.12
+
+0.1
+
+0.08
+
+0.06
+
+(cid:27)
+
+0.04
+
+0.02
+
+3
+
+0
+
+3
+
+3
+
+3
+
+-0.02
+
+0
+
+0.5
+
+1
+
+1.5
+
+2
+
+2.5
+
+3
+
+3.5
+
+4
+
+4.5
+
+g
+
+br
+
+Figure 2: Graph of the surface tension σ (in lattice units) of an interface between two
+immiscible ﬂuids, against the value of the coupling constant gbr. The high-gbr limit of the
+graph indicates the maximum value, beyond which simulations will become unstable.
+
+of parameter space which will contain a region of stability, and blindly launch many
+simulations over this space.
+
+A slightly more versatile approach made possible by scripting is to start with a known-
+stable point in parameter space, and an initial direction in parameter space. A simulation
+is started at the known-stable point, and if it completes successfully, another one is started
+at an adjacent point in parameter space, until eventually a numerically unstable regime
+is found; successive simulations can then be launched to home in on the location of the
+stable/unstable boundary.
+
+In the Shan-Chen LB model, the interaction force between components, described in
+equation (12), gives rise to a surface tension at the interface between regions of different
+components; the strength of this interaction, and therefore the magnitude of the surface
+tension, is controlled by the coupling constant gbr.
+
+A simple parameter-space investigation is to take an interface between two immiscible
+ﬂuids, and run simulations with increasing gbr, and therefore increasing surface tension,
+until numerical instability sets in. The script controlling this process ensures that each
+If a simulation
+simulation runs for long enough that the system reaches equilibrium.
+succeeds, then the surface tension is raised; if not, then it is lowered, and the boundary
+is located using an interval bisection algorithm. The results of such an investigation are
+
+14
+
+Timestep: 50
+
+1000
+
+2650
+
+4450
+
+7250
+
+7850
+
+Figure 3: Simulation of droplet coalescence on an obstacle during channel ﬂow using
+scripted boundary conditions
+
+shown in Figure 2, in which the surface tension was calculated for each value of gbr for
+which a simulation could successfully be run.
+
+4.5 Scripted boundary conditions
+
+The use of scripting allows extremely versatile and dynamic speciﬁcation of boundary
+conditions in a simulation. Consider a stream of droplets ﬂowing through a channel until
+they meet an obstacle:
+the droplets accumulate on the obstacle and coalesce to form
+a larger droplet, until the resulting droplet becomes too large and breaks free to travel
+further down the channel. Conventionally, one might investigate this situation by ﬁrst
+running a simulation of single-component ﬂow through the channel with the obstacle,
+until the velocity ﬁeld equilibrates, and then starting a new simulation from this one in
+which droplets are added to the channel, either through manual intervention, or by writing
+an additional piece of code which periodically generates a new droplet near the entrance
+to the channel.
+
+However, it is also possible to perform the simulation in one single run, using a script.
+This script equilibrates the single-component velocity ﬁeld, and then automatically intro-
+duces a droplet to the channel entrance. It then waits, monitoring the simulation state,
+until the droplet has moved sufﬁciently far down the channel that a new one may be intro-
+duced without colliding with it. The results of such a simulation are shown in Figure 3:
+the automatically-generated droplet stream is induced by the obstacle to coalesce into a
+single large droplet, which then breaks off shortly before timestep 7850. The advantage of
+this approach is that it does not require human intervention to restart the simulation after
+the velocity ﬁeld has equilibrated, nor does it require a ﬁxed droplet generation rate to be
+set: if such a rate were set slightly too high, then droplets may collide with one another
+
+15
+
+before reaching the obstacle, a situation avoided by the use of a dynamically-speciﬁed
+boundary condition.
+
+5 Steering lattice-Boltzmann simulations through a generic
+
+library interface
+
+In this section, we present a discussion of the way in which we have implemented compu-
+tational steering for LB3D within the ongoing RealityGrid project [50]. The RealityGrid
+project aims to enable the modelling and simulation of complex condensed matter struc-
+tures at the molecular and mesoscale levels as well as the discovery of new materials
+using computational grids. The project also involves biomolecular applications and its
+long term ambition is to provide generic computational grid based technology for scien-
+tiﬁc, medical and commercial activities.
+
+5.1 Motivation
+
+Within RealityGrid, the way in which computational steering is implemented is driven by
+a desire to enable existing scientiﬁc computer programs (often written in Fortran90 and
+designed for multi-processor/parallel supercomputers) to be made steerable while min-
+imising the amount of work required. Minimising the number of changes that a scientist
+must make to an existing program is important since it encourages him to take responsi-
+bility for this work. Consequently, the scientist understands the changes that are required
+and can continue to maintain the software in the future.
+
+In the light of these requirements, we chose to implement the steering software as a
+library written in C and thus callable from a variety of languages (including C, C++ and
+Fortran90). The library completely insulates the application from any implementation
+details. For instance, the process by which messages are transferred between the steer-
+ing client and the application (e.g. via ﬁles or sockets) is completely hidden from the
+application code.
+
+Different scientists favour various techniques for writing programs intended to run on
+the specialist architectures of large supercomputers. Our steering library therefore does
+not assume or prescribe any particular parallel-programming paradigm (e.g. message
+passing or shared memory).
+
+Obviously, a scientist does not want a failure in the steering system (such as a loss of
+connection to the application) to result in valuable computing time being lost. We have
+therefore designed the steering protocol so that, insofar as is possible, the steering is never
+made critical to the simulation process. The protocol enables a steering client to attach
+and detach from a running application without affecting its state.
+
+16
+
+The scientist’s ability to monitor the state of his simulation and use this to inform
+his steering decisions plays a key role in computational steering. While a steering client
+provides some information via the simulation’s monitored parameters, a visualisation of
+some aspect of the simulation’s state is often required. In our architecture this visualisa-
+tion is created by a second software component.
+
+5.2 Requirements
+
+In order to make use of the steering library, an application must satisfy certain require-
+ments. In particular, the application must have a logical structure such that there exists a
+point (which we term a breakpoint) within a control loop at which it is possible to carry
+out the following steering tasks:
+
+i) emit a consistent representation of the state of the application’s steerable and mon-
+
+itored parameters;
+
+ii) accept a change to one or more steered parameters;
+
+iii) emit a consistent representation (data sample) of part of the system being simulated
+
+(e.g. for visualisation);
+
+iv) take a checkpoint or restart from an existing checkpoint.
+
+While all of these things must, theoretically, be possible at the breakpoint, it is up
+to the scientist as to how many of them his application actually supports. For instance,
+enabling the application to restart from a checkpoint during execution might be a difﬁcult
+task and therefore need only be attempted if the scientist particularly wants the function-
+ality that that facility will bring.
+
+5.3 The steering library
+
+The steering library itself consists of two parts: an application side and a client side.
+The client side is intended to be used in the construction of a steering client. We have
+developed a generic steering client using C++ and Qt (a GUI toolkit) [51] which is capable
+of steering any application that has been ‘steering enabled’ using the library.
+
+The steering library itself supports a variety of features. These include the facility
+for the application to register both monitored (read-only) and steerable (changed only
+through user interaction) parameters. Beyond this facility, the library supports a set of pre-
+deﬁned commands such as ‘pause’, ‘resume’, ‘detach’ and ‘stop.’ In addition to these pre-
+deﬁned commands, the library also allows the user to instruct the application to emit or
+
+17
+
+consume any data sets that it has previously registered. Similarly, the user may instruct the
+application to take a checkpoint or restart from one which the application has registered.
+The latter functionality is particularly important since it provides the basis of a system
+that allows the scientist to ‘rewind’ a simulation (by restarting from a previous check-
+point). Having done so, it can then be run again, perhaps after having steered some
+parameter or altered the frequency with which data from the simulation is recorded. The
+GRASPARC project [52] is an example of another system with this functionality.
+
+In order to maximise the ﬂexibility of the library, we use a system of ‘reverse com-
+munication’ with the application. This means that, for most actions, the library simply
+notiﬁes the application of what the latter needs to do. It is then the application’s responsi-
+bility to carry out the task, possibly using utility routines from the steering library. This is
+consistent with the philosophy mentioned earlier, of allowing the scientist to decide how
+much steering functionality he wishes to implement.
+
+The steering library currently uses ﬁles for transmission of the steering messages.
+This means either that the application and the steering client must have access to the same
+disk or that some other software (known as ‘middleware’) takes responsibility for trans-
+ferring the ﬁles between speciﬁc locations on the computers running the application and
+the client. Work in progress will lift this restriction by introducing direct communication
+between the application and client.
+
+5.4 Computational steering with LB3D
+
+As noted earlier, our parallel three-dimensional lattice-Boltzmann code (LB3D) has been
+interfaced to the RealityGrid steering library, which allows the user to steer all parameters
+of the simulation including coupling constants, ﬂuid densities, relaxation times and even
+data dumping frequencies. Steerable data dumping frequencies enable the user to increase
+the amount of generated data for parts of the simulation where the effects of interest are
+happening. This helps to save an expensive resource, namely disk space.
+
+In addition to the features the steering library provides, LB3D has its own logging
+and replay facilities which permit the user to ‘replay’ a steered simulation. This is an im-
+portant feature since it allows the data from steered simulations to be reproduced without
+human intervention. Moreover, this feature can be used as an ‘auto-steerer’, i.e. multi-
+ple simulations which read different input-ﬁles at startup and are ‘steered’ in the same
+way can be launched without the need for human intervention during the simulation. One
+application of this particular feature is for studies of how changes in parameters affect a
+simulation that has evolved for a given number of timesteps. Another application is the
+automatic adaptation of data dumping or checkpointing frequencies. If the user has found
+from a manually steered simulation that no effects of interest are expected for a given
+number of initial timesteps, he can reduce the amount of data written to disk for early
+
+18
+
+times of the simulation.
+
+All steered LB3D simulations that are reported in this paper were performed on 64
+processors of an SGI Origin 3800 in Manchester, UK. For data visualisation we used
+the Visualization Toolkit (VTK) [53] on a workstation in London. We chose to run the
+steering client on the same workstation.
+
+5.4.1 Spinodal decomposition
+
+As an example of a typical steered simulation with LB3D, let us consider the miscibility
+of a binary ﬂuid mixture. We are interested in the behaviour of the system for different
+values of the coupling constant gbr which controls the strength of the interaction between
+both ﬂuids, which we call ‘blue’ and ‘red’ here (see equation (12)). By interacting with
+a single ongoing simulation, we can change gbr ‘on the ﬂy’ and immediately see how
+the ﬂuid mixture behaves. Depending on the phenomena we are interested in, we can
+‘steer’ the ﬂuid into miscible or immiscible states. This technique can as well be utilised
+to ﬁnd optimal values of gbr to study spinodal decomposition. Spinodal decomposition
+takes place if an incompressible binary ﬂuid mixture is forced into thermodynamically
+unstable regions of its phase diagram, i.e. below its spinodal temperature. In this case,
+the mixture starts to phase separate into domains of the two ﬂuids. This effect is important
+in various industries because phase separations in products like paints or cosmetics have
+to be controlled carefully and many researchers have studied spinodal decomposition in
+detail [39, 38, 54, 55, 56, 57, 47, 58, 59, 60, 61].
+
+Figure 4 shows snapshots of volume rendered ‘colour’ ﬁelds (see section 2 and 3 for
+details). The colour ﬁeld describes the net force of different ﬂuid species on a given lattice
+site. A value of zero is obtained if forces caused by both ﬂuid types cancel each other.
+This takes place at the interface between the ﬂuids. A ‘colour’ ﬁeld greater than zero
+corresponds to areas where the ‘blue’ ﬂuid dominates while negative values correspond to
+a domination of ‘red’ particles respectively. In ﬁgures 4(a-f), areas of ‘blue’ dominance
+are rendered in blue and ‘red’ areas close to the interface are visualised in red. In the
+remaining snapshots, the colouring is utilized to visualise the diffusion of one ﬂuid species
+into areas where the other species is dominant.
+
+As initial condition for the simulation of the 643 system, we chose a mixture, where
+for both species, each vector on each lattice site is assigned a random occupation number
+between zero and 0.7. Relaxation times and masses are set to unity and the initial value
+of gbr is 0.001. This value is too low for phase separation to occur. Therefore, gbr is
+slowly raised to a value of 0.01. Within a few thousand timesteps, both phases start to
+separate and after 11000 timesteps of the simulation, a clear structure in the ﬂuid densities
+can be observed. It takes until timestep 24000 for the mixture to reach a fully separated
+state (ﬁgure 4a-f). At timestep 25000 we start to reduce gbr again in order to force the
+
+19
+
+a)
+
+b)
+
+T = 11000
+
+T = 12000
+
+T = 13000
+
+c)
+
+T = 14000
+
+T = 22000
+
+T = 25000
+
+d)
+
+g)
+
+e)
+
+h)
+
+f)
+
+i)
+
+T = 26000
+
+T = 27000
+
+T = 29000
+
+Figure 4: Snapshots of the ‘colour’ ﬁeld from a steered lattice-Boltzmann simulation of
+a 643 binary ﬂuid mixture of red and blue particles using the LB3D code. The coupling
+constant gbr between both ﬂuids is slowly raised from 0.001 to 0.01 during the inital phase
+of the simulation so that the phases start to separate until they reach a fully separated state
+after 25000 timesteps (a-f). Afterwards, the coupling is reduced to -0.001 so that the
+ﬂuids become mixed again (g-i). In (a-f) the colour red is used to visualise where areas of
+‘red’ dominance start and in (g-i) the colouring is utilized to show the diffusion of ﬂuid
+particles into areas where the other species is dominant.
+
+20
+
+ﬂuids to mix again. The minimum value of the coupling strength used is -0.001. Soon
+after reducing gbr, red ﬂuid particles start to diffuse into areas of blue dominance and vice
+versa. At timestep 29000 the system has arrived in a nearly fully mixed up state again
+(ﬁgures 4g-i).
+
+5.4.2 Parameter searching
+
+The second example we give to demonstrate the usefulness of computational steering of
+three dimensional lattice-Boltzmann simulations is focused on parameter searches.
+
+As noted previously, our simulations are very resource intensive. Single simulations
+might take between hours and days on a large number of processors of a parallel com-
+puter, and storing the generated data requires tens or hundreds of gigabytes of disk space.
+Typical system sizes of our simulations include 643, 1283 or 2563 lattices. The data writ-
+ten to disk for a single measuring timestep of a 2563 lattice requires about one gigabyte of
+disk space. For typical simulation lengths of 20000 timesteps and a measuring frequency
+of 100 timesteps, 200GB are needed. By reducing the lattice size to 643, one is able to
+substantially reduce the amount of data to 3GB. However, due to the possible occurrence
+of ﬁnite size effects, such small lattice sizes are often not appropriate. Much of this data
+might turn out not to include physically interesting results or the data might be of limited
+use because the simulation parameters were not choosen correctly. Moreover, like other
+mesoscopic models, the lattice-Boltzmann method contains a number of free parameters
+(see section 3), resulting in high-dimensional parameter spaces, although only limited
+areas may be of interest. In addition, the phenomena of interest might occur within a lim-
+ited time interval in the simulation only. In all these situations, very expensive compute
+resources are wasted.
+
+The free parameters of our lattice-Boltzmann ternary amphiphilic ﬂuid algorithm in-
+clude the coupling constants between different ﬂuid types (see section 3.3). The relation-
+ship between these parameters and experimentally available ﬂuid properties is not well
+understood. Therefore, it is important to choose these parameters carefully so as to study
+a wide range of phenomena with one or a small number of parameter sets.
+
+Traditionally, such ‘optimal’ parameter sets have been determined by ‘task farming’
+approaches, that is by performing large numbers of small simulations concurrently, on
+a large parallel machine or on a large number of small individual machines [24]. This
+technique allows one at least in principle to ‘scan’ the entire parameter space. In practice,
+only subspaces can usually be investigated in detail, although these can be distributed.
+No human interaction is required after the jobs have been submitted, which makes it
+easy to use script based approaches for the generation of input ﬁles and job submission.
+However, the available computing resources are not used very efﬁciently. Not only is
+CPU time wasted in a task farm simulation, the amount of disk space needed to store the
+
+21
+
+simulation data can be immense.
+
+For example, we did large scale parameter searches for binary water-surfactant mix-
+tures. The system size was 643 and parameters studied were the surfactant-surfactant
+coupling constant gss, the surfactant-water coupling constant gbs (see equation (12)), and
+initial ﬂuid densities. Masses and relaxation times were kept ﬁxed at unity. We were only
+able to study small regions of the available parameter space, i.e. gss was varied between
+-0.001 and -0.006 and values for gbs varied between -0.004 and -0.008. The initial condi-
+tions were set as in section 5.4.1, but the maximum occupation numbers were varied from
+0.2 to 0.7 for each ﬂuid individually. In practice, we launched a number of simulations
+with different values for gss, gbs and initial densities and analysed the generated data after-
+wards. This analysis gave us an idea of interesting values for the parameters studied and,
+in principle, on the basis of these ﬁndings one could launch more simulations in order to
+investigate the system in more detail.
+
+However, within a few wall-clock weeks of simulation time, we generated about
+300GB of data and used about 30000 CPU hours on an SGI Origin 3800. While the
+simulations were performed in a highly automated manner within a couple of weeks, data
+analysis has been ongoing for months. Automation of the analysis of the generated data
+is much harder because it might be difﬁcult to deﬁne the effects sufﬁciently well, or im-
+possible to anticipate the effects in advance, or simply not worthwhile to invest additional
+effort in the development of algorithms to automate the process.
+
+By considering this example, the disadvantage of conventional parameter searches is
+apparent: a signiﬁcant fraction of the simulations performed in such a search employ
+parameters which do not admit interesting phenomena. Nonetheless, these simulations
+generate data that has to be analysed. In fact, it is not the elapsed computing time that
+makes parameter searches very time consuming, but extracting information from the data
+produced.
+
+This analysis time can be signiﬁcantly reduced by introducing human intuition into
+the simulation-analysis loop. The scientist doing the simulations and analysing the data
+is usually able to decide whether a parameter set is in a region of interest long before
+any given simulation ﬁnishes. By providing the scientist with the possibility to change
+simulation parameters on the ﬂy, two goals can be achieved. First, he might be able to
+‘steer’ the simulation into areas of interest: this improves the effective use of CPU cycles
+and reduces the amount of produced data. Second, analysing the reduced simulation
+output data is much less time consuming.
+
+Figure 5 depicts a steered parameter search using the LB3D code. Instead of trying to
+cover the full parameter space, we only perform a limited number of steered simulations.
+We start with a random water-surfactant mixture with the surfactant-surfactant coupling
+constant gss set to -0.003 and the water-surfactant coupling constant gbs set to -0.006
+(ﬁgure 5a). The lattice size is 643 and initial maximum occupation numbers in this case
+
+22
+
+a)
+
+b)
+
+s
+s
+g
+
+2
+0
+0
+.
+0
+−
+
+3
+0
+0
+.
+0
+−
+
+5
+0
+0
+.
+0
+−
+
+d)
+
+c)
+
+e)
+
+f)
+
+0
+
+5000
+
+10000
+
+15000
+
+Number of timesteps
+
+Figure 5: A steered parameter search is performed for a 643 mixture of water and surfac-
+tant (see text for simulation details). The data visualised in the insets (a-f) is the volume
+rendered surfactant density, i.e. areas with densities higher than the average are coloured
+in green. We start at timestep zero with a random ﬂuid mixture and gss set to -0.003
+(a). After 10000 timesteps we ﬁnd a stable phase, i.e. a large fraction of the surfactant
+molecules forms spherical micelles (e). We ‘rewind’ the simulation to timestep 5000 (b)
+and change gss to -0.002. The system’s state at timestep 10000 is only slightly different
+from (e), but still evolving in time. At timestep 15000 the micelles are much clearer than
+at timestep 10000, showing that a larger fraction of the surfactant molecules is involved
+in the micelle formation (d). The inset in (d) shows the orientations of surfactant particles
+around an area of low surfactant concentration: all of them point to regions of higher
+water concentration. We now rewind to timestep 5000 again and change gss to -0.005.
+At timestep 10000 the system has formed a lamellar structure (f), where the surfactant
+molecules are aligned in parallel bilayers between areas of high water density (see inset
+of (f)).
+
+23
+
+are 0.7 for surfactant and 0.4 for water. The insets of ﬁgure 5 show volume rendered
+surfactant densities, where densities higher than the average are coloured in green. We
+monitor the state of the system while the simulation evolves and ﬁnd a stable micellar
+phase after about 10000 timesteps (ﬁgure 5e), i.e. a large fraction of surfactant molecules
+forms spherical micelles.
+
+Since we are not able to detect any drastic changes for later timesteps, we ‘rewind’
+the simulation back to timestep 5000 and change gss to -0.002. In this way we lower
+the interaction between surfactant molecules. Rewinding to an earlier simulation step is
+necessary because due to the low ﬂuid velocities it takes a very long time in a system
+that is close to equilibrium for parameter changes to take effect. Steering the values
+of the coupling constants more drastically is not a solution to this problem because the
+simulation might become unstable and produce unphysical results or even crash.
+
+Five thousand timesteps after ‘rewinding’, the system arrives in a state that is only
+slightly different from the gss=-0.003 case at timestep 10000.
+In order to investigate
+whether any more changes occur, we let the simulation evolve for a further 5000 timesteps
+and discover more well deﬁned structures than before. A closeup of the dataset (see inset
+of ﬁgure 5d) allows us to investigate the self-assembled spherical micelles in our system
+in more detail: the surfactant molecules visualised by the blue cones are pointing away
+from regions of low surfactant density, that is away from regions of high water density.
+The more well deﬁned structure than in ﬁgure 5c is due to a larger fraction of surfactant
+molecules being involved in forming micelles.
+
+In order to investigate areas of the parameter space where the absolute value of gss is
+higher, we ‘rewind’ the simulation again and change gss to -0.005. At timestep 10000, the
+system now ﬁnds itself in a drastically different state from the previous cases: water and
+surfactant form lamellae, the surfactant molecules align in parallel bilayers between areas
+ﬁlled with water. The colour purple is used here to visualise the interface between water
+and surfactant and the inset of ﬁgure 5f depicts how the surfactant molecules are aligned
+in this case.
+
+Of course, a single steered simulation cannot by itself replace a full task farm pa-
+rameter search, but a small number of steered simulations can provide a coarse grained
+overview of the available parameter space. By steering into areas of interest, one is able
+to dramatically reduce the resources required. Most of the analysis takes place during
+the simulation time itself and therefore required additional effort for ofﬂine analysis is
+reduced. Moreover, CPU time is further reduced because not every simulation has to start
+from timestep zero again. In the example given here, three conventional simulations of
+15000 timesteps each sum up to 45000 simulation steps in total. In contrast, the steered
+simulations use only about 25000 timesteps because we do not have to rewind to timestep
+zero and can stop as soon as we cannot detect any further changes. Since the scientist
+interacts with the simulations, data dumping rates can be adapted during the run, thus
+
+24
+
+reducing the requirements for disk storage even further.
+
+6 Computational steering
+
+As alluded to in previous sections, the problems associated with high performance com-
+putational science in general and large scale simulations in particular are not conﬁned to
+merely ﬁnding resources with larger numbers of processors or memory. Simulations that
+require greater computational resources also require increasingly sophisticated and com-
+plex tools for the analysis and management of the output of the simulations. In Sections 4
+and 5, we highlighted the limitations of a simple simulate-then-analyse approach and in-
+dicated how more sophisticated approaches help alleviate some of the problems. We then
+sketched some speciﬁc advantages of controlling the evolution of a computation, based
+upon the realtime analysis and visualisation of the status of a simulation, as opposed to
+the post facto analysis and visualisation of the output of a computation. The functional-
+ity that we refer to as computational steering enables the user to inﬂuence the otherwise
+sequential simulation and analysis phases by merging and interspacing them.
+
+What additional requirements does computational steering place on computer sys-
+tems? In order to computationally steer a simulation, one needs an interface to commu-
+nicate with the simulation, which may be running on a remote machine. In addition to
+allowing parameters to be monitored and changed, this interface needs to offer the possi-
+bility of visualising complex data sets, for instance 3D isosurfacing and volume rendering.
+To enable intuitive interaction with a simulation, it is essential that visualisation can be
+perfomed sufﬁciently fast compared to changes taking place in the simulation. Visualisa-
+tion of large and complex data sets typically requires high-end graphics hardware, which,
+like high-end computing resources, is not always available locally. Therefore, visualisa-
+tion should be treated as a distributed resource as well, the need for which stems not only
+from computational steering but also from the requirements of high performance visuali-
+sation. The requirement to use more than one distributed resource simultaneously in turn
+raises more subtle issues associated with the requirements of sophisticated scheduling
+algorithms and techniques. Typical supercomputer centres currently make no provision
+for coallocation of resources, for example a compute node and a visualisation node. It
+would be desirable to be able to request resources for a computational steering session in
+advance and be assured of a certain quality of service during a session. Equally impor-
+tant is the requirement to be able to reserve substantial compute resources with small turn
+around time.
+
+What advantages does computational steering provide the application scientist in re-
+turn? We have described a few speciﬁc examples of how computational steering can
+increase a scientist’s productivity. This increase in productivity is due to an increase in
+
+25
+
+the throughput of hardware resources but equally important is the enhanced productivity
+due to a more effective computational science workﬂow bench (simulation-analysis loop)
+as a consequence of being able to use computational steering. There have been attempts
+to use computational steering as a novel approach to studying outstanding and important
+problems in biomolecular systems [62]. At the very least, computational steering com-
+plements existing techniques [63]. However, computational steering should not simply be
+thought of as an effective tool in the production and analysis phase of a simulation. It can
+provide the application scientist (often also the application developer) with greater ﬂexi-
+bility in the development, debugging and validation phases of an application [8, 64, 65],
+where it complements rather than replaces other well established tools. Computational
+steering can also be extended to collaborative environments where several geographically
+distributed scientists can simultanously interact with one or more simulations from sepa-
+rate locations [66, 67, 68, 69, 70].
+
+This sets the stage for a few remarks on what kind of computational science appli-
+cations are suitable candidates for the use of computational steering. If an application
+requires barely a few seconds of computing time to simulate a physical process or ef-
+fectively ﬁnish the simulation (say a ﬁxed small number of iterations in a minimization
+routine), then the advantages of user intervention while the simulation is in progress are
+limited. Any overhead associated with interrupting such an inexpensive simulation will
+not be worth the gain bought by interactivity. At the other end of the spectrum, simu-
+lations that ‘take forever’ for any discernible changes to manifest as a consequence of
+user interaction are also not good candidates as the advantage from such interactivity is
+typically limited. A case in point are ab initio quantum mechanical molecular dynamics
+simulations, where even when only a small number of atoms are of interest, each step of
+the calculation may take several hours on a multiprocessor machine [71, 72]. Any changes
+initiated dynamically by the user for such simulations would take many hours to become
+manifest, clearly limiting their use. Thus it appears to be the case that simulations with
+a run time from several minutes to several hours (irrespective of the resources used), are
+ideally suited for interactive aspects of computational steering. It is important to distin-
+guish between the role of steering in long running simulations as opposed to simulations
+with long response times to a pertubation. We have discussed the limited role of steering
+in the latter, but in the former case, steering can be useful for checking the progress of
+a long running simulation by connecting to the simulation, getting a sample and visual-
+ising it and then disconnecting after checking all is correct, thus enabling the scientist to
+use computational steering as ‘simulation monitor’ and as a safeguard against possible
+wastage of computational resources.
+
+A few cautionary remarks are in place. Many physical systems have long equilibration
+time scales and suffer from ﬁnite size effects. In such cases, changing the parameters and
+taking the state immediately following the change to be the putative true state might be
+
+26
+
+misleading. Moreover, many physical systems exhibit hysteresis, that is their properties at
+a given point in parameter space are dependent upon their history. Before computationally
+steering a simulation, it is imperative to determine if it displays hysteresis and, if so,
+how the use of steering may inﬂuence the analysis. Computational steering of diverse
+applications may involve different challenges, but in all cases an antidote to possible
+problems will be careful and consistent study rather than a refusal to adopt new analysis
+techniques.
+
+We end this section by discussing why there has been comparatively limited accep-
+tance or use of computational steering in scientiﬁc applications until now. If there is a
+lesson to be learnt from the evolution of computational science, it is that the complexity
+of doing something new and exciting has to be well hidden from the application scientist,
+it is essential to minimize the amount of implementation, learning, disruption and
+i.e.
+changes to the user interface, until the advantages of the new features are well established
+and very clearly seen to offset the cost of implementation. Ideally one would like, if pos-
+sible, to just slip in the functionality where the user never knows or notices, but this may
+not be achievable in a computational steering context, when the application scientist often
+has to actually execute the functionality. Thus maximal effort will have to be invested
+into reducing the ‘barrier of entry’. Until now, implementing computational steering has
+required a high degree of customization, but most scientists typically are not in a position
+to invest in the time-consuming task of developing the necessary tools; indeed, cooper-
+ation with specialists in visualisation and interfacing techniques has hitherto been vital.
+This problem is not helped by the fact that the requirements of a scientist might change
+during a project because new results from simulations lead future investigations in differ-
+ent directions than initially planned. This could result in the steering tools having to be
+adapted, which can be very costly [64, 65].
+
+The question that logically follows is what can be done to address the relatively low
+acceptance of computational steering in computational science. We believe that most sci-
+entists are not cognisant of the advantages computational steering offers and thus unaware
+how they might beneﬁt from steerable applications. Therefore, their simulations are done
+in the ‘traditional’ way, invoking long batch jobs and subsequently lengthy ofﬂine data
+analysis. In this paper we have outlined the advantages that computational steering has
+brought to our LB studies. Part of the purpose of this article is to encourage computational
+scientists to think about the enhanced ability and beneﬁts that computational steering ca-
+pabilities would bring to their scientiﬁc productivity, along the lines of our LB studies,
+but speciﬁc to their own applications. It is obvious that not all computational science
+problems are amenable to, or for that matter require, computational steering. However,
+we believe that documenting the advantages of computational steering in widely differing
+applications and areas will help bring greater acceptance of steering as a valid paradigm
+for computational science research. We also wish to emphasize that, as shown by the
+
+27
+
+RealityGrid steering framework, by using the correct abstractions and good software en-
+gineering practices, implementing the required changes is much less effort than might
+otherwise be expected. Indeed many generic tools and libraries useful in program steer-
+ing and data visualisation are now readily available [8, 73, 7, 74].
+
+7 Steering on Computational Grids: Current Status and
+
+Future Outlook
+
+Signiﬁcant effort is being invested worldwide in Grid computing [75]. A basic premise
+of grid computing is to provide the infrastructure required to facilitate the collaborative
+sharing of resources. The grid aims to present the elements required for a computational
+task (e.g. calculation engine, ﬁlters, visualisation capability) as components which can
+be effectively and transparently coupled through the grid framework. In this scenario,
+any application or simulation code can be viewed simply as a data producing/consuming
+object on the grid and computational steering is a way of allowing a user to interact with
+such objects. As discussed in previous sections, a scientist using steering has hetero-
+geneous and dynamic computational resource requirements, making the stated ability of
+the grid to collectively and transparently marshall diverse resources complementary to
+the primary motivation of computational steering. Thus a grid infrastructure that permits
+the coordination of heterogeneous and distributed computing resources provides a nat-
+ural environment as well as a testbed for demonstrating the effectiveness of steering in
+computational science.
+
+In our description of the RealityGrid steering framework in section 5, we did not
+mention the use of a computational grid or dependence on any underlying middleware
+requirement. This is because the RealityGrid steering framework is capable of being used
+on stand alone workstations as well as the most ambitious computational grids available
+in the world today. Equally important is the fact that our steering framework is not crit-
+ically dependent on any one particular middleware although it does adhere to the best
+practises and the open standards currently being discussed within the Global Grid Forum
+(GGF) [75]. In the remainder of this section we will describe how the RealityGrid project
+uses the grid to implement computational steering.
+
+In the same way that a high-ﬁdelity simulation of a physical system often requires a
+supercomputer, so the visualisation of the (potentially) large data sets that these simula-
+tions produce also requires specialist hardware that few scientists have direct access to.
+Consequently, the visualisation component of the RealityGrid steering may well be on a
+machine other than the one the scientist is sitting in front of. This is consistent with our
+earlier proposal that visualisation be treated like a distributed resource. This then requires
+that the output (images) of the visualisation component be returned to the user’s worksta-
+
+28
+
+tion quickly enough to allow for full interactivity (e.g. to rotate, zoom, etc.). We currently
+use SGI’s OpenGL VizServer software to perform this task; it takes the images directly
+from the rendering hardware on the visualisation machine, compresses them, transports
+them to the user’s machine, decompresses and displays them [76]. This allows the sci-
+entist to interact with a remote visualisation, even over network links with relatively low
+bandwidth.
+
+The outline traced above has been the basis for several successful computational steer-
+ing demonstrations that we have performed within the past year. In our ﬁrst demonstration
+at the UK e-Science All Hands Conference in Shefﬁeld in September 2002, we used this
+technique to interact with a visualisation produced on an SGI Onyx300 in Manchester
+from a laptop in Shefﬁeld with the computation performed in London. For this demon-
+stration and the subsequent two, we used Unicore [77] as the underlying middleware to
+manage the ﬁle transfer aspects of the demonstration. At Supercomputing 2002, we used
+a trans-Atlantic link to interact with a visualisation on the Onyx300 in Manchester from
+a laptop in Baltimore, USA, the computation being performed on the SGI Origin 3800
+in Manchester. In February of 2003 at the SGI VizSummit, we used a laptop in Paris to
+interact with simulations on 128 processors of the Origin 3800 in Manchester, visualising
+and steering being performed locally using the Onyx300 facilities provided on the demon-
+stration ﬂoor. Thus we have in the process performed computational steering using three
+different albeit transient grid scenarios: within the UK, trans-Atlantic and UK-continental
+Europe.
+
+The grids used in these demonstrations were assembled especially for each event.
+However, the UK e-Science community has constructed an ambitious Level 2 Grid [78]
+that aims to provide the user community with a persistent grid. We have already de-
+ployed a preliminary RealityGrid LB3D application involving computational steering,
+using Globus (as opposed to Unicore, conﬁrming the ﬂexibility of our steering frame-
+work) on this Level 2 Grid, thus being amongst the ﬁrst groups in the world to use a
+persistent grid for routine science requiring high performance computing and computa-
+tional steering.
+
+At the time of writing, the RealityGrid steering library supports both ﬁle-based and
+streaming (based on globus io from the Globus project [79]) data transfer between the
+application and visualisation components. Communications between the application and
+the client is currently implemented by exchanging XML documents through a shared ﬁle
+system (XML is a widely accepted language specifying the syntax to mark-up data in
+computer documents).
+
+We are in the process of implementing a more ﬂexible architecture, based on the Open
+Grid Services Infrastructure [80]. As shown in Figure 6, communications between the
+application and client are routed through an intermediate steering grid service (SGS). The
+SGS provides the public interface through which clients can steer the application. In our
+
+29
+
+Steering GS
+
+Application
+
+Steering library
+
+d
+
+B i n
+
+Publish
+
+Steering client
+
+Registry
+
+Find
+
+Connect
+
+Data transfer
+
+Publish
+
+Bind
+
+Steering GS
+
+Steering library
+
+Visualisation
+
+Figure 6: Architecture for RealityGrid steering within the Open Grid Services Infrastruc-
+ture (OGSI). The application and client communicate by exchanging messages through
+intermediate grid services. The grid service (GS) provides the public interface through
+which clients can steer the applications.
+
+architecture, the visualisation and application components appear on equal footing, and
+a visualisation can possess its own SGS. Each SGS publishes information about itself in
+a registry, which is used by clients to discover and bind to running applications, and can
+also be instrumental in bootstrapping the communications between the application and
+visualisation components. We note that the approach of exposing steering controls as grid
+services in a standard way could bring profound beneﬁts in the form of interoperability
+between different implementations of computational steering.
+
+8 Conclusions
+
+This paper has described the work we have done to incorporate computational steering
+in mesoscale lattice Boltzmann simulations of binary and ternary immiscible and am-
+phiphillic ﬂuids. The scale and efﬁciency of these studies is set to increase dramatically
+with the advent of computational grids which are now becoming widely available within
+the UK, Europe, the USA and the Paciﬁc Rim.
+
+30
+
+Acknowledgements
+
+We are grateful to ESPRC for funding much of this research through RealityGrid grant
+GR/R67699 and for providing access to SGI Origin 3800, Origin 2000, and CRAY T3E
+supercomputers at Computer Services for Academic Research (CSAR), Manchester, UK.
+We would also like to thank the University of Manchester for access to their SGI Onyx300
+and HEFCE for funding the 16 processor dual pipe SGI Onyx2 at University College
+London. Jonathan Chin acknowledges Huntsman and Queen Mary, University of London,
+for funding his Ph.D. studentship. Jens Harting wishes to thank the European Commission
+Access to Research Infrastructures action of the ‘Improving Human Potential Programme’
+for supporting his stay at Italy’s national supercomputer centre in Bologna (CINECA) and
+the use of their local IBM SP4, SGI Origin 3800 and SGI Onyx2 facilities.
+
+References
+
+edition, 1998.
+
+2001.
+
+University Press, 2001.
+
+sity Press, 1997.
+
+[1] L. E. Reichl. A Modern Course in Statistical Physics. J. Wiley and Sons, second
+
+[2] J.-P. Rivet and J. P. Boon. Lattice Gas Hydrodynamics. Cambridge University Press,
+
+[3] S. Succi. The Lattice Boltzmann Equation for Fluid Dynamics and Beyond. Oxford
+
+[4] D. H. Rothman and S. Zaleski. Lattice Gas Cellular Automata. Cambridge Univer-
+
+[5] A. K. Gunstensen, D. H. Rothman, S. Zaleski, and G. Zanetti. Lattice Boltzmann
+
+model of immiscible ﬂuids. Phys. Rev. A, 43(8):4320–4327, 1991.
+
+[6] W. Gu, J. Vetter, and K. Schwan. An annotated bibliography of interactive program
+
+steering. ACM SIG-PLAN Notices, 29(9):140–148, 1994.
+
+[7] J. Prins, J. Hermans, G. Mann, L. Nyland, and M. Simons. A virtual environment
+for steered molecular dynamics. Future Generation Computer Systems, 15:485–495,
+1999.
+
+[8] W. Gu, G. Eisenhauer, and J. V. Karsten Schwan. Falcon: On-line monitoring and
+steering of parallel programs. Technical report, College of Computing, Georgia In-
+stitute of Technology, 1995. http://www.cc.gatech.edu/systems/projects/FALCON/.
+
+31
+
+[9] L. E. Scriven and C. V. Sternling. The Marangoni effects. Nature, 187:186 – 188,
+
+1960.
+
+[10] J. B. Grotberg and D. P. G. III. A synopsis of surfactant spreading research. J.
+
+Colloid Interface Sci., 178:377–378, 1996.
+
+[11] B. M. Boghosian and P. V. Coveney. A particulate basis for an immiscible lattice-gas
+
+model. Comp. Phys. Comm., 129(1–3):46–55, 2000.
+
+[12] E. G. Flekkøy, P. V. Coveney, and G. D. Fabritiis. Foundations of dissipative particle
+
+dynamics. Phys. Rev. E, 62(2):2140–2157, 2000.
+
+[13] P. J. Hoogerbrugge and J. M. V. A. Koelman. Simulating microscopic hydrody-
+namic phenomena with dissipative particle dynamics. Europhys. Lett., 19(3):155–
+160, 1992.
+
+[14] P. Espa˜nol and P. Warren. Statistical mechanics of dissipative particle dynamics.
+
+Europhys. Lett., 30(4):191–196, 1995.
+
+[15] P. V. Coveney and P. Espa˜nol. Dissipative particle dynamics for interacting multi-
+
+component systems. J. Phys. A: Math. Gen., 30:779–784, 1997.
+
+[16] U. Frisch, B. Hasslacher, and Y. Pomeau. Lattice-gas automata for the Navier-Stokes
+
+equation. Phys. Rev. Lett., 56(14):1505–1508, 1986.
+
+[17] S. Wolfram. Cellular automaton ﬂuids 1: Basic theory. J. Stat. Phys., 45(3/4):471–
+
+526, 1986.
+
+[18] U. Frisch, D. d’Humi`eres, B. Hasslacher, P. Lallemand, Y. Pomeau, and J.-P. Rivet.
+Lattice gas hydrodynamics in two and three dimensions. Complex Systems, 1:649–
+707, 1987.
+
+[19] D. H. Rothman and J. M. Keller.
+Phys., 52(3–4):1119–1127, 1988.
+
+Immiscible cellular-automaton ﬂuids. J. Stat.
+
+[20] P. V. Coveney, J. Maillet, J. L. Wilson, P. W. Fowler, O. Al-Mushadani, and B. M.
+Boghosian. Lattice-gas simulations of ternary amphiphilic ﬂuid ﬂow in porous me-
+dia. Int. J. Mod. Phys. C, 9(8):1479–1490, 1998.
+
+[21] G. Gompper and M. Schick. Self-assembling amphiphilic systems.
+
+In C. Domb
+and J. Lebowitz, editors, Phase Transitions and Critical Phenomena, volume 16, pp
+1–176. Academic Press, 1994.
+
+32
+
+[22] P. J. Love, J. Maillet, and P. V. Coveney. Three-dimensional hydrodynamic lattice-
+gas simulations of binary immiscible and ternary amphiphilic ﬂow through porous
+media. Phys. Rev. E, 64(061302), 2001.
+
+[23] B. M. Boghosian, P. V. Coveney, and A. N. Emerton. A lattice-gas model of mi-
+
+croemulsions. Proc. R. Soc. Lond. A, 452:1221–1250, 1996.
+
+[24] B. M. Boghosian, P. V. Coveney, and P. J. Love. A three dimensional lattice-gas
+model for amphiphilic ﬂuid dynamics. Proc. R. Soc. Lond. A, 456:1431, 2000.
+
+[25] A. Malevanets and R. Kapral. Continuous-velocity lattice-gas model for ﬂuid ﬂow.
+
+Europhys. Lett., 44(5):552–558, 1998.
+
+[26] Y. Hashimoto, Y. Chen, and H. Ohashi. Immiscible real-coded lattice gas. Comp.
+
+Phys. Comm., 129(1–3):56–62, 2000.
+
+[27] T. Sakai, Y. Chen, and H. Ohashi. Formation of micelle in the real-coded lattice gas.
+
+Comp. Phys. Comm., 129(1–3):75–81, 2000.
+
+[28] P. L. Bhatnagar, E. P. Gross, and M. Krook. Model for collision processes in gases.
+I. Small amplitude processes in charged and neutral one-component systems. Phys.
+Rev., 94(3):511–525, 1954.
+
+[29] R. L. Liboff. Kinetic Theory: Classical, Quantum, and Relativistic Descriptions.
+
+Prentice-Hall, 1990.
+
+[30] S. Chapman and T. G. Cowling. The Mathematical Theory of Non-uniform Gases.
+
+Cambridge University Press, second edition, 1952.
+
+[31] Y. H. Qian, D. d’Humi`eres, and P. Lallemand. Lattice BGK models for Navier-
+
+Stokes equation. Europhys. Lett., 17(6):479–484, 1992.
+
+[32] X. He and L.-S. Luo. Theory of the lattice Boltzmann method: From the Boltzmann
+
+equation to the lattice Boltzmann equation. Phys. Rev. E, 56(6):6811–6817, 1997.
+
+[33] G. R. McNamara and G. Zanetti. Use of the Boltzmann equation to simulate lattice-
+
+gas automata. Phys. Rev. Lett., 61(20):2332–2335, 1988.
+
+[34] H. Chen, S. Chen, and W. H. Matthaeus. Recovery of the Navier-Stokes equations
+using a lattice-gas Boltzmann method. Phys. Rev. A, 45(8):5339–5341, 1992.
+
+[35] M. R. Swift, E. Orlandini, W. R. Osborn, and J. M. Yeomans. Lattice-Boltzmann
+simulations of liquid-gas and binary ﬂuid mixtures. Phys. Rev. E, 54(5):5041–5052,
+1996.
+
+33
+
+[36] L.-S. Luo. Theory of the lattice Boltzmann method: Lattice Boltzmann models for
+
+nonideal gases. Phys. Rev. E, 62(4):4982–4995, 2000.
+
+[37] X. Shan and H. Chen. Lattice Boltzmann model for simulating ﬂows with multiple
+
+phases and components. Phys. Rev. E, 47(3):1815–1819, 1993.
+
+[38] J. Chin and P. V. Coveney. Lattice Boltzmann study of spinodal decomposition in
+
+two dimensions. Phys. Rev. E, 66(016303), 2002.
+
+[39] N. Gonz´alez-Segredo, M. Nekovee, and P. V. Coveney. Three-dimensional lattice-
+Boltzmann simulations of critical spinodal decomposition in binary immiscible ﬂu-
+ids. Phys. Rev. E, in print. Available as e-print cond-mat/0301046 in Los Alamos
+Preprint Archive – http://www.arXiv.org/ .
+
+[40] N. S. Martys and J. F. Douglas. Critical properties and phase separation in lattice
+
+Boltzmann ﬂuid mixtures. Phys. Rev. E, 63:031205, 2001.
+
+[41] X. Shan and H. Chen. Simulation of nonideal gases and liquid-gas phase transitions
+
+by the lattice Boltzmann equation. Phys. Rev. E, 49(4):2941–2948, 1994.
+
+[42] N. S. Martys and H. Chen. Simulation of multicomponent ﬂuids in complex three-
+dimensional geometries by the lattice Boltzmann method. Phys. Rev. E, 53(1):743–
+750, 1996.
+
+[43] H. Chen, B. M. Boghosian, P. V. Coveney, and M. Nekovee. A ternary lattice Boltz-
+
+mann model for amphiphilic ﬂuids. Proc. R. Soc. Lond. A, 456:2043–2047, 2000.
+
+[44] P. J. Love. A particulate basis for a lattice-gas model of amphiphilic ﬂuids. Phil.
+
+Trans. R. Soc. Lond. A, 360:345, 2002.
+
+[45] P. J. Love, M. Nekovee, P. V. Coveney, J. Chin, N. Gonz´alez-Segredo, and J. M. R.
+Martin. Simulations of amphiphilic ﬂuids using mesoscale lattice-Boltzmann and
+lattice-gas methods. Comp. Phys. Comm., in press. Available as e-print
+cond-
+mat/0212148 in Los Alamos Preprint Archive – http://www.arXiv.org/ .
+
+[46] R. Srinivasan. XDR: External data representation standard. Network work-
+ing group request for comments: 1832, Internet Engineering Task Force, 1995.
+http://www.ietf.org/rfc/rfc1832.txt.
+
+[47] V. M. Kendon, M. E. Cates, I. Pagonabarraga, J. C. Desplat, and P. Bladon. Iner-
+tial effects in three-dimensional spinodal decomposition of a symmetric binary ﬂuid
+mixture: A lattice Boltzmann study. J. Fluid Mech., 440:147–203, 2001.
+
+34
+
+[48] The Comprehensive Perl Archive Network. http://www.cpan.org/ .
+
+[49] T. Jenness and S. Cozens. Extending and Embedding Perl. Manning Publications,
+
+2002.
+
+[50] The RealityGrid project: http://www.realitygrid.org.
+
+[51] Trolltech Qt - A GUI Toolkit, http://www.trolltech.com.
+
+[52] K. W. Brodlie, L. A. Brankin, G. A. Banecki, A. Gay, A. Poon, and H. Wright.
+GRASPARC: A problem solving environment integrating computation and visual-
+ization. In G. M. Nielson and D. Bergeron, editors, Proceedings of IEEE Visualiza-
+tion 93 Conference, p 102. IEEE Computer Society Press, 1993.
+
+[53] W. Schroeder, K. Martin, and B. Lorensen. The Visualization Toolkit: An Object
+
+Oriented Approach to 3D Graphics. Kitware, Inc., 3rd edition, 2003.
+
+[54] P. V. Coveney and K. E. Novik. Computer simulations of domain growth and phase
+separation in two-dimensional binary immiscible ﬂuids using dissipative particle
+dynamics. Phys. Rev. E, 54(5):5134–5141, 1996.
+
+[55] F. J. Alexander, S. Chen, and D. W. Grunau. Hydrodynamic spinodal decomposition:
+
+Growth kinetics and scaling functions. Phys. Rev. B, 48(1):634–637, 1993.
+
+[56] M. Grant and K. R. Elder. Spinodal decomposition in ﬂuids. Phys. Rev. Lett.,
+
+82(1):14–16, 1999.
+
+[57] H. Furukawa. Spinodal decomposition of two-dimensional ﬂuid mixtures: A spec-
+
+tral analysis of droplet growth. Phys. Rev. E, 61(2):1423–1431, 2000.
+
+[58] F. Perrot, C. K. Chan, and D. Beysens. Spinodal decomposition under shear: To-
+
+wards a two-dimensional growth? Europhys. Lett., 9(1):65–70, 1989.
+
+[59] R. B. Rybka, M. Cieplak, and D. Salin. Boltzmann cellular automata studies of the
+
+spinodal decomposition. Physica A, 222:105–118, 1995.
+
+[60] F. J. Solis and M. O. de la Cruz. Hydrodynamic coarsening of binary ﬂuids. Phys.
+
+Rev. Lett., 84(15):3350–3353, 2000.
+
+[61] E. D. Siggia. Late stages of spinodal decomposition in binary mixtures. Phys. Rev.
+
+A, 20(2):595–605, 1979.
+
+35
+
+[62] S. Izrailev, S. Sergey, B. Isralewitz, D. Kosztin, H. Lu, F. Molnar, W. Wriggers, and
+K. Schulten. Computational molecular dynamics: Challenges, methods, ideas. In
+P. Deuﬂhard et al., editors, volume 4 of Lecture Notes in Computational Science and
+Engineering, pp 39–65. Springer-Verlag, Berlin, 1998.
+
+[63] I. Barry, M. Gao, and K. Schulten. Steered molecular dynamics and mechanical
+functions of proteins. Current Opinion in Structural Biology, 11:224–230, 2001.
+
+[64] R. van Liere, J. Mulder, and J. van Wijk. Computational steering. Future Generation
+
+Computer Systems, 12(5):441–450, 1997.
+
+[65] J. van Wijk, R. van Liere, and J. Mulder. Bringing computational steering to the user.
+In H. Hagen, G. Nielson, and F. Post, editors, Scientiﬁc visualization, pp 304–313.
+IEEE Computer Society, 2000.
+
+[66] I. Foster and C. Kesselman. Computational grids. In I. Foster and C. Kesselman,
+editors, The Grid: Blueprint for a New Computing Infrastructure, pp 15–25. Morgan
+Kaufmann, 1999.
+
+[67] T. DeFanti and R. Stevens. Teleimmersion.
+
+In I. Foster and C. Kesselman, edi-
+tors, The Grid: Blueprint for a New Computing Infrastructure, pp 131–155. Morgan
+Kaufmann, 1999.
+
+[68] K. Brodlie, S. Mason, M. Thompson, M. Walkley, and J. Wood. Reacting to a crisis:
+beneﬁts of collaborative visualization and computational steering in a grid environ-
+ment.
+In paper presented at the UK e-Science All Hands Conference, Shefﬁeld,
+2002.
+
+[69] M. Walkley, J. Wood, and K. Brodlie. A Distributed Co-operative Problem Solving
+
+Environment. Computational Science - ICCS 2002, LNCS 2329, Springer, 2002.
+
+[70] D. Foulser. Iris explorer: a framework for investigation. ACM SIGGRAPH Computer
+
+Graphics, 29(2):13–16, 1995.
+
+[71] J. Harting, O. M¨ulken, and P. Borrmann. The interplay between shell effects and
+electron correlation in quantum dots. Phys. Rev. B, 62(15):10207, October 2000.
+
+[72] K. Mishima, K. Yamashita, and A. Bandrauk.
+
+Isomers and transition states
+ab initio studies of geometries and absorption spectra.
+
+of the Na+
+J. Phys. Chem. A, 102(18):3157, 1998.
+
+4 clusters.
+
+36
+
+[73] D. Beazley and P. Lomdahl. Lightweight computational steering of very large scale
+molecular dynamics simulations. In Proceedings of the 1996 ACM/IEEE conference
+on Supercomputing. ACM Press, 1996.
+
+[74] The GridLab Project, http://www.gridlab.org.
+
+[75] The Global Grid Forum, http://www.gridforum.org.
+
+[76] SGI Inc. OpenGL VizserverTM 3.0: Application-Transparent Remote Interactive
+
+Visualization and Collaboration. http://www.sgi.com/software/vizserver/.
+
+[77] The Uniform Interface to Computing Resources, http://www.unicore.de.
+
+[78] The Level 2 Grid Project, http://www.grid-support.ac.uk/l2g/index.html.
+
+[79] I. Foster and C. Kesselman. Globus: A toolkit-based grid architecture. In I. Foster
+and C. Kesselman, editors, The Grid: Blueprint for a New Computing Infrastructure,
+p 259. Morgan Kaufmann, 1999.
+
+[80] S. Tueke, K. Czajkowski,
+
+I. Foster,
+and P. Vanderbilt.
+
+J. Frey, S. Graham, C. Kessel-
+Infrastruc-
+man, D. Snelling,
+ture (OGSI)
+the Global Grid Forum,
+OGSI Working Group of
+2003. http://www.gridforum.org/Meetings/ggf7/drafts/ draft-ggf-ogsi-gridservice-
+23 2003-02-17.pdf .
+
+Open Grid Services
+
+(draft).
+
+37
+
+Jonathan Chin is a postgraduate student in Peter Coveney’s group at the University
+College London. In 1999, while an undergraduate at the University of Oxford, he took
+a summer placement in the group, where he wrote the LB3D parallel lattice Boltzmann
+code and enjoyed it so much he joined the group in 2000 to do a PhD. His interests include
+complex ﬂuids, visualization, and premature micro-optimization.
+
+Jens Harting studied physics at the Carl von Ossietzky University in Oldenburg, Ger-
+many. After a Diploma thesis on Bose-Einstein Condensation he worked on path integral
+Monte Carlo simulations of few electron systems such as semiconductor quantum dots
+and received his PhD in December 2001. Being interested in simulations of ﬂuids, com-
+putational steering and high performance computing, joined the RealityGrid project as a
+Research Fellow in Peter Coveney’s group in March 2002.
+
+Shantenu Jha is a Research Fellow with RealityGrid at the Centre for Compuatatioal
+Science, UCL, London. His graduate work is in Physics and Computer Science from
+Syracuse University, New York, USA. His interests are in computational physics, high
+performance and distributed computing and politics.
+
+Peter Coveney holds a Chair in Physical Chemistry in the Department of Chemistry
+and is Director of the Centre for Computational Science (CCS) at University College
+London. His group performs internationally leading research in the area of atomistic and
+mesoscale modelling and simulation, including molecular dynamics, dissipative particle
+dynamics, lattice-gas and lattice-Boltzmann techniques and exploits state of the art high
+performance computing and visualisation methods. He has published numerous theoret-
+ical and modelling/simulation papers on lattice-gas and lattice-Boltzmann automata, dis-
+sipative particle dynamics and molecular dynamics inter alia. Professor Coveney is cur-
+rently leading the large RealityGrid research programme, funded by the UK’s Engineering
+and Physical Science Research Council, aimed at grid enablement of supercomputing, vi-
+sualisation and computational steering (http://www.realitygrid.org). He previously held
+the Chair in Physical Chemistry in the Department of Chemistry at Queen Mary, Univer-
+sity of London, before which he was with the Schlumberger Cambridge Research, where
+he held a number of scientiﬁc and management positions.
+
+Andrew Porter is a software engineer in the Supercomputing, Visualization and e-
+Science group in Manchester Computing at the University of Manchester. He graduated
+with a PhD in computational condensed-matter physics from the University of Cambridge
+in 2000 and, after a spell as an IT consultant in industry, joined the RealityGrid project in
+March 2002. His interests include computational steering and scientiﬁc visualisation.
+
+38
+
+Stephen Pickles is Software Infrastructure Manager for the RealityGrid project, and
+co-leader of Manchester Computing’s e-Science team at the University of Manchester.
+He has been engaged in grid computing since 1999. After nearly a decade as programmer
+and systems analyst with ICL (Australia), Stephen graduated from Macquarie University
+in 1994 with BSc (Hons I) in Physics, gained his PhD in lattice quantum chromodynamics
+from the University of Edinburgh in 1998 and then joined the CSAR service at Manchester
+Computing as Senior Applications Consultant.
+
+39
+
+

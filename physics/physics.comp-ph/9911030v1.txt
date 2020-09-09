@@ -1,0 +1,587 @@
+One-way multigrid method in electronic structure calculations
+
+In-Ho Lee
+School of Physics, Korea Institute for Advanced Study, Cheongryangri-dong, Dongdaemun-gu,
+Seoul 130-012, Korea
+
+Yong-Hoon Kim and Richard M. Martin
+Department of Physics, University of Illinois at Urbana Champaign, Illinois 61801
+(September 17, 1999)
+
+Abstract
+
+We propose a simple and eﬃcient one-way multigrid method for self-
+consistent electronic structure calculations based on iterative diagonalization.
+Total energy calculations are performed on several diﬀerent levels of grids
+starting from the coarsest grid, with wave functions transferred to each ﬁner
+level. The only changes compared to a single grid calculation are interpolation
+and orthonormalization steps outside the original total energy calculation and
+required only for transferring between grids. This feature results in a minimal
+amount of code change, and enables us to employ a sophisticated interpola-
+tion method and noninteger ratio of grid spacings. Calculations employing a
+preconditioned conjugate gradient method are presented for two examples, a
+quantum dot and a charged molecular system. Use of three grid levels with
+grid spacings 2h, 1.5h, and h decreases the computer time by about a factor
+of 5 compared to single level calculations.
+
+71.15.-m, 71.15.Nc, 71.15.Mb, 71.15.Pd
+
+9
+9
+9
+1
+ 
+v
+o
+N
+ 
+5
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+0
+3
+0
+1
+1
+9
+9
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Typeset using REVTEX
+
+1
+
+I. INTRODUCTION
+
+Recently, the usefulness of the real-space technique based on three-dimensional uniform
+grid and higher-order ﬁnite-diﬀerence formula1 has been demonstrated2,3 for the electronic
+structure calculations within the framework of the Kohn-Sham (KS) density functional the-
+ory (DFT).4 All the computations are performed in real space without resort to fast Fourier
+transforms as in the planewave formalism. The major parts of calculations are local opera-
+tions, so the algorithm is easily parallelized. Furthermore, explicit storage of the Hamiltonian
+matrix elements can be avoided, since the Laplacians and potential-wave functions multi-
+plications are respectively evaluated by the ﬁnite-diﬀerence operation on the wave functions
+and a simple one-dimensional vector multiplications.
+
+Since the number of grids Ng is order of 105 ∼ 106, which increases further with the
+system size and/or the level of accuracy, one requires an eﬃcient numerical procedure for
+the Hamiltonian diagonalization in ﬁnite-diﬀerence real-space schemes. Iterative diagonal-
+ization methods are usually employed as in other modern electronic structure calculations,
+and due to the orthogonality condition between the KS orbitals the complexity of this iter-
+ative diagonalization scales as O(N 2
+b Ng), where Nb represents the number of lowest states
+taken into account. It turns out that the prefactor of this scaling can be very dependent on
+the details of calculation scheme, and the development of a new algorithm which results in
+the optimal prefactor is a very important and challenging problem at the moment. Among
+the most promising approaches in the literature are the multigrid (MG) algorithms.5,6 MG
+methods originated as attempts to accelerate relaxation methods and they have been very
+successful in improving the speed and accuracy in a wide variety of science and engineering
+applications by combining computations at diﬀerent scales of grid levels.
+In the context
+of DFT electronic structure calculations, several groups have already applied the multi-
+grid scheme to the solution of KS equations and demonstrated its eﬃciency: Briggs et al.
+adopted coarse-grid-correction multigrid algorithm to the calculations of various periodic
+and nonperiodic systems.7 Ancilotto et al. implemented full multigrid diagonalization pro-
+cedure to study the fragmentation of charged Li clusters.8 While these two works employed
+the pseudopotentials, Beck et al. has demonstrated the feasibility of all-electron grid calcu-
+lation by employing full multigrid algorithm.9 These authors typically use integer ratio of
+grid spacings (e.g., 4h, 2h, and h) and correction multilevel algorithm (V-cycle).
+
+In this article, we introduce a simple one-way multigrid algorithm5 to accelerate self-
+consistent electronic structure calculations based on iterative diagonalization. Calculations
+start from the coarsest grid level and approximate solutions are transferred successively up
+to the ﬁnest grid. An interesting aspect of this method is that the number of interpolation
+is minimized : Interpolations are performed outside of original total energy calculation part,
+hence only for (number of grid levels −1) times when the wave functions are transferred to the
+next ﬁner grid level. It enables us to use an accurate interpolation scheme and the noninteger
+ratio of grid spacing in the hierarchy of grids. Speciﬁcally we employ three diﬀerent uniform
+grids spacings, 2h, 1.5h, and h to obtain the solution at the resolution of grid spacing h,
+in which calculations on the preceding two coarse grids provide a good initial guess of the
+wave functions for the ﬁnest level calculation. We demonstrate the eﬃciency of the current
+scheme on the twenty-electron quantum dots and the charged H cluster systems in which
+the ionic potentials have been replaced by ab initio pseudopotentials. The comparison with
+
+2
+
+a single-level calculations shows a factor of 5 improvement in CPU time.
+
+II. METHODS
+
+A. Basic issues
+
+The iterative total energy minimization based on DFT is a nonlinear problem in which
+
+the KS equations (Hartree atomic units are used throughout this paper)
+
+−
+
+(cid:26)
+
+1
+2
+
+~∇2 + Vext(~r) + ˜VH(~r) + ˜V σ
+
+xc(~r)
+
+j (~r) = ǫσ
+ψσ
+
+j ψσ
+
+j (~r), σ =↑, ↓, j = 1, · · · , Nb
+
+(1)
+
+(cid:27)
+
+and the Poisson equation
+
+~∇2 ˜VH(~r) = −4πρ(~r),
+
+(2)
+
+are closely coupled in the self-consistency loop.10 Here ˜VH(~r) and ˜V σ
+xc(~r) respectively repre-
+sent the input Hartree and spin dependent exchange-correlation potential, at each iteration
+within the self-consistent calculations. Vext(~r) stands for the external potential, and the
+charge density ρ(~r) is deﬁned as the squared summation of the occupied KS orbitals. In
+the higher-order ﬁnite-diﬀerence real space formulation, the KS and Poisson equations are
+discretized on a uniform grid. The Laplacian operation is evaluated by the higher-order
+ﬁnite diﬀerence formula1 which is characterized by the ﬁnite-diﬀerence order N and grid
+spacing h:
+
+d2
+dx2 f (x) =
+
+N
+
+Xj=−N
+
+Cjf (x + jh) + O(h2N +2),
+
+(3)
+
+where {Cj} are constants.
+
+KS(~r) = Vext(~r) + ˜VH (~r) + ˜V σ
+
+In the present work solutions of the KS equations for the lowest Nb eigenstates are
+found by the iterative preconditioned conjugate gradient method of Bylander, Kleinman, and
+Lee,11,12 for a given total potential V σ
+xc(~r). The Hartree potential
+VH(~r) is obtained by solving the Poisson equation. Note that, for each self-consistent step,
+we need to solve two Poisson equations for the given input and output charge densities. For
+the ﬁnite systems considered here the boundary values of Hartree potential are evaluated
+using a multipole expansion of the potential of the charge distribution and the relaxation
+vectors at the boundary are set to zero for the Dirichlet boundary conditions. The solution
+of Poisson equation inside of the box has been ﬁrst generated by a Fourier method with low
+order ﬁnite diﬀerence (N = 1),6 and it has been subsequently relaxed by the preconditioned
+conjugate gradient method13,14 with higher-order ﬁnite diﬀerence formula. At each step we
+choose the new input density and potential using a simple linear mixing of output and input
+densities.11
+
+After obtaining orbitals and density from self-consistent solutions of Poisson and KS
+
+equations, the total electronic energy is obtained:
+
+Etot =
+
+ǫσ
+j −
+
+Xσ,j
+
+Xσ Z
+
+d3r{ ˜VH(~r) + ˜V σ
+
+xc(~r)}ρσ(~r) +
+
+1
+2 Z
+
+d3r′
+
+d3r
+
+Z
+
+ρ(~r)ρ(~r′)
+| ~r − ~r′ |
+
++ Exc[ρ↑(~r), ρ↓(~r)], (4)
+
+3
+
+where the summations over the single particle energy (ǫσ
+j ) are carried out for all the states
+below the Fermi level, and Exc[ρ↑(~r), ρ↓(~r)] is the exchange-correlation energy. For our
+local spin density approximation we use the Perdew and Zunger’s parameterization of the
+Ceperley and Alder’s quantum Monte Carlo data.15
+
+B. One-way multigrid method
+
+The most time-consuming part of the self-consistent electronic structure calculations
+described in the previous subsection is the iterative solution of KS equations. The sources
+of this computation bottleneck can be traced to broadly two (but closely related) aspects
+of self-consistent iterative diagonalization schemes. First of all, in general we do not have
+a good initial guess of wave functions, which generate density, and hence ˜VH(~r) and ˜V σ
+xc(~r)
+in Eq. (1). So initial several self-consistency steps will be used to obtain solutions of biased
+Hamiltonians, although they tend to be the most time-consuming part. Secondly, in single
+iterative solution of KS equations, a direct application of a relaxation method on the ﬁne
+grid has trouble in damping out the long-ranged or slowly varying error components in the
+orbitals. This can be understood by the usual spectral analysis of relaxation scheme, or
+considering that the nonlocal Laplacian operation on a ﬁne grid is physically short-ranged.
+This means that there is an imbalance in the relaxation step for the long-ranged and short-
+ranged error components.
+
+MG is a quite general concept, and the choice of a speciﬁc algorithm is very dependent
+on the problem under consideration. For our purpose, we seek a procedure which generates
+a good initial guess for the ﬁnest grid calculation and eﬀectively removes long-range error
+components of wave functions in the solution of KS equations. In this work, we employed
+the one-way multigrid scheme with three diﬀerent uniform grids with noninteger ratio of
+spacings, 2h, 1.5h, and h. The calculation starts from the coarsest grid 2h, and in each
+grid-level calculation, Eqs. (2) and (1) are solved self-consistently as in the usual single-level
+algorithm. After each self-consistent calculation on a coarse grid, only wave functions are
+interpolated to the next ﬁne grid, and another set of self-consistent calculation is performed.
+Since that the interpolated wave functions usually do not satisfy the orthonormality condi-
+tion any more, we take an extra Gram-Schmidt orthogonalization process after each orbital
+interpolation. So we have two interpolations and two Gram-Schmidt orthogonalization pro-
+cesses for our hierarchy of three grid systems. In Fig. 1, we summarize the algorithmic ﬂow
+of the procedures.
+
+While an eﬃcient interpolation/projection scheme is a crucial ingredient of any successful
+application of MG method, we note that it can be also time-consuming and tricky part due
+to the physical conditions such as orthonormality of wave functions. Hence our strategy,
+which is the characteristic of the current scheme, is to minimize the number of data transfer
+between diﬀerent grid levels, while employ a sophisticated interpolation method which is
+very accurate and allow us to use a noninteger ratio of grid spacings. Speciﬁcally, we
+used a three-dimensional piecewise polynomial interpolation with a tensor product of one-
+dimensional B-splines as the interpolating function.6,16 A piecewise cubic polynomials have
+been taken as B-splines.
+
+4
+
+III. EFFICIENCY AND DISCUSSIONS
+
+2ω2
+
+2ω2
+
+2ω2
+
+yy2 + 1
+
+xx2 + 1
+
+We consider two diﬀerent electronic systems of a localized quantum dot model and a
+charged hydrogen cluster to demonstrate the eﬃciency of the present algorithm. We ﬁrst take
+a twenty-electron quasi two-dimensional quantum dot modeled by an anisotropic parabolic
+conﬁnement potential3 Vext(~r) = 1
+z z2. In-plane potential is characterized
+by the conﬁnement energies ωx = ωy = 5 meV, and ωz = 45 meV has been taken to reproduce
+the dot-growth z-direction conﬁnement caused by the quantum wells and heterojunctions.3
+Our calculations for anisotropic parabolic dot in GaAs host material (dielectric constant
+ǫ = 12.9, eﬀective mass m∗ = 0.067me) are based on the eﬀective mass approximation, and
+B = 101.88 ˚A and 10.96 meV, respectively. Uniform
+rescaled length and energy units are a∗
+B with box size 81 × 81 × 21a∗ 3
+grid spacing h = 0.3a∗
+B have been used, hence the number of
+grid points is about 1.4 × 105 points at the ﬁnest grid level (h = 0.3a∗
+B) while only about
+1.6 × 104 points at the coarsest grid level (2h = 0.6a∗
+B). Finite diﬀerence order N = 3 has
+been used at grid levels h and 1.5h, while N = 1 for grid level 2h, to solve a set of spin-
+polarized KS equations with ﬁfteen orbitals in each spin channel. Noninteracting eigenstates
+(Hermite polynomials) are used as an initial guess for the coarsest grid calculation.
+
+The CPU times for each self-consistent iteration are shown in Fig. 2. The horizontal
+axis stands for the self-consistency iteration index, while the vertical axis is the required
+computer time for a given iteration step. The case of the present three-level one-way multi-
+grid algorithm is shown in the lowest panel (c). Comparing with the results of a single-level
+calculation shown in the panel (a), we see signiﬁcant savings of the computation time, in
+which total computation time is about 5 times shorter than a single-level calculation. While
+the three-level MG scheme requires more number of self-consistent iterations (28 iterations
+compared with 20 iterations), they are mostly performed in the coarsest grid 2h, and at
+the ﬁnest grid level h we only need several iterations. Interpolation and orthonormalization
+steps are indicated by downward arrows, which take only a small amount of computation
+time.
+
+To further demonstrate the advantage of the usage of the intermediate grid spacing 1.5h
+in our three-level scheme, we show the CPU time of two-level (2h and h) calculation in the
+panel (b). While the number of iterations taken in the ﬁnest grid h is still much smaller than
+the single-level calculation, it is much larger than that in the three-level calculation, resulting
+in the ratio of computation times 5 : 2 : 1 for one-, two-, and three-level grid calculations.
+Although noninteger ratio of grid spacing is not widely used in MG applications, this clearly
+shows its usefulness.
+
+We obtained similar results of factor 5 improvements in computation speed for other
+test cases, such as the ab initio nonlocal pseudopotential calculation of a charged hydrogen
+cluster H+
+9 . Details of the calculation are identical to those of quantum dot calculations,
+except that ionic external potentials are treated by separable17 nonlocal pseudopotential
+generated by the method of Troullier and Martins.18 Finite diﬀerence order N = 6 at grid h
+and 1.5h, and N = 1 for the grid 2h have been used to solve spin-unpolarized KS equations
+with the lowest 6 states. The number of grid points involved in the ﬁnest grid calculation is
+3.5 × 105, while it is 4.3 × 104 for the coarsest grid calculation.
+
+We have to emphasize that the improvements seen in previous examples are purely
+induced by the a simple usage of MG idea, in which the only modiﬁcation from the original
+
+5
+
+single-level code was the addition of an outer loop which transfer the wave functions. We can
+expect that the introduction of the MG scheme at diﬀerent stages of calculations, such as
+the correction path for the relaxation of KS orbital or Hartree potential, will result in further
+improvements. To do so, we will need additional residual computation and projection steps
+that can be combined with our conjugate gradient solvers. We also note that it will require an
+interpolation strategy and grid levels which are diﬀerent from the current method. Finally,
+we point out that this type of one-way multigrid idea is very similar to often-used practices in
+plane-wave calculations based on iterative diagonalization, in which a solution is ﬁrst found
+at one energy cutoﬀ (equivalent to a coarse grid) and used as the input to a higher energy
+cutoﬀ calculation (equivalent to a ﬁner grid). This corresponds to interpolating solutions
+from a coarser to a ﬁner grid using Fourier components.
+
+IV. CONCLUSIONS
+
+In this work, we demonstrated that the introduction of a simple one-way multigrid
+method greatly improves the eﬃciency of real-space electronic structure calculations based
+on the iterative solution of KS equations. While minimizing the number of data transfer
+between grids, we employed an accurate interpolation method, which enabled us to incor-
+porate three-level grids with noninteger ratio of grid spacings. Our general strategy of using
+2h, 1.5h, and h, showed a factor 5 improvement of computation time, while it required only
+minimal computer code modiﬁcations. The usefulness of the intermediate grid step 1.5h has
+been shown by comparing the current scheme with two-level (2h and h) calculations.
+
+ACKNOWLEDGMENTS
+
+This work was supported in part by the National Science Foundation under grant DMR
+
+9802373. We are grateful to supercomputer center SERI.
+
+6
+
+REFERENCES
+
+1 B. Fornberg and D. Sloan, in Acta Numerica 1994, edited by A. Iserles (Cambridge Uni-
+versity Press, Cambridge, 1994), pp. 203-267.
+2 J. R. Chelikowsky, N. Troullier, and Y. Saad, Phys. Rev. Lett. 72, 1240 (1994); J. R.
+Chelikowsky, N. Troullier, K. Wu, and Y. Saad, Phys. Rev. B 50, 11 355 (1994).
+3 I.-H. Lee, V. Rao, R. M. Martin, and J.-P. Leburton, Phys. Rev. B 57, 9035 (1998).
+4 P. Hohenberg and W. Kohn, Phys. Rev. 136, B864 (1964); W. Kohn and L. J. Sham,
+Phys. Rev. 140, A1133 (1965).
+5 C. C. Douglas, IEEE Computational Science & Engineering, Winter 55 (1996).
+6 W. H. Press, S. A. Teukolsky, W. T. Vetterling, and B. P. Flannery, Numerical Recipes in
+Fortran, (Second edition, Cambridge University Press, 1992).
+7 E. L. Briggs, D. J. Sullivan, and J. Bernholc, Phys. Rev. B 52, R5471 (1995).
+8 F. Ancilotto, P. Blandin, and F. Toigo, Phys. Rev. B 59, 7868 (1999).
+9 J. Wang and T. Beck, preprint cond-mat/9905422 and references therein.
+10 M. C. Payne, M. P. Teter, D. C. Allan, T. A. Arias, and J. D. Joannopoulos, Rev. Mod.
+
+Phys. 64, 1045 (1992).
+
+11 D. M. Bylander, L. Kleinman, and S. Lee, Phys. Rev. B 42, 1394 (1990).
+12 A. P. Seitsonen, M. M. Puska, and R. M. Nieminen, Phys. Rev. B 51, 14 057 (1995).
+13 J. C. Strikwerda, Finite Diﬀerence Schemes and Partial Diﬀerential Equations,
+
+(Wadsworth, Belmont, California, 1989), pp. 333-335.
+
+14 T. Hoshi, M. Arai, and T. Fujiwara, Phys. Rev. B 52, R5459 (1995).
+15 D. M. Ceperley and B. J. Alder, Phys. Rev. Lett. 45, 566 (1980); J. Perdew and A. Zunger,
+
+Phys. Rev. B 23, 5048 (1981).
+
+16 C. De Boor, A Practical Guide to Splines Vol. 5, (Springer-Verlag, New York, 1978), pp.
+
+173-182.
+
+17 L. Kleinman and D. M. Bylander, Phys. Rev. Lett. 48, 1425 (1982).
+18 N. Troullier and J. L. Martins, Phys. Rev. B 43, 8861 (1991).
+
+7
+
+FIGURES
+
+FIG. 1. Schematic diagram of the present one-way multigrid algorithm discussed in the text.
+The self-consistent calculation at each level is done by using preconditioned conjugate gradient
+relaxation. The values in circles, 2h, 1.5h, and h stand for the uniform grid spacing for a given
+level. The calculation starts at the coarsest level (level 1, 2h) at the bottom, and ends at the ﬁnest
+grid (level 3, h) at the top. Orbital interpolation and orthogonalization step is taken after each
+coarse grid (level 1 and 2) calculation.
+
+FIG. 2.
+
+CPU time vs.
+
+self-consistent iteration number for 20-electron quantum dot cal-
+culations in (a) single-level (h), (b) two-level (2h and h), and (c) three-level (2h, 1.5h, and h)
+schemes. Within the local spin density approximation, we minimized the total energy with re-
+spect to the electronic degree of freedom. Downward arrows in (b) and (c) indicate the inter-
+polation-orthogonalization steps. Calculations are performed on a DEC alpha 433au personal
+workstation.
+
+8
+
+level 3
+
+h
+
+self-consistent calculation
+
+interpolation & orthogonalization
+
+level 2
+
+1.5h
+
+self-consistent calculation
+
+interpolation & orthogonalization
+
+Computation flows from left to right
+
+F
+i
+g
+.
+
+1
+
+9
+
+level 1
+
+2h
+
+self-consistent calculation
+
+1
+0
+
+2h
+
+1.5h
+
+h
+
+h
+
+2h
+
+40
+
+30
+
+20
+
+10
+
+0
+
+40
+
+30
+
+20
+
+10
+
+0
+
+40
+
+30
+
+20
+
+10
+
+0
+
+0
+
+)
+n
+i
+m
+
+(
+ 
+e
+m
+
+i
+t
+ 
+
+U
+P
+C
+
+h
+
+(a)
+
+(b)
+
+(c)
+
+5
+
+10
+
+20
+
+25
+
+30
+
+15
+iteration
+
+F
+i
+g
+.
+
+2
+
+

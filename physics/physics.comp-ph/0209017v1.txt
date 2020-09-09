@@ -1,0 +1,1371 @@
+2
+0
+0
+2
+ 
+p
+e
+S
+ 
+4
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+7
+1
+0
+9
+0
+2
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Methods for parallel simulations of surface reactions
+
+S.V. Nedea,∗ J.J. Lukkien,† A.P.J. Jansen,‡ and P.A.J. Hilbers†
+
+We study the opportunities for parallelism for the simulation of surface reactions. We introduce
+the concept of a partition and we give new simulation methods based on Cellular Automaton using
+partitions. We elaborate on the advantages and disadvantages of the derived algorithms comparing
+with Dynamic Monte Carlo algorithms. We ﬁnd that we can get very fast simulations using this
+approach trading accuracy for performance and we give experimental data for the simulation of Ziﬀ
+model.
+
+1. Introduction
+
+Understanding chemical reactions that take place on
+catalytic surfaces is of vital importance to the chem-
+ical industry. The knowledge can be used to improve
+catalysts thus yielding better reactors. In addition, im-
+proving the catalytic process in engines can lead to im-
+provement of environmental conditions. Dynamic Monte
+Carlo simulations have turned out to be a powerful tool
+to model and analyse surface reactions [1, 2, 3, 4, 5, 6, 7].
+In such a DMC model, the surface is described as a two-
+dimensional lattice of sites that can be occupied by parti-
+cles. The simulation consist of changing the surface over
+time by execution of reactions, which are merely mod-
+ifcations of small neighborhoods. Simple models can be
+simulated easily; however, for more complicated models
+and for larger systems computation time and memory use
+become very large. One way of dealing with this is to use
+parallelism.
+
+There are roughly three ways to introduce parallelism
+in simulations. First one may choose an existing simula-
+tion algorithm and exploit inherent concurrency. This
+boils down to a parallelization eﬀort which is by no
+means straightforward but limited by the properties of
+the algorithm one starts with. General parallel methods
+such as the optimistic method Time Warp or the pes-
+simistic methods suggested by Misra and Chandy can
+be used [8, 9, 10]. If the model (and, hence, the algo-
+rithm) does not admit much concurrency one may try
+to change the model. The penalty in many cases will
+be that such a model is less accurate but this may be
+acceptable. Third, the necessary statistics may be ob-
+tained from the averaging of a large number of small,
+independent simulations (this is, in fact, an instance of
+the second approach). The mathematical model for DMC
+simulations of surface reactions is the Master Equation
+( [11], see also section 2). The algorithms based on it
+are rather sequential in nature and do not admit an opti-
+mistic parallel simulation method like Time Warp. This
+
+is because each reaction disables many others and, hence,
+an optimistic method would result in frequent roll-back.
+Successful parallel methods therefore change the model.
+The most frequently used alternative model is that of
+a Cellular Automaton (CA) model. The CA model [12]
+is inherently parallel: all sites of the lattice are updated
+simultaneously according to the state of the neighbor-
+ing sites. The time is incremented after updating syn-
+chronously all the sites of the lattice, such that the state
+of a cell at time t depends on the state of the neighboring
+sites at time t − 1. Each site is updated according to a
+transition rule dependent on the state of the neighboring
+sites.
+
+There are two problems with the CA. First, all patterns
+(i.e., neighborhood occupations) are treated on the same
+footing.
+In practice, however, these patterns represent
+diﬀerent reactions that proceed with a diﬀerent speed.
+The solution is to use a so-called non-deterministic CA
+(NDCA) in which execution of reaction is performed with
+a probability dependent on its rate. The second problem
+concerns the occurence of conﬂicts. These conﬂicts must
+be resolved but they make it impossible to have a syn-
+chronous update.
+
+In this paper we introduce and study the partitioned
+CA model [13, 14]. Each site of the lattice belongs to a set
+of a partition. These sets are chosen such that reactions
+concerning sites within the same set have no conﬂicts. If
+we have, for example, a von Neumann neighborhood [15],
+the sites can be distributed over ﬁve sets with this prop-
+erty. The result is that updates in the same partition can
+be done simultaneously.
+
+The paper is organized as follows. In section 2 we give
+the mathematical description of the simulation model.
+DMC simulation methods and algorithms are introduced
+in section 3. In section 4 we give the CA and its sim-
+ulation algorithm. Section 5 introduces the idea of par-
+titioning worked out into several alternatives. Section
+6 contains some experimental data. We end with some
+conclusions.
+
+∗Department of Mathematics and Computer Science, Technical
+University of Eindhoven; Electronic address: silvia@win.tue.nl
+†Department of Mathematics and Computer Science, Technical
+University of Eindhoven
+‡Department of Chemical Engineering, Technical University of
+Eindhoven
+
+2. The Model
+
+The model comprises
+
+the particles
+(molecules and atoms) and the reactions that take place.
+A picture of a model system is found in Fig. 1.
+
+the surface,
+
+Lattice and set of states - Ω, D
+
+1. S′(z) = S(z) if z /∈ N bRt(s), i.e. z does not occur
+
+We model the surface by a two-dimmensional lattice Ω
+of N =L0 x L1 sites. Every site takes a value from a set
+D, the domain of particle types. D is a ﬁnite set and
+generally contains an element to indicate that a site is
+vacant, D={∗, A, B, . . .}, where * stands for an empty
+site. A complete assignment of particles to sites is called
+a system state or conﬁguration. Hence a conﬁguration is
+a function from Ω to D.
+
+The set of reaction types - T
+
+A system state can be changed into a next state
+through a reaction. Such a reaction is an instance of
+a reaction type at a speciﬁc site s. Occurrence of a re-
+action means that the particles in a small neighborhood
+of s are replaced by new particles. A reaction can only
+occur when it is enabled, i.e., when the neighborhood is
+occupied according to some speciﬁc pattern. A reaction
+type therefore speciﬁes
+
+1. the neighborhood that should be considered for a
+
+given site,
+
+2. the pattern needed for the reaction type in the neig-
+
+borhood (the source pattern),
+
+3. the pattern that will result from occurrence of the
+
+reaction (the target pattern).
+
+A reaction type therefore is a function that, when ap-
+plied to a speciﬁc site s yields a collection of triples of
+the form (site, source, target). The collection speciﬁes
+the neighborhood and the source and target patterns.
+More precisely, a reaction type Rt is a function from Ω
+to the subsets of Ω x D x D, P(Ω x D x D).
+
+For t ∈ Rt(s) we call the ﬁrst component t.site, the
+second component t.src and the third component t.tg.
+We will loosely refer to the set of ﬁrst components as the
+neighborhood of Rt, the set of second components as the
+source pattern and the set of third components as the
+target pattern. The neighborhood of Rt is a function,
+N bRt: Ω → P(Ω), that, when applied to a site s, yields
+a collection of sites from Ω. This function must have the
+following two properties
+
+1. the neighborhood of a site s includes s: s ∈ N b(s).
+
+2. translation invariance: the neighborhood looks the
+same for all sites such that for any site t, N b(s+t) =
+N b(s) + t = N b(t) + s.
+
+We can now also deﬁne when a reaction type is enabled.
+A reaction type Rt is enabled at site s in state S when
+for all t in Rt(s), S(t.site) = t.src, i.e., when the source
+pattern matches at s in S.
+
+Usually, there are many reaction types and in a certain
+state many of them are enabled. A simulation proceeds
+by repeatedly selecting an enabled reaction and executing
+it. The new state that results from executing an enabled
+reaction type Rt in state S at a site s is deﬁned as follows.
+Call this new state S′ then
+
+in the neighborhood of Rt(s),
+
+2. for any t in Rt(s), S′(t.site) = t.tg.
+
+Reaction Rates
+
+Each reaction type Rt has a rate constant k associated
+with it, which is the probability per unit time that the re-
+action of type Rt occurs. This rate constant depends on
+the temperature, expressed through an Arrhenius expres-
+−E
+sion k = ν exp (cid:16)
+kB T (cid:17) where E is the activation energy
+and ν the pre-exponential factor.
+
+Example
+
+We give a simple example where we use the deﬁned
+model to describe the surface reactions in a simple sys-
+tem. In this system [16], particles of type CO (carbon
+monoxide) may adsorb on the sites of a square lattice.
+Particles of type O (oxygen) may do so as well, but in
+the gas phase O is diatomic. The adsorption of CO has
+rate constant kCO and the dissociative adsorption of O2
+has rate constant kO2 . O2 adsorbs at adjacent vacant
+sites. Adsorbed O and CO particles form CO2 and des-
+orb (see Fig. 1). The rate of formation and desorption
+of CO2 is kCO2 . The surface is modelled by a lattice of
+sites Ω=L0 x L1, and D={*, CO, O}. The reactions are
+modelled by seven reaction types that we give in Table I.
+
+For CO adsorption there is one reaction type, for O2
+adsorption there are two reaction types because two ori-
+entations are possible when the O2 molecule dissociates.
+Finally, the CO2 formation and desorption is modelled
+by four reaction types.
+
+CO   desorption
+
+2
+
+O  adsorption
+
+2
+
+CO adsorption
+
+reaction
+
+FIG. 1:
+Reactions on a surface modelled by a two-
+dimensional lattice, with two types of particles, O(light col-
+ored) and CO(dark colored).
+
+3. Simulations
+
+Using diﬀerent simulation techniques we want to study
+the evolution of the deﬁned model over time. This means
+
+0
+RtCO+O {(s,CO,*),
+
+RtO2
+
+RtCO
+
+(s+(1,0),O,*)}
+{(s,*,O),
+(s+(1,0),*,O)}
+{(s,*,CO)}
+
+1
+{(s,CO,*),
+(s+(0,1),O,*)}
+{(s,*,O),
+(s+(0,1),*,O)}
+
+2
+{(s,CO,*),
+(s+(-1,0),O,*)}
+
+3
+{(s,CO,*),
+(s+(0,-1),CO,*)}
+
+TABLE I: All the transformations of the reaction types that model the reactions of the system in Fig. 1 applied on a site s.
+Notice that RtCO+O has four versions corresponding to the four possible orientations of the pattern. RtO2 has only two.
+
+that we repeatedly execute enabled reactions on the lat-
+tice according to a simulation algorithm. There are basi-
+cally two diﬀerent approaches to simulate lattice models:
+Dynamic Monte Carlo (DMC) and Cellular Automata
+(CA).
+
+set time to 0;
+repeat
+
+Dynamic Monte Carlo
+
+Dynamic Monte Carlo methods are used to simulate
+the behavior of stochastic models over time. The stochas-
+tic models of physical systems are based on a Master
+Equation (ME) of the form
+
+dP (S, t)
+dt
+
+=
+
+X
+S′
+
+[kSS′ P (S′, t) − kS′SP (S, t)] .
+
+(1)
+
+In this equation P (S, t) denotes the probability to ﬁnd
+the system in a conﬁguration S at time t, kSS′ is the
+reaction probability of the reaction that transfers S′ into
+S. Such a reaction is an instance of a reaction type at a
+particular location.
+
+A simulation according to this equation is essentially
+a discrete event simulation with continuous time, where
+the events are the occurences of reactions. When we as-
+sume that the rate constants do not change over time,
+occurrence of each event has a negative exponential dis-
+tribution [2, 3].
+In an abstract way, a simulation then
+consists of a repetition of the following steps
+
+1. Determine the list of enabled reactions.
+
+2. Select the reaction that is the next and the time of
+
+its occurence.
+
+3. Adjust the time and the lattice.
+
+4. Continue from 1.
+
+There are many diﬀerent ways to organize these steps
+resulting in diﬀerent algorithms. The taxonomy by
+Segers [17] mentions not less than 48 DMC algorithms.
+One of these algorithms, called the Random Selection
+Method (RSM) has become quite popular in the litera-
+ture because of its simple implementation.
+It reads as
+follows
+
+1. select a site s randomly with probability 1/N ;
+2. select a reaction type i with probability ki/K;
+3. check if the reaction type is enabled at s;
+4. if it is, execute it;
+5. advance the time by drawing from
+
+[1 − exp(−N Kt)];
+
+until simulation time has elapsed;
+
+We denoted with K the sum of the rate constants of the
+Pi ki. A single iteration of this
+reaction types, i.e., K =
+algorithm is called a trial as no success is guaranteed. In
+the literature the connection with real time (step 5) is
+usually not mentioned. Since the method decouples the
+notion of time completely from the simulation (the time
+increment is drawn from a ﬁxed distribution) there is a
+tendency to measure time in Monte Carlo steps. One
+MC step corresponds to one trial of a reaction type per
+lattice site on average, i.e., one MC step is N trials.
+
+This deﬁnition of MC steps also allows comparison be-
+tween time-based simulation techniques and MC step-
+based techniques. Thus, one MC step is equivalent to
+N −1
+j=0 Tj, where the time increment Tj is selected from
+P
+the ﬁxed distribution 1 − exp (−N Kt). This value can
+be drawn at the end of an MC step or at the end of the
+entire simulation. Without using the negative exponen-
+tial distribution, method RSM can also be regarded as
+a time discretization of the ME. The time step is then
+1/N K.
+
+In this paper we apply method RSM because it is a
+DMC method that is very similar to a cellular automa-
+ton. RSM is a purely sequential algorithm that is not
+well suited for parallelism. In [17, 18], Segers et al. in-
+vestigated how parallelism may be used in the simulation
+of surface reactions. The goal was to see whether simula-
+tions that are too large to run on a sequential computer
+may run on a parallel computer. He proposed an ap-
+proach in which coherent parts of the lattice, so-called
+chunks, are assigned to a number of processors. The
+chunks are then simulated using RSM. When reactions
+are across multiple lattice chunks, state information has
+to be exchanged. Thus, synchronization and communi-
+cation techniques are required for the chunk-boundaries.
+His investigation shows that for parallel simulations, the
+overhead of the parallel algorithm is considerable because
+
+of the high communication latency of parallel computers.
+In order to get a signiﬁcant increase in speed over the se-
+quential algorithm the amount of work on each processor
+must be large compared to the amount of communica-
+tion. This trade-oﬀ is given by the volume/boundary
+ratio of the blocks.
+In this paper we explore another
+direction, viz., a parallel simulation algorithm that ap-
+proximates the kinetics of the ME, thus trading accuracy
+for performance.
+
+4. Cellular Automaton
+
+Cellular Automata are a powerful tool to simulate
+physical and chemical systems of a high level of com-
+plexity. The CA approach is discrete in space and time.
+In a CA, all sites can make a reaction in each step of
+the simulation. For a standard Cellular Automaton the
+notion of real time is discarded: the decision of whether
+to make a reaction is based only on information local to
+that site. As a result, a slowly evolving reaction at some
+part of the lattice, has the same probability to occur as
+a fast reaction at another place. In order to introduce
+the real-time dynamics, the decision of whether to make
+a reaction is taken with a probability that depends on
+the rate constant resulting in a Non-Deterministic Cellu-
+lar Automaton (NDCA). This NDCA resembles the RSM
+method the best. A NDCA algorithm consists of the fol-
+lowing steps
+
+for each step
+
+for each site s
+
+1. select a reaction type i with probability ki/K;
+2. check whether the reaction is enabled at s;
+3. if it is, execute it;
+4. advance the time;
+
+In RSM and NDCA the mechanism of selecting a site
+is diﬀerent and generates deviations in the simulation re-
+sults. This happens because in a NDCA, each site is
+always selected during a step, while in RSM there is a
+non-zero probability that a site is chosen twice or more
+in a succesion during one simulation step. This diﬀer-
+ence in selecting a site introduces biases in the rates of
+the reactions and causes NDCA to give degenerate re-
+sults for some systems (Ising models, Single-File models,
+etc.) [19].
+
+The CA approach is inherently parallel and all lattice
+sites can be updated simultaneously in one single time
+step of the simulation. However, parallelism also intro-
+duces conﬂicts for reactions that may disable each other.
+Consider, for instance, a diﬀusion model involving two
+sites. A particle at site n can jump to one of the neigh-
+boring sites if this is an empty site, while another particle
+from the same neighborhood could jump as well to the
+same empty site (see Fig. 2). Failure to deal with this
+may lead to the violation of the physical laws. We avoid
+erroneous simulations by adjusting the simulation model
+
+n−1
+
+n
+
+n+1
+
+FIG. 2: Conﬂict for simulating reactions that aﬀect neigh-
+boring sites (such as diﬀusion) in a CA model. Both particle
+can jump to the empty site n during the same step.
+
+in order to avoid the conﬂicts that arise as a consequence
+of the parallel execution.
+
+5. Cellular Automaton with partitions
+
+In the literature, the problem of the conﬂicts in paral-
+lel simulations is solved using Block Cellular Automata
+(BCA). The BCA use the concept of partitioning. The
+sites of a CA are partitioned into a regular pattern of
+blocks that cover the whole space and do not overlap. A
+step is then applied at the same time and independently
+to each block. In the next step, the block boundaries are
+shifted such that the edges occur at a diﬀerent place.
+
+In Fig. 3 we have an example of using blocks in a very
+simple one-dimensional BCA. The only reaction rule is
+that the state of a site (0 or 1) becomes 0 if at least one
+of the neighboring sites is 0, otherwise it stays the same.
+
+0
+
+0
+
+0
+
+0
+
+0
+
+1
+
+1
+
+0
+
+1
+
+0
+
+2
+
+1
+
+1
+
+2
+
+1
+
+3
+
+1
+
+1
+
+3
+
+1
+
+4
+
+1
+
+1
+
+4
+
+1
+
+5
+
+1
+
+1
+
+5
+
+1
+
+6
+
+0
+
+0
+
+6
+
+0
+
+7
+
+1
+
+0
+
+7
+
+0
+
+8
+
+1
+
+1
+
+8
+
+1
+
+0
+
+0
+
+1
+
+1
+
+0
+
+0
+
+FIG. 3: Example of a BCA where the transition is applied
+within blocks consisting of three sites.
+
+To avoid the exchange of information between the
+blocks and the problems that might appear at the edges,
+we generalize this idea of a block to a partition. We de-
+ﬁne a partition P as a collection Pi of subsets of Ω called
+chunks, such that these chunks are disjoint and cover the
+Pi Pi. For instance, we can write
+entire lattice, Ω =
+the previous example in terms of partitions. We have
+in this case two partitions P and Q consisting of three
+sets each where P0={0,1,2}, P1={3,4,5}, P2={6,7,8} and
+Q0={0,7,8}, Q1={1,2,3}, Q2={4,5,6}.
+
+The new deﬁnition of a partition introduces more free-
+dom: we can assign non-adjacent sites to the chunks such
+that the problem with the edges between the chunks dis-
+appears. This means that the conﬂicts should disappear
+and we therefore add the following restriction.
+
+0
+3
+1
+4
+2
+
+1
+4
+2
+0
+3
+
+2
+0
+3
+1
+4
+
+3
+1
+4
+2
+0
+
+4
+2
+0
+3
+1
+
+FIG. 4: The lattice is split into a number of chunks (ﬁve in
+this case), and the sites are distributed between these chunks.
+We have labelled the sites with numbers from 0 to 4, accord-
+ing to the chunk they belong to. The sites into one chunk can
+be updated simultaneously, giving a von Neumann neighbor-
+hood.
+
+Each site of the lattice is assigned to a chunk
+such that between the sites in the same chunk
+there are no conﬂicts for the given model.
+
+Opportunities for improvements
+
+The RSM simulations diﬀer from PNDCA simulations
+for the following reasons. In a PNDCA, in a step, a site
+can be selected only once for the simulation because a
+chunk is selected once per step, and in each chunk a site
+is selected exactly once. After the site has been selected
+once, the probability to select that site again in the same
+step is 0. In RSM there is a probability 1/N per itera-
+tion to select a site and a non-zero probability to choose
+the site again in the same step. Another reason is that
+while the reactions in a chunk are simulated, the enabled
+reactions in other chunks are postponed for execution.
+
+The deviation can be made smaller through additional
+randomization and through re-organization of the steps
+in the algorithm. Depending on how the selection of a
+chunk is done, we can derive a set of algorithms. Chunks
+can be selected in the following ways:
+
+This means that for all s, t ∈ Pi, s 6= t and for all reaction
+types Rt, Rt′
+
+1. all chunks in a predeﬁned order,
+
+2. all chunks randomly ordered,
+
+N bRt(s) ∩ N bRt′ (t) = ∅
+
+As all the sites in a chunk can be simulated simul-
+taneously, we are interested to minimize the number of
+these chunks of a partition (i.e., minimize |P |) in order
+to increase parallelism.
+
+Example
+
+We consider again the physical model used in the pre-
+vious section for CO oxidation on a catalyst surface (see
+Fig. 1). From Table I we can see that the reaction types
+do not include more than two sites. When assigning sites
+to the chunks we observe that a minimum number of ﬁve
+chunks can be used, such that the patterns of the deﬁned
+reaction types applied at the sites of these chunks do not
+overlap. In Fig. 4 we have a block of 5 x 5 lattice sites,
+optimally divided into a number of ﬁve chunks. We can
+use this block as a pattern to tile the whole lattice.
+
+Algorithm
+
+We give here a NDCA that uses the concept of par-
+titions. We call it the Partitioned NDCA algorithm
+(PNDCA) and it reads as follows
+
+for each step
+
+choose a partition P ;
+for all Pi ∈ P
+
+for each site s∈Pi
+
+1. select a reaction type with probability ki/K;
+2. check if the reaction is enabled at s;
+3. if it is, execute it;
+4. advance the time;
+
+The idea is to simulate the enabled reactions according
+to their rate constants visiting all the sites of the chunks
+Pi.
+
+3. a set of random chunks such that a chunk has a
+probability 1/|P | to be selected during a step,
+
+4. a weighted selection according to the rates of en-
+
+abled reactions in each chunk.
+
+Simulating all the chunks per step in order or randomly,
+introduces correlations in the occupancy of the sites.
+More correlations between occupancy of the sites occur
+as less chunks are introduced. If |P | is large the algorithm
+performs better. If |P | = N and a chunk is selected ran-
+domly, PNDCA and RSM match.
+
+We can also vary the amount of work done per chunk
+through the choice of the number of trials, L.
+If this
+number is small only a relatively small amount of time is
+spent within the chunk resulting in a small overall devi-
+ation. This leads to the following general structure.
+
+for each step
+
+choose a partition P ;
+set trials to 0;
+repeat
+
+select Pi ∈ P (probability |Pi|/|P |);
+select L, 1 ≤ L ≤ (N − trials)
+set trials to trials + L;
+for L sites ∈ Pi
+
+1. select a reaction type with probability ki/K;
+2. check if the reaction is enabled at the site;
+3. if it is, execute it;
+4. advance the time;
+
+until trials = N
+
+The number of trials per chunk is smaller than the size
+of a chunk, L ≤ |Pi|, and the sites to be visited in a
+chunk are selected randomly. We name this algorithm L-
+PNDCA. Through special choices of the parameters that
+we have introduced the L-PNDCA approaches the DMC
+method RSM. For example, when L is ﬁxed at 1 or when
+|P | assumes the extreme values 1 or N .
+
+T0 Rt(0)
+T1 Rt(1)
+
+CO+O, Rt(2)
+CO+O,Rt(3)
+
+CO+O
+
+CO+O
+
+Rt(0)
+O2
+Rt(1)
+O2
+
+RtCO
+-
+
+s
+
+TABLE II: The new division of the reaction types in subsets
+Tj, j = 0, 1 for the model in Fig. 1 applied on a site s.
+
+FIG. 5: Overlap of the reaction patterns on the central site
+s for the model of CO oxidation.
+
+10
+76
+12
+
+5432
+98
+11
+10
+13 14 15 16
+
+2 3 4 5
+7 8 9 10 11
+
+0 1
+6
+12 13 14 15 16
+
+0 1 2
+3 4
+6
+7
+9
+8
+12 13 14 15
+
+5
+10 11
+
+1 2 3 4 5
+7 8 9 10 11
+
+0
+6
+12 13 14 15 16
+
+FIG. 6: The four partitions of the lattice sites according to
+the subsets Ti of reaction types, for the model of CO oxida-
+tion.
+
+Another approach using partitions
+
+The eﬀect of the non-overlap rule is that the patterns
+in the model limit the choice of the partition signiﬁcantly:
+larger patterns lead to more chunks. Since the degree of
+concurrency is related to the size of the chunks the non-
+overlap rule also limits the concurrency. By adding an
+additional ordering constraint we can reduce this eﬀect
+as follows.
+
+If we look at the simulation of a single chunk in the
+partition then this simulation proceeds by repeatedly se-
+lecting a reaction type and executing it. We re-order
+these steps by partitioning the set of reaction types T
+into
+Pj Tj . The sets Tj are selected according to their
+rates and then the algorithm is executed for the reaction
+types in this selected Tj. We can now do a partitioning
+of the set ΩxT =
+(Pi, Tj). The non-overlap rule re-
+duces to non-overlap with respect to the reactions types
+within Tj and, as a result, the partition can be done with
+fewer chunks. There is a trade-oﬀ however: the work per
+chunk is less, in principle.
+
+P
+
+Example
+
+such pair, apart from translation. The set of reaction
+1
+j=0 Tj
+types is then a collection of two subsets Tj, T =
+(see Table II). The partition P is a collection of only
+two chunks which are constructed by skipping a row or
+a column each time. Fig. 6 illustrates the principle for
+our earlier example. The chunks Pi are the following
+P0={0, 2, 4, 7, 9, . . . }
+P1={1, 3, 5, 6, 8, . . . }.
+
+P
+
+Algorithm
+
+The algorithm consists of the following steps
+
+for each step
+
+for |T | times
+
+select Tj ∈ T with probability KTj /K;
+select a reaction type from Tj with probability ki/kTj ;
+select Pi ∈ P
+for each site s∈Pi
+
+1. check if the reaction is enabled at s;
+2. if it is, execute it;
+3. advance the time;
+
+This is basically the generalization of the simulation
+algorithm used by Kortl¨uke [20]. We have used here KTj
+to denote the sum of the reaction rates of the elements
+from the set Tj.
+
+6. Correctness and performance
+
+In order to study the correctness of our methods, we
+compare the kinetics of the reactions in DMC and in CA
+simulations. DMC is based on the following fundamental
+assumption known as Gillespie hypothesis:
+
+If a reaction with a rate constant k is enabled
+in a state S, then the probability of this reac-
+tion occuring in an inﬁnitesimal time interval
+of size δt is equal to kδt. The probability that
+more than one reaction occurs in an interval
+of length δt is negligible.
+
+The patterns of the reaction types that can be enabled
+at a speciﬁc site s, all contain two sites positioned as in
+Fig. 5 and the site s can thus be a part of four possible
+pairs during a transformation. We split the set of
+reaction types in subsets, such that the patterns of the
+reaction types from a subset Ti are included in only one
+
+The above assumption says that in any state and at
+any time, the probability of occurence of an enabled re-
+action in a vanishingly small interval is proportional to
+its rate, and that the probability of two reactions occur-
+ing simultaneously is negligible [21, 22, 23]. A stochastic
+
+model that respects the fundamental assumption is de-
+scribed by a Master Equation and can be simulated using
+DMC methods [1, 2, 3, 4, 5, 7, 11].
+
+Based on the Gillespie hypothesis, Segers et al. [17] has
+given two criteria for the correctness of the simulation
+algorithms of surface reactions. These criteria suggest a
+way to select a site and a reaction type with a correct
+probability. According to these criteria, each algorithm
+is correct if only enabled reactions are performed and 2
+conditions are satisﬁed:
+
+1. the waiting time for a reaction of type i (the time
+that elapses before it occurs) has an exponential
+probability distribution (exp(−kit));
+
+2. the waiting time of the next reaction type i is ac-
+cording to the ratio between the reaction rate con-
+stant (ki) and the sum of the rate constants of all
+the enabled reactions.
+
+In our CA methods with partitions, we have seen that
+the order of visiting the sites is important and can intro-
+duce correlations in the simulations. Using partitions,
+some sites are excluded from simulation for a certain
+time, while others are preferred. The same problem arises
+for executing the enabled reactions. Executing reaction
+types from a chunk, disables the enabled reactions in
+other chunks and introduces biases in the rates of re-
+actions. This comes from the fact that for CA methods,
+the fundamental assumption does not hold. In principle,
+many reactions can be enabled and executed during a
+small time interval in a CA. Thus, CA gives results that
+may deviate from the DMC results.
+
+As an example for our new methods, we consider the
+model used by Kuzovkov et al. [24] to study reactions on
+the surface including surface reconstruction. The model
+used is similar to our example model, the oxidation of
+CO on a face of Platinum(100). Adsorbates like CO can
+lift the reconstruction of the hexagonal structure of the
+top layer of Pt(100) to a square structure. CO adsorbs
+in both phases of the top layer. O2 adsorbes only in
+the square phase. Adsorbed CO may desorb again and
+O and CO may desorb associatively, forming CO2. The
+behavior on the surface is the following: CO adsorbs on
+Pt(100) in a hexagonal phase, the surface top layer re-
+constructs into a square structure such that O2 can now
+adsorb on the lattice. As O2 molecules are adsorbed,
+CO2 is produced and desorb liberating the lattice from
+particles. The surface reconstructs again to a hexagonal
+structure and the process is repeating: we get oscillatory
+behavior on the surface. We use the oscillations in the
+coverages with particles of the lattice for comparing our
+results.
+
+Because of the absence of conﬂicts between the chunks,
+the approach with partitions leads to a signiﬁcant in-
+crease in speedup even for not so large systems (100x100,
+200x200). In Fig. 7 we can see how the speedup of the
+PNDCA algorithm depends on the system size N and on
+the number of processors p. The speedup is deﬁned as
+
+the ratio between the simulation time using 1 processor,
+for a system size N (T(1,N)) and the simulation time on
+p processors, for a system size N (T(p,N)).
+
+T(1,N)/T(p,N)
+
+8
+7
+6
+5
+4
+3
+2
+1
+0
+
+200 300 400 500 600 700 800 90010002
+N
+
+5
+
+4
+
+3
+
+7
+
+6
+
+p
+
+10
+
+9
+
+8
+
+FIG. 7: Speedup function on the system size N and on the
+number of processors p.
+
+For the method with partitions we see that a small time
+spent within a chunk (small L) aﬀects the parallelism,
+while a large time spent within a chunk (large L) aﬀects
+the correctness.
+
+We denote with m the number of chunks (m = |P |).
+In Fig. 8 we see that for m = 1, L = N 2 (one chunk
+containing all the lattice sites), and for m = N 2, L = 1
+(N 2 chunks with one site per chunk), DMC and
+L-PNDCA give the same results.
+
+O
+
+CO
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0
+
+0
+
+50
+
+150
+
+200
+
+100
+
+time
+
+FIG. 8: RSM and L-PNDCA results for the time dependence
+of the coverage with CO and O particles of a system of size
+N =100x100. The continous line is for RSM, and the dashed
+line is for L-PNDCA with parameters m = 1, L = N 2 and
+m = N 2, L = 1.
+
+For the optimal case of ﬁve chunks, we experimented
+with diﬀerent L’s. Increasing L introduces biases in the
+simulations. In Fig. 9 we illustrate this for case L = 1
+and L = 100, for lattice size N =100x100. We notice that
+for L = 1, L-PNDCA gives almost the same results as
+DMC.
+
+In case a chunk is selected each time with a proba-
+bility |Pi|/|P |, for larger values of L (e.g. L=100), the
+correlations have as eﬀect the deviation in time of the
+oscillations from the DMC results. In this case, for very
+large values of L, the oscillations disappear. But, if we
+simulate all the chunks only once per step in a random or-
+der, we get oscillatory behavior even for very large values
+of L (L = N 2/m)(see Fig. 10). In this case, if we consider
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0
+
+0
+
+a
+
+b
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0
+
+0
+
+50
+
+100
+
+200
+
+250
+
+300
+
+50
+
+100
+
+150
+
+200
+
+250
+
+300
+
+150
+
+time
+
+time
+
+FIG. 9: RSM and L-PNDCA results for ﬁve chunks and
+N =100x100. In a) L = 1 and in b) L=100.
+
+mation in these algorithms is introduced through param-
+eters. The Cellular Automaton is already an approxi-
+mate approach that can be taken as a starting point for
+simulation of surface reactions, but it gives results that
+deviate from the Master Equation. These CA algorithms
+simulate for the limit parameters the Master Equation,
+such that the accuracy of the simulations can be com-
+pared for diﬀerent parameters sets. We ﬁnd that we can
+get fast simulations using this approach trading accuracy
+for performance. We give an example when we can use
+full parallelization getting accurate results.
+
+very fast diﬀusion and small probabilities for chemical re-
+actions in the cells, the deviations are so small that DMC
+and L-PNDCA give similar results. We can have in this
+case full parallelization and very accurate results.
+
+Conclusions
+
+We have presented a collection of approximate algo-
+rithms based on the Cellular Automaton model for par-
+allel simulation of surface reactions. We have introduced
+the concept of partitions in a Non-Deterministic Cellular
+Automaton, and we have derived a set of parameterized
+algorithms based on the partitions concept. The approxi-
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0
+
+0
+
+20
+
+40
+
+60
+
+80
+
+100
+
+time
+
+FIG. 10: RSM and L-PNDCA results for ﬁve chunks (m = 5),
+N =100x100, L = N 2/m, when all the chunks are randomly
+selected exactly once per step.
+
+[1] R.J.Gelten, R. Santen, and A.P.J.Jansen, Dynamic
+Monte Carlo simulations of oscillatory heterogeneous cat-
+alytic reactions in P.B. Balbuena and J.M.Seminario
+(Elsevier, Amsterdam, 1999).
+
+[2] A.P.J.Jansen, Comput. Phys. Comm. 86, 1 (1995).
+[3] J.J.Lukkien, J.P.L.Segers, P.A.J.Hilbers, R.J.Gelten,
+
+[14] T. Worsch, Future Generation Computer Systems 16,
+
+Verlag, Berlin, 1997).
+
+157 (1999).
+
+[15] Toﬀoli and N. Margolus, Cellular Automata Machines
+
+(Cambbridge, MA:MIT, 1987).
+
+[16] R.M.Ziﬀ, E.Gulari, and Z.Barshad, Phys. Rev. Lett. 56,
+
+and A.P.J.Jansen, Phys.Rev.E 58, 2598 (1998).
+
+2553 (1986).
+
+[4] R.J.Gelten, R. Santen, and A.P.J.Jansen, Israel J.Chem.
+
+[5] K.Binder, Monte Carlo methods in Statistical Physics
+
+38, 415 (1998).
+
+(Springer, Berlin, 1986).
+
+[6] S.V.Nedea,
+
+A.P.J.Jansen,
+
+J.J.Lukkien,
+
+and
+
+P.A.J.Hilbers, Phys.Rev.E (2002).
+
+[7] R.J.Gelten, A.P.J.Jansen, R. Santen, J.J.Lukkien, and
+
+P. Hilbers, J.Chem.Phys. 108(14), 5921 (1998).
+
+[8] K.M.Chandy and J.Misra, Communications of the ACM
+
+24, no.11, 39 (1986).
+
+[9] R. M. Fujimoto, Proc. 1989 International Conference on
+
+Parallel Processing III, 242 (1989).
+
+ence on Distributed Simulation pp. 8–13 (1988).
+
+[11] V. Kampen, Stochastic Processes in Physics and Chem-
+
+istry (Elsevier Science Publishers B.V., 1981).
+
+[12] C.Levermore and B.Boghosian, Springer Proceedings in
+Physics, vol. 46 (Springer, Berlin, ed. P. Manneville at
+al, 1989).
+
+[13] J. Weimar, Simulation with Cellular Automata (Logos-
+
+[17] J.P.L.Segers, Algorithms for the Simulation of Surface
+Processes (Ph.D. thesis, Eindhoven University of Tech-
+nology, 1999).
+
+[18] J.P.L.Segers, J.J.Lukkien, and P.A.J.Hilbers, High-
+Performance Computing and Networking. Proceedings
+HPCN Europe 1996 1067, 235 (1996).
+[19] Y. Vichniac, Physica D 10, 96 (1984).
+[20] O.Kortl¨uke, J.Phys. A 31, 9185 (1998).
+[21] D.T.Gillespie, J.Comput.Phys. 22, 403 (1976).
+[22] D. Gillespie, J.Phys.Chem. 81, 2340 (1977).
+[23] A. P. J. Jansen, Comput. Phys. Commun. 86, 1 (1995).
+[24] V. N. Kuzovkov, O. Kortl¨uke, and W. von Niessen,
+
+[25] B.Chopard and M.Droz, J. Phys. A 21, 205 (1988).
+[26] B.Chopard and M.Droz, J. Stat. Phys. 64, 859 (1989).
+[27] B.Chopard and M.Droz, Europhys.Lett. 15, 459 (1991).
+[28] O. Kortl¨uke, V. N. Kuzovkov, and W. von Niessen, Phys.
+
+Rev. Lett. 81, 2164 (1998).
+
+[10] D. A. Reed and A.Malony, Proc. 1988 SCS Multiconfer-
+
+J.Chem.Phys. 108, 5571 (1998).
+
+

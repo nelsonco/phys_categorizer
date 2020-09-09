@@ -1,0 +1,4111 @@
+5
+0
+0
+2
+ 
+t
+c
+O
+ 
+0
+1
+ 
+ 
+]
+h
+p
+-
+s
+s
+a
+l
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+3
+7
+0
+0
+1
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+THE EXPLICIT SIMPLIFIED INTERFACE METHOD
+FOR COMPRESSIBLE MULTICOMPONENT FLOWS.
+
+BRUNO LOMBARD∗ AND ROSA DONAT†
+
+Abstract. This paper concerns the numerical approximation of the Euler equations for mul-
+ticomponent ﬂows. A numerical method is proposed to reduce spurious oscillations that classically
+occur around material interfaces. It is based on the ”Explicit Simpliﬁed Interface Method” (ESIM),
+previously developed in the linear case of acoustics with stationary interfaces (2001, J. Comput.
+Phys. 168, pp. 227-248). This technique amounts to a higher order extension of the ”Ghost Fluid
+Method” introduced in Euler multicomponent ﬂows (1999, J. Comput. Phys. 152, pp. 457-492).
+The ESIM is coupled to sophisticated shock-capturing schemes for time-marching, and to level-sets
+for tracking material interfaces. Jump conditions satisﬁed by the exact solution and by its spatial
+derivative are incorporated in numerical schemes, ensuring a subcell resolution of material interfaces
+inside the meshing. Numerical experiments show the eﬃciency of the method for rich-structured
+ﬂows.
+
+Key words. Euler equations, multicomponent ﬂows, jump conditions, interface methods, Ghost
+
+Fluid Method, ENO-WENO, level-set.
+
+AMS subject classiﬁcations. 65M06, 65M99, 76T05
+
+1. Introduction. Let us consider multicomponent ﬂows composed of pure invis-
+cid ﬂuids separated by material interfaces. These ﬂows arise in a wide range of physical
+situations, from water-steam to bubbly ﬂows, liquid suspensions or even high-speed
+impacts on solids. They may be modeled by the Euler equations, augmented by ad-
+ditional equations describing the ﬂuid composition. The numerical simulation of such
+conﬁgurations leads to major diﬃculties.
+
+Indeed, even state-of-the-art numerical schemes for single-component ﬂows cannot
+be applied directly in multicomponent ﬂow simulations. These schemes give rise
+to oscillations and other computational inaccuracies near material interfaces. For
+example, any Godunov-type shock-capturing scheme which conserves the mass of
+individual species fails to maintain pressure equilibrium at a material interface [1]. The
+unphysical pressure oscillations stem from the fact that in a shock-capturing scheme,
+the transition across a material interface is governed by the numerical viscosity of the
+scheme. When two ﬂuids are involved, intermediate states generated in the numerical
+transition layer (corresponding to the material interface) are not physically consistent
+with any component of the mixture: updating the pressure ﬁeld via one particular
+equation of state generates erroneous pressure ﬂuctuations. Since material interfaces
+lack the compressive mechanisms associated to shocks, errors generated within the
+diﬀused interface escape and contaminate all ﬂow variables.
+
+Many numerical methods have been proposed to avoid these unphysical oscil-
+[2] for a concise survey of up-to-date multicomponent methods.
+lations. See e.g.
+Remaining within the front-capturing (as opposed to front-tracking) computational
+framework, we distinguish two main approaches:
+
+Miscible models. Material interfaces are approximated by diﬀused fronts. An
+artiﬁcial equation of state (or mixture model) is deﬁned, based on thermodynamical
+arguments [3, 17, 23], which is considered valid for the entire ﬂuid mixture and is used
+
+∗Laboratoire de M´ecanique et d’Acoustique, 31 chemin Joseph Aiguier, 13402 Marseille,
+
+†Departament de Matematica Aplicada, Universitat de Valencia,
+
+46100 Burjassot,
+
+France(lombard@lma.cnrs-mrs.fr).
+
+Spain(donat@uv.es).
+
+1
+
+2
+
+B. LOMBARD AND R. DONAT
+
+to update the pressure from conserved variables. These models have been analyzed
+in [1, 2, 15, 16, 31]. The elimination of unphysical oscillations generally involves
+sacriﬁcing strict conservation to some degree, except in [23] where a conservative
+algorithm maintains oscillations under a computationally acceptable level.
+
+Purely inmiscible models, as in the present paper. A level-set function is used to
+track material interfaces in an Eulerian manner, i.e. without explicitely computing
+their location. Depending on the sign of the level-set, one applies the corresponding
+equation of state. Thermodynamic properties of the ﬂuid change discontinuously
+across material interfaces, which are preserved as sharp discontinuities. A simple
+approach was ﬁrst used in [24], but it suﬀers from severe computational inaccuracies
+in multicomponent ﬂow computations [16].
+
+The Ghost Fluid Method (GFM) [8] is the best-known method belonging to this
+second group. On each side of a material interface, two ﬂuids are considered: the
+”real ﬂuid” (i.e.
+the ﬂuid that really exists on this side) and a ”ghost ﬂuid” (i.e.
+the ﬂuid with the same pressure and velocity than the real ﬂuid on that side, but
+the entropy of the real ﬂuid on the other side). Near a material interface, classical
+single-component schemes are then simply applied both on ”real-ﬂuid” values and on
+”ghost-ﬂuid” values. Extensions to multidimensional problems and to other physical
+situations have been tackled by the GFM [7, 9]. However, the GFM suﬀers from some
+inaccuracies which are not appreciated when material interfaces separate uniform
+states. These numerical artifacts are mainly due to the zeroth-order extrapolations
+used to deﬁne the ghost ﬂuid. Simple minded ﬁrst-order extrapolations do not work
+[8].
+
+The goal of the present paper is to remove these drawbacks of the GFM by cor-
+rectly increasing the precision of the computation across a material interface. We pro-
+pose to implement a carefully designed ﬁrst-order extrapolation procedure to obtain
+the ”ghost ﬂuid” values. To do so, we adapt the Explicit Simpliﬁed Interface Method
+(ESIM), previously developed for the linear hyperbolic systems of acoustics with sta-
+tionary interfaces [21, 22, 27]. Note that another linear extrapolation in the context
+of the GFM has been proposed in [4] in order to couple Eulerian and Lagrangian
+computations. In the present paper, however, the goal is to enforce ﬁrst-order jump
+conditions at material interfaces.
+
+Interface methods have been widely used in the numerical treatment of bound-
+aries and interfaces in PDE’s: see e.g. the Immersed Interface Method (IIM), applied
+to elliptic equations [18] and linear hyperbolic systems [34]. See [20, 27] for a concise
+survey of up-to-date interface methods. To our knowledge, the present paper is the
+ﬁrst attempt to apply interface methods to the nonlinear hyperbolic system of the
+Euler equations. The computational complexity of the resulting algorithm is essen-
+tially the same as that of the GFM, and it can easily be coupled to a wide class of
+high-order shock-capturing schemes.
+
+The paper is organized as follows. Section 2 recalls the level-set framework to
+model compressible multicomponent ﬂows. Section 3 describes the numerical schemes.
+The interface method is detailed in section 4. Numerical tests are proposed in section
+5. Conclusions and future works are drawn in section 6.
+
+2. The level-set framework for multicomponent ﬂows.
+
+2.1. The Euler equations. We focus on multicomponent ﬂows consisting of
+pure ﬂuids separated by material interfaces. Assuming that all components can be
+described by a single velocity and pressure function, the ﬂow can be modeled by the
+compressible Euler equations expressing conservation of mass, momentum, and energy
+
+INTERFACE METHOD AND EULER FLOWS
+
+3
+
+of the ﬂuid mixture. Let ρ be the density of the ﬂuid mixture, u the velocity, p the
+pressure and e = ε + 1
+2 u2 the speciﬁc total energy, with ε the speciﬁc internal energy.
+Then, we have
+
+∂
+∂ t
+
+∂
+∂ x
+
+U +
+
+f (U ) = 0,
+
+where the vector of conserved quantities U and the ﬂux function f are
+
+ρ
+
+ρ u
+
+ρ e
+
+,
+
+
+
+
+
+
+U = 
+
+
+
+
+f (U ) = 
+
+
+
+
+ρ u
+ρ u2 + p
+
+u (ρ e + p)
+
+.
+
+
+
+
+
+
+To close the system (2.1), we need to specify the equation of state (EOS). In this
+paper, we consider the stiﬀened gas EOS
+
+p = (γ − 1) ρ ε − γ p∞,
+
+(2.3)
+
+where p∞ is the stiﬀness parameter. The basic polytropic gas case is recoverred for
+in this case, γ represents the ratio of speciﬁc heats. The EOS (2.3) is
+p∞ = 0:
+a reasonable approximation for gases, liquids, and even solids under huge pressure
+conditions [29]. The sound speed c is given by
+
+c2 =
+
+γ (p + p∞)
+ρ
+
+.
+
+γ
+
+0
+
+p
+
+0
+
+α
+
+γ
+
+1
+
+p
+
+1
+
+Ω
+
+0
+
+Ω
+
+1
+
+x
+
+Fig. 2.1. Two components Ω0 and Ω1 separated by a material interface.
+
+2.2. The level-set equation. The ﬂow description is completed by an addi-
+tional equation describing the ﬂuid composition.
+In level-set framework, a scalar
+function φ is used to track material interfaces. For the sake of simplicity, we consider
+only two components Ω0 and Ω1, separated by a material interface at α(t) (ﬁgure
+2.1). We suppose that each ﬂuid satisﬁes (2.3), and that physical parameters of (2.3)
+may be discontinuous at α
+
+(γ0, p∞ 0)
+
+if x ≤ α
+
+(γ1, p∞ 1)
+
+if x > α.
+
+(γ, p∞) =
+
+
+
+
+
+
+The marker variable φ is initialized as the signed distance function to α(0), which is
+known initially. Hence its zero level-set deﬁnes the material interface at t = 0, while
+its sign determines the region occupied by each ﬂuid.
+
+Since material interfaces propagate with the ﬂuid velocity, the zero level-set of φ
+identiﬁes the material interface for all t > 0 if φ(x, t) satisﬁes the advection initial-
+
+(2.1)
+
+(2.2)
+
+(2.4)
+
+(2.5)
+
+4
+
+B. LOMBARD AND R. DONAT
+
+value problem
+
+∂ φ
+∂ t
+
++ u
+
+= 0,
+
+∂ φ
+∂ x
+
+φ(x, 0) = x − α(0).
+
+
+
+
+
+
+∂ ρ φ
+∂ t
+
++
+
+∂ u ρ φ
+∂ x
+
+= 0.
+
+The evolution equation in (2.6) can be recast in conservation form, by combining it
+with the conservation of mass,
+
+Equations (2.1), (2.3), and (2.6) (or (2.7)) form an ”inmiscible” model in which the
+ﬂuid ”mixture” consists of either ﬂuid Ω0 or Ω1, and where thermodynamic properties
+change discontinuously across the material interface.
+
+3. Numerical schemes. To integrate the Euler equations and the level-set
+equation for multicomponent ﬂows, two strategies are available. The ﬁrst one is
+to discretize the conservative system composed by the Euler equations (2.1) together
+with the level-set equation in conservation form (2.7). This discretization can be per-
+formed by applying the classical methodology of shock-capturing schemes for systems
+of conservation laws. It has been used in other papers (see e.g. [24]), but the addition
+of the level-set equation enlarges the Jacobian matrix, which increases the complexity
+of characteristic decompositions. This feature may become specially cumbersome in
+multidimensional calculations.
+
+The second strategy - simpler, and followed here - is considered in [8], where
+the Euler equations (2.1) are discretized independently from the level-set equation
+in non-conservative form (2.6). Following [11], the Euler system is identiﬁed as the
+minimal system, hence it can be discretized with any standard conservative scheme,
+while the level-set equation is independently discretized following its advection form
+(2.6). The numerical ﬂux function involved in the Euler equations will therefore not
+depend directly on φ, like in a single-component ﬂow. The Lax-Wendroﬀ theorem
+can still be applied [11], hence the obtained numerical solution converges to a weak
+solution of the full conservative system.
+
+The discrete set-up to solve the system (2.1)-(2.6) is as follows: we consider a
+lattice of points in the x plane xi = i ∆ x, where ∆ x is a uniform spacing parameter.
+Numerical values U n
+i are respectively considered as approximations to U and
+φ at xi and time tn [30]. To decouple the spatial and time integrations, we follow a
+method of lines approach [19] for both the Euler system and the level-set equation.
+The semi-discrete approximation of the nonlinear hyperbolic system (2.1) is written
+
+i and φn
+
+whereas the semi-discrete approximation of the advection equation (2.6) is
+
+d
+d t
+
+d
+d t
+
+U i = LΩ(U , i),
+
+φi = G(φ, i).
+
+The discrete operator LΩ in (3.1) is speciﬁed in subsection 3.1. We say that a grid
+point is regular if LΩ uses numerical values belonging only to one ﬂuid component.
+Otherwise, a grid point is called irregular, and the expression of LΩ is modiﬁed by the
+
+(2.6)
+
+(2.7)
+
+(3.1)
+
+(3.2)
+
+INTERFACE METHOD AND EULER FLOWS
+
+5
+
+interface method detailed in section 4. The discrete operator G in (3.2) is speciﬁed
+in subsection 3.2.
+
+We emphasize the fact that the numerical schemes proposed in the next two
+subsections are by no means fundamental for the interface method. The reader’s
+favorite single-component solvers can be adapted easily to the forthcoming discussion.
+
+3.1. Discretization of the Euler equations. When xi is a regular point, all
+the values involved in the ﬂux computations belong to one of the ﬂuid components, say
+Ωl. Then, the spatial discrete operator LΩ = LΩl in (3.1) is written in the customary
+conservation form
+
+LΩl(U , i) = −
+
+(F Ωl (U i−s+1, ..., U i+s) − F Ωl (U i−s, ..., U i+s−1)) .
+
+(3.3)
+
+1
+∆ x
+
+The numerical ﬂux function F Ω in (3.3) is the trademark of the scheme; it is deﬁned
+by a reconstruction procedure, and by a solver. In numerical experiments, we use
+ENO or WENO reconstructions [30, 13]. The width of the stencil s in (3.3) is related
+with the theoretical order of accuracy of the spatial reconstruction (s = 3 for ENO-3
+or WENO-5).
+
+As a solver, we consider a ﬂux-splitting construction [6, 10]. This choice has
+been considered in [23] within the mass fraction model for two-ideal gas ﬂows. This
+ﬂux-splitting requires two spectral decompositions of the Jacobian at each cell inter-
+face, which serve to perform upwind reconstructions of characteristic variables and
+ﬂuxes. The additional cost is counterbalanced by the robust behavior of the scheme in
+pathology-prone situations. In addition, and as opposed to a Roe-type numerical ﬂux
+function, no average-state needs to be computed at a cell interface, which is particu-
+larly useful for real-gas simulations. We only need to know the spectral decomposition
+of the Jacobian matrix: for the EOS (2.3), this is given e.g. in [32].
+
+The time integration of (3.1) is performed by the standard third-order TVD
+Runge-Kutta [30], even when the ﬁfth-order WENO-5 reconstruction is used. ∆ t
+follows from ∆ x and from the classical CFL condition of stability
+
+CFL = max
+
+i=0,..., Nx
+
+(|un
+
+i | + cn
+i )
+
+∆ t
+∆ x
+
+≤ 1,
+
+(3.4)
+
+where Nx + 1 is the number of grid points.
+
+3.2. Discretization of the level-set equation. We follow the same method
+of lines as for the Euler system. The spatial discretization is carried out using the
+Hamilton-Jacobi framework for the numerical approximation of the derivative terms
+[14, 26]. The upwind direction at xi is determined by the sign of ui. Full details are
+in Appendix A.1 of [8].
+
+Theoretically, solving (2.6) is suﬃcient to track the material interface. However,
+some extra-care must be taken for numerical purposes. Since u is nonuniform along
+the ﬂow, the numerical representation of φ(x, t) may become distorted [28], leading to
+a poor estimation of the position of α. To keep φ approximately equal to the distance
+function near the material interface, we follow a classical procedure proposed in [33],
+and called reinitialization of the level-set. This procedure can be carried out in a
+number of diﬀerent ways, here we follow [8] and solve to steady state the Hamilton-
+
+6
+
+B. LOMBARD AND R. DONAT
+
+Jacobi equation
+
+where S is a smeared sign function given by
+
+∂ ˜φ
+∂ t
+
++ S( ˜φ)
+
+∂ ˜φ
+∂ x (cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+˜φ(x, 0) = φ(x, tn),
+(cid:12)
+
+ (cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+− 1
+
+= 0,
+
+!
+
+
+
+
+
+S( ˜φ) =
+
+˜φ
+
+.
+
+˜φ2 + ∆ x2
+
+q
+
+(3.5)
+
+The reinitialization equation is solved in ﬁctitious time after each fully complete time
+step for the Euler equations, with a method of lines approach. For the spatial inte-
+gration of (3.5), we use a modiﬁcation of Godunov’s method detailed in Appendix
+A.3 of [8]. For the time integration, we use the same TVD Runge-Kutta scheme as
+for the Euler equations. As a time step, we take ∆ τ = ∆ x. After ﬁve integrations,
+we obtain a steady distance function, ˜φ, which is then exchanged with φ.
+
+4. The ESIM for the Euler equations.
+
+4.1. The numerical interface treatment. The ESIM is a numerical treatment
+to be applied at irregular points, i.e. at points for which the ﬂux computations in
+the right-hand side of (3.1) involve more that one ﬂuid component. This treatment
+is carried out at each time integration (such as a Runge-Kutta substep). Let us ﬁx
+an instant in time (to simplify the notations, the time variable is omitted from now).
+Then, the basic strategy of the ESIM can be schematically described as follows.
+
+*
+U J-s
+
+J-s
+
+...
+
+U
+
+*
+J+s+1
+
+...
+
+J+s+1
+
+U
+
+J
+
+J
+
+U
+
+*
+J
+
+α
+- +
+
+U
+
+*
+J+1
+
+J+1
+
+U
+
+J+1
+
+Fig. 4.1. Numerical values Ui and modiﬁed values U∗
+i .
+
+Consider the material interface at x = α separating the two media Ω0 and Ω1
+(x) of the exact solution U (x): here, we
+
+(ﬁgure 2.1). We deﬁne smooth extensions U ∗
+
+INTERFACE METHOD AND EULER FLOWS
+
+7
+
+consider two-terms Taylor-like expansions past the interface, written
+
+for x > α,
+
+U ∗
+
+(x) = U (α
+
+) + (x − α)
+
+−
+
+U (α
+
+−
+
+),
+
+for x ≤ α,
+
+U ∗
+
+(x) = U (α+) + (x − α)
+
+U (α+).
+
+∂
+∂ x
+
+∂
+∂ x
+
+(4.1)
+
+Then, the interface treatment is divided in two parts.
+
+First, numerical estimations U ∗
+
+(xi) in (4.1), called modiﬁed values (or ghost
+values, in the GFM framework), are sought at grid points surrounding α (ﬁgure 4.1).
+To do so, one must estimate U (α±) and ∂
+∂ x U (α±). These last estimations, based on
+jump conditions presented in subsection 4.2, are detailed in subsection 4.3.
+
+i of U ∗
+
+Second, at each irregular point xi belonging to a particular ﬂuid component,
+say Ωl, the spatial operator LΩ(U , i) is constructed by considering only thermody-
+namically similar state values, that is: numerical values for grid locations in Ωl and
+modiﬁed values at grid points on the other ﬂuid component. This subject is detailed
+in subsection 4.4.
+
+4.2. Jump conditions at material interfaces. Across α, the primitive vari-
+
+ables satisfy the classical zeroth-order jump conditions
+
+[u] = 0,
+
+[p] = 0,
+
+(4.2)
+
+where, for any function f (x, t),
+
+[f ] = lim
+x→α+
+
+f (x, t) − lim
+
+x→α− f (x, t).
+
+Since u and p do not jump across the interface, then their material - or Lagrangian -
+derivatives do not either. This fact immediately leads to the less-classical ﬁrst-order
+jump conditions
+
+1
+ρ
+
+∂ p
+∂ x
+
+(cid:20)
+
+(cid:21)
+
+= 0,
+
+ρ c2 ∂ u
+∂ x
+
+(cid:20)
+
+(cid:21)
+
+= 0.
+
+One can also ﬁnd second-order (and higher) jump conditions. However and unlike the
+acoustics case [27, 20], these jump conditions (not presented here) involve nonlinear
+combinations of p, u and their successive spatial derivatives, making the computations
+much more intricate.
+
+simpliﬁed in [γ ∂ u
+
+For polytropic gases, ρ c2 = γ p; since [p] = 0, the last equation of (4.3) can be
+∂ x ] = 0. Note also that nothing is said about [ρ] and [ ∂ ρ
+∂ x ].
+4.3. Numerical estimation of one-sided quantities. In a level-set model,
+the location of the material interface is given by a sign change in the marker variable
+φ. Suppose that
+
+As a consequence, the interface lies somewhere between xJ and xJ+1. The subcell
+location of α is speciﬁed by the parameter
+
+(4.3)
+
+(4.4)
+
+(4.5)
+
+φJ × φJ+1 < 0.
+
+˜θ =
+
+α − xJ
+∆ x
+
+∈ [0, 1[,
+
+8
+
+B. LOMBARD AND R. DONAT
+
+which is readily estimated to second-order by a simple linear interpolation involving
+the smooth level-set function φ. Indeed, deﬁning
+
+θ =
+
+|φJ |
+|φJ | + |φJ+1|
+
+,
+
+we have θ = ˜θ + O(∆x2). Since the jump conditions (4.2) and (4.3) concern the
+primitive variables W = T (ρ, u, p), it is easier to ﬁrst look for estimations of W (α±)
+∂ x U (α±).
+and ∂
+In the following discussion and for any function f , the numerical estimation of f (α±)
+or ∂
+
+∂ x W (α±), and then to go back to the conserved variables U (α±) and ∂
+
+∂ x f (α±) is denoted by f ± or f ±
+x .
+Density. The density is not subject to any constraint at a material interface,
+x are performed via one-sided interpolations.
+
+therefore numerical estimations ρ± and ρ±
+On the left of α, elementary interpolations lead to
+
+while on the right of α, we get
+
+ρ− = −θ ρJ−1 + (1 + θ) ρJ ,
+
+ρ−
+x =
+
+1
+∆ x
+
+(ρJ − ρJ−1) ,
+
+ρ+ = (2 − θ) ρJ+1 − (1 − θ) ρJ+2,
+
+ρ+
+x =
+
+1
+∆ x
+
+(ρJ+2 − ρJ+1) .
+
+If ρ(x) is a piecewise C1 function, we obviously have
+
+ρ(α±) = ρ± + O(∆ x2),
+
+(α±) = ρ±
+
+x + O(∆ x).
+
+∂ ρ
+∂ x
+
+Remark 1. The density estimations obtained above must remain within the
+physical range, i.e. ρ± > 0.
+In some cases, negative values can be numerically
+obtained (e.g. in regions close to vacuum). Then, a diﬀerent approximation procedure
+with constraints would be necessary (which is not considered here).
+
+Pressure. The pressure and its spatial derivative satisfy (4.2) and (4.3)
+
+From the deﬁnition of p± and p±
+
+x , we have
+
+p(α+) = p(α
+
+−
+
+),
+
+1
+ρ(α+)
+
+∂ p
+∂ x
+
+(α+) =
+
+1
+ρ(α−)
+
+∂ p
+∂ x
+
+(α−).
+
+pJ
+
+= p− + (xJ − α) p−
+x ,
+
+pJ+1 = p+ + (xJ+1 − α) p+
+x .
+
+We impose that numerical estimations satisfy exactly the same jump conditions as
+exact values. Combining (4.10) with (4.9) leads to the 2 × 2 system
+
+pJ
+
+pJ+1
+
+
+
+
+
+= 
+
+
+
+
+
+
+
+
+1
+
+1
+
+−θ ∆ x
+
+(1 − θ)
+
+ρ+
+ρ− ∆ x
+
+
+
+
+
+
+
+
+
+
+p−
+
+p−
+x
+
+.
+
+
+
+
+
+(4.6)
+
+(4.7)
+
+(4.8)
+
+(4.9)
+
+(4.10)
+
+(4.11)
+
+INTERFACE METHOD AND EULER FLOWS
+
+9
+
+The above matrix is always invertible, provided that ρ± > 0. Inverting the above
+system gives the numerical values at α−
+
+−
+
+p
+
+=
+
+p−
+x =
+
+1
+ρ+
+ρ− + θ (cid:18)
+
+(1 − θ)
+
+(1 − θ)
+
+ρ+
+ρ− pJ + θ pJ+1
+
+,
+
+(cid:19)
+
+1
+ρ+
+ρ− + θ
+
+(1 − θ)
+
+∆ x
+
+(pJ+1 − pJ ) .
+
+(4.12)
+
+(4.13)
+
+(4.14)
+
+(4.15)
+
+(cid:18)
+
+(cid:19)
+To get estimations at α+, one uses (4.12) and jump conditions (4.9). Note that p+ (or
+p−) is a convex combination with positive coeﬃcents of pJ and pJ+1, hence p± > 0.
+As in the previous case, standard results allow to conclude that if both p(x) and ρ(x)
+are C1 away from the material interface, then
+
+±
+
+p(α
+
+) = p
+
+±
+
++ O(∆ x2),
+
+±
+
+(α
+
+) = p
+
+±
+x + O(∆ x).
+
+∂p
+∂x
+
+Velocity. Zeroth-order and ﬁrst-order jump conditions for the velocity are
+u(α+) = u(α−),
+
+ρ(α+) c2(α+)
+
+(α+) = ρ(α
+
+−
+
+) c2(α
+
+−
+
+)
+
+−
+
+(α
+
+).
+
+∂ u
+∂ x
+
+∂ u
+∂ x
+
+Applying the same procedure as for the pressure, we obtain a system which is invertible
+as long as (1 − θ)γ0 (p− + p∞ 0) /γ1 (p+ + p∞ 1) + θ > 0. This is always the case since
+p± > 0. For stiﬀened gas EOS (2.3), deﬁning
+
+(for the ideal polytropic case ξ = γ0/γ1) with p− given by (4.12), we obtain
+
+ξ =
+
+γ0 (p− + p∞ 0)
+γ1 (p− + p∞ 1)
+
+,
+
+u− =
+
+1
+(1 − θ) ξ + θ
+
+((1 − θ) ξ uJ + θ uJ+1) ,
+
+−
+x =
+
+u
+
+1
+((1 − θ) ξ + θ) ∆ x
+
+(uJ+1 − uJ ) .
+
+To get estimations at α+, one uses (4.15) and the jump conditions (4.13). As before,
+under the appropriate smoothness assumptions, one has
+
+u(α±) = u± + O(∆ x2),
+
+(α±) = u±
+
+x + O(∆ x).
+
+(4.16)
+
+∂u
+∂x
+
+Conserved variables. Once sided estimations W ±
+
+deduce U ±
+exact values under appropriate smoothness assumptions, hence
+
+x are computed, we
+x from (2.3). These values are second-order approximations to the
+
+and W ±
+
+and U ±
+
+ˆU (x) =
+
+U + + (x − α) U +
+x
+
+for x ≤ α
+
+
+
+
+U −
+
++ (x − α) U −
+x
+
+for x > α
+
+(4.17)
+
+satisﬁes U ∗
+
+(x) = ˆU (x) + O(∆x2) near the interface.
+
+
+
+10
+
+B. LOMBARD AND R. DONAT
+
+4.4. Spatial integration at irregular points. From (3.3) and (4.4), one de-
+
+duces that the irregular points are
+
+xJ−s+1, ..., xJ+s.
+
+(4.18)
+
+Modiﬁed values must also be computed at xJ−s and xJ+s+1 because the material
+interface can move between tn and tn+1, crossing one grid point (but no more, be-
+cause of the CFL condition): as a consequence, these two regular points can become
+irregular points during one Runge-Kutta substep. The modiﬁed values are computed
+by substituting the appropriate grid point in the expresion (4.17). Using (4.6) as a
+second-order approximation to (4.5), we obtain
+i = U −
+
++ (i − J − θ) ∆ x U −
+x ,
+
+i = J + 1, ..., J + s + 1,
+
+U ∗
+
+i = J − s, ..., J,
+
+U ∗
+
+i = U + + (i − J − θ) ∆ x U +
+x .
+
+At each irregular point xi, LΩ is now applied on numerical values on the same side
+than xi, and on modiﬁed values on the other side than xi, hence
+
+i = J − s + 1, ..., J,
+
+1
+∆ x
+
+1
+∆ x
+
+LΩ(U , i) = −
+
+F Ω 0
+
+U i−s+1, ..., U J , U ∗
+
+J+1, ..., U ∗
+
+i+s
+
+(cid:0)
+−F Ω 0
+
+(cid:0)
+U i−s, ..., U J , U ∗
+
+J+1, ..., U ∗
+
+i+s−1
+
+i = J, ..., J + s,
+
+(cid:0)
+
+LΩ(U , i) = −
+
+F Ω 1
+
+U ∗
+
+i−s+1, ..., U ∗
+
+J , U J+1, ..., U i+s
+
+(cid:0)
+−F Ω 1
+
+(cid:0)
+U ∗
+
+i−s, ..., U ∗
+
+J , U J+1, ..., U i+s−1
+
+(cid:1)
+
+,
+
+(cid:1)(cid:1)
+
+(cid:1)
+
+.
+
+(cid:1)(cid:1)
+
+4.5. Summary of the implementation. Suppose that Runge-Kutta integra-
+tions (denoted by RK) have been performed up to the (m − 1)-th substep. Then, the
+time-marching for both the Euler equations and the level-set equation can be summed
+up in 8 steps.
+
+(cid:0)
+
+Step 1: location of the interface. Compute J (4.4) and θ (4.5).
+Step 2: construction of modiﬁed values. Compute (4.19).
+Step 3: construction of temporary values. Build two sets Ai and Bi
+
+U (m−1)
+
+i
+
+, i = 0, ..., J,
+
+U ∗
+
+i , i = J − s, ..., J,
+
+U ∗
+
+i , i = J + 1, ..., J + s + 1,
+
+U (m−1)
+
+i
+
+, i = J + 1, ..., Nx.
+
+B(m−1)
+
+i
+
+=
+
+
+
+
+
+
+Step 4: update Ai and Bi. Compute one Runge-Kutta substep of (3.1)
+
+A(m−1)
+
+i
+
+=
+
+
+
+
+
+
+i = s, ..., J + 1,
+
+A(m)
+i
+
+= RK
+
+A(k)
+i
+
+, LΩ0
+
+k ≤ m
+
+i = J, ..., Nx − s,
+
+B(m)
+i
+
+= RK
+
+, LΩ1
+
+k ≤ m.
+
+,
+
+,
+
+(cid:17)
+
+(cid:17)
+
+(cid:16)
+B(k)
+i
+
+(cid:16)
+
+Step 5: update φ. Compute one Runge-Kutta substep of (2.6) via u(m−1).
+
+(4.19)
+
+(4.20)
+
+(4.21)
+
+(4.22)
+
+INTERFACE METHOD AND EULER FLOWS
+
+11
+
+Step 6: location of the interface. Compute J (4.4) from φ(m).
+Step 7: update U . From (4.22) and J, select
+
+U (m)
+
+i = 
+
+
+A(m)
+i
+
+B(m)
+i
+
+for i = 0, ..., J,
+
+for i = J + 1, ..., Nx.
+
+(4.23)
+
+Step 8: reinitialization of φ. If m = 3 (i.e. t = tn+1), integrate (3.5).
+
+
+
+4.6. Some remarks. Complexity. The algorithm presented in section 4.5 is
+simple. The computation of modiﬁed values U ∗
+i does not depend on the discrete
+spatial operator. No analytical results - such as the solution of a Riemann problem -
+are required. As deduced from (4.22), one does not need to write a new solver: the
+adaptation of known single-component solvers to the multicomponent case is direct.
+The only diﬃculty is to switch precisely modiﬁed values in the appropriate solver,
+depending on the sign of the level-set function, which is in fact an easy task.
+
+Computational cost. In comparison with single-component simulations, our ap-
+proach leads to a +25 % additional cost, both on a memory and computational time
+point of view. This cost is almost completely due to the level-set function φ. Such a
+cost is inherent to level-set formulations, in order to know the composition of the ﬂuid
+at each grid point. Eulerian methods that do not use level-sets require in counterpart
+to modify the Euler eigenstructure, leading to a similar additional cost.
+
+Consistency. As for the GFM [2], the ESIM works because values used for time-
+stepping in (4.22) are thermodynamically similar: A∗
+i ) in (4.21)
+satisfy the same equation of state. The algorithm amounts to consider separately two
+single-component ﬂows, where no oscillations exist.
+
+i (respectively B∗
+
+Single-component ﬂow. In the limit case γ0 = γ1, p∞ 0 = p∞ 1, the ﬂow is single-
+component, and material interfaces amount to classical contact-discontinuities. The
+ESIM behaves equally well, sharpening contact discontinuities.
+
+Conservativity. The ESIM is formally non-conservative locally, since
+
+J+1, ..., U ∗
+
+U J−s+1, ..., U J , U ∗
+
+(cid:0)
+
+F Ω0
+
+,
+(4.24)
+(cid:1)
+like in [15] or [8]. However, the lack of conservation is only introduced at one cell
+boundary on the entire domain.
+In practice, this feature does not seem to spoil
+convergence to the correct solution.
+
+J , U J+1, ..., U J+s
+
+6= F Ω1
+
+J+s
+
+(cid:1)
+
+(cid:0)
+
+J−s+1, ..., U ∗
+
+U ∗
+
+Note that a fully-conservative version of the GFM has been developed [25]. Such
+an approach could probably be adapted to the ESIM, but we do not look further in the
+present paper: unlike in [25] where inert shocks and detonation waves are adressed,
+we only focus on the material interfaces (where conservation errors are not crucial).
+
+5. Numerical experiments.
+
+5.1. Conﬁgurations. Four numerical experiments are proposed. Tests 1 and 2
+illustrate the interaction of shock waves with one and two material interfaces. Test
+3 is a pure advection problem, with smooth structures. Test 4 concerns nonlinear
+acoustics. Analytical values and numerical values are respectively shown in solid lines
+and dotted lines, and we take CFL=0.66.
+
+All tests have initially-isolated material interfaces. Riemann problems are not our
+concern, since jump conditions (4.2) - which are a building-block of the ESIM - are
+then generally not satisﬁed. Note that the GFM has the same limitation. In practice,
+
+12
+
+B. LOMBARD AND R. DONAT
+
+the GFM often works for Riemann problems, but some failures (see e.g. data of Test
+4 in [2]) can be explained by the fact that basic assumptions are not satisﬁed.
+
+Density
+
+Velocity
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0.5
+
+x(m)
+
+Entropy
+
+0.5
+
+x(m)
+
+Pressure
+
+)
+3
+m
+/
+g
+k
+(
+ 
+y
+t
+i
+s
+n
+e
+D
+
+)
+J
+(
+ 
+y
+p
+o
+r
+t
+n
+E
+
+7 
+
+6 
+
+5 
+
+4 
+
+3 
+
+2 
+
+1 
+
+0
+
+1.1 
+
+1 
+
+0.9 
+
+0.8 
+
+0.7 
+
+0.6 
+
+0.5 
+
+0.4 
+
+0.3 
+
+0.2 
+
+0.1 
+
+0 
+
+0
+
+)
+s
+/
+m
+
+(
+ 
+y
+t
+i
+c
+o
+l
+e
+V
+
+0 
+
+−0.2 
+
+−0.4 
+
+−0.6 
+
+−0.8 
+
+−1 
+
+−1.2 
+
+)
+a
+P
+(
+ 
+e
+r
+u
+s
+s
+e
+r
+P
+
+10 
+
+9 
+
+8 
+
+7 
+
+6 
+
+5 
+
+4 
+
+3 
+
+2 
+
+1 
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0.5
+
+x(m)
+
+0.5
+
+x(m)
+
+Fig. 5.1. Test 1-a: Mach 1.95 shock wave interacting with a material interface. WENO-5
+
+coupled with the ESIM (exact values: solid line; numerical values: points).
+
+5.2. Test 1: shock-interface interaction. Firstly, we consider a shock-interface
+
+interaction problem, previously studied in [31]. On a 1 m long domain, the initial con-
+ﬁguration consists of a stationary material interface at α0 = 0.5 m, separating two
+ﬂuids with diﬀerent EOS: a polytropic gas on the left, a stiﬀened gas on the right. A
+left-going Mach 1.95 shock wave is initially set at α1 = 0.7 m. Physical parameters
+are
+
+ρ0 = 1.000 kg/m3, p0 = 1 Pa , u0 = 0 m/s , γ0 = 1.4, p∞ 0 = 0 Pa,
+
+
+
+
+
+
+ρ1 = 5.000 kg/m3, p1 = 1 Pa , u1 = 0 m/s , γ1 = 4, p∞ 1 = 1 Pa,
+
+ρ2 = 7.093 kg/m3, p2 = 10 Pa , u2 = −0.7288 m/s , γ2 = 4.0, p∞ 2 = 1 Pa.
+
+(5.1)
+At t = 4.69 10−2 s, the shock wave collides with the material interface, leading to a
+left-going shock, a left-going material interface, and a right-going rarefaction fan (see
+
+INTERFACE METHOD AND EULER FLOWS
+
+13
+
+ﬁgure 4 in [31]).
+
+Density
+
+Velocity
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0.5
+
+x(m)
+
+Entropy
+
+0.5
+x(m)
+
+Pressure
+
+)
+3
+m
+/
+g
+k
+(
+ 
+y
+t
+i
+s
+n
+e
+D
+
+)
+J
+(
+ 
+
+y
+p
+o
+r
+t
+n
+E
+
+8 
+
+7 
+
+6 
+
+5 
+
+4 
+
+3 
+
+2 
+
+1 
+
+0
+
+2.5 
+
+2 
+
+1.5 
+
+1 
+
+0.5 
+
+0 
+
+0
+
+0 
+
+−0.5 
+
+−1 
+
+)
+s
+/
+m
+
+(
+ 
+y
+t
+i
+c
+o
+l
+e
+V
+
+−1.5 
+
+−2 
+
+−2.5 
+
+−3 
+
+−3.5 
+
+−4 
+
+0
+
+)
+a
+P
+(
+ 
+e
+r
+u
+s
+s
+e
+r
+P
+
+80 
+
+70 
+
+60 
+
+50 
+
+40 
+
+30 
+
+20 
+
+10 
+
+0 
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0.5
+x(m)
+
+0.5
+x(m)
+
+Fig. 5.2. Test 1-b: Mach 5 shock wave interacting with a material interface. WENO-5 coupled
+
+with the ESIM (exact values: solid line; numerical values: points).
+
+Figure 5.1 shows exact values and numerical values of ρ, u, p, and entropy S at
+t = 0.202 s (after 200 time steps). The computations are performed on Nx = 200 grid
+points with WENO-5 coupled with the ESIM. The agreement between analytical and
+numerical values is good. The main interest of this example is to show that the ESIM
+is robust and behaves well, even when a shock wave is in the vicinity of the material
+interface. No spurious oscillations induced by Taylor expansions are seen in u and p
+around the material interface (near x = 0.32 m).
+
+Secondly, we consider the case of a stronger shock wave. The physical parameters
+around the material interface are the same than in (5.1); only the parameters in the
+post-shock ﬂuid are modiﬁed
+ρ2 = 8.116 kg/m3,
+
+u2 = −2.428 m/s ,
+
+p2 = 77.80 Pa ,
+
+p∞ 2 = 1 Pa,
+
+γ2 = 1.4,
+
+what amounts to a Mach 5 left-going shock wave. The wave phenomena (after the
+collision between the shock wave and the material interface) are the same than in the
+previous example. The computations are performed with WENO-5 coupled with the
+ESIM.
+
+14
+
+B. LOMBARD AND R. DONAT
+
+Figure 5.2 shows exact values and numerical values of ρ, u, p, and entropy S at
+t = 0.112 s (after 300 time steps). The agreement between numerical and analytical
+values is good, even for this strong shock test. No oscillations are visible in u and p
+around the material interface (near x = 0.26 m).
+
+Density
+
+Velocity
+
+0
+
+0.05
+
+0.1
+
+0.15
+
+0.2
+
+0.25
+
+0.3
+
+0.35
+
+0.4
+
+0.05
+
+0.1
+
+0.15
+
+0.2
+
+0.25
+
+0.3
+
+0.35
+
+0.4
+
+x (m)
+
+Entropy
+
+x (m)
+
+Pressure
+
+1.6 
+
+1.4 
+
+1.2 
+
+1 
+
+0.8 
+
+0.6 
+
+0.4 
+
+)
+3
+m
+/
+g
+k
+(
+ 
+y
+t
+i
+s
+n
+e
+D
+
+1200000 
+
+1000000 
+
+800000 
+
+)
+J
+(
+ 
+y
+p
+o
+600000 
+r
+t
+n
+E
+
+400000 
+
+200000 
+
+0 
+
+−20 
+
+−40 
+
+−60 
+
+)
+s
+/
+m
+
+−80 
+
+(
+ 
+y
+t
+i
+c
+o
+l
+e
+V
+−100 
+
+−120 
+
+−140 
+
+−160 
+0
+
+160000 
+
+150000 
+
+140000 
+
+)
+a
+P
+(
+ 
+e
+130000 
+r
+u
+s
+s
+e
+r
+P
+
+120000 
+
+110000 
+
+100000 
+0
+
+0
+
+0.05
+
+0.1
+
+0.15
+
+0.2
+
+0.25
+
+0.3
+
+0.35
+
+0.4
+
+0.05
+
+0.1
+
+0.15
+
+0.2
+
+0.25
+
+0.3
+
+0.35
+
+0.4
+
+x (m)
+
+x (m)
+
+Fig. 5.3. Test 2: shock-bubble interaction. WENO-5 coupled with the ESIM (ﬁne grid solution:
+
+solid line; numerical values: points).
+
+5.3. Test 2: shock-bubble interaction. We consider the 1D version of the
+classical shock-bubble interaction problem, numerically addressed e.g.
+in [23] with
+a conservative algorithm. On a 0.445 m long domain, a helium domain, initially
+delimitated by α0 = 0.2 m and α1 = 0.25 m, is at rest in air. A left-going Mach 1.22
+shock wave is initially set at α2 = 0.275 m. Physical parameters are
+
+ρ0 = 1225 kg/m3, p0 = 1.01325 105 Pa , u0 = 0.0 m/s , γ0 = 1.4, p∞ 0 = 0 Pa,
+
+ρ1 = 0.2228 kg/m3, p1 = 1.01325 105 Pa , u1 = 0.0 m/s , γ1 = 1.648, p∞ 1 = 0 Pa,
+
+ρ2 = 1225 kg/m3, p2 = 1.01325 105 Pa , u2 = 0.0 m/s , γ2 = 1.4, p∞ 2 = 0 Pa,
+
+ρ3 = 1686 kg/m3, p3 = 1.59059 105 Pa , u3 = −3.59 m/s , γ3 = 1.4, p∞ 3 = 0 Pa.
+
+
+
+
+
+
+INTERFACE METHOD AND EULER FLOWS
+
+15
+
+See [23] for a description of wave phenomena. Since no analytic solution is available,
+we compute the solution with WENO-5 coupled with ESIM on a ﬁne grid with 3200
+mesh points; we refer to this approximation as the ”exact solution” for comparison
+purposes.
+
+Figure 5.3 shows ”exact values” and numerical values of ρ, u, p, and S at t =
+2.86 10−3 s (after 400 time steps). The computations are performed on Nx = 400 grid
+points with WENO-5 coupled to the ESIM. The agreement between ”exact values”
+and numerical values is very good. The resolution is better than in [23]: compare the
+density inside the helium in ﬁgure 5.3 with the density in ﬁgure 2 of [23].
+
+To conclude the tests 1 and 2, let us notice that similar results could be obtained
+with the GFM treatment (not shown here). Indeed, when only ﬂat proﬁles are in-
+volved, the GFM and the ESIM have a similar behavior. When a shock wave collides
+with a material interface, both treatments produce a ”sloping” behavior in density
+and entropy very close to the ”overheating” phenomenon found in shock reﬂection
+problems [6]. Increasing the Mach number seems to accentuate this ”overheating”,
+producing in addition slightly perturbed post-shock values: small acoustic perturba-
+tions can be observed downstream in ﬁgure 5.2. More testing (not shown) has been
+performed with Mach numbers up to 9, which conﬁrm these observations. No crash
+due to negative pressure values has been observed on these tests.
+
+The goal of the next two tests is to show the advantage of using the ESIM (com-
+
+pared to the GFM) for rich-structured ﬂows.
+
+Method Nx
+
+L1 error L1 order Method Nx
+
+L1 error L1 order
+
+ENO-3
++
+GFM
+
+100
+200
+400
+800
+1600
+3200
+
+6.44e-3
+1.62e-3
+6.86e-4
+2.40e-4
+6.44e-5
+2.05e-5
+
+-
+1.99
+1.24
+1.51
+1.89
+1.65
+
+ENO-3
++
+ESIM
+
+100
+200
+400
+800
+1600
+3200
+
+3.76e-3
+4.74e-4
+6.42e-5
+8.62e-6
+9.50e-7
+1.21e-7
+
+-
+2.98
+2.88
+2.89
+3.18
+2.98
+
+Table 5.1
+Measures of convergence in Test 3.
+
+5.4. Test 3: pure advection. We consider a 1 m long domain with two material
+interfaces initially at α0 = 0.160 m and α1 = 0.526 m. The pressure and the velocity
+are initially constant: u(x, 0) = 300 m/s, p(x, 0) = 105 Pa. The density is initially
+
+1 + 0.3 sin(50 (x − α0)) kg/m3 if α0 ≤ x < α1,
+
+ρ(x, 0) =
+
+
+
+
+
+
+1 kg/m3 else.
+
+16
+
+B. LOMBARD AND R. DONAT
+
+Density (GFM)
+
+Density (ESIM)
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+x (m)
+
+x (m)
+
+Entropy (GFM)
+
+Entropy (ESIM)
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0.5
+
+x (m)
+
+Pressure (GFM)
+
+x (m)
+
+Pressure (ESIM)
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0.5
+x (m)
+
+0.5
+x (m)
+
+Velocity (GFM)
+
+Velocity (ESIM)
+
+)
+3
+m
+/
+g
+k
+(
+ 
+y
+t
+i
+s
+n
+e
+D
+
+1.3 
+
+1.2 
+
+1.1 
+
+1 
+
+0.9 
+
+0.8 
+
+0.7 
+
+400000 
+
+350000 
+
+300000 
+
+250000 
+
+)
+J
+(
+ 
+y
+p
+o
+r
+t
+n
+200000 
+E
+
+150000 
+
+100000 
+
+100200 
+
+100100 
+
+)
+a
+P
+(
+ 
+e
+100000 
+r
+u
+s
+s
+e
+r
+P
+
+99900 
+
+99800 
+
+300.5 
+
+300.4 
+
+300.3 
+
+300.2 
+
+300.1 
+)
+s
+/
+m
+
+300 
+
+(
+ 
+y
+t
+i
+c
+o
+l
+e
+V
+299.9 
+
+299.8 
+
+299.7 
+
+299.6 
+
+299.5 
+0
+
+)
+3
+m
+/
+g
+k
+(
+ 
+y
+t
+i
+s
+n
+e
+D
+
+1.3 
+
+1.2 
+
+1.1 
+
+1 
+
+0.9 
+
+0.8 
+
+0.7 
+
+400000 
+
+350000 
+
+300000 
+
+250000 
+
+)
+J
+(
+ 
+y
+p
+o
+r
+t
+n
+200000 
+E
+
+150000 
+
+100000 
+
+100200 
+
+100100 
+
+)
+a
+P
+(
+ 
+e
+100000 
+r
+u
+s
+s
+e
+r
+P
+
+99900 
+
+99800 
+
+300.5 
+
+300.4 
+
+300.3 
+
+300.2 
+
+300.1 
+)
+s
+/
+m
+
+300 
+
+(
+ 
+y
+t
+i
+c
+o
+l
+e
+V
+299.9 
+
+299.8 
+
+299.7 
+
+299.6 
+
+299.5 
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+x (m)
+
+x (m)
+
+Fig. 5.4. Test 3-a: 200 grid points. ENO-3 coupled with the GFM (left column) and with the
+ESIM (right column). Exact values: solid line; numerical values: points (note that the scales for p
+and u are magniﬁed).
+
+INTERFACE METHOD AND EULER FLOWS
+
+17
+
+Density (GFM)
+
+Density (ESIM)
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+x (m)
+
+x (m)
+
+Entropy (GFM)
+
+Entropy (ESIM)
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+x (m)
+
+x (m)
+
+Pressure (GFM)
+
+Pressure (ESIM)
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+x (m)
+
+x (m)
+
+Velocity (GFM)
+
+Velocity (ESIM)
+
+)
+3
+m
+/
+g
+k
+(
+ 
+y
+t
+i
+s
+n
+e
+D
+
+1.3 
+
+1.2 
+
+1.1 
+
+1 
+
+0.9 
+
+0.8 
+
+0.7 
+
+400000 
+
+350000 
+
+300000 
+
+250000 
+
+)
+J
+(
+ 
+y
+p
+o
+r
+t
+n
+200000 
+E
+
+150000 
+
+100000 
+
+100100 
+
+100080 
+
+100060 
+
+100040 
+
+100020 
+)
+a
+P
+(
+ 
+e
+100000 
+r
+u
+s
+s
+e
+r
+P
+99980 
+
+99960 
+
+99940 
+
+99920 
+
+300.5 
+
+300.4 
+
+300.3 
+
+300.2 
+
+300.1 
+)
+s
+/
+m
+
+300 
+
+(
+ 
+y
+t
+i
+c
+o
+l
+e
+V
+299.9 
+
+299.8 
+
+299.7 
+
+299.6 
+
+299.5 
+0
+
+)
+3
+m
+/
+g
+k
+(
+ 
+y
+t
+i
+s
+n
+e
+D
+
+1.3 
+
+1.2 
+
+1.1 
+
+1 
+
+0.9 
+
+0.8 
+
+0.7 
+
+400000 
+
+350000 
+
+300000 
+
+250000 
+
+)
+J
+(
+ 
+y
+p
+o
+r
+t
+n
+200000 
+E
+
+150000 
+
+100000 
+
+100100 
+
+100080 
+
+100060 
+
+100040 
+
+100020 
+)
+a
+P
+(
+ 
+e
+100000 
+r
+u
+s
+s
+e
+r
+P
+99980 
+
+99960 
+
+99940 
+
+99920 
+
+300.5 
+
+300.4 
+
+300.3 
+
+300.2 
+
+300.1 
+)
+s
+/
+m
+
+300 
+
+(
+ 
+y
+t
+i
+c
+o
+l
+e
+V
+299.9 
+
+299.8 
+
+299.7 
+
+299.6 
+
+299.5 
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+x (m)
+
+x (m)
+
+Fig. 5.5. Test 3-b: 800 grid points. ENO-3 coupled with the GFM (left column) and with the
+ESIM (right column). Exact values: solid line; numerical values: points (note that the scales for p
+and u are magniﬁed).
+
+18
+
+B. LOMBARD AND R. DONAT
+
+Method Nx
+
+∆(ρ)
+
+Order ∆(ρ u) Order ∆(ρ e)
+
+Order
+
+ENO-3
++
+GFM
+
+ENO-3
++
+ESIM
+
+100
+200
+400
+800
+1600
+3200
+
+100
+200
+400
+800
+1600
+3200
+
+7.25e-1
+3.82e-1
+2.21e-1
+1.27e-1
+7.10e-2
+3.61e-2
+
+1.98e-1
+4.69e-2
+1.07e-2
+2.75e-3
+6.82e-4
+1.54e-4
+
+-
+0.92
+0.79
+0.80
+0.84
+0.97
+
+-
+2.08
+2.13
+1.96
+2.01
+2.14
+
+2.21e+2
+1.14e+2
+6.65e+1
+3.83e+1
+2.13e+1
+1.08e+1
+
+5.96e+1
+1.40e+1
+3.23e+0
+8.27e-1
+2.37e-1
+6.72e-2
+
+-
+0.95
+0.77
+0.79
+0.84
+0.98
+
+-
+2.09
+2.11
+1.96
+1.80
+1.81
+
+3.22e+4
+1.72e+4
+9.97e+3
+5.74e+3
+3.19e+3
+1.62e+3
+
+8.94e+3
+2.11e+3
+4.85e+2
+1.24e+2
+3.41e+1
+9.36e+0
+
+-
+0.90
+0.78
+0.79
+0.84
+0.97
+
+-
+2.08
+2.12
+1.96
+1.86
+1.86
+
+Table 5.2
+Conservation errors in Test 3.
+
+Physical parameters are
+
+γ0 = 1.40, p∞ 0 = 104 Pa
+
+if x ≤ α0,
+
+(γ, p∞) =
+
+γ1 = 1.67, p∞ 1 = 105 Pa
+
+if α0 < x ≤ α1,
+
+γ2 = 1.40, p∞ 2 = 104 Pa
+
+if x > α1.
+
+
+
+
+
+
+This conﬁguration amounts to an advection equation for ρ; material interfaces are
+advected at the velocity u; p and u remain theoretically constant. Because of the
+discontinuous physical parameters, the entropy S is discontinuous at α0 and at α1.
+Numerical experiments are performed with ENO-3, coupled with the GFM or with
+the ESIM.
+
+Figures 5.4 and 5.5 show exact values and numerical values of ρ, S, p, and u
+at t = 6.62 10−4 s, respectively for Nx = 200 grid points (hence 25 grid points by
+wavelength) and Nx = 800 grid points (hence 100 grid points by wavelength). Notice
+that the zeroth-order extrapolation of S used by the GFM result in jumps of ρ at
+material interfaces, that are advected with the ﬂow; these glitches are also transferred
+to u, and p, near x = 0.35 m and x = 0.75 m, and act as sources of acoustic noise.
+These glitches still exist with 800 grid points (ﬁgure 5.5) with the GFM. On the other
+hand, no entropy or density glitches are observed when the ESIM is used instead.
+
+We must mention that ENO reconstructions of a sinusoidal proﬁle might produce
+oscillations on the level of the truncation error. These small spurious oscillations are
+seen in p and u, which should have ﬂat proﬁles, and can be observed even without
+material interfaces. When these oscillations interact with the GFM-produced glitches
+at material interfaces, they are ampliﬁed and lead also to spurious acoustic waves.
+These oscillations are entirely reconstruction dependent and, since they are of the
+
+INTERFACE METHOD AND EULER FLOWS
+
+19
+
+order of the truncation error (see also our convergence measures), they are essentially
+not visible on 800 grid points when the ESIM is used (ﬁgure 5.5).
+
+Measures of convergence are provided in table 5.1. Coupled with the ESIM,
+the ENO-3 scheme maintains third-order convergence. Coupled with the GFM, the
+ENO-3 scheme looses accuracy and shows a 1.6 order of convergence. Table 5.2 shows
+measures of conservation errors induced by the GFM and by the ESIM, for various
+values of Nx (see subsection 4.6). To do so, we compute
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+i1
+
+n=0,...,Nt (cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+i=i0
+X
+
+(cid:0)
+
+∆ U (T, Nx) = max
+
+U n
+
+i − U 0
+i
+
++ n
+
+f
+
+U n
+i1
+
+− f
+
+U n
+i0
+
+(5.2)
+
+∆ t
+∆ x
+
+(cid:1)
+
+(cid:0)
+
+(cid:0)
+
+(cid:1)
+
+(cid:0)
+
+(cid:1)(cid:1)
+
+at T = 1.05 10−3 s, where f is the ﬂux function (2.2) , and Nt = Trunc (T /∆ t).
+The domain of measure is bounded by i0 = 10 and i1 = Nx − 10. Getting ﬁable and
+meaningfull measures requires some care. Indeed, errors of conservativity vary a lot
+with the position of α inside the meshing, hence with t. The ”max” in (5.2) ensures
+almost-steady values of ∆ U (T, Nx) and reliable measures.
+
+A fully conservative scheme would satisfy ∆ U (T, Nx) = 0 for all values of T and
+Nx (see e.g. (12.33) in [19]). Here, errors are non-null, but they decrease with ∆ x.
+Conservation errors induced by the ESIM are much smaller than that induced by
+the GFM. The table 5.2 indicates ﬁrst-order conservation errors for the GFM, and
+second-order conservation errors for the ESIM.
+
+Measures of convergence and conservativity have been done also with the WENO-
+5 scheme coupled with the GFM or with the ESIM. The results are essentially the
+same than in tables 5.1 and 5.2. To get a ﬁfth-order accurate scheme (as in [27]) and
+a higher order of conservation would require to develop a higher order ESIM, which
+is not investigated in the present study.
+
+5
+x 10
+
+)
+a
+P
+
+(
+ 
+e
+r
+u
+s
+s
+e
+r
+P
+
+1.0015
+
+1.001
+
+1.0005
+
+1
+
+0.9995
+
+0.999
+
+0.9985
+
+10
+
+20
+
+30
+
+40
+
+50
+
+70
+
+80
+
+90
+
+100
+
+60
+x (m)
+
+Fig. 5.6. Initial values of the pressure p at t0 = 5.1 10−2 s in Test 4.
+
+5.5. Test 4: nonlinear acoustics. As a last example, we consider a rich-
+structured wave interacting with a stationary material interface. This example is
+a generalization of the Test 1 studied in [27]:
+for small amplitude initial data, the
+simple linear equations of acoustics used in [27] are valid, and the wave remains
+smooth. Higher amplitudes of initial data lead to a nonlinear problem, where shocks
+can develop.
+
+20
+
+B. LOMBARD AND R. DONAT
+
+(a)
+
+(b)
+
+70
+
+80
+
+90
+
+100
+
+120
+
+130
+
+140
+
+150
+
+70
+
+80
+
+90
+
+100
+
+120
+
+130
+
+140
+
+150
+
+110
+x (m)
+
+(c)
+
+110
+x (m)
+
+(e)
+
+110
+x (m)
+
+(d)
+
+x (m)
+
+(f)
+
+70
+
+80
+
+90
+
+100
+
+120
+
+130
+
+140
+
+150
+
+90
+
+95
+
+100
+
+105
+
+110
+
+115
+
+120
+
+5
+x 10
+
+1.003
+
+)
+a
+P
+
+(
+ 
+e
+r
+u
+s
+s
+e
+r
+P
+
+1.002
+
+1.001
+
+1
+
+0.999
+
+0.998
+
+0.997
+
+60
+
+)
+a
+P
+
+(
+ 
+e
+r
+u
+s
+s
+e
+r
+P
+
+)
+a
+P
+
+(
+ 
+e
+r
+u
+s
+s
+e
+r
+P
+
+−5
+
+−10
+
+−15
+
+60
+
+15
+
+10
+
+5
+
+0
+
+15
+
+10
+
+5
+
+0
+
+−5
+
+−10
+
+−15
+
+60
+
+8
+x 10
+
+1.5
+
+0.5
+
+2
+
+1
+
+0
+
+−0.5
+
+−1
+
+−1.5
+
+)
+a
+P
+
+(
+ 
+
+e
+r
+u
+s
+s
+e
+r
+P
+
+−2
+
+60
+
+6
+x 10
+
+6
+
+4
+
+2
+
+0
+
+6
+
+4
+
+2
+
+0
+
+)
+a
+P
+
+(
+ 
+e
+r
+u
+s
+s
+e
+r
+P
+
+)
+a
+P
+
+(
+ 
+e
+r
+u
+s
+s
+e
+r
+P
+
+−2
+
+−4
+
+−6
+
+85
+
+6
+x 10
+
+−2
+
+−4
+
+−6
+
+85
+
+70
+
+80
+
+90
+
+100
+
+120
+
+130
+
+140
+
+150
+
+90
+
+95
+
+100
+
+105
+
+110
+
+115
+
+120
+
+110
+x (m)
+
+x (m)
+
+Fig. 5.7. Test 4. ε = 10−3 (left column), ε = 1 (right column) at t1 = 8.61 10−2 s. Snapshots
+of ﬁne grid solution (solid line) and numerical values (dotted line) of p with the ESIM: (a), (b).
+Errors with the ESIM: (c), (d). Errors with the GFM: (e), (f ).
+
+INTERFACE METHOD AND EULER FLOWS
+
+21
+
+To illustrate both cases, we use exactly the same physical parameters than in
+[27]. On a 300 m long domain, a material interface separates piecewise constant
+values, initially motionless
+
+ρ0 = 1000 kg/m3, p0 = 105 Pa , u0 = 0.0 m/s , γ0 = 3, p∞ 0 = 7.50 108 Pa,
+
+ρ1 = 1200 kg/m3, p1 = 105 Pa , u1 = 0.0 m/s , γ1 = 4, p∞ 1 = 2.35 109 Pa.
+
+From (2.4), one deduces sound speeds: c0 = 1500 m/s, and c1 = 2800 m/s. These phys-
+ical parameters correspond respectively to water and Plexiglass under atmospheric
+pressure. A perturbation ∆ W 0(x) is added to initial data on medium Ω0, which is
+an exact solution of acoustics and leads to a right-going wave
+
+
+
+
+
+
+∆ W 0(x) = ε f
+
+t0 −
+
+−
+
+, −
+
+, −p0
+
+.
+
+(5.3)
+
+T
+
+x
+c0 (cid:19)
+
+(cid:18)
+
+p0
+c2
+0
+
+p0
+ρ0 c0
+
+(cid:18)
+
+(cid:19)
+
+The function f is a C5 spatially-bounded sinusoid
+
+ak sin(βk ωc ξ)
+
+if 0 < ξ <
+
+1
+fc
+
+,
+
+q
+
+k=1
+X
+
+0 else,
+
+f (ξ) = 
+
+
+
+∆ ρ0
+ρ0
+
+∼
+
+∆ u0
+c0
+
+∼
+
+∆ p0
+p0
+
+∼ ε.
+
+with βk = 2k−1, ωc = 2π fc; the coeﬃcients ak are: a1 = 1, a2 = −21/32, a3 = 63/768,
+a4 = −1/512. The central frequency is fc = 50 Hz. Elementary calculations show
+that
+
+(5.4)
+
+(5.5)
+
+For ε = 0, the solution remains a stationary material interface. For small values
+of ε (typically ε = 10−3), the acoustics limit is valid and one obtains a pure right-
+going wave. For higher values of ε (typically ε = 0.1), the perturbation (5.3) does
+not satisfy exactly the nonlinear Euler equations: the wave separates into a weak left-
+going wave and a right-going wave. In both cases, the right-going wave is reﬂected and
+transmitted by the material interface. The analytical solution is not detailed in the
+linear case [20]. No analytical solution is available in the nonlinear case: one computes
+an ”exact solution” on a ﬁne grid of 3200 grid points. Numerical experiments are
+performed with Nx = 400 grid points, which is 40 points in the wavelength λc = c0/fc,
+and t0 = 5.1 10−2 s. Initial values of the p at t0 are shown in ﬁgure 5.6, for ε = 10−3.
+Figure 5.7 shows results at t1 = 8.61 10−2 s, after 200 time steps. Left and right
+columns concern respectively ε = 10−3 and ε = 0.1. Figures 5.7 (a) and (b) show
+numerical values and exact values of p computed by WENO-5 coupled to the ESIM.
+Logically, (a) is similar to ﬁgure 3-(d) of [27]. In the nonlinear case (b), the reﬂected
+and transmitted waves have developed a shock. In both cases, the agreement between
+exact values and numerical values is excellent.
+
+To see clearly diﬀerences between the ESIM and GFM treatments, we display
+errors for both methods: with the ESIM in (c) and (d), with the GFM in (e) and (f).
+In the nonlinear cases (d) and (f), errors are displayed from x = 85 m to x = 120
+m, to avoid the shock area. In both cases, the graphs conﬁrm that the ESIM is more
+accurate than the GFM.
+
+22
+
+B. LOMBARD AND R. DONAT
+
+Unlike in [27], the material interface is allowed to move with the ﬂow. For
+ε = 10−3, the measured movement is lower than 10−7 m: so, the approximation
+of stationary material interfaces is justiﬁed. For ε = 0.1, the material interface moves
+from 96.3 m to 96.114 m, and then it comes back to the initial position 96.3 m: it is
+logical, since the velocity is symetric with respect to zero.
+
+6. Conclusion. We have proposed an extension of the ”Explicit Simpliﬁed Inter-
+face Method” (ESIM), previously developed in acoustics [21, 22, 27], to treat material
+interfaces in 1D multicomponent Euler ﬂows.
+
+The method enforces the numerical solution to satisfy zero-order and ﬁrst-order
+jump conditions at the material interface and can be coupled with the user’s favourite
+high-order shock-capturing scheme for single component ﬂows. It behaves as robustly
+as the GFM [8] in numerical simulations involving ﬂat states, while it displays a
+superior performance in ﬂows with rich structures.
+
+Our numerical simulations show that the interface treatment we propose guaran-
+tees a numerical solution with no unphysical numerical artifacts due to the material
+interface. The behavior observed for the numerical errors is similar to that observed
+for the same underlying method when applied to a ﬂow without material interfaces.
+This paper was focused on 1D ﬂows: applying the ESIM to 2D cases is a challeng-
+ing project, subject of future works. Some key tools for the 2D implementation have
+been validated already in the simple case of 2D linear acoustics with stationary inter-
+faces [22]. Other ingredients (such as multidimensional level-set-based extrapolations)
+may be found in [5, 12].
+
+Acknowledgments. The ﬁrst author thanks the European network HYKE,
+contract HPRN-CT-2002-00282, to have ﬁnanced his postdoctoral position at the
+University of Valencia, where the present research was done. The second author also
+acknowledges partial support from the spanish MCYT-BFM-2001-2814. The authors
+would like to thank the anonymous referees for their comments and for pointing to us
+several useful references.
+
+REFERENCES
+
+[1] R. Abgrall, How to prevent pressure oscillations in multicomponent ﬂow calculations: a
+
+quasi conservative approach, J. Comput. Phys., 125 (1996), pp. 150–160.
+
+[2] R. Abgrall and S. Karni, Computations of compressible multiﬂuids, J. Comput. Phys., 169
+
+(2001), pp. 594–623.
+
+[3] G. Allaire, S. Clerc, and S. Kokh, A ﬁve-equation model for the simulation of interfaces
+
+between compressible ﬂows, J. Comput. Phys., 181 (2002), pp. 577–616.
+
+[4] M. Arienti, P. Hung, E. Morano, and J. E. Shepherd, A level-set approach to Eulerian-
+
+Lagrangian coupling, J. Comput. Phys., 185 (2003), pp. 213–251.
+
+[5] T. D. Aslam, A partial diﬀerential equation approach to multidimensional extrapolation, J.
+
+[6] R. Donat and A. Marquina, Capturing shock reﬂections: an improved ﬂux formula, J.
+
+Comput. Phys., 193 (2003), pp. 349–355.
+
+Comput. Phys., 125 (1996), pp. 42–58.
+
+[7] R. P. Fedkiw, Coupling an eulerian ﬂuid calculation to a lagrangian solid calculation with
+
+the Ghost Fluid Method, J. Comput. Phys., 175 (2002), pp. 200–224.
+
+[8] R. P. Fedkiw, T. Aslam, B. Merriman, and S. Osher, A non-oscillatory eulerian approach
+to interfaces in multimaterial ﬂows (the Ghost Fluid Method), J. Comput. Phys., 152
+(1999), pp. 457–492.
+
+[9] R. P. Fedkiw, T. Aslam, and S. Xu, The Ghost Fluid Method for deﬂagration and detona-
+
+tion discontinuities, J. Comput. Phys., 154 (1999), pp. 393–427.
+
+INTERFACE METHOD AND EULER FLOWS
+
+23
+
+[10] R. P. Fedkiw, B. Merriman, R. Donat, and S. Osher, The penultimate scheme for systems
+of conservation laws: ﬁnite-diﬀerence ENO with Marquina’s ﬂux splitting, UCLA CAM
+Report 96-18 (1996).
+
+[11] R. P. Fedkiw, B. Merriman, and S. Osher, Simpliﬁed discretization of systems of hyperbolic
+conservation laws containing advection equations, J. Comput. Phys., 157 (2000), pp. 302–
+326.
+
+[12] T. Y. Hou, Z. Li, S. Osher, and H. Zhao, A hybrid method for moving interface problems
+with application to Hele-Shaw ﬂow, J. Comput. Phys., 134 (1997), pp. 236–252.
+[13] G. S. Jiang and C. W. Shu, Eﬃcient implementation of weighted ENO schemes, J. Comput.
+
+Phys., 126 (1996), pp. 202–228.
+
+[14] G. S. Jiang and D. Peng, Weighted ENO schemes for Hamilton-Jacobi equations, SIAM J.
+
+Scient. Comput., 21-6 (2000), pp. 2126–2143.
+
+[15] S. Karni, Multicomponent ﬂow calculations by a consistent primitive algorithm, J. Comput.
+
+Phys., 112 (1994), pp. 31–43.
+
+[16] S. Karni, Hybrid multiﬂuid algorithms, SIAM J. Scient. Comput., 17-5 (1996), pp. 1019–1039.
+[17] B. Larrouturou, How to preserve the mass fractions positive when computing compressible
+
+multi-component ﬂows, J. Comput. Phys., 95 (1991), pp. 59–84.
+
+[18] Z. Li and R. J. LeVeque, The Immersed Interface Method for elliptic equations with discon-
+tinuous coeﬃcients and singular sources, SIAM J. Num. Anal., 31 (1994), pp. 1019–1044.
+
+[19] R. J. LeVeque, Numerical Methods for Conservation Laws, Birkhauser, 1990.
+[20] B. Lombard, Mod´elisation num´erique de la propagation des ondes acoustiques et ´elastiques
+
+en pr´esence d’interfaces, PhD. thesis, University of Aix-Marseille II, France (2002).
+
+[21] B. Lombard and J. Piraux, How to incorporate the spring-mass conditions in ﬁnite-
+
+diﬀerence schemes, SIAM J. Scient. Comput., 24-4 (2003), pp. 1379–1407.
+
+[22] B. Lombard and J. Piraux, Numerical treatment of two-dimensional interfaces for acoustic
+
+and elastic waves, J. Comput. Phys., 195 (2004), pp. 90–116.
+
+[23] A. Marquina and P. Mulet, A ﬂux-split algorithm applied to conservative models for mul-
+
+ticomponent compressible ﬂows, J. Comput. Phys., 185 (2003), pp. 120–139.
+
+[24] W. Mulder, S. Osher, and J. A. Sethian, Computing interface motion in compressible gas
+
+dynamics, J. Comput. Phys., 100 (1992), pp. 209–228.
+
+[25] D. Nguyen, F. Gibou, and R. P. Fedkiw, A fully conservative Ghost Fluid Method and stiﬀ
+
+detonation waves, 12-th Int. Deton. Symp., (2002).
+
+[26] S. Osher and C. W. Shu, High-order nonoscillatory schemes for Hamilton-Jacobi equations,
+
+SIAM J. Num. Anal., 28-4 (1991), pp. 907–922.
+
+[27] J. Piraux and B. Lombard, A new interface method for hyperbolic problems with discon-
+tinuous coeﬃcients: one-dimensional acoustic example, J. Comput. Phys., 168 (2001),
+pp. 227–248.
+
+[28] G. Russo, P. Smereka, A remark on computing distance functions, J. Comput. Phys.,163
+
+(2000), pp. 51–67.
+
+[29] R. Saurel and R. Abgrall, A simple method for compressible multiﬂuid ﬂows, SIAM J.
+
+Scient. Comput., 21-3 (1999), pp. 1115–1145.
+
+[30] C. W. Shu and S. Osher, Eﬃcient implementation of Essentially Non-Oscillatory shock-
+
+capturing schemes, J. Comput. Phys., 83 (1989), pp. 32–78.
+
+[31] K. M. Shyue, An eﬃcient shock-capturing algorithm for compressible multicomponent prob-
+
+lems, J. Comput. Phys., 142 (1998), pp. 208–242.
+
+[32] Y. Stiriba, A. Marquina, and R. Donat, Equilibrium real gas computations using Mar-
+
+quina’s scheme, Int. J. Numer. Meth. Fluids, 141 (2003), pp. 275–301.
+
+[33] M. Sussman, P. Smereka, and S. Osher, A level-set approach for computing solutions to
+
+incompressible two-phase ﬂows, J. Comput. Phys., 114 (1994), pp. 146–159.
+
+[34] C. Zhang and R. J. LeVeque, The Immersed Interface Method for acoustic wave equations
+
+with discontinuous coeﬃcients, Wave Motion, 25 (1997), pp. 237–263.
+
+

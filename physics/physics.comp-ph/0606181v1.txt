@@ -1,0 +1,2948 @@
+6
+0
+0
+2
+ 
+n
+u
+J
+ 
+0
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+1
+8
+1
+6
+0
+6
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Variational multiscale turbulence modelling in
+a high order spectral element method
+
+Thor Gjesdal ∗, Carl Erik Wasberg,
+Bjørn Anders Pettersson Reif, Øyvind Andreassen
+
+Norwegian Defence Research Establishment (FFI), P.O. Box 25, NO-2027 Kjeller,
+Norway
+
+Abstract
+
+One of the more promising recent approaches to turbulence modelling is the Varia-
+tional Multiscale Large Eddy Simulation (VMS LES) method proposed by Hughes
+et al. [Comp. Visual. Sci., vol. 3, pp. 47-59, 2000]. This method avoids several con-
+ceptual issues of traditional ﬁlter-based LES by employing a priori scale partitioning
+in the discretization of the Navier-Stokes equations.
+
+Most applications of VMS LES reported to date have been based on hierarchical
+bases, in particular global spectral methods, in which scale partitioning is straight-
+forward. In the present work we describe the implementation of the methodology
+in a three-dimensional high-order spectral element method with a nodal basis. We
+report results from coarse grid simulations of turbulent channel ﬂow at diﬀerent
+Reynolds numbers to assess the performance of the model.
+
+Key words: Large eddy simulation, variational multiscale method, spectral
+element method, incompressible ﬂow
+1991 MSC: 76F65, 65M60, 65M70
+PACS: 47.27.Eq, 02.70.Hm, 02.70.Dh
+
+1 Introduction
+
+Large-eddy simulations (LES) provides a physically more appealing framework
+for turbulent ﬂow prediction than the more traditional Reynolds-averaged
+∗ Corresponding author.
+
+Email addresses: Thor.Gjesdal@ffi.no (Thor Gjesdal),
+
+Carl-Erik.Wasberg@ffi.no (Carl Erik Wasberg), Bjorn.Reif@ffi.no (Bjørn
+Anders Pettersson Reif), Oyvind.Andreassen@ffi.no (Øyvind Andreassen).
+
+Preprint submitted to Journal of Computational Physics
+
+25 May 2006
+
+models (RANS). In the latter the full impact of the ensemble averaged eﬀect
+of turbulent advection on the mean ﬂow ﬁeld has to be modeled. The essence
+of the LES approach on the other hand is to directly solve (with a complete
+time and space resolution) the three-dimensional and time-dependent motion
+of the largest turbulent scales. These scales are in general associated with the
+most energetic motion of the turbulence ﬁeld and it is (ideally) only the least
+energetic motion that need to be modeled. The concept as such is therefore
+well suited to confront the scale complexity and transient behavior inherent to
+turbulent ﬂows and oﬀers a more complete representation than RANS models
+per se.
+
+In traditional LES, large- and small-scale motion are separated by applying a
+spatial ﬁltering operation to the Navier-Stokes equations. This results in a set
+of equations for the large-scale motion. The residual motion, i.e. turbulent mo-
+tions on scales that are smaller than the ﬁlter width, appear in these equations
+as a residual stress term that must be modeled. There are several conceptual
+issues in ﬁlter-based LES that have to be addressed. For instance, ﬁltering
+and spatial diﬀerentiation do not in general commute on bounded domains or
+for non-uniform grids, and it is not obvious how to prescribe correct bound-
+ary conditions for the ﬁltered velocity at solid walls. Another unwarranted
+character of ﬁlter-based LES models is that the residual stress model has a
+tendency to aﬀect the entire range of the spectrum and not only represent the
+ﬁltered eﬀect of the unresolved scales near the spectral cut-oﬀ. These issues
+have been the subject of a considerable amount of research, and the lesson
+learned, in general, is that LES works well in cases where the rate-controlling
+processes occur at the largest (resolved) scales of motion, or equivalently in
+ﬂows where the unresolved scales, and consequently the model, only plays a
+secondary dynamical role.
+
+In this paper we consider a diﬀerent approach to LES, the variational multi-
+scale (VMS) LES method originally proposed by Hughes et al. [1]. The VMS
+LES method employs an a priori scale partitioning in the discretization of
+the Navier-Stokes equations, instead of ﬁltering to separate the large- and
+small-scale motion. The scale partitioning appears to overcome some of the
+disadvantages of ﬁlter-based LES. First, since there is no ﬁltering, all issues
+concerning commutation errors and boundary conditions at solid walls are ad-
+dressed. Second, since the scale partitioning is performed during discretization,
+we develop diﬀerent equations representing diﬀerent ranges of the spectrum.
+Diﬀerent modelling assumptions can then be applied to each range of the spec-
+trum, improving our ability to apply the model terms where they are needed,
+and only there.
+
+We implement the VMS LES formulation in a high order spectral element
+method for the solution of the Navier-Stokes equations. Spectral element meth-
+ods oﬀer an attractive combination of the accuracy of spectral methods and
+
+2
+
+the ﬂexibility of ﬁnite element methods. This provides us with an attractive
+framework for model development in which the numerical errors can be con-
+trolled, such that the true performance of the model can be assessed. The ﬁrst
+implementations of the variational multiscale LES method [2,3,4] used global
+spectral methods. These methods naturally employ an orthogonal modal basis,
+such that the scale partitioning becomes straightforward. Recently, the method
+has also been implemented in the context of other numerical schemes, such
+as ﬁnite element methods [5,6] and ﬁnite volume methods [7]. Our spectral
+element code uses an element-wise discretization with nodal basis functions
+that contain information on all the scales. One of the challenges of the present
+work is therefore to devise a way to separate the large and the small scales,
+and to implement the VMS terms. We show that this can be achieved by an
+element-by-element transformation into the Legendre modal basis functions.
+
+In the following sections we will discuss the variational multiscale method as a
+turbulence modelling tool, and describe the implementation of the method in a
+spectral element solver for the incompressible Navier-Stokes equations. Finally
+we will present computed results, from both a high-resolution DNS and coarse
+grid VMS LES for the turbulent ﬂow in a plane channel at diﬀerent Reynolds
+numbers. The computed results show that, even with simple modelling applied
+to the small-scale equations, the performance of the methodology is promising.
+
+2 The variational multiscale method
+
+In this section we will discuss the variational multiscale method as a tool for
+turbulence modelling. The variational multiscale LES method was introduced
+by Hughes et al. [1] and later elaborated by Collis [8]. We will outline the
+method following Collis, to shed light on the modelling assumptions employed
+in the derivation of the model.
+
+The Navier-Stokes equations describing the dynamics of a viscous, incompress-
+ible ﬂuid are
+
+∇ · u = 0,
+
+∂u
+∂t
+
++ u · ∇u = −∇p + ν∇2u + f ,
+
+(1a)
+
+(1b)
+
+where the independent variables are the velocity, u = (u, v, w), and the pres-
+sure, p. The kinematic viscosity is denoted by ν, and f is a body force term.
+The non-dimensional parameter that characterizes the ﬂow is the Reynolds
+number Re = |u|L/ν.
+
+For ease of presentation we assume homogeneous Dirichlet boundary condi-
+
+3
+
+tions for the velocity, i.e.
+
+u(x) = 0 x ∈ Γ.
+
+We can then construct the weak, or variational, formulation by choosing test
+and trial functions in the same function space V. Note however that in general
+the test and trial spaces will diﬀer at the boundary.
+
+U = (u, p) ∈ V
+W = (w, q) ∈ V
+
+We take the inner product of W with Eq. (1) (written in the compact form
+N (U) = F ) to obtain the weak Navier-Stokes operator:
+
+(W, N (U)) ≡ L(W, U) − R(w, u) = (W, F ),
+
+(2)
+
+comprising the linear Stokes operator
+
+L(W, U) ≡ (w,
+
+) − (∇ · w, p) + (∇sw, 2ν∇su) + (r, ∇ · u),
+
+(3)
+
+∂u
+∂t
+
+and nonlinear advection represented by the Reynolds projection
+
+where B is the tri-linear term.
+
+R(w, u) = B(w, u, u),
+
+B(w, u, v) ≡ (∇w, uv).
+
+(4)
+
+(5)
+
+To take into account the multiscale representation, we write the solution space
+V as a disjoint sum
+
+V = V ⊕
+
+V ⊕
+
+V,
+
+V comprise the large and small scales, respectively, whereas
+b
+
+V
+in which V and
+contains the unresolved scales that cannot be represented by the numerical dis-
+b
+cretization. The scale partitioning is sketched in Fig. 1. Now, by decomposing
+the test and trial functions in these spaces
+
+e
+
+e
+
+we can develop exact variational equations governing diﬀerent scales. Further-
+more, by assuming that the scale partitioning is orthogonal, we obtain the
+
+U = U +
+
+U +
+
+U,
+
+W = W +
+
+W ,
+W +
+b
+e
+
+f
+
+c
+
+4
+
+)
+k
+(
+E
+
+Large
+
+Small
+
+Unresolved
+
+k
+
+Fig. 1. Schematic of the turbulent energy spectrum with scale partitioning
+
+following equations governing the large, the small, and the unresolved scales:
+
+e
+
+c
+
+L(
+
+L(
+
+u)
+
+w,
+
+W ,
+
+(6a)
+
+(6b)
+
+e
+u)
+
+u, u,
+
+e
+u)
+
+f
+W ,
+
+= R(
+b
+
+= R(w,
+
+u) + C(w,
+
+u) − C(w, u,
+
+W , F ) − R(
+b
+u) + C(
+
+u),
+u,
+e
+u, u) − C(
+b
+e
+u),
+u,
+w,
+e
+u,
+w,
+u) − C(
+e
+f
+b
+u) + (
+w, u,
+W , F ),
+b
+e
+c
+
+L(W , U) − R(w, u) − (W , F ) − R(w,
+u) + C(w, u,
+u) − (
+u,
+U ) − R(
+b
+u, u,
+u) + C(
+= R(
+f
+e
+e
+e
+w, u,
+w,
+u) − C(
+U ) − R(
+e
+f
+b
+b
+u) + C(
+w,
+w, u) + R(
+c
+c
+b
+where C(w, u, u′) = B(w, u, u′) + B(w, u′, u) is the cross stress term. We
+have written these equations in a form such that all terms that depend on the
+unresolved scales are collected in the right-hand sides. It is thus evident that
+there is an eﬀect of the unresolved scales on the computable, resolved scales,
+and it goes without saying that this eﬀect must be modeled. In the original
+paper by Hughes et al. [1], the modelling assumptions were not stated, but
+the issue was clariﬁed by Collis [8], who showed that essentially the following
+assumptions result in a method that is identical to the method proposed by
+Hughes (which by then had produced excellent results [2,3])
+
+(6c)
+
+c
+
+c
+
+c
+
+c
+
+e
+
+e
+
+b
+
+• The separation between large and unresolved scales is suﬃciently large so
+that there is negligible direct dynamic inﬂuence from the unresolved scales
+on the large scales.
+
+• The dynamic impact of the unresolved scales on the small scales are on
+
+average dissipative in nature.
+
+The simple scalar Smagorinsky-type model is in an averaged sense fully consis-
+
+5
+
+tent with the last assumption. In order to approximate the temporal behaviour
+at the cut-oﬀ, a more reﬁned modelling approach would be needed. This is
+however outside the scope of the present study.
+
+With these assumptions, the LES model is only applied to the small scale
+equation, adding additional dissipation where it is mostly needed. Diﬀerent
+implementations of this method by the Hughes group [2,3], by Ramakrishnan
+and Collis [4], and by Jeanmart and Winckelmans [9] have produced very good
+results even for wall-bounded channel ﬂows.
+
+We remark here that both assumptions are, or at least should be, open to
+scrutiny. Firstly, although it is plausible that the unresolved scales do not
+inﬂuence the large scales, it is not necessarily obvious. In fact, a recent anal-
+ysis by Oberai et al. [10] showed that the energy transfer from the large and
+small scales, respectively, to the unresolved scales depends critically on the
+discretization method and the function spaces that are used to perform the
+scale partitioning. Furthermore, Reynolds number eﬀects or other aspects of
+the ﬂow physics may mandate that a more sophisticated model for the large
+scales must be taken into account. Secondly, the assumption of a one-way
+cascade from the small to the unresolved scales require that ﬂow is properly
+resolved, such that the cut-oﬀ is far out in the inertial range. This is unfor-
+tunately not always the case in LES computations. Such considerations are,
+however, outside the scope of the present study. Our objective is to present an
+implementation of the VMS LES formulation in the spectral element method.
+For this purpose the assumptions employed to date [1,8] are acceptable. At
+present, we merely note in passing that the VMS method presents an excellent
+framework for improved modelling to address these issues.
+
+Bearing the above in mind, we can formulate the variational modeled equa-
+tions. The eﬀect of the unresolved scales on the large scales, given by the
+right-hand side of (6a), is neglected according to the ﬁrst assumption, while
+the eﬀect of the unresolved scales on the small scales, given by the right-
+hand side of (6b), is modeled by a Smagorinsky term. The equation for the
+unresolved scales is naturally omitted. The resulting set of equations is
+
+L(W , U) − R(w, u) − R(w,
+
+u) − (W , F ) = 0,
+
+(7a)
+
+L(
+
+W ,
+
+U ) − R(
+
+w, u) − R(
+
+w,
+
+f
+
+e
+
+f
+
+f
+
+u) − C(w, u,
+u)
+w, u,
+W , F ) = −(∇s
+e
+
+u) − C(
+e
+− (
+
+f
+
+e
+
+e
+
+w, 2νT ∇s
+
+u).
+
+(7b)
+
+f
+
+f
+
+e
+
+The terms that couple the diﬀerent scales are evident in (7); the small-scale
+equation has been supplemented with a dissipative term that accounts for the
+interactions between the small and the unresolved scales, whereas large-scale
+Reynolds and cross stress projection account for the large-scale inﬂuence on
+the small scales. The large-scale equation contains a projection of the small-
+
+6
+
+scale Reynolds stress onto the large-scale to account for interaction between
+the small and the large scales (i.e. back-scatter).
+
+U =
+U , not with the large and small scales per se, and adding the large- and
+
+We are however chieﬂy concerned with the complete resolved solution
+U +
+small-scale equations we obtain
+
+e
+
+e
+
+W , N (
+
+U)
+
++ (∇s
+
+w, 2νT ∇s
+
+u) = (
+
+W , F ).
+
+(8)
+
+(cid:18)
+
+f
+
+(cid:19)
+
+e
+
+f
+
+e
+
+f
+We note that in this equation, all the interaction terms between the large
+and the small scales are accounted for in the advection operator R, which is
+part of the ﬁrst term on the left-hand side in (8). The projected cross and
+Reynolds stress terms that appear in the large- and small-scale equations (7)
+are therefore mainly important for analysis and turbulence modelling, but need
+not necessarily impact on the implementation of the method. The variational
+formulation is hence primarily an analysis tool and a vehicle for developing the
+VMS methodology. The essential feature of the method is that the turbulence
+modelling should be conﬁned to the small scales. As long as a suitable scale
+partitioning can be performed on the solution space, the methodology can in
+principle be applied to any discretization, as indicated by Hughes et al. [2].
+
+3 Implementation in the spectral element method
+
+In this section we describe the implementation of a VMS LES model in a high-
+order spectral element method for the solution of the incompressible Navier-
+Stokes equations.
+
+We will start with a brief discussion of Legendre polynomials and the spectral
+element basis functions. These concepts are important, both for the descrip-
+tion of the basic numerical method as well as for the implementation of the
+variational multiscale framework that follows. More details about the topics
+covered in Sections 3.1 and 3.2 can be found in [11].
+
+3.1 Legendre spectral elements
+
+The Legendre polynomials are orthogonal with respect to the unweighted inner
+product in the function space L2(−1, 1). The Legendre polynomials are given
+
+7
+
+by the recurrence relation
+
+L0(x) = 1,
+L1(x) = x,
+
+Lk+1(x) =
+
+xLk(x) −
+
+Lk−1(x),
+
+k ≥ 1,
+
+2k + 1
+k + 1
+
+k
+k + 1
+
+(9)
+
+where LN (x) is the Legendre polynomial of degree N.
+
+The Gauss-Lobatto-Legendre (GLL) points {ξj}N
+j=0 on Λ = [−1, 1] are deﬁned
+as the extrema of the Nth order Legendre polynomial LN (x), in addition to
+the endpoints of Λ:
+
+ξ0 = −1, ξN = 1, L′
+
+N (ξj) = 0, j = 1, . . . , N − 1, ξ0 < ξ1 < . . . < ξN .
+
+(10)
+
+Furthermore, the Gauss-Legendre (GL) points {ηj}N −1
+j=1 on Λ, that are used to
+represent the pressure in the spectral element method, are deﬁned implicitly
+by LN −1(ηj) = 0, i.e. as the zeros of the Legendre polynomials of order (N −
+1) [12]. Note that the GL points do not include the endpoints of Λ.
+
+The spectral element nodal Gauss-Lobatto-Legendre basis is deﬁned by choos-
+ing trial and test functions to be the corresponding Lagrangian interpolants
+at the Gauss-Lobatto-Legendre (GLL) grid points, constructed as Nth order
+polynomials such that each function has the property
+
+A function w(x) deﬁned on Λ can then be represented by the interpolating
+polynomial:
+
+hj(ξi) = δij,
+
+i = 0, . . . , N.
+
+wh(x) =
+
+wihi(x),
+
+x ∈ Λ,
+
+N
+
+i=0
+X
+
+(11)
+
+(12)
+
+where wi = w(ξi) are the function values at the GLL points. Higher-dimen-
+sional trial and test functions are constructed as tensor products of these one-
+dimensional functions. Each velocity component is represented this way on
+each element, and the global representation is the sum of the representations
+on all elements.
+
+A Gauss-Legendre nodal basis for the pressure is constructed in an analogous
+way, only taking into account that we use lower-order polynomials in the basis
+for the pressure to avoid spurious pressure modes in the solution [13].
+
+3.2 Spectral element Navier-Stokes solver
+
+To solve the Navier-Stokes equations (1) we employ an implicit-explicit time
+splitting in which we integrate the advective term explicitly, while we treat
+
+8
+
+the diﬀusive term, the pressure term, and the divergence equation implicitly.
+After discretization in time we can write (1) in the form
+
+(αI − ν∇2)un+1 = ∇p + g(f , un, un−1, . . . ),
+
+∇ · un+1 = 0,
+
+(13a)
+(13b)
+
+in which the explicit treatment of the advection term is included in the source
+term g. In the actual implementation we use the BDF2 formula for the tran-
+sient term,
+
+∂u
+∂t
+
+=
+
+3un+1 − 4un + un−1
+2∆t
+
++ O(∆t2),
+
+which gives α = 3/2∆t in (13), while we compute the advective contributions
+according to the operator-integration-factor (OIF) method [14].
+
+The spatial discretization is based on a spectral element method [13,15]; the
+computational domain is sub-divided into non-overlapping hexahedral cells or
+elements. Within each element, a weak representation of (13) is discretized by
+a Galerkin method in which we choose the test and trial functions from bases
+of polynomial spaces
+
+uh
+i ∈ PN (x) ⊗ PN (y) ⊗ PN (z),
+ph ∈ PN −2(x) ⊗ PN −2(y) ⊗ PN −2(z).
+
+(14a)
+(14b)
+
+The velocity component variables are deﬁned in the Gauss-Legendre-Lobatto
+basis described above, and they are C 0-continuous across element boundaries.
+The pressure variable is represented in the Gauss-Legendre basis, and is dis-
+continuous across element boundaries. As we noted above, the unknowns, or
+dependent variables, in the discrete formulation are the function values of the
+velocities in the GLL points, and of the pressure in the GL points.
+
+The GLL grid corresponding to the Legendre polynomial of degree N has
+(N + 1) points. Gauss-Lobatto-Legendre quadrature at the (N + 1) GLL
+points is exact for polynomials of degree up to (2N − 1). Hence, the com-
+putation of the inner products corresponding to the diﬀusive terms in (1) are
+calculated exactly, whereas the evaluation of the non-linear advective terms
+incurs quadrature (aliasing) errors. These errors can be detrimental to the sta-
+bility of the method and must be controlled. The most fundamental approach
+to de-aliasing is to perform over-integration [16,17] – that is, to over-sample
+by a factor 3/2 and calculate the quadrature at this reﬁned grid for the inner
+products containing non-linear terms. The overhead involved depends on the
+amount of the total computational time that is originally spent on the advec-
+tion part, but for the channel ﬂow calculations presented here, over-integration
+typically leads to an increase of around 20% of computational time.
+
+An alternative, and computationally more eﬃcient approach, is to use polyno-
+mial ﬁltering of the solutions as proposed by Fischer and Mullen [18], where
+
+9
+
+a simple ﬁlter operator with negligible computational cost is applied to the
+solution at every time-step. The eﬀect in the spectral space on each element
+is to transfer a certain fraction (the ﬁlter strength) of the energy on the high-
+est order basis polynomial in each element over to the third-highest order
+polynomial [19]. By this operation, the pile-up of energy on the highest order
+polynomial is reduced, while the values at the element boundaries are un-
+changed. Filter strengths as small as 1–5% can have positive eﬀects on the
+solution.
+
+For the solution of the discrete system of equations we now introduce the
+discrete Helmholtz operator,
+
+H =
+
+B + νA,
+
+3
+2∆t
+
+where A and B are the global three-dimensional stiﬀness- and mass matrices;
+the discrete divergence operator, D; and the discrete gradient operator, G. Ap-
+propriate boundary conditions should be included in these discrete operators.
+This gives the discrete equations
+
+Hun+1 − Gpn+1 = Bf ,
+
+−Dun+1 = 0,
+
+(15a)
+(15b)
+
+where the change of sign in the pressure gradient term is caused by an inte-
+gration by parts in the construction of the weak form of the problem. This
+discrete system is solved eﬃciently by a second order accurate pressure cor-
+rection method. If we let Q denote an approximate inverse to the Helmholtz
+operator, given by a scaled inverse of the diagonal mass matrix, the pressure
+correction method can be written
+
+Hu∗ = Bf + Gpn,
+
+DQG(pn+1 − pn) = −Du∗
+
+un+1 = u∗ + QG(pn+1 − pn),
+
+(16a)
+(16b)
+(16c)
+
+where u∗ is an auxiliary velocity ﬁeld that does not satisfy the continuity
+equation, i.e. Du∗ 6= 0.
+
+The discrete Helmholtz operator is symmetric and diagonally dominant, since
+the mass matrix of the Legendre discretization is diagonal, and can be ef-
+ﬁciently solved by the conjugate gradient method with a diagonal (Jacobi)
+preconditioner. Whereas the pressure operator DQG is easily computed; it is
+ill-conditioned. The pressure system is solved by the preconditioned conjugate
+gradient method, with a multilevel overlapping Schwarz preconditioner based
+on linear ﬁnite elements [20].
+
+10
+
+3.3 Incorporation of VMS LES in the SEM
+
+The implementations of the variational multiscale LES method reported in [2,3,4]
+used global spectral methods. These methods naturally employ an orthogo-
+nal modal basis, such that the scale partitioning becomes straightforward. Our
+spectral element code uses on an element-wise discretization based on the Leg-
+endre polynomials. The Legendre polynomials oﬀer an orthogonal hierarchical
+basis. Like the majority of the spectral element community, we do however
+use a nodal basis constructed from the Lagrangian interpolant functions. In
+this case all the basis functions contains information on all the scales and the
+scale partitioning is no longer straightforward.
+
+3.3.1 Nodal and modal bases
+
+We have demonstrated above that in the nodal Gauss-Lobatto-Legendre basis
+a function w(x) deﬁned on −1 ≤ x ≤ 1 can be represented by a combination
+of the interpolating polynomials, as given by (12). The coeﬃcients in the sum
+are the function values at the grid points.
+
+An alternative, modal, representation is to use an expansion directly in the
+Legendre polynomials
+
+w(ξ) =
+
+N
+
+Xj=0
+
+cj
+
+s
+
+2j + 1
+2
+
+Lj(ξ),
+
+(17)
+
+2j+1
+2
+
+where the unknowns now are the spectral coeﬃcients cj. The factor
+is used to normalize the basis. The scaled Legendre polynomials represents a
+natural orthonormal basis, in which it is straightforward to perform the scale
+partitioning. In this setting, it is natural to associate the low order polynomials
+with the large scales and the higher order polynomials with the smaller scales.
+
+q
+
+The nodal and modal bases are related through the linear transformation
+
+Kc = w,
+
+(18)
+
+where the entries of the matrix K are given by
+
+(K)ij =
+
+2j + 1
+2
+
+s
+
+Lj(ξi),
+
+and c and w are the vectors of spectral coeﬃcients and GLL nodal function
+values, respectively.
+
+Let N = N +
+large scales and
+f
+
+f
+
+N , such that N is the dimension of the polynomial basis for the
+N is the dimension of the small-scale space. The large-scale
+
+11
+
+yk
+
+yk
+
+⊗y
+(S     S  )
+
+x
+
+S = I − L
+
+⊗
+(L      L  )
+x
+
+y
+
+L
+
+kx
+
+kx
+
+Fig. 2. Large- and small-scale partitions in the 2-dimensional polynomial wavenum-
+ber space. The chosen partition operators are shown to the right.
+part of a nodal function w can then be written as
+
+w = KT K −1w,
+
+(19)
+
+where T = diag(I
+N , 0N ) is the operator that annihilates the small-scale compo-
+nents in the modal basis. For notational convenience, we deﬁne the large-scale
+extraction operator
+e
+
+f
+
+while the corresponding small-scale extraction operator is
+
+L = KT K −1,
+
+S = I − L.
+
+When tensor products of these operators are formed in higher dimensions, the
+resulting operators extract the components with large-scale, or small-scale,
+respectively, components in all dimensions. The sum of these two operators
+does not add up to the identity, so we choose to deﬁne the three-dimensional
+small-scale extraction operator to be
+
+S = I − (Lz ⊗ Ly ⊗ Lx).
+
+(20)
+
+This is illustrated in two dimensions in ﬁgure 2. The resulting small-scale
+extraction operator returns functions with small-scale structure in at least
+one dimension.
+
+3.3.2 Properties of the large-small partition
+
+The large-scale extraction operator corresponds to a sharp cut-oﬀ in the Leg-
+endre modal space. To illustrate the eﬀect in Fourier space of this large-small
+partitioning, we represent the function
+
+f (x) =
+
+cos(kx)
+
+(21)
+
+12
+
+Xk=0
+
+12
+
+Original flat spectrum
+Large scale spectrum
+Small scale spectrum
+
+k
+
+f^
+
+ 1.4
+
+ 1.2
+
+ 1
+
+ 0.8
+
+ 0.6
+
+ 0.4
+
+ 0.2
+
+ 0
+
+-0.2
+
+-0.4
+
+ 0
+
+ 5
+
+ 10
+
+ 15
+
+ 20
+
+ 25
+
+k
+
+Fig. 3. Fourier representation of a sharp cut-oﬀ in Legendre modal space.
+
+on a spectral element grid on [0, 2π] with 6 elements and 7 grid points in
+each element. Higher wave-numbers can not be represented accurately on this
+particular grid. We extract the large- and small-scale partitions using N = 4 of
+the 7 modes (57%) on each element as the large-scale space. The two resulting
+functions are sampled on a 54-point regular grid, and their Fourier spectra are
+plotted in ﬁgure 3.
+
+The main point illustrated by ﬁgure 3 is that although the scale partitioning
+in the Legendre space is done as a sharp cut-oﬀ, the Fourier spectra of the
+two partitions are much smoother. The reason for this is that each the original
+cosine terms is represented by a combination of local Legendre modes on each
+element. We also note that the gradual growth in the small-scale spectrum
+starts around the cut-oﬀ percentage, so the impact of the small-scale extraction
+is weaker than for a straightforward Fourier representation.
+
+In a more general case with variable element size and/or polynomial order, it
+may be possible to vary the cut-oﬀ point in the local Legendre space to keep
+the corresponding “average wavelength” approximately constant throughout
+the whole domain.
+
+3.3.3 Implementation of the model term
+
+We now turn our attention to the implementation of the variational multiscale
+model term (∇s
+u) from (8). Note that the turbulent eddy viscosity
+νT is not a material property of the ﬂuid, but a property of the ﬂow ﬁeld and
+
+w, 2νT ∇s
+
+f
+
+e
+
+13
+
+as such varies through the ﬂow domain.
+
+It is instructive to ﬁrst consider the one-dimensional case with a constant
+eddy viscosity. Furthermore, for ease of exposition, we only consider a single
+element. In this case, the weak form of the model term above is
+
+Using the small-scale extraction operator deﬁned above, we have
+
+and for a given test function on Lagrange form (wi(x) = hi(x))
+
+νT
+
+Z
+
+∂
+w
+∂x
+e
+
+∂
+u
+∂x
+e
+
+.
+
+u(x) =
+
+Smquqhm(x),
+
+N
+
+N
+
+m=0
+X
+
+q=0
+X
+
+e
+
+e
+
+wi(x) =
+
+Spihp(x).
+
+N
+
+p=0
+X
+
+Inserting these representations and using Gauss-Lobatto quadrature, we ob-
+tain
+
+N
+
+N
+
+N
+
+N
+
+(∇
+
+w, ∇
+
+u) =
+
+p=0
+X
+
+r=0
+X
+N
+
+m=0
+X
+N
+
+q=0
+X
+N
+
+e
+
+e
+
+Spih′
+
+p(ξr)Smquqh′
+
+m(ξr)ρr
+
+p(ξr)h′
+h′
+
+m(ξr)ρr
+
+N
+
+Smquq
+
+r=0
+X
+SmquqApm
+
+Spi
+
+Spi
+
+m=0
+X
+N
+
+q=0
+X
+N
+
+m=0
+X
+
+q=0
+X
+
+(ST AS)iquq = ST ASu
+
+=
+
+=
+
+=
+
+p=0
+X
+N
+
+p=0
+X
+N
+
+q=0
+X
+
+= (I − L)T A
+
+u,
+
+(22)
+
+(23)
+
+(24)
+
+(25)
+
+where the ﬁnal line is in the form we generalize to higher dimensions. It is easily
+seen from the second-to-last line that (25) represents a symmetric operator
+acting on u.
+
+e
+
+The corresponding term in three dimensions is
+
+(∇
+
+w, ∇
+
+ui) =
+
+e
+
+e
+
+(Bz ⊗ By ⊗ Ax) − (LzT ⊗ LyT ⊗ LxT )(Bz ⊗ By ⊗ Ax)
+(cid:16)
+(Bz ⊗ Ay ⊗ Bx) − (LzT ⊗ LyT ⊗ LxT )(Bz ⊗ Ay ⊗ Bx)
+(cid:16)
+(Az ⊗ By ⊗ Bx) − (LzT ⊗ LyT ⊗ LxT )(Az ⊗ By ⊗ Bx)
+(cid:16)
+
+(cid:17)
+
+(cid:17)
+
+(cid:17)
+
++
+
++
+
+ui
+
+ui
+e
+ui
+e
+(26)
+e
+
+for each component ui.
+
+14
+
+Taking into account that the eddy viscosity, νT (x, y), is not constant but rather
+a function that varies in space, will distort the tensor product structure of (26).
+Following the procedure for discretization of terms with variable coeﬃcients
+described in [11], we can write
+
+(∇
+
+w, 2νT (x, y, z)∇
+
+ui) = 2
+
+I z ⊗ I y ⊗ DxT
+
+V (I z ⊗ I y ⊗ Dx)
+
+e
+
+e
+
+(cid:16)
+− 2
+
+LzT ⊗ LyT ⊗ (DxLx)T
+
+(cid:17)
+
++ 2
+
+(cid:16)
+I z ⊗ DyT ⊗ I x
+
+(cid:17)
+V (I z ⊗ Dy ⊗ I x)
+
+(cid:16)
+− 2
+
+LzT ⊗ (DyLy)T ⊗ LxT
+
+(cid:17)
+
++ 2
+
+(cid:16)
+DzT ⊗ I y ⊗ I x
+
+(cid:17)
+V (Dz ⊗ I y ⊗ I x)
+
+(cid:16)
+− 2
+
+(DzLz)T ⊗ LyT ⊗ LxT
+
+(cid:17)
+
+(cid:16)
+
+(cid:17)
+
+ui
+V (I z ⊗ I y ⊗ Dx)
+e
+ui
+V (I z ⊗ Dy ⊗ I x)
+e
+ui
+V (Dz ⊗ I y ⊗ I x)
+e
+
+ui
+
+e
+ui
+
+e
+ui.
+(27)
+e
+
+In this equation, D denotes the GLL derivation matrix in each direction. Fur-
+thermore, the values of the eddy viscosity are lumped with the GLL integration
+weights in the diagonal matrix V with the entries νrst
+t , in which rst are
+the grid point indices and V is ordered to be consistent with the ordering of
+the element grid points.
+
+T ρx
+
+r ρy
+
+sρz
+
+We are now ﬁnally ready to consider the model term in the form given in (8).
+Since the product of a symmetric and an anti-symmetric tensor is zero, we
+ﬁnd that we only need to to compute the inner product
+
+(∇
+
+w, 2νT ∇s
+
+u) =
+
+e
+
+e
+
+∂
+w
+∂xj
+e
+
+ 
+
+, νT
+
+∂
+ui
+∂xj !
+e
+
++
+
+ 
+
+∂
+w
+∂xj
+e
+
+, νT
+
+∂
+uj
+∂xi !
+e
+
+.
+
+(28)
+
+In tensor product form, the VMS small-scale dissipation term for the compo-
+nent of the momentum equation becomes
+
+(∇
+
+w, 2νT (x, y, z)∇
+
+u1)
+
+= 2
+e
+
+e
+
+I z ⊗ I y ⊗ DxT
+
+−
+
+LzT ⊗ LyT ⊗ (DxLx)T
+
+V (I z ⊗ I y ⊗ Dx)
+
+u1
+
+(cid:16)
+
+(cid:17)
+
+(cid:16)
+
+(cid:16)
+
+(cid:17)
+
+(cid:17)o
+
+n(cid:16)
+
+(cid:17)
+I z ⊗ DyT ⊗ I x
+
++
+
++
+
++
+
+−
+
+−
+
+−
+
+n(cid:16)
+
+n(cid:16)
+
+n(cid:16)
+
+(cid:17)o
+
+V (I z ⊗ Dy ⊗ I x)
+
+LzT ⊗ (DyLy)T ⊗ LxT
+
+DzT ⊗ I y ⊗ I x
+
+I z ⊗ DyT ⊗ I x
+
+V (Dz ⊗ I y ⊗ I x)
+
+(DzLz)T ⊗ LyT ⊗ LxT
+
+LzT ⊗ (DyLy)T ⊗ LxT
+
+u1
+e
+u1
+e
+u2
+e
+u3,
+e
+(29)
+e
+and we obtain similar expressions for the other two components. The couplings
+between the velocity components, introduced by the second term of (28), are
+handled by including the cross terms in the explicit part of the time splitting,
+leaving the Helmholtz problem for the velocity components uncoupled.
+
+(DzLz)T ⊗ LyT ⊗ LxT
+
+V (I z ⊗ I y ⊗ Dx)
+
+V (I z ⊗ I y ⊗ Dx)
+
+DzT ⊗ I y ⊗ I x
+
+(cid:17)o
+
+n(cid:16)
+
+(cid:17)o
+
+(cid:17)o
+
+−
+
++
+
+(cid:16)
+
+(cid:17)
+
+(cid:17)
+
+(cid:16)
+
+15
+
+As seen from (29), the calculation of the VMS LES model terms requires sev-
+eral additional operations. The increase in total computational work will vary
+with the size and complexity of the simulation, but for the cases considered
+in this paper the increase is in the range 20–40%, with the smallest relative
+increase for the largest simulations. To put these numbers into perspective, we
+note that the total computational complexity of the spectral element method
+is O(K 3N 4), so increasing the polynomial order (N − 1) from 6 to 7 gives a
+70% increase in computational time, about the same as increasing the number
+of elements in each dimension (K) from 5 to 6 would give.
+
+3.3.4 Smagorinsky model
+
+The eddy viscosity νT (x, t) is chosen in [1] as a Smagorinsky-type function:
+
+or alternatively
+
+νT = (C ′
+
+S∆′)2|∇s
+
+u|,
+
+e
+
+νT = (C ′
+
+S∆′)2|∇s ¯u|.
+
+The former was labeled “small-small” in [2], while the latter was labeled “large-
+small”.
+
+As the purpose of the model term is to approximate the eﬀect of the unresolved
+scales on the small scales, it is argued in [1] that (30) is more consistent with
+the physical basis of the method, whereas (31) appears to be a computationally
+attractive alternative. The results in [2,3] show that good results are obtained
+with both methods. However, in terms of the spectral element implementation,
+the “large-small” form is not a computational simpliﬁcation. A more attractive
+form is instead the “full-small” term
+
+νT = (C ′
+
+S∆′)2|∇su|,
+
+in which the scale extraction operators are avoided completely.
+
+The sum |∇su| can be written out as
+
+1
+2
+
+|∇su| = v
+u
+u
+u
+t
+
+3
+
+3
+
+i=1
+X
+
+j=1  
+X
+
+∂ui
+∂xj
+
++
+
+2
+
+.
+
+∂uj
+∂xi !
+
+The constant C ′
+S is set to 0.1, following [2,3], while ∆′ is calculated for each
+element as the geometric average of the mean grid spacing in each direction.
+
+(30)
+
+(31)
+
+(32)
+
+(33)
+
+16
+
+4 Computational results
+
+4.1 Channel ﬂow
+
+The plane turbulent channel ﬂow is one of the simplest cases of an inhomoge-
+neous turbulence ﬁeld, and this conﬁguration has therefore been extensively
+used to assess the performance of turbulence models. The fully developed, sta-
+tistically stationary, plane channel ﬂow is an equilibrium ﬂow, because there
+is a global balance between the rate of production of turbulent kinetic energy
+and the rate of viscous dissipation.
+
+The ﬂuid domain is bounded by two inﬁnitely large parallel solid walls, and
+the ﬂow is driven by a constant mean pressure gradient in the stream-wise di-
+rection along the walls. The boundary conditions are no-slip at the solid walls,
+and periodicity is imposed in the streamwise (x) and spanwise (z) directions,
+respectively. The wall-normal direction is thus y, and the channel half-height
+is denoted h.
+
+The instantaneous ﬂow ﬁeld is three-dimensional and time dependent, the
+ensemble (or time) averaged ﬂow ﬁeld is however unidirectional. If we let h·i
+denote the ensemble average, we therefore have U = hui = [U(y), 0, 0].
+
+The friction velocity, uτ , is deﬁned by
+
+u2
+τ ≡ ν ·
+
+,
+
+wall
+
+dU
+dy (cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+and this is used in the deﬁnition of the relevant Reynolds number for plane
+channel ﬂow: Reτ ≡ uτ h/ν.
+
+Integrating the ensemble averaged Navier-Stokes equations in the wall-normal
+direction yields
+
+where the pressure gradient is a constant, related to the Reynolds number by
+
+0 = −
+
+dP
+dx !
+
+ 
+
+y + µ
+
+− ρhu′v′i,
+
+dU
+dy
+
+−
+
+dP
+dx !
+
+ 
+
+=
+
+µ2
+h3 Re2
+τ .
+
+(34)
+
+(35)
+
+(36)
+
+Hence, the sum of the viscous (µdU/dy) and turbulent (−ρhu′v′i) stresses must
+vary linearly across the channel. The turbulent stress contribution dominates
+across the channel except very close to the wall where viscous stress dominates.
+This region is usually referred to as the viscous sub-layer and its thickness
+decreases with increasing Reynolds numbers.
+
+17
+
+Present Moser
+
+Reτ nom.
+Reτ act.
+Lx
+Ly
+Lz
+Nx
+Ny
+Nz
+∆x+ mean
+∆y+ min
+∆y+ max
+∆z+ mean
+Elements
+Pol. order
+
+DNS
+180
+178.83
+8
+2
+4
+112
+113
+112
+12.9
+0.10
+8.6
+6.4
+163
+7
+
+del ´Alamo
+et al. & Jim´enez
+180
+178.13
+4π
+2
+4
+3 π
+128
+129
+128
+17.7
+0.054
+4.4
+5.9
+-
+-
+
+550
+546.75
+8π
+2
+4π
+1536
+257
+1536
+9.0
+0.041
+6.7
+4.5
+-
+-
+
+del ´Alamo
+et al.
+950
+934
+8π
+2
+3π
+3072
+385
+2304
+8.9
+0.032
+7.8
+4.5
+-
+-
+
+Table 1
+Grid parameters for the present DNS and the reference simulations by Moser et
+al. [21] and by del ´Alamo et al. [22,23]. Grid spacing in wall units are calculated
+from the nominal Reτ .
+
+Coarse-24 Coarse-36 Coarse-42 Coarse-60
+
+Reτ nom.
+Lx
+Ly
+Lz
+Nx
+Ny
+Nz
+∆x+ mean
+∆y+ min
+∆y+ max
+∆z+ mean
+Elements
+Pol. order
+
+180
+8
+2
+4
+24
+25
+24
+40.0
+2.0
+21.1
+20.0
+43
+6
+
+550
+8
+2
+4
+42
+43
+42
+104.8
+4.6
+57.4
+52.4
+73
+6
+
+950
+8
+2
+4
+60
+61
+60
+126.7
+3.9
+68.8
+63.3
+103
+6
+
+Table 2
+Grid parameters for the VMS LES runs. Grid spacing in wall units are calculated
+from the nominal Reτ .
+
+We consider three diﬀerent Reynolds numbers: Reτ = 180, 550, 950, and the
+VMS LES computations are compared with reference solutions obtained from
+direct numerical simulations.
+
+180
+8
+2
+4
+36
+37
+36
+60.0
+4.5
+29.8
+30.0
+63
+6
+
+18
+
+Reτ = 180: Moser et al, Chebyshev, N=129:
+
+Reτ = 180: Present DNS, SEM, N=8, K=16, 113 pts:
+
+Reτ = 180: Coarse-36, SEM, N=7, K=6, 24 pts:
+
+Reτ = 180: Coarse-24, SEM, N=7, K=4, 24 pts:
+
+Reτ = 550: del A’ lamo et al, Chebyshev, N=257:
+
+Reτ = 550: Coarse-42, SEM, N=7, K=7, 42 pts:
+
+Reτ = 950: del A’ lamo et al, Chebyshev, N=385:
+
+Reτ = 950: Coarse-60, SEM, N=7, K=10, 60 pts:
+
+ 0
+
+ 20
+
+ 40
+
+ 60
+
+ 80
+
+ 100
+
+y+
+
+Fig. 4. Details of the point and element distribution in the wall-normal direction
+for the grids listed in Tables 1 and 2. The longer bars show element boundaries for
+the spectral element grids.
+
+4.2 Direct numerical simulations at Reτ = 180
+
+As a ﬁrst step towards our ultimate goal, to implement and evaluate the
+variational multiscale LES method in a high order spectral element ﬂow solver,
+we performed a Direct Numerical Simulation to verify the code. To this end,
+we considered fully developed channel ﬂow at Reτ = 180, which corresponds
+to the well-known benchmark simulations reported by Kim et al. [24]. We
+performed the actual comparison of the results with the updated data set
+reported by Moser et al. [21] who used a fully spectral Fourier/Chebyshev
+method with 128 × 129 × 128 grid points.
+
+The simulation was carried out on a computational domain that approxi-
+mately corresponds to the one used by the reference solutions [21,24], see
+Table 1 for details. Across the channel we used 16 non-uniformly distributed
+elements with 8 nodal points in each element. In the streamwise and span-
+wise directions we used 16 × 16 uniformly distributed elements with 8 × 8
+nodal points per element. Thus, the total number of nodal points amounts
+to 112 × 113 × 112 in the streamwise, wall-normal, and spanwise directions,
+respectively. The solution was advanced in time with a time-step correspond-
+ing to 0.18 viscous time-units (ν/u2
+τ ), and with 50% polynomial ﬁltering [18]
+on each time-step. The simulation was initiated by a ﬂow ﬁeld obtained from
+
+19
+
+Present DNS (Reτ = 178.83)
+Coarse-36 (Reτ = 177.93)
+Moser et al (Reτ = 178.12)
+
+ 20
+
+ 15
+
+ 10
+
+ 5
+
+τ
+u
+/
+U
+
+ 0
+ 0.01
+
+ 0.1
+
+ 1
+y+
+
+ 10
+
+ 100
+
+Fig. 5. Reτ = 180: Variation of the mean velocity across half the channel in viscous
+units, compared with the reference solution of Moser et al. [21].
+
+an existing plane channel ﬂow solution obtained by a ﬁnite-volume code. The
+ﬂow then evolved approximately 54 ﬂow-through times before a fully devel-
+oped state was achieved. The results presented here was obtained by collecting
+statistics over approx. 20 ﬂow-through times. The ﬂow statistics are averaged
+over the homogeneous – streamwise and spanwise – directions. Homogeneity
+in a speciﬁc direction implies that any correlation of a ﬂuctuating quantities
+remains invariant under translation in that direction.
+
+4.2.1 Results
+
+The actual computed Reynolds number is Re∗ = 178.83, i.e. within 0.7% of
+the prescribed value and well within what can be expected. Moser et al. [21]
+reported Re∗ = 178.13. The results presented in Figs. 5–8 compare in all
+aspects very well with the benchmark data, thus establishing solid conﬁdence
+in the numerical method. The slight deviations reported herein is well within
+what should be expected, and even closer correspondence could have been
+obtained by simply collecting statistics for a longer period of time. This was,
+however, not considered to be necessary.
+
+As background for the VMS LES results presented below, we also include
+results from a simulation on the grid “Coarse-36” (see Table 2 for grid prop-
+erties). This simulation contains no turbulence modelling, but 2% polynomial
+ﬁltering [18] is employed. Except for the pressure correlations in Fig. 8, the re-
+
+20
+
+ 0
+
+ 20
+
+ 40
+
+ 60
+
+ 80  100  120  140  160  180
+
+Fig. 6. Reτ = 180: Variation of mean viscous shear and the turbulent shear stress
+across half the channel, compared with the reference solution of Moser et al. [21].
+
+ 1.2
+
+ 1
+
+ 0.8
+
+ 0.6
+
+ 0.4
+
+ 0.2
+
+ 0
+
+τ
+u
+/
+
+2
+/
+1
+
+>
+
+2
+
+i
+
+u
+<
+
+ 3
+
+ 2.5
+
+ 2
+
+ 1.5
+
+ 0.5
+
+ 1
+
+ 0
+
+Present DNS
+Coarse-36
+Moser et al
+
+-ρ<uv>/uτ
+
+2
+
+Present DNS
+Coarse-36
+Moser et al
+
+µ(dU/dy)/uτ
+
+2
+
+u
+
+w
+
+v
+
+y+
+
+21
+
+ 0
+
+ 20
+
+ 40
+
+ 60
+
+ 80  100  120  140  160  180
+
+y+
+Fig. 7. Reτ = 180: Variation of streamwise (u′), spanwise (v′), and wall-normal (w′)
+root-mean-square velocity ﬂuctuations across half the channel, compared with the
+reference solution of Moser et al. [21].
+
+Present DNS
+Coarse-36
+Moser et al
+
+2
+
+τ
+u
+ρ
+/
+
+2
+/
+1
+
+>
+p
+p
+<
+
+ 2.4
+
+ 2.2
+
+ 2
+
+ 1.8
+
+ 1.6
+
+ 1.4
+
+ 1.2
+
+ 1
+
+ 0.8
+
+ 0.6
+
+ 0
+
+ 20
+
+ 40
+
+ 60
+
+ 80  100  120  140  160  180
+
+y+
+
+Fig. 8. Reτ = 180: Variation of the root-mean-square pressure ﬂuctuations across
+half the channel, compared with the reference solution of Moser et al. [21].
+
+sults are so good that modelling is not expected to improve them. This shows
+that the spectral element method gives high accuracy even for relatively coarse
+grids, but it also indicates that plane channel ﬂow is not the most challenging
+test case. The availability of quality reference data makes it attractive as a
+starting case, we must however keep in mind that the grids for the model tests
+have to be suﬃciently coarse and not turn into a “quasi-DNS” e.g. near the
+walls.
+
+4.3 VMS LES results
+
+Lots of combinations of the scale partitioning parameter and the Smagorinsky
+forms were tested for Reτ = 180, and the best choice was used for additional
+simulations at Reτ = 550 and Reτ = 950.
+
+The spectral element grid for Reτ = 180 was chosen as the “Coarse-24” grid
+described in Table 2. The element interfaces in the wall-normal direction were
+given by a coarse Gauss-Lobatto-Chebyshev grid, as recommended in [25].
+The scale partitioning cut-oﬀ mode was kept constant for all elements, even
+though the element size varied in the wall-normal direction.
+
+In order to get a real test of the modelling, the grid had to be much coarser than
+what would give reasonably good results without a model. Spectral element
+grids for the higher Reynolds numbers were constructed such that the ﬁrst
+
+22
+
+_
+VMS L-S, N
+_
+_
+VMS L-S, N
+VMS L-S, N
+
+=4 (Reτ = 182.08)
+=5 (Reτ = 189.78)
+=6 (Reτ = 177.95)
+ Moser et al (Reτ = 178.12)
+
+ 25
+
+ 20
+
+ 15
+
+ 10
+
+ 5
+
+τ
+u
+/
+U
+
+ 0
+ 0.01
+
+ 0.1
+
+ 1
+y+
+
+ 10
+
+ 100
+
+Fig. 9. Reτ = 180: Variation of the mean velocity across half the channel in viscous
+units, compared with the reference solution of Moser et al. [21].
+
+element interface in the wall-normal direction is placed at approximately the
+same value of y+ for all the cases, see the illustrations in Fig. 4. To reduce the
+number of parameters, the polynomial degree was ﬁxed for all the VMS LES
+runs; only the number of elements was changed.
+
+4.3.1 Simulations at Reτ = 180
+
+The grid parameters for this case are given in the column “Coarse-24” in
+Table 2.
+
+Without a model, both over-integration and polynomial ﬁltering (2%) was
+necessary to keep the simulation stable at this resolution. With the VMS model
+term, either method was suﬃcient. It was found that polynomial ﬁltering did
+reduce rather than improve the quality of the results. To obtain the presented
+VMS results we therefore employed only over-integration in the simulations.
+
+Beside using the diﬀerent forms of the Smagorinsky term (30)–(32), the scale
+partitioning was varied in the simulations. With a local grid of 7 grid points in
+each direction on each element, we have used N = 4 and N = 5 for the large-
+scale extraction described in Section 3.3.1. These values correspond to 57% and
+71% of the one-dimensional spectrum, respectively. In three dimensions, the
+resulting large-scale spaces consist of 19% and 35% of the modes, respectively.
+
+Varying the scale partitioning had a strong inﬂuence on the results, and N = 5
+
+23
+
+_
+_
+VMS L-S, N
+_
+VMS L-S, N
+VMS L-S, N
+
+=4
+=5
+=6
+ Moser et al
+
+u
+
+w
+
+v
+
+ 0
+
+ 20
+
+ 40
+
+ 60
+
+ 80  100  120  140  160  180
+
+y+
+Fig. 10. Reτ = 180: Variation of streamwise (u′), spanwise (w′), and wall-normal
+(v′) root-mean-square velocity ﬂuctuations across half the channel, compared with
+the reference solution of Moser et al. [21].
+
+VMS full-small (Reτ = 188.48)
+VMS small-small (Reτ = 188.48)
+No model (Reτ = 186.50)
+Moser et al (Reτ = 178.12)
+
+τ
+u
+/
+
+2
+/
+1
+
+>
+
+2
+
+i
+
+u
+<
+
+ 3
+
+ 2.5
+
+ 2
+
+ 1.5
+
+ 1
+
+ 0.5
+
+ 0
+
+τ
+u
+/
+U
+
+ 20
+
+ 15
+
+ 10
+
+ 5
+
+ 0
+ 0.01
+
+ 0.1
+
+ 10
+
+ 100
+
+Fig. 11. Reτ = 180: Variation of the mean velocity across half the channel in viscous
+units, compared with the reference solution of Moser et al. [21].
+
+was found to be the best choice, as seen from Figs. 9 and 10. The rest of the
+results shown here are obtained with N = 5.
+
+ 1
+y+
+
+24
+
+ 0
+
+ 20
+
+ 40
+
+ 60
+
+ 80  100  120  140  160  180
+
+Fig. 12. Reτ = 180: Variation of mean viscous shear and the turbulent shear stress
+across half the channel, compared with the reference solution of Moser et al. [21].
+
+ 1.2
+
+ 1
+
+ 0.8
+
+ 0.6
+
+ 0.4
+
+ 0.2
+
+ 0
+
+τ
+u
+/
+
+2
+/
+1
+
+>
+
+2
+
+i
+
+u
+<
+
+ 3
+
+ 2.5
+
+ 2
+
+ 1.5
+
+ 0.5
+
+ 1
+
+ 0
+
+µ(dU/dy)/uτ
+
+2
+
+u
+
+w
+
+v
+
+VMS full-small
+VMS small-small
+No model
+Moser et al
+
+-ρ<uv>/uτ
+
+2
+
+VMS full-small
+VMS small-small
+No model
+Moser et al
+
+y+
+
+25
+
+ 0
+
+ 20
+
+ 40
+
+ 60
+
+ 80  100  120  140  160  180
+
+y+
+Fig. 13. Reτ = 180: Variation of streamwise (u′), spanwise (w′), and wall-normal
+(v′) root-mean-square velocity ﬂuctuations across half the channel, compared with
+the reference solution of Moser et al. [21].
+
+VMS full-small
+VMS small-small
+No model
+Moser et al
+
+2
+
+τ
+u
+ρ
+/
+
+2
+/
+1
+
+>
+p
+p
+<
+
+ 3.5
+
+ 3
+
+ 2.5
+
+ 2
+
+ 1.5
+
+ 1
+
+ 0.5
+
+ 0
+
+ 20
+
+ 40
+
+ 60
+
+ 80  100  120  140  160  180
+
+y+
+
+Fig. 14. Reτ = 180: Variation of the root-mean-square pressure ﬂuctuations across
+half the channel, compared with the reference solution of Moser et al. [21].
+
+The diﬀerent forms of the Smagorinsky term gave very similar results for Reτ =
+180. The results are presented in Figs. 11–14. The results from “large-small”
+form (31) were almost indistinguishable from the “full-small” (32) results, and
+are not included in the ﬁgures.
+
+As shown in Section 4.2.1, simulations on the “Coarse-36”-grid gave good re-
+sults without modelling for this case. Results from simulations without mod-
+elling on an intermediate grid with 303 grid points were comparable to the
+VMS results from the 243-grid shown here, but at a 40% higher computa-
+tional cost.
+
+4.3.2 Simulations at Reτ = 550
+
+The grid parameters for this case are given in the column “Coarse-42” in
+Table 2.
+
+The scale partitioning parameter of N = 5, which was found to be the best
+choice for Reτ = 180, was also used for this case. Again, the “full-small” and
+“large-small” Smagorinsky forms produced very similar results, so the latter
+are not shown. The results are presented in Figs. 15–17.
+
+26
+
+VMS full-small (Reτ = 552.63)
+VMS small-small (Reτ = 533.30)
+No model (Reτ = 473.25)
+del Alamo & Jimenez (Reτ = 546.75)
+
+ 25
+
+ 20
+
+ 15
+
+ 10
+
+ 5
+
+τ
+u
+/
+U
+
+ 1.8
+
+ 1.6
+
+ 1.4
+
+ 1.2
+
+ 1
+
+ 0.8
+
+ 0.6
+
+ 0.4
+
+ 0.2
+
+ 0
+
+-0.2
+
+ 0
+ 0.01
+
+ 0.1
+
+ 1
+
+ 10
+
+ 100
+
+y+
+
+Fig. 15. Reτ = 550: Variation of the mean velocity across half the channel in viscous
+units, compared with the reference solution of del ´Alamo and Jim´enez [22].
+
+VMS full-small
+VMS small-small
+No model
+del Alamo & Jimenez
+
+-ρ<uv>/uτ
+
+2
+
+µ(dU/dy)/uτ
+
+2
+
+ 0
+
+ 100
+
+ 200
+
+ 400
+
+ 500
+
+Fig. 16. Reτ = 550: Variation of mean viscous shear and the turbulent shear stress
+across half the channel, compared with the reference solution of del ´Alamo and
+Jim´enez [22].
+
+ 300
+y+
+
+27
+
+VMS full-small
+VMS small-small
+No model
+del Alamo & Jimenez
+
+u
+
+w
+
+v
+
+ 0
+
+ 100
+
+ 200
+
+ 300
+y+
+Fig. 17. Reτ = 550: Variation of streamwise (u′), spanwise (w′), and wall-normal
+(v′) root-mean-square velocity ﬂuctuations across half the channel, compared with
+the reference solution of del ´Alamo and Jim´enez [22].
+
+ 400
+
+ 500
+
+VMS full-small (Reτ = 884.18)
+No model (Reτ = 781.22)
+del Alamo et al. (Reτ = 930.72)
+
+τ
+u
+/
+
+2
+/
+1
+
+>
+
+2
+
+i
+
+u
+<
+
+ 4
+
+ 3.5
+
+ 3
+
+ 2.5
+
+ 2
+
+ 1.5
+
+ 0.5
+
+ 1
+
+ 0
+
+ 25
+
+ 20
+
+ 15
+
+ 10
+
+ 5
+
+τ
+u
+/
+U
+
+ 0
+ 0.01
+
+ 0.1
+
+ 1
+
+ 10
+
+ 100
+
+Fig. 18. Reτ = 950: Variation of the mean velocity across half the channel in viscous
+units, compared with the reference solution of del ´Alamo et al. [23].
+
+y+
+
+28
+
+ 2
+
+ 1.5
+
+ 1
+
+ 0.5
+
+ 0
+
+-0.5
+
+ 0
+
+ 4.5
+
+ 4
+
+ 3.5
+
+ 3
+
+ 2.5
+
+ 2
+
+ 1
+
+ 0
+
+ 0.5
+
+VMS full-small
+No model
+del Alamo et al.
+
+-ρ<uv>/uτ
+
+2
+
+VMS full-small
+No model
+del Alamo et al.
+
+µ(dU/dy)/uτ
+
+2
+
+ 100  200  300  400  500  600  700  800  900
+y+
+
+Fig. 19. Reτ = 950: Variation of mean viscous shear and the turbulent shear stress
+across half the channel, compared with the reference solution of del ´Alamo et al. [23].
+
+τ
+u
+/
+
+2
+/
+1
+
+>
+
+2
+
+i
+
+u
+<
+
+u
+
+ 1.5
+
+w
+
+v
+
+ 0  100  200  300  400  500  600  700  800  900
+y+
+Fig. 20. Reτ = 950: Variation of streamwise (u′), spanwise (w′), and wall-normal
+(v′) root-mean-square velocity ﬂuctuations across half the channel, compared with
+the reference solution of del ´Alamo et al. [23].
+
+29
+
+4.3.3 Simulations at Reτ = 950
+
+The grid parameters for this case are given in the column “Coarse-60” in
+Table 2.
+
+In this case we have only run the “full-small” Smagorinsky form, and the scale
+partitioning parameter is still N = 5. The reference simulation is described
+in [23], and the reference data are downloaded from the site given in [22]. Our
+results are presented in Figs. 18–20.
+
+4.4 Comments on the results
+
+The VMS LES results show clear improvement from the results without a
+model, in particular for the higher Reynolds numbers. The plane channel ﬂow
+at Reτ = 180 does not seem to provide suﬃcient challenges for the testing
+of turbulence models, as it is too easy to resolve the main features without
+any modelling at all. The VMS LES results are not compared with alterna-
+tive turbulence models, as the intentions of this study was mainly to lay the
+foundations for the incorporation of VMS LES in a spectral element method.
+Therefore only the simplest Smagorinsky eddy viscosity was used in the model
+terms in the small-scale equations.
+
+5 Conclusions
+
+The Variational Multiscale Large Eddy Simulation method has been imple-
+mented within the framework of a spectral element method. The presented
+scale partitioning method was shown to produce a gradual introduction of the
+small-scale model terms. This is intuitively favourable to a sharp cut-oﬀ at a
+given point in the spectral space. The computational overhead for the method
+was 20–40% for the applications considered here. This must be considered
+to be reasonably low, as even small increases in the spatial resolution of the
+spectral element method are more computationally demanding. Good results
+have been obtained for plane channel ﬂows up to Reτ = 950, even for grid
+densities as low as 0.06% of the reference simulation grid density, and using
+the simplest possible small-scale dissipation model.
+
+30
+
+Acknowledgements
+
+This work was in part performed under the WALLTURB project. WALL-
+TURB (A European synergy for the assessment of wall turbulence) is funded
+by the CEC under the 6th framework program (CONTRACT No: AST4-CT-
+2005-516008).
+
+This work received support from the Research Council of Norway (Programme
+for Supercomputing) through a grant of computing time.
+
+We are grateful to Professor Lars Davidson for providing suitable initial data
+for the plane channel ﬂow simulations.
+
+References
+
+[1] T. J. R. Hughes, L. Mazzei, K. E. Jansen, Large eddy simulation and the
+
+variational multiscale method, Comp. Visual. Sci. 3 (2000) 47–59.
+
+[2] T. J. R. Hughes, L. Mazzei, A. A. Oberai, A. A. Wray, The multiscale
+isotropic
+
+large eddy simulation: Decay of homogeneous
+
+formulation of
+turbulence, Phys. Fluids 13 (2001) 505–512.
+
+[3] T. J. R. Hughes, A. A. Oberai, L. Mazzei, Large eddy simulation of turbulent
+channel ﬂow by the variational multiscale method, Phys. Fluids 13 (2001) 1784–
+1799.
+
+[4] S. Ramakrishnan, S. S. Collis, Variational multiscale modelling for turbulence
+
+control, AIAA paper 2002-1320 (2002).
+
+[5] V. Gravemeier, W. A. Wall, E. Ramm, A three-level ﬁnite element method
+for the instationary incompressible Navier-Stokes equations, Comput. Methods
+Appl. Mech. Engrg. 193 (2004) 1323–1366.
+
+[6] V. John, S. Kaya, A ﬁnite element variational multiscale method for the Navier-
+
+Stokes equations, SIAM J. Sci. Comput. 26 (5) (2005) 1485–1503.
+
+[7] C. Farhat, I. Harari, U. Hetmaniuk, The discontinuous enrichment method for
+multiscale analysis, Comput. Methods Appl. Mech. Engrg. 192 (2003) 3195–
+3209.
+
+[8] S. S. Collis, Monitoring unresolved scales in multiscale turbulence modeling,
+
+Phys. Fluids 13 (2001) 1800–1806.
+
+[9] H. Jeanmart, G. S. Winckelmans, Comparison of recent dynamic subgrid-scale
+models in turbulent channel ﬂow, in: Proceedings of the Summer Program 2002,
+Center for Turbulence Research, NASA Ames/Stanford Univ., 2002, pp. 105–
+116.
+
+31
+
+[10] A. A. Oberai, V. Gravemeier, G. C. Burton, Transfer of energy in the variational
+multiscale formulation of LES, in: Proceedings of the Summer Program 2004,
+Center for Turbulence Research, NASA Ames/Stanford Univ., 2004, pp. 123–
+132.
+
+[11] M. O. Deville, P. F. Fischer, E. H. Mund, High-Order Methods
+
+for
+
+Incompressible Fluid Flow, Cambridge University Press, 2002.
+
+[12] C. Canuto, M. Y. Hussaini, A. Quarteroni, T. A. Zang, Spectral Methods in
+
+Fluid Dynamics, Springer-Verlag, 1988.
+
+[13] Y. Maday, A. T. Patera, Spectral element methods for the incompressible
+Navier-Stokes equations, in: A. K. Noor (Ed.), State of the Art Surveys in
+Computational Mechanics, ASME, New York, 1989, pp. 71–143.
+
+[14] Y. Maday, A. Patera, E. M. Rønquist, An operator-integration-factor method
+for time-dependent problems: Application to incompressible ﬂuid ﬂow, J. Sci.
+Comput. 4 (1990) 263–292.
+
+[15] A. T. Patera, A spectral element method for ﬂuid dynamics: Laminar ﬂow in a
+
+channel expansion, J. Comput. Phys. 54 (1984) 468–488.
+
+[16] P. F. Fischer, Private communication, May 2002.
+
+[17] R. M. Kirby, G. E. Karniadakis, De-aliasing on non-uniform grids: algorithms
+
+and applications, J. Comput. Phys. 191 (2003) 249–264.
+
+[18] P. F. Fischer, J. S. Mullen, Filter-based stabilization of spectral element
+methods, Comptes Rendus de l’Acad´emie des sciences Paris, t.332, S´erie I -
+Analyse num´erique (2001) 265–270.
+
+[19] R. Pasquetti, C. J. Xu, Comments on “Filter-based stabilization of spectral
+
+element methods”, J. Comput. Phys. 182 (2002) 646–650.
+
+[20] P. F. Fischer, N. I. Miller, H. M. Tufo, An overlapping Schwarz method
+for spectral element simulation of three-dimensional
+incompressible ﬂows,
+in: P. Bjørstad, M. Luskin (Eds.), Parallel Solution of Partial Diﬀerential
+Equations, Springer-Verlag, 2000, pp. 159–180.
+
+[21] R. D. Moser, J. Kim, N. N. Mansour, Direct numerical simulation of turbulent
+
+channel ﬂow up to Reτ = 590, Phys. Fluids 11 (1999) 943–945.
+
+[22] J. C. del ´Alamo, J. Jim´enez, Spectra of the very large anisotropic scales in
+
+turbulent channels, Phys. Fluids 15 (6) (2003) L41–L44.
+
+[23] J. C. del ´Alamo, J. Jim´enez, P. Zandonade, R. D. Moser, Scaling of the energy
+
+spectra of turbulent channels, J. Fluid Mech. 500 (2004) 134–144.
+
+[24] J. Kim, P. Moin, R. Moser, Turbulence statistics in fully developed channel ﬂow
+
+at low Reynolds number, J. Fluid Mech. 177 (1987) 133–166.
+
+[25] G. E. Karniadakis, S. J. Sherwin, Spectral/hp Element Methods for CFD,
+
+Oxford University Press, 1999.
+
+32
+
+

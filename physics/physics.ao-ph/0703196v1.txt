@@ -1,0 +1,4157 @@
+Eﬃcient form of the LANS-alpha turbulence
+model in a primitive-equation ocean model
+
+Mark R. Petersen
+
+Computer, Computational and Statistical Sciences Division, and Center for
+Nonlinear Studies, Los Alamos National Laboratory, Los Alamos, New Mexico
+
+Abstract
+
+The Lagrangian-Averaged Navier-Stokes alpha (LANS-α) model is a turbulence pa-
+rameterization that has been shown to capture some of the most important features
+of high resolution ocean modeling at lower resolution. Simulations using LANS-α in
+the POP primitive-equation ocean model resemble doubled-resolution simulations
+of standard POP in statistics like kinetic energy, eddy kinetic energy, and potential
+temperature ﬁelds. The computational cost of adding LANS-α is only 27% for our
+most eﬃcient implementation, as compared to a factor of 8—10 for a doubling of
+resolution.
+
+The LANS-α model improves turbulence statistics with an additional nonlinear
+term and a smoothed advecting velocity. In this work we investigate diﬀerent kinds of
+smoothing techniques and their eﬀect on the LANS-α model’s results and eﬃciency.
+We show that we can substitute convolution ﬁlters for full Hemlholtz inversions and
+produce similar results at a signiﬁcantly lower expense.
+
+When constructing ﬁlters for LANS-α in a primitive-equation ocean model the
+ﬁlter weights must be chosen carefully, otherwise a pressure-velocity instability will
+be excited. We show analytically that certain ranges of ﬁlter weights are unstable,
+and conﬁrm this with numerical experiments. Our stability criterion also guarantees
+that the kinetic energy is well deﬁned, and that the ﬁltered velocity is smoother that
+the original velocity.
+
+7
+0
+0
+2
+ 
+r
+a
+
+M
+ 
+1
+2
+ 
+ 
+]
+h
+p
+-
+o
+a
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+6
+9
+1
+3
+0
+7
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+1 Introduction
+
+The LANS-α model is a turbulence model that can reproduce some of the statistics
+and structures that are seen in standard simulations (without LANS-α) at higher
+resolution. The LANS-α model accomplishes this in part by using a smoothed velocity
+ﬁeld for the advecting velocity in the momentum and tracer equations. The question
+
+Email address: mpetersen@lanl.gov (Mark R. Petersen).
+
+Preprint submitted to Elsevier
+
+2 February 2008
+
+addressed in this paper is, “What is the best way to smooth the velocity ﬁeld in LANS-
+α?” This is not simply a matter of choosing the smoothing method that produces the
+best result. As a turbulence model, LANS-α must be extremely eﬃcient as well; if the
+addition of LANS-α were expensive, it would be more sensible to drop the turbulence
+model altogether and simply run at higher resolution. Thus the choices we make in
+designing the LANS-α algorithm and smoothing ﬁlters are governed by the trade-
+oﬀs of higher-resolution eﬀects versus the cost of adding LANS-α to the model. We
+win this game if we can get the eﬀects of, say, a doubling of resolution while only
+increasing the computation time by a small fraction of the time required to double
+the resolution with the standard model.
+
+We have designed a LANS-α algorithm and smoothing ﬁlter for primitive-equation
+ocean models that meets this criteria of a successful turbulence model. The algorithm
+is presented by Hecht, Holm, Petersen, and Wingate in a closely related work [1]. The
+focus of the present paper is the method used to smooth the advecting velocity. In
+the typical LANS-α model derivation, the smooth velocity, u, is computed from the
+rough velocity, v, with an inverse Helmholtz operator,
+
+u =
+
+α2
+
+1
+(cid:16)
+
+−
+
+∇
+
+(cid:17)
+
+2
+
+1
+
+−
+
+v
+
+(1)
+
+(2)
+
+where the namesake α parameter is a length scale that determines the amount of
+smoothing [2]. The Helmholtz inversion is the basis of comparison for other smoothing
+methods in this work, as this is the relationship between u and v in the original LANS-
+α equations. With it we are able to run successful simulations of LANS-α; however,
+it requires an iterative solver and is therefore relatively expensive. Fortunately, local
+averaging methods work well in LANS-α and are much cheaper. In these methods,
+the smooth velocity is computed as a weighted average of nearby neighbors, and can
+be written as a convolution with the ﬁlter function g as
+
+u = g
+
+v =
+
+g(x
+
+∗
+
+Z
+
+−
+
+y)vd3y.
+
+The LANS-α equation using a ﬁlter (sometimes called the Kelvin-ﬁltered Navier-
+Stokes equation) retains Kelvin’s circulation theorem [3], which is a property of funda-
+mental importance to LANS-α. If the ﬁlter is properly designed, other characteristics
+of LANS-α with the Helmholtz inversion are guaranteed: u is smoother that v, the
+energy is well deﬁned, and LANS-α conserves energy in the absence of dissipation. In
+this paper we develop design criteria for ﬁlters that satisfy these requirements.
+
+There is a precedent of using simple ﬁlters in LANS-α in large eddy simulation (LES)
+models. Geurts and Holm [4] used a simple three-point top-hat ﬁlter as a smoothing
+operator in LANS-α and Leray LES modeling of three-dimensional isotropic turbu-
+lent mixing. They found that the LANS-α and Leray models are considerably more
+accurate than dynamic eddy-viscosity models, and at a lower computational cost. The
+LANS-α and Leray models performed particularly well at capturing the ﬂow features
+characteristic of the smaller resolved scales.
+
+This paper is organized as follows:
+
+2 brieﬂy reviews the LANS-α equations for
+§
+
+2
+
+primitive-equations and the POP-α algorithm. The pressure-velocity instability, which
+3. Using an eigen-
+develops with the incorrect choice of ﬁlter weights, is discussed in
+§
+value analysis of the discretized ﬁlter in
+4, we develop design criteria for the ﬁlter
+§
+weights to ensure the proper smoothing and kinetic energy properties. The results
+5, shows that POP-α can produce results qualitatively similar to those of
+section,
+§
+higher resolution simulations of standard POP using either the Helmholtz inversion
+or an ﬁlter to smooth the velocity. In the ﬁnal section,
+6, we compare the merits of
+§
+each. The family of ﬁlters presented here produce stable simulations and are 20—50%
+faster than Helmholtz inversions. Filters produce better temperature statistics in the
+baroclinic instability model problem, while the Helmholtz inversion produces higher
+kinetic and eddy kinetic energy.
+
+2 The LANS-α model
+
+This section gives a brief overview of the primitive-equation version of LANS-α that
+is used in the POP-α code. These equations were originally derived by Holm et al.
+[5], and are described at length, along with the POP-α algorithm, by Hecht et al. [1].
+The model equations are
+
+∂v
+∂t
+
++ u
+
+· ∇
+
+uj + f
+
+u =
+
+×
+
+1
+ρ0 ∇
+
+−
+
+π +
+
+(v) ,
+
+F
+
+v + u3∂zv + vj∇
+∂π
+∂z
+
+=
+
+ρg,
+
+−
+
+∂ϕ
+∂t
+
+∇ ·
+u =
+
++ u
+
+ϕ =
+
+(ϕ) ,
+
+· ∇
+
+D
+
+u + ∂zu3 = 0,
+1
+α2
+
+1
+
+−
+
+2
+
+v,
+
+−
+1
+2 |
+
+2
+
+u
+|
+
+∇
+
+−
+
+(cid:17)
+α2
+2 |∇
+
+(cid:16)
+
+−
+
+2
+
+u
+|
+
+π = p
+
+(3)
+
+(4)
+
+(5)
+
+(6)
+
+(7)
+
+(8)
+
+∇
+
+where (v1, v2, v3) = (v, v3) and (u1, u2, u3) = (u, u3) are the rough and smooth veloc-
+is the horizontal gradient, ϕ is a tracer (temperature, salinity, or a passive
+ities,
+tracer), ρ is the full density, ρ0 is the background density, π is a modiﬁed pressure,
+are momentum and tracer diﬀusion terms [6], f
+p is the physical pressure,
+is the Coriolis parameter, g is gravitational acceleration, and α is the alpha model’s
+smoothing length scale. These equations are hydrostatic (4), incompressible (6), and
+Boussinesq (ρ0 appears in eqn 3 but not in 4).
+
+and
+
+D
+
+F
+
+The principle feature of the LANS-α model is that the momentum equation (3) is an
+advection-diﬀusion equation for a Lagrangian-averaged velocity v, while the advecting
+velocity is an Eulerian-averaged velocity u. These names arise in the derivation of the
+LANS-α model [2], where velocities are averaged along a particle track (Lagrangian)
+or at a particular location (Eulerian). The Helmholtz relation (7) indicates that u
+is smoother that v. In this paper we prefer the names rough velocity for v, which is
+computed prognostically from (3), and smooth velocity for u, which is computed diag-
+
+3
+
+nostically from (7). The LANS-α model has an additional nonlinear term
+uj
+in the momentum equation (3), which does not appear in the Leray model[2], and
+which allows LANS-α to satisfy Kelvin’s circulation theorem while conserving energy
+and a form of potential vorticity in the absence of dissipation [2].
+
+j=1 vj∇
+
+P
+
+3
+
+In this paper, we investigate how to most eﬀectively and eﬃciently smooth the rough
+velocity v to obtain the smooth velocity u. This could be with a Helmholtz inversion,
+as in (7), or with a convolution using various ﬁlter functions, as in (2). LANS-α using
+a ﬁlter rather than a Helmholtz inversion still satisﬁes Kelvin’s circulation theorem
+[3]. If the proper ﬁlters are chosen, one also conserves energy and a form of potential
+vorticity in the absence of dissipation.
+
+The most commonly used form of the LANS-α equations use a three-dimensional (3D)
+smoothing. In the primitive equations, which assume a thin layer approximation, this
+reduces to a 2D smoothing, and so our ﬁlters are horizontal-only as well. 3D smoothing
+may be tested at a future time, but we expect that the computational cost would be
+too high to justify the beneﬁt. The Helmholtz inversion is horizontally isotropic. Thus
+one of the design criteria for the smoothing ﬁlter is that it is horizontally isotropic as
+well.
+
+The POP primitive-equation ocean-climate model [7,8], developed and maintained at
+Los Alamos National Laboratory, was augmented to include the LANS-α formulation
+[1]. POP is a split implicit/explicit code; that is, it takes an implicit step for the
+barotropic (vertically integrated 2D) velocity ﬁeld, and takes an explicit step for the
+baroclinic (remaining 3D) velocity ﬁeld. This is done so that the timestep is not
+limited by the fast free-surface gravity waves in the barotropic velocity ﬁeld.
+
+In the LANS-α version of POP, named POP-α, a smooth velocity ﬁeld must be com-
+puted for both the baroclinic and barotropic velocity ﬁelds. In the explicit baroclinic
+component of the code, the smooth baroclinic velocity, u, is computed by simply
+smoothing v. The implicit barotropic component is more complicated, and in the
+end a reduced version of the full barotropic algorithm, as derived from the LANS-α
+equations, was used [1]. The reduced algorithm produced nearly identical results to
+the full algorithm, but was three to four times faster.
+
+A few pieces of the POP-α barotropic algorithm are needed to understand the pressure-
+velocity instability presented in the following section. The 2D barotropic velocities,
+denoted by capital letters, are found by integrating the full velocity from the bottom
+to the free surface height, η:
+
+U
+
+≡
+
+η
+
+1
+H + η Z
+−
+
+H
+
+u dz,
+
+(9)
+
+where H(x, y) is the ocean depth when the surface is at rest. By integrating the
+continuity equation (6), which states that the smooth velocity is divergence-free, we
+obtain a prognostic equation for the free surface height,
+
+4
+
+(10)
+
+(11)
+
+(12)
+
+Z
+
+η
+
+H
+−
+∂η
+∂t
+
+(
+∇ ·
+
++
+
+∇ ·
+
+u + ∂zu3) dz = 0,
+
+(H + η) U = 0.
+
+∂U
+∂t
+
++ f
+
+U =
+
+×
+
+η + G,
+
+g
+−
+
+∇
+
+The free surface height now replaces the pressure in the barotropic form of the mo-
+mentum equation,
+
+where G contains the vertically integrated forcing terms. The barotropic momentum
+equation is the same as the shallow water equation.
+
+3 Pressure-velocity instability
+
+In this section, we present an analytic stability analysis of a pressure-velocity insta-
+bility that constrains the ﬁlter weights in the barotropic ﬁlter. The pressure-velocity
+instability is a phenomenon particular to models where a smoothed velocity ﬁeld is
+used in the equation for free surface height η (11). Consider a velocity ﬁeld in one-
+dimensional (1D) discretized shallow water equations, where the pressure and velocity
+gridpoints are oﬀset. If the velocity ﬁeld were at the Nyquist frequency (alternating
+between positive and negative at each grid cell), then using the standard shallow
+water equations, the free surface height would raise (lower) where the velocity ﬁeld
+converges (diverges). In either case, a pressure gradient force would ensue that would
+work against the tendency of the surface to undergo further deformation, providing
+a stabilizing eﬀect.
+
+In the LANS-α model the equation for the free surface height involves the smooth
+velocity because this equation is derived from the continuity equation (6), which
+involves the smooth velocity. When the outer stencil weights are suﬃciently large in
+LANS-α, a pressure-velocity instability ensues in the highest frequencies. This can be
+shown with the simplest case, a 1D velocity ﬁeld and a smoothing stencil of width
+three,
+
+bvi
+
+1 + avi + bvi+1
+
+ui =
+
+−
+
+.
+
+a + 2b
+
+(13)
+
+In most cases, ui and vi will have the same sign at each gridpoint, as one would expect
+for a smoothing operator. However, for high frequencies and suﬃciently large outer
+stencil weight b, u can have the opposite sign of v, as shown in Fig. 1 for the Nyquist
+frequency and b = 0.7.
+
+The tendency equation for v depends on η, but η in turn is not directly dependent
+on the convergence/divergence of v but on that of u. In the case of a pure harmonic
+mode, restricting the local ﬁlter to produce a smoothed velocity u of the same sign
+everywhere as the rough velocity v is suﬃcient to also ensure that the divergence
+
+5
+
+of smooth and rough velocities share the same sign, preserving the essential physical
+feedback of the underlying equations even after inclusion of the LANS-α model. Cases
+in which this physical feedback is respected or not, depending on the ﬁlter width, are
+illustrated in Fig. 2.
+
+This understanding of the pressure-velocity instability allows us to construct an an-
+alytical stability criterion as follows: The ﬁlter weights must be chosen so that the
+ﬁltered velocity u retains the same sign as v for all harmonic modes resolved on the
+grid.
+
+For example, for the stencil of width three (13) where a is normalized to 1, consider
+the Nyquist frequency
+
+vi+j = cos(πj/k)
+
+(14)
+
+with k = 1. Since vi = 1, the condition that u and v are like-signed is ui > 0.
+Using (13), the constraint on the stencil is b < 0.5. For a slightly higher wavenumber,
+k = 1.5, the constraint is weaker, b < 1. For still higher wavenumbers, u and v are
+like-signed for any choice of b. Thus b must be chosen based on the tightest constraint,
+b < 0.5.
+
+Numerical simulations of POP-α with a stencil of width three almost exactly cor-
+respond to the predictions of this stability analysis. The model runs stably when
+b < 0.48. At larger values of b an instability quickly grows in v and η at the Nyquist
+frequency, so that v is four times larger than u within 100 time steps (Fig 3). By
+150 timesteps the conjugate gradient routine in the barotropic solver fails to con-
+verge within 1000 iterations. Numerical simulations use a 2D stencil that is a squared
+version of the 1D stencil, as discussed below.
+
+Because of the limitation imposed by the pressure-velocity instability, further smooth-
+ing must be accomplished by increasing the stencil size. The criterion that u and
+v must be like-signed for all frequencies applies, but larger stencils have more un-
+knowns, one for each stencil weight. Figure 4 shows these constraints in chart form
+for 1D ﬁlters of width 3, 5, 7, and 9 and for wavenumbers k = 1 . . . 4. In general,
+these constraints require that the weights are each less than 0.5. Beyond that, each
+consecutive weight moving away from the center must be slightly less than the one
+before it. This latter requirement can be seen in the constraints for the stencil of
+width nine for wavenumber k = 3 and k = 4,
+
+c + 2d + e < 1 + b,
+√2d + 2e < 1 + √2b.
+
+Neither of these are satisﬁed if all the weights are 0.5, but are satisﬁed when the
+weights decrease as
+
+b = 0.45, c = 0.4, d = 0.35, e = 0.3.
+
+Again, the results of this stability analysis were veriﬁed using the POP-α model.
+Simulations using the stencil weights in (17) were always stable (Fig 5). If any of the
+
+(15)
+
+(16)
+
+(17)
+
+6
+
+weights are increased by 0.02, a fast-growing, high frequency appears in v and η (Fig
+3).
+
+In the POP-α model the smoothing operator is 2D. The 2D stencil was chosen to be a
+squared version of the 1D stencil (Fig. 6). Such a stencil is isotropic, and thus follows
+the same stability analysis as the 1D case presented above. POP-α is very sensitive
+to these stability constraints; for example, if the corner weights of the stencil in Fig.
+6b are increased by 10—20%, the simulation is unstable.
+
+Other experiments were conducted where the 2D stencil was a diamond or circle
+instead of a square. The motivation here is that in the standard square 2D stencil
+(Fig. 6) the corner weights are small, and don’t contribute much to the average. Thus
+computation time could be saved by removing the corners from the stencil, and the
+degree of smoothing should be nearly the same. However, in practice any stencil other
+than a full square stencil resulted in unstable simulations that did not converge in the
+barotropic solver. This was even true when only a single gridpoint was left oﬀ of the
+stencil on each corner, for example when the 0.09 weight is removed from a nine-wide
+stencil in Fig. 6b. Thus all of the simulations presented in this work use a complete
+square stencil.
+
+Near boundaries, the stencil is reduced in size so that all grid-cells used in the aver-
+aging calculation are water-cells, and none are land-cells. For example, at a grid-cell
+directly beside or diagonal to a land cell no averaging takes place (i.e. ui,j = vi,j).
+If the nearest land-cell is two grid-cells away, a ﬁlter of width three is used. The
+disadvantage of this method is that the smoothing goes to zero as one approaches a
+land-cell. This stands in contrast to the LANS-α equations, where the smoothing scale
+α is constant throughout the domain. Other ﬁltering schemes near the boundary were
+considered: One could use a constant-size stencil and assign zero velocity to land-cells,
+but this strongly damps the smooth velocity near the boundary. Another possibility
+is to use large but nonsymmetric stencils near the boundary, but this proved to be
+unstable.
+
+4 Eigenvalue analysis of the ﬁlter
+
+Most theoretical results for the LANS-α model depend on the two velocities being
+related through the Helmholtz operator. We can replace the Helmholtz operator with
+ﬁlters if two critical properties are preserved. These are that (1) the ﬁltered velocity
+u must be smoother than the unﬁltered velocity v, and (2) that the energy,
+
+E =
+
+1
+2 Z
+
+u
+
+·
+
+v d3x
+
+(18)
+
+must be well deﬁned (e.g., non-negative). When both of these criterion are satisﬁed,
+the ﬁlter may be used in place of the Helmholtz inversion operator in the LANS-
+α model. In this section we will review why the Helmholtz inversion satisﬁes these
+criterion, and then proceed to show that the ﬁlter described in the previous section
+satisﬁes them as well.
+
+7
+
+The Helmholtz inversion is easily shown to be a smoothing operator using Fourier
+analysis,
+
+ˆu(k, l) =
+
+ˆv(k, l)
+1 + α2k2
+h
+
+,
+
+where ˆu and ˆv are the Fourier coeﬃcients, (k, l) are horizontal wavenumbers and
+h = k2 + l2. For scales much larger than α the Fourier coeﬃcients are unaﬀected,
+k2
+because 1/kh >> α so α2k2
+ˆv. For scales at or smaller than α the
+Fourier coeﬃcients are strongly damped because α2k2
+h > 1 so that ˆu < ˆv. The energy
+for the Helmholtz inversion is also well deﬁned, because (18) can be rewritten, using
+integration by parts, as
+
+h << 1 and ˆu
+
+∼
+
+E =
+
+2
+
+1
+2 Z |
+
+u
+|
+
++ α2
+
+2
+
+u
+|
+
+|∇
+
+d3x,
+
+which is nonnegative.
+
+We next show that these properties also hold for our ﬁlters by using the eigenvalue
+problem applied to the discrete ﬁlter-operator matrix A. To illustrate this process,
+ﬁrst consider the simple three-wide ﬁlter in 1D shown in (13). This ﬁlter can be
+written as a tridiagonal matrix,
+
+(19)
+
+(20)
+
+(21)
+
+A =
+
+1
+a + 2b
+
+a b
+
+0
+
+b a
+. . .
+
+0
+
+b
+. . .
+
+0
+
+· · ·
+0
+· · ·
+. . . 0
+
+0
+
+· · ·
+
+0
+
+b
+
+a
+
+
+
+
+
+
+
+
+
+
+
+
+
+.
+
+
+
+
+
+
+
+
+
+
+
+
+
+so that a vector can be ﬁltered using u = Av. The eigenvalues of A vary as a function
+of b. If b = 0, A is the identity matrix and the eigenvalues are all one. As b increases,
+the range of eigenvalues increases but always remains less than one (Fig. 7). The
+smallest eigenvalues are associated with the highest wavenumber modes (Fig. 8),
+indicating that the most oscillatory modes are damped the strongest, and that the
+matrix A is indeed a smoothing operator.
+
+n grid
+We now evaluate the eigenvalues of the full ﬁlter (Fig. 6) in 2D. On an n
+the ﬁlter operator is an n2 matrix (Fig. 9). Here we consider Dirichlet boundary
+conditions of zero, but the results are similar for periodic boundaries. As in the
+1D case, all eigenvalues are less than one. We have chosen weights so that most
+eigenvalues are near zero but positive (Fig. 10). The most oscillatory modes have
+very small eigenvalues, so that these are strongly damped (Fig. 11). This ensures that
+the ﬁlter is a smoothing operator.
+
+×
+
+The last task is to ensure that the energy deﬁned in (18) is well deﬁned. The matrix
+A is positive deﬁnite if vT Av > 0 for all nonzero vectors v. Since the ﬁltered velocity
+u > 0, which means that the global energy (18)
+u = Av, this is equivalent to v
+
+·
+
+8
+
+is nonnegative and therefore well deﬁned. A matrix is positive deﬁnite if all of its
+eigenvalues are positive. Thus a criterion for our ﬁlter is that its minimum eigenvalue
+is positive. This leads to a process for choosing each ﬁlter weight: plot the minimum
+eigenvalue as a function of the ﬁlter weight, and choose the largest weight that guar-
+antees stability. There is no reason to choose a smaller value, because then the ﬁlter
+smooths less. Figure 12 shows that this process produces the same restrictions on
+ﬁlter weights as the pressure-velocity instability in the previous section. In fact, the
+two methods of analysis agree so well that the pressure-velocity instability appears
+to be a physical manifestation of the poorly deﬁned energy. Numerical experiments
+where the ﬁlter weights were varied conﬁrm that the simulations are unstable when
+the energy is poorly deﬁned.
+
+5 Results
+
+The model problem is a zonally periodic channel with a deep-sea ridge, eastward
+wind forcing, and surface thermal forcing that restores SST to a smooth proﬁle from
+12oC in the north to 2oC in the south, as described in [1]. This conﬁguration is
+an idealization of the Antarctic Circulpolar Current, and was designed to induce
+baroclinic instability, where isopycnals are tilted from the horizontal meridionally
+by the surface thermal and wind forcing. If present, eddies in the ﬂow advect heat
+meridionally, with the net eﬀect that the isopycnals are less tilted; in this way, the
+eddies convert the potential energy of the tilted isopycnals to the kinetic energy of
+the eddies themselves. Simulations of standard POP at three resolutions show this
+eﬀect. In the lowest resolution simulation (0.8, see Table 1) the Rossby Radius of
+deformation is not resolved, and no eddies are present. As the resolution doubles
+(0.4) and doubles again (0.2) more eddies exist, and the isopycnals are less tilted
+(Fig. 13).
+
+The ﬂatter isotherms at higher resolution create a sharper thermocline and colder
+temperatures below the thermocline (Fig. 14). (In this model conﬁguration, salinity
+is constant, so the isotherms shown in the ﬁgures coincide with isopycnals.) Higher
+resolution simulations of standard POP also show progressively higher kinetic energy
+(Fig. 15) and higher eddy kinetic energy (Fig. 16) as more eddies are resolved.
+
+POP-α simulations resemble higher resolution simulations of standard POP in all of
+these measures. The strength of the eddy activity is controlled by how much smooth-
+ing is done on the rough velocity v: when a Helmholtz inversion is used, a larger
+α smooths more; when a ﬁlter is used, wider ﬁlter stencils smooth more. In either
+case, Figs. 13–16 show that POP-α can produce results that look progressively like a
+doubling of resolution of standard POP as the smoothing is increased.
+
+Because POP-α has two velocities, some details are necessary to explain how these
+diagnostic quantities were computed. The kinetic energy is
+
+KE =
+
+1 + u2
+u2
+2
+(cid:16)
+
+(cid:17)
+
+/2, KEα = (u1v1 + u2v2) /2
+
+(22)
+
+9
+
+for POP and POP-α, where the subscripts indicate horizontal components. The eddy
+kinetic energy is
+
+EKE =
+
+(u′1)2 + (u′2)2
+(cid:16)
+
+(cid:17)
+
+/2, EKEα =
+
+u′1v′1 + u′2v′2
+
+/2,
+
+(cid:16)
+
+(cid:17)
+
+(23)
+
+where each variable is the sum of a mean and perturbation, e.g. u1 = u1 + u′1, and
+the overbar indicates a ﬁve-year time-averaged mean.
+
+There would seem to be three possible ways one could compute the kinetic energy
+for POP-α: using the products u2, uv, or v2. The product of the smooth and rough
+velocities, uv, is used because this the conserved kinetic energy that emerges from
+the derivation of the LANS-α equation [5,2]. For comparison, kinetic and eddy kinetic
+energies were also computed using u2 and v2. The product of the smooth velocities is
+smaller than uv, and the product of the rough velocities is larger (typically by 10 to
+20%). However, the general trends shown in Figs. 15 and 16 still hold if u2 or v2 are
+used instead of uv.
+
+An interesting diﬀerence between the ﬁlter and Helmholtz inversion in POP-α is that
+simulations using ﬁlters are better at the temperature statistics, while simulations
+using the Helmholtz inversion have higher kinetic and eddy kinetic energy. This can
+be seen by comparing 0.8H2 with 0.8F9 or 0.4H1.5 with 0.4F9 if ﬁgures 13—16.
+Even though results diﬀer a bit with each measure, one may loosely assign each
+ﬁlter an eﬀective alpha value. For example, in most plots the ﬁlter F5 corresponds to
+α = 1.5∆x and F9 corresponds to α = 2∆x.
+
+The computation time required for POP-α is slightly longer than standard POP due
+to the smoothing operations and additional nonlinear term, but is much less than a
+doubling of resolution in standard POP (Fig. 17). Computation increases as the ﬁlter
+width increases from three to nine; smoothing using the Helmholtz inversion is even
+slower than the nine-wide ﬁlter.
+
+The standard POP algorithm may use an explicit or implicit discretization for the
+Coriolis term. Typically the implicit discretization is chosen because it allows longer
+timesteps to be taken, resulting in faster simulations. As described in [1], the POP-
+α algorithm must use the explicit implementation of the Coriolis term. Fortunately,
+POP-α can use longer timesteps than the standard POP algorithm with explicit
+Coriolis [1,9]. This explains why most of the POP-α simulations in Fig. 17 are faster
+than POP with an explicit Coriolis term, and just a bit slower than POP with an
+implicit Coriolis term.
+
+6 Conclusions
+
+This paper presents an assessment of two methods of smoothing the velocity ﬁeld
+in the LANS-α turbulence model: the Helmholtz inversion and ﬁlters. The LANS-α
+model equations specify the Helmholtz inversion, but this method requires an iterative
+conjugate gradient routine for each smoothing. The ﬁlter, which is simply a weighted
+average of nearby neighbors, results in simulations that are 20 to 50% faster than
+
+10
+
+those with the Helmholtz inversion. This disparity is expected to increase with larger
+domains and more processors, because more iterations are required for convergence
+in the conjugate gradient method as the problem-size increases ([10], p. 530). The
+savings in computation time provides a strong motivation to choose a local ﬁlter over
+the global Helmholtz inversion.
+
+Both the Helmholtz inversion and the ﬁlters produce results expected of the LANS-α
+turbulence model: statistics such as temperature proﬁles, kinetic and eddy kinetic en-
+ergy resemble higher-resolution simulations of non-alpha simulations. The parameter
+α is a length-scale that controls the amount of smoothing, and thus the strength of
+the turbulence model. Analogously, as the ﬁlter width varies from three to nine, the
+smoothing increases and the eﬀects of LANS-α are stronger. For a particular value of
+α or ﬁlter width, the methods perform a bit diﬀerently in diﬀerent metrics: the ﬁlter
+has better temperature proﬁles (as judged by higher-resolution simulations), while
+the Helmholtz inversion has higher kinetic and eddy kinetic energy.
+
+The ﬁlter is more robust than the Helmholtz inversion. When α was too high (i.e the
+smoothing too strong) in the Helmholtz inversion method, the kinetic energy grew
+without bound and the simulation was unstable. This is typical of LANS-α models.
+Unstable simulations occurred when α = 2.5∆x and 2∆x at resolutions of 0.8 and 0.4,
+respectively. For the ﬁlter, all stencils tested (up to 9x9) were stable, and stronger
+sub-grid model eﬀects could be obtained with the ﬁlter than with the Helmholtz
+inversion.
+
+The stencil weights must be chosen carefully, otherwise POP-α will be unstable. If
+the outer weights are too large, the smooth velocity will be of the opposite sign as the
+rough velocity for the highest wave-number modes. When this occurs the pressure
+gradient, which is calculated from the smooth velocity, is of the wrong sign. The
+physically correct relationship between pressure gradient force and rough velocity
+is lost, and the mode grows. The conditions that bring about this pressure-velocity
+instability were identiﬁed exactly, and then veriﬁed by numerical simulations. We
+found that the ﬁrst neighboring weight must be less than one-half the central weight,
+and each consecutive neighbor must be less than the one before. In 2D, this pattern
+is squared to make an isotropic, stable stencil. The full square was required; leaving
+oﬀ the corners to make diamond-shaped stencils resulted in unstable simulations.
+
+It is important that the ﬁlters chosen are actually smoothing operators, and that
+the energy is well deﬁned. Both of these properties were veriﬁed using an eigenvalue
+analysis of the ﬁlter, discretized as a matrix operator. In fact, the criterion on ﬁlter
+weights that guaranteed well-deﬁned energy turned out to be the same as the weight
+limits to prevent the pressure-velocity instability. Thus it appears that the instability
+is a physical manifestation of poorly-deﬁned energy in the equation set.
+
+The goal of any turbulence model is to capture the eﬀects of higher resolution simula-
+tions without paying the computational price of running at that higher resolution. We
+have shown that our implementation of the LANS-α model in a primitive-equation
+ocean-climate model accomplishes this goal. Speciﬁcally, statistics in POP-α simula-
+tions such as kinetic energy, eddy kinetic energy, and temperature proﬁles are similar
+to standard POP simulations with double the resolution. But the LANS-α simula-
+
+11
+
+tions only required 27% more computing time than standard POP, as compared to a
+factor of nine increase to double the resolution of standard POP (for the 0.4 case).
+
+We are currently performing simulations to compare LANS-α with other turbu-
+lence models, including constant coeﬃcient hyperviscosity, Gent-McWilliams isopyc-
+nal tracer mixing [11], the Leray model [2], and the Simpliﬁed Bardina model [12].
+These results, to be published in the near future, will consider the merits of LANS-α
+relative to competing models in the context of primitive-equation ocean models. We
+also intend to test the model in an ocean-basin or global simulation.
+
+The comparison of the Helmholtz inversion and the ﬁlter in this study has shown
+that the ﬁlter is both cheaper and more robust than the Helmholtz inversion, while
+producing similar results. Thus our future work with the POP-α model will use local
+ﬁlters in place of the global Helmholtz for the majority of our simulations.
+
+7 Acknowledgements
+
+I thank M. Hecht and B. Wingate for numerous discussions, ideas, and feedback on
+the manuscript; E. Titi for valuable insight on the important properties of ﬁlters; and
+B. Geurts for helpful conversations on his experience with ﬁlters in LES models. This
+work was carried out under the auspices of the National Nuclear Security Adminis-
+tration of the U.S. Department of Energy at Los Alamos National Laboratory under
+Contract No. DE-AC52-06NA25396.
+
+References
+
+[1] M. W. Hecht, D. D. Holm, M. R. Petersen, B. A. Wingate, Implementation of the
+LANS-alpha turbulence model in a primitive equation ocean model, submitted to JCP
+(2007).
+
+[2] D. D. Holm, Fluctuation eﬀects on 3D Lagrangian mean and Eulerian mean ﬂuid
+
+motion, Physica D133 (1999) 215–269.
+
+[3] C. Foias, D. D. Holm, E. S. Titi, The Navier-Stokes-alpha model of ﬂuid turbulence,
+
+Physica D Nonlinear Phenomena 152 (2001) 505–519.
+
+[4] B. J. Geurts, D. D. Holm, Leray and LANS-α modeling of turbulent mixing, Journal
+
+of TurbulenceSubmitted.
+
+[5] D. Holm, J. Marsden, T. Ratiu, The Euler-Poincare equations in geophysical ﬂuid
+
+dynamics, Isaac Newton institute proceedings — (1998) —.
+
+[6] R. Smith, P. Gent, Reference manual for the Parallel Ocean Program (POP), see
+
+http://climate.lanl.gov/source/projects/climate/Models/POP (2002).
+
+[7] R. D. Smith, J. K. Dukowicz, R. C. Malone, Parallel ocean general circulation modeling,
+
+Physica D 60 (1992) 38–61.
+
+12
+
+[8] J. K. Dukowicz, R. D. Smith, Implicit free-surface method for the Bryan-Cox-Semtner
+
+ocean model, J. Geophys. Res.99 (1994) 7991–8014.
+
+[9] B. A. Wingate, The maximum allowable time step for the shallow water alpha model
+and its relation to time-implicit diﬀerencing, Mon. Weather Rev.132 (12) (2004) 2719–
+2731.
+
+[10] G. H. Golub, C. F. V. Loan, Matrix Computations, 3rd Edition, Johns Hopkins Univ.
+
+Pr., 1996.
+
+[11] P. R. Gent, J. C. McWilliams, Isopycnal mixing in ocean circulation models, J. Phys.
+
+Oceanogr.20 (1) (1990) 150–155.
+
+[12] Y. Cao, E. M. Lunasin, E. S. Titi, Global well-posedness of the three-dimensional viscous
+
+and inviscid simpliﬁed bardina turbulence models, unpublished (2006).
+URL http://www.citebase.org/abstract?id=oai:arXiv.org:physics/0608096
+
+13
+
+4
+
+6
+
+8
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10
+
+k=1, b=0.5
+
+u=0
+
+k=1.5, b=0.5
+
+k=1, b=0.3
+
+u same sign as v
+
+k=1.5, b=0.3
+
+1
+
+0
+
+1
+
+0
+
+1
+
+0
+
+0.5
+
+0.5
+
+0.5
+
+b
+
+0.3
+
+b
+
+0.3
+
+i−2
+
+i−1
+
+i+1
+
+i+2
+
+b
+
+b
+
+0.5
+
+0.5
+
+i−2
+
+i−1
+
+i+1
+
+i+2
+
+4
+
+6
+
+8
+
+b
+
+b
+
+0.7
+
+0.7
+
+i−2
+
+i−1
+
+i+1
+
+i+2
+
+4
+
+6
+
+8
+
+aa
+
+11
+
+i
+
+aa
+
+11
+
+i
+
+aa
+
+11
+
+i
+
+1
+
+0
+
+−1
+
+1
+
+0
+
+−1
+
+1
+
+0
+
+−1
+
+i
+
+i
+
+i
+
+−1
+
+−1
+
+1
+
+0
+
+1
+
+0
+
+1
+
+0
+
+−1
+
+i
+
+i
+
+i
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10
+
+k=1, b=0.7
+
+u opposite sign of v
+
+k=1.5, b=0.7
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10
+
+Fig. 1. The eﬀects of ﬁltering the rough velocity v (open circles) to compute the smooth
+velocity u (closed circles) for a 1D ﬁlter of width three, where the weight of the neighboring
+cell, b, is varied between 0.3 and 0.7, as shown in the left column. For the Nyquist frequency
+(k = 1, middle column) u is of opposite sign to v if b > 0.5; this results in an instability,
+since the equation for free surface height η involves u. For a slightly higher wavenumber
+(k = 1.5, right column) u has the same sign as v for b < 1.
+
+v
+
+u
+η
+
+−∇ η
+
+v
+
+u
+η
+
+−∇ η
+
+i−2
+
+i−1
+
+i
+
+i+1
+
+i−2
+
+i−1
+
+i
+
+i+1
+
+1
+
+2
+
+3
+(a) stable case, b < 0.5
+
+4
+
+5
+
+1
+
+2
+
+5
+3
+(b) unstable case, b > 0.5
+
+4
+
+Fig. 2. Schematic of variables to illustrate the pressure-velocity feedback instability. In the
+stable case (a) the smooth and rough velocities, u and v, are of the same sign, and the
+pressure gradient force
+η counters the original velocity perturbation, as expected. In the
+unstable case (b), u and v have opposite signs; the free surface height, which is computed
+from u, increases (decreases) where u converges (diverges); now the pressure gradient force
+reinforces the rough velocity v, increasing this perturbation.
+
+−∇
+
+14
+
+(a) rough velocity v
+
+(b) smooth velcotiy u
+
+Fig. 3. An example of the pressure-velocity instability. Shown are the velocity ﬁelds of simu-
+lation 0.8F3 using b = 0.52 after 100 time steps. The Nyquist frequency grows exponentially
+in the rough velocity v (a), but is ﬁltered out of the smooth velocity u (b) (note diﬀerence
+in vector length scales). The surface elevation η is computed using u, so pressure gradient
+forces don’t counteract this unstable mode.
+
+15
+
+1
+
+0
+
+−1
+
+0
+
+k=1
+
+k=1.5
+
+k=2
+
+k=3
+
+k=4
+
+i−2
+
+i
+
+i+2
+
+i+4
+
+i
+
+i+3
+
+i−2
+
+i
+
+i+2
+
+i+4
+
+i−1
+
+i
+
+i+1
+
+i+3
+
+i−1
+
+i
+
+i+1
+
+i+4
+
+1
+0.5
+0
+−0.5
+−1
+
+1
+
+0
+
+−1
+
+1
+0.5
+0
+−0.5
+−1
+
+1
+0.7
+
+0
+
+−0.7
+−1
+
+8
+
+2
+
+4
+1 + 2b(
+
+6
+1)
+
+−
++2c(1) + 2d(
+
+−
++2e(1) > 0
+
+1)
+
++2c
+
+8
+
+4
+
+6
+1
+2 (cid:17)
+(cid:16)−
++ 2d(1)
+
+0
+
+2
+1 + 2b
+
+1
+2 (cid:17)
+
+(cid:16)−
++2e
+
+1
+2 (cid:17)
+
+(cid:16)−
+
+> 0
+
+2
+
+4
+
+0
+
+6
+1 + 2b(0) + 2c(
+
+8
+1)
+
++2c(
+
+−
++2e(
+
+−
+1) + 2d(0)
+
+1) > 0
+
+−
+
+0
+
+2
+4
+1 + 2b
+
+6
+
+8
+
+1
+2 (cid:17)
+(cid:16)
++ 2d(
+
++2c
+
+1
+2 (cid:17)
+
+(cid:16)−
++2e
+
+1
+2 (cid:17)
+
+(cid:16)−
+
+1)
+
+−
+> 0
+
+6
+
+8
+
+0
+
+4
+
+2
+1 + 2b
+
+(cid:16)
++2c(0) + 2d
+
+√2
+2 (cid:17)
+
+√2
+2 (cid:17)
+
+(cid:16)−
+1) > 0
+
++2e(
+
+−
+
+b < 1
+
+stable
+
+b
+
+∀
+
+stable
+
+b
+
+∀
+
+stable
+
+b
+
+∀
+
+0.5
+
+b
+
+b
+
+i−4
+i−3
+2
+
+i−2
+i−1
+4
+
+i
+
+i+1
+6
+
+i+3
+i+2
+8
+
+i+4
+
+10
+
+b < 1
+2
+
+1
+6
+
+0.5
+
+c
+
+b
+
+b
+
+c
+
+condition:
+
+aa
+
+aa
+
+aa
+
+aa
+
+1
+
+0
+
+1
+
+0
+
+1
+
+0
+
+1
+
+0
+
+0.5
+
+d
+
+c
+
+b
+
+b
+
+c
+
+d
+
+0.5
+
+e
+
+d
+
+c
+
+b
+
+b
+
+c
+
+d
+
+e
+
+i−4
+i−3
+2
+
+i−2
+i−1
+4
+
+i
+
+i+1
+6
+
+i+3
+i+2
+8
+
+i+4
+
+10
+
+b < 1
+
+2 + c
+
+b + c < 1
+
+c < 1
+2
+
+c < 1 + b
+
+stable
+
+b, c
+
+∀
+
+i−4
+i−3
+2
+
+i−2
+i−1
+4
+
+i
+
+i+1
+6
+
+i+3
+i+2
+8
+
+i+4
+
+10
+
+b + d < 1
+
+2 + c
+
+b + c < 1 + 2d
+
+c < 1
+2
+
+c + 2d < 1 + b
+
+d < √2
+
+2 + b
+
+i−4
+i−3
+2
+
+i−2
+i−1
+4
+
+i
+
+i+1
+6
+
+i+3
+i+2
+8
+
+i+4
+
+10
+
+b + d < 1
+
+2 + c + e
+
+b + c + e < 1 + 2d
+
+c < 1
+
+2 + e
+
+c + 2d + e < 1 + b
+
+√2d + 2e < 1 + √2b
+
+Fig. 4. Conditions required for stability for ﬁlters of width 3, 5, 7, and 9 (rows) for several wavenumbers of v (columns). Variables a—e are
+the weights of the 1D stencil, normalized such that a = 1. A stable scheme requires that ui, the smooth velocity, is the same sign as vi.
+Conditions that limit the weights b—e to be less that one-half are boxed.
+
+aa
+
+aa
+
+0.5
+
+1
+
+0
+
+1
+
+0
+
+b
+
+b
+
+0.45
+
+11
+
+0.45
+
+c
+
+b
+
+b
+
+c
+
+0.4
+
+0.45
+
+11
+
+0.45
+
+0.4
+
+i−4
+i−3
+2
+
+i−2
+i−1
+4
+
+i
+
+i+1
+6
+
+i+3
+i+2
+8
+
+i+4
+
+10
+
+i−4
+i−3
+2
+
+i−2
+i−1
+4
+
+i
+
+i+1
+6
+
+i+3
+i+2
+8
+
+i+4
+
+10
+
+(a) 1D stencil, width 3
+
+(b) width 5
+
+0.5
+
+d
+
+c
+
+b
+
+b
+
+c
+
+d
+
+0.5
+
+e
+
+d
+
+c
+
+b
+
+b
+
+c
+
+d
+
+e
+
+0.35
+
+0.4
+
+0.45
+
+11
+
+0.45
+
+0.4
+
+0.35
+
+0.3
+
+0.35
+
+0.4
+
+0.45
+
+11
+
+0.45
+
+0.4
+
+0.35
+
+0.3
+
+i−4
+i−3
+2
+
+i−2
+i−1
+4
+
+i
+
+i+1
+6
+
+i+3
+i+2
+8
+
+i+4
+
+10
+
+i−4
+i−3
+2
+
+i−2
+i−1
+4
+
+i
+
+i+1
+6
+
+i+3
+i+2
+8
+
+i+4
+
+10
+
+(c) width 7
+
+(d) width 9
+
+aa
+
+aa
+
+0.5
+
+1
+
+0
+
+1
+
+0
+
+Fig. 5. Filters used in this study, with the value of each weight b—e under the corresponding
+variable.
+
+j+4
+8
+j+3
+
+j+2
+6
+j+1
+
+j
+4
+j−1
+
+j−2
+2
+j−3
+
+j−4
+0
+
+e2
+de
+
+ce
+
+be
+
+e
+
+be
+
+ce
+
+de
+e2
+i−4
+
+ed
+d2
+cd
+
+bd
+
+d
+
+bd
+
+cd
+d2
+ed
+
+ec
+
+dc
+c2
+bc
+
+c
+
+bc
+c2
+dc
+
+ec
+
+eb
+
+db
+
+cb
+b2
+b
+b2
+cb
+
+db
+
+eb
+
+e
+
+d
+
+c
+
+b
+
+a
+
+b
+
+c
+
+d
+
+e
+
+i
+
+eb
+
+db
+
+cb
+b2
+b
+b2
+cb
+
+db
+
+eb
+
+ec
+
+dc
+c2
+bc
+
+c
+
+bc
+c2
+dc
+
+ec
+
+ed
+d2
+cd
+
+bd
+
+d
+
+bd
+
+cd
+d2
+ed
+
+e2
+de
+
+ce
+
+be
+
+e
+
+be
+
+ce
+
+de
+e2
+i+4
+
+0.09
+
+0.1
+
+0.12
+
+0.14
+
+0.3
+
+0.14
+
+0.12
+
+0.1
+
+0.09
+
+0.1
+
+0.12
+
+0.14
+
+0.16
+
+0.35
+
+0.16
+
+0.14
+
+0.12
+
+0.1
+
+0.12
+
+0.14
+
+0.16
+
+0.18
+
+0.4
+
+0.18
+
+0.16
+
+0.14
+
+0.12
+
+0.14
+
+0.16
+
+0.18
+
+0.2
+
+0.45
+
+0.2
+
+0.18
+
+0.16
+
+0.14
+
+0.3
+
+0.35
+
+0.4
+
+0.45
+
+1
+
+0.45
+
+0.4
+
+0.35
+
+0.3
+
+0.14
+
+0.16
+
+0.18
+
+0.2
+
+0.45
+
+0.2
+
+0.18
+
+0.16
+
+0.14
+
+0.12
+
+0.14
+
+0.16
+
+0.18
+
+0.4
+
+0.18
+
+0.16
+
+0.14
+
+0.12
+
+0.1
+
+0.12
+
+0.14
+
+0.16
+
+0.35
+
+0.16
+
+0.14
+
+0.12
+
+0.1
+
+0.09
+
+0.1
+
+0.12
+
+0.14
+
+0.3
+
+0.14
+
+0.12
+
+0.1
+
+0.09
+
+j+4
+8
+j+3
+
+j+2
+6
+j+1
+
+j
+4
+j−1
+
+j−2
+2
+j−3
+
+j−4
+0
+
+(a)
+
+0
+
+i−3
+
+2
+
+i−2
+
+i−1
+
+4
+
+i+1
+
+6
+
+i+2
+
+i+3
+
+8
+
+0
+
+i−4
+
+i−3
+
+2
+
+i−2
+
+i−1
+
+4
+
+i
+
+i+1
+
+6
+
+i+2
+
+i+3
+
+8
+
+i+4
+
+(b)
+
+Fig. 6. The 2D version of a ﬁlter stencil of width nine general form (a). This is simply the
+square of the 1D stencil. The 2D ﬁlters of width 3, 5, and 7 are subsets of this stencil. Our
+speciﬁc choice of weights is shown in (b).
+
+17
+
+b
+ 
+t
+h
+g
+e
+w
+
+i
+
+ 
+r
+e
+t
+l
+i
+f
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+0.3
+
+0.2
+
+0.1
+
+0
+
+−0.1
+
+−0.2
+
+0.3
+
+0.2
+
+0.1
+
+0
+
+−0.1
+
+−0.2
+
+0
+
+0.4
+
+0.2
+magnitude of eigenvalues
+
+0.6
+
+0.8
+
+1
+
+Fig. 7. Eigenvalues of the 1D, width-three ﬁlter operator using 16 gridpoints. When b = 0
+the operator is simply the identity, so all eigenvalues are one. As b increases the eigenvalues
+spread out below one, indicating that some eigenvectors contract. Eigenvalues are never
+larger than one, so no eigenvectors increase. When b > 0.5 there are negative eigenvalues.
+
+eigenvector k=1, λ
+=0.05
+k
+
+eigenvector k=10, λ
+=0.25
+k
+
+(a)
+
+15
+index
+
+5
+
+10
+
+20
+
+25
+
+30
+
+5
+
+10
+
+20
+
+25
+
+30
+
+15
+index
+
+eigenvector k=20, λ
+=0.68
+k
+
+eigenvector k=30, λ
+=0.98
+k
+
+(c)
+
+5
+
+10
+
+20
+
+25
+
+30
+
+5
+
+10
+
+20
+
+25
+
+30
+
+15
+index
+
+(d)
+
+15
+index
+
+Fig. 8. Eigenvectors of the 1D, width-three ﬁlter operator using 32 gridpoints. High
+wavenumber modes (a,b) have eigenvalues near zero, while low wavenumber modes (c,d)
+have eigenvalues near one. This shows that the ﬁlter is a smoothing operator, because the
+highest wavenumbers are strongly damped.
+
+0.3
+
+0.2
+
+0.1
+
+0
+
+−0.1
+
+−0.2
+
+(b)
+
+0.3
+
+0.2
+
+0.1
+
+0
+
+−0.1
+
+−0.2
+
+18
+
+ 
+
+1
+
+0
+
+0.5
+
+20
+
+40
+
+60
+
+80
+
+100
+
+Fig. 9. Matrix representation of the 2D, 7x7 ﬁlter using 10x10 gridpoints. The full matrix
+is 100 elements square, while each block is 10 square. This matrix is not yet normalized by
+the factor 1/(a + 2b + 2c + 2d + 2e)2, so weights range between 0 and 1.
+
+20
+
+40
+
+60
+
+80
+
+100
+
+ 
+
+200
+
+150
+
+100
+
+50
+
+l
+
+s
+e
+u
+a
+v
+n
+e
+g
+e
+
+i
+
+ 
+f
+
+o
+
+ 
+r
+e
+b
+m
+u
+n
+
+0
+
+0
+
+0.2
+0.8
+magnitude of eigenvalues
+
+0.6
+
+0.4
+
+1
+
+Fig. 10. Distribution of eigenvalues of the 2D, 9x9 ﬁlter operator using 16x16 gridpoints.
+Filter weights are as shown in Fig. 5. The majority of eigenvalues are less than 0.1, indicating
+that most eigenmodes are stongly damped.
+
+19
+
+eigenvector k=2, λ
+=0.001
+k
+
+eigenvector k=86, λ
+=0.014
+k
+
+(a)
+
+5
+
+10
+
+15
+
+(b)
+
+5
+
+10
+
+15
+
+eigenvector k=170, λ
+=0.037
+k
+
+eigenvector k=255, λ
+=0.695
+k
+
+5
+
+10
+
+15
+
+5
+
+10
+
+15
+
+(c)
+
+5
+
+10
+
+15
+
+(d)
+
+5
+
+10
+
+15
+
+Fig. 11. Eigenmodes of the 2D, 9x9 ﬁlter operator using 16x16 gridpoints. As in the 1D
+case, highly oscillatory modes (a) have eigenvalues near zero and so are strongly damped,
+while less oscillatory modes (d) have eigenvalues near one and so are only weakly damped.
+This shows that the ﬁlter we have implemented is a smoothing operator.
+
+5
+
+10
+
+15
+
+5
+
+10
+
+15
+
+20
+
+A
+
+ 
+r
+e
+
+t
+l
+i
+f
+ 
+f
+
+l
+
+ 
+
+o
+e
+u
+a
+v
+n
+e
+g
+e
+m
+u
+m
+n
+m
+
+ 
+
+i
+
+i
+
+i
+
+A
+
+ 
+r
+e
+
+t
+l
+i
+f
+ 
+f
+
+o
+
+ 
+
+i
+
+l
+
+e
+u
+a
+v
+n
+e
+g
+e
+ 
+m
+u
+m
+n
+m
+
+i
+
+i
+
+a=1
+b=0.45
+c varied
+d=0
+e=0
+
+−0.05
+
+0.2
+
+0.05
+
+0
+
+0
+
+a=1
+b=0.45
+c=0.40
+d=0.35
+e varied
+0.3
+
+−0.05
+
+0.2
+
+0
+
+200
+
+400
+
+600
+
+800
+
+1000
+
+1200
+
+1400
+
+1600
+
+m
+
+ 
+,
+h
+t
+
+p
+e
+d
+
+0.8
+0.4
+0.2
+0.8F5
+0.8F9
+0.4F5
+0.4F9
+
+0.05
+
+0.05
+
+0.3
+
+0.4
+filter weight b
+
+0.5
+
+0.6
+
+(b)
+
+0.3
+
+0.4
+filter weight c
+
+0.5
+
+0.6
+
+A
+
+ 
+r
+e
+
+t
+l
+i
+f
+ 
+f
+
+l
+
+ 
+
+o
+e
+u
+a
+v
+n
+e
+g
+e
+m
+u
+m
+n
+m
+
+ 
+
+i
+
+i
+
+i
+
+A
+
+ 
+r
+e
+
+t
+l
+i
+f
+ 
+f
+
+o
+
+ 
+
+i
+
+l
+
+e
+u
+a
+v
+n
+e
+g
+e
+ 
+m
+u
+m
+n
+m
+
+i
+
+i
+
+(a)
+
+−0.05
+
+0.2
+
+0.05
+
+0
+
+0
+
+a=1
+b varied
+c=0
+d=0
+e=0
+
+a=1
+b=0.45
+c=0.40
+d varied
+e=0
+
+0
+
+500
+
+1000
+
+1500
+
+m
+
+ 
+,
+h
+t
+
+p
+e
+d
+
+0.8
+0.4
+0.2
+0.8H1.5
+0.8H2
+0.4H1
+0.4H1.5
+
+−0.05
+
+0.2
+
+(c)
+
+0.3
+
+0.4
+filter weight d
+
+0.5
+
+0.6
+
+(d)
+
+0.4
+filter weight e
+
+0.5
+
+0.6
+
+Fig. 12. Minimum eigenvalue of the 2D, 9x9 ﬁlter operator using 16x16 gridpoints, as a
+function of each ﬁlter weight. If all eigenvalues are strictly positive then the operator is
+positive deﬁnite, and the energy is well deﬁned. The value of each ﬁlter weight is chosen
+(starred points) to satisfy this criterion.
+
+ 
+
+ 
+
+ 
+−64 −62 −60 −58 −56 −54
+
+latitude
+
+(a)
+
+(b)
+
+ 
+−64 −62 −60 −58 −56 −54
+
+latitude
+
+Fig. 13. Depth of 6oC isotherm of potential temperature using the Helmholtz inversion (a)
+and the ﬁlter (b) to smooth the velocity. Higher resolution simulations of standard POP
+(dotted line) have isotherms which are less tilted than lower resolution simulations (solid
+lines). As α or ﬁlter size increases, the POP-α simulations show ﬂatter isotherms, and
+approach a doubling of resolution using standard POP.
+
+21
+
+ 
+
+ 
+
+m
+
+ 
+,
+h
+t
+p
+e
+d
+
+500
+
+1000
+
+1500
+
+2000
+
+2500
+
+3000
+
+m
+
+ 
+,
+h
+t
+p
+e
+d
+
+500
+
+1000
+
+1500
+
+2000
+
+2500
+
+3000
+
+0.8
+0.4
+0.2
+0.8H1.5
+0.8H2
+0.4H1
+0.4H1.5
+
+7
+
+0.8
+0.4
+0.2
+0.8F5
+0.8F9
+0.4F5
+0.4F9
+
+7
+
+ 
+
+4
+
+5
+
+6
+
+temperature, oC
+
+ 
+
+4
+
+5
+
+6
+
+temperature, oC
+
+(a) Helmholtz inversion
+
+(b) ﬁlters
+
+Fig. 14. Horizontally averaged potential temperature versus depth using the Helmholtz
+inversion (a) and the ﬁlter (b) to smooth the velocity. Higher resolution simulations of
+standard POP (dotted line) are cooler and have a sharper thermocline than lower resolution
+simulations (solid lines). Again, POP-α simulations approach a doubling of resolution using
+standard POP.
+
+ 
+
+ 
+
+POP
+POP−α
+
+5
+2
+.
+1
+=
+α
+
+5
+7
+.
+1
+=
+α
+
+5
+.
+1
+=
+α
+
+1
+=
+α
+
+2
+=
+α
+
+5
+2
+.
+1
+=
+α
+
+5
+.
+1
+=
+α
+
+5
+7
+.
+1
+=
+α
+
+1
+=
+α
+
+2
+
+s
+/
+
+2
+m
+c
+
+80
+
+60
+
+40
+
+20
+
+0
+
+ 
+
+2
+
+s
+/
+
+2
+m
+c
+
+30
+
+25
+
+20
+
+15
+
+10
+
+5
+
+0
+
+ 
+
+POP
+POP−α
+
+3
+ 
+F
+
+5
+ 
+F
+
+7
+ 
+F
+
+9
+ 
+F
+
+3
+ 
+F
+
+5
+ 
+F
+
+7
+ 
+F
+
+9
+ 
+F
+
+0.8
+
+0.4
+
+0.2
+
+0.8
+
+0.4
+
+0.2
+
+resolution
+
+resolution
+
+(a) Helmholtz inversion
+
+(b) ﬁlters
+
+Fig. 15. Kinetic energy for all simulations. As the resolution increases with standard POP,
+the kinetic energy increases. Kinetic energy also increases using POP-α at ﬁxed resolution,
+when α is increased using the Helmholtz inversion (a) or the stencil width of the ﬁlter is
+increased (b). Each value was calculated by averaging over the entire domain, and in time
+after 500 years.
+
+22
+
+2
+
+s
+/
+
+2
+m
+c
+
+60
+
+50
+
+40
+
+30
+
+20
+
+10
+
+0
+
+ 
+
+n
+
+2.5
+
+0
+1
+
+ 
+,
+
+e
+d
+a
+c
+e
+d
+
+ 
+
+l
+
+i
+
+t
+
+d
+e
+a
+u
+m
+s
+/
+s
+r
+u
+o
+h
+−
+r
+o
+s
+s
+e
+c
+o
+r
+P
+
+1.5
+
+2
+
+1
+
+0.5
+
+0
+
+ 
+
+2
+
+s
+/
+
+2
+m
+c
+
+20
+
+15
+
+10
+
+5
+
+0
+
+ 
+
+POP
+POP−α
+
+POP
+POP−α
+
+ 
+
+ 
+
+5
+2
+.
+1
+=
+α
+
+5
+7
+.
+1
+=
+α
+
+5
+.
+1
+=
+α
+
+2
+=
+α
+
+1
+=
+α
+
+5
+2
+.
+1
+=
+α
+
+5
+7
+.
+1
+=
+α
+
+5
+.
+1
+=
+α
+
+1
+=
+α
+
+3
+ 
+F
+
+5
+ 
+F
+
+7
+ 
+F
+
+9
+ 
+F
+
+3
+ 
+F
+
+5
+ 
+F
+
+7
+ 
+F
+
+9
+ 
+F
+
+0.8
+
+0.4
+
+0.2
+
+0.8
+
+0.4
+
+0.2
+
+resolution
+
+resolution
+
+(a) Helmholtz inversion
+
+(b) ﬁlters
+
+Fig. 16. Same as Fig. 15 but for eddy kinetic energy. Note that at the lowest resolution (0.8)
+the eddy kinetic energy of standard POP is indistinguishable from zero on this scale.
+
+ 
+
+ 
+
+3
+F
+
+ 
+
+5
+F
+
+ 
+
+7
+F
+
+ 
+
+9
+F
+
+z
+t
+l
+
+o
+h
+m
+e
+H
+
+l
+
+POP, implicit Coriolis
+POP, explicit Coriolis
+POP−α
+
+3
+ 
+F
+
+5
+ 
+F
+
+7
+ 
+F
+
+9
+ 
+F
+
+z
+t
+l
+
+o
+h
+m
+e
+H
+
+l
+
+0.8
+
+0.4
+
+resolution
+
+0.2
+
+Fig. 17. Timing data from various implementations of POP and POP-α (note log scale).
+The POP-α ﬁlter algorithms (F3—F9) are much cheaper than a doubling of resulution using
+standard POP. Using a Helmholtz inversion to smooth is more expensive than the ﬁlters.
+All POP-α algorithms use explicit Coriolis discretization.
+
+23
+
+name
+
+model
+
+smoothing
+
+fw
+
+grid
+
+lon
+
+lat
+
+0.8
+
+0.4
+
+0.2
+
+POP
+
+POP
+
+POP
+
+-
+
+-
+
+-
+
+0.8H1
+
+POP-α Helmholtz
+
+1 ∆x
+
+0.8H1.5 POP-α Helmholtz
+
+1.5 ∆x
+
+0.8H2
+
+POP-α Helmholtz
+
+2 ∆x
+
+0.4H1
+
+POP-α Helmholtz
+
+1 ∆x
+
+0.4H1.5 POP-α Helmholtz
+
+1.5 ∆x
+
+0.4H2
+
+POP-α Helmholtz
+
+2 ∆x
+
+0.8F3
+
+POP-α
+
+0.8F5
+
+POP-α
+
+0.8F7
+
+POP-α
+
+0.8F9
+
+POP-α
+
+0.4F3
+
+POP-α
+
+0.4F5
+
+POP-α
+
+0.4F7
+
+POP-α
+
+0.4F9
+
+POP-α
+
+ﬁlter
+
+ﬁlter
+
+ﬁlter
+
+ﬁlter
+
+ﬁlter
+
+ﬁlter
+
+ﬁlter
+
+ﬁlter
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+3
+
+5
+
+7
+
+9
+
+3
+
+5
+
+7
+
+9
+
+40x40x34
+
+80x80x34
+
+160x160x34
+
+40x40x34
+
+40x40x34
+
+40x40x34
+
+80x80x34
+
+80x80x34
+
+80x80x34
+
+40x40x34
+
+40x40x34
+
+40x40x34
+
+40x40x34
+
+80x80x34
+
+80x80x34
+
+80x80x34
+
+80x80x34
+
+0.8
+
+0.4
+
+0.2
+
+0.8
+
+0.8
+
+0.8
+
+0.4
+
+0.4
+
+0.4
+
+0.8
+
+0.8
+
+0.8
+
+0.8
+
+0.4
+
+0.4
+
+0.4
+
+0.4
+
+0.4
+
+0.2
+
+0.1
+
+0.4
+
+0.4
+
+0.4
+
+0.2
+
+0.2
+
+0.2
+
+0.4
+
+0.4
+
+0.4
+
+0.4
+
+0.2
+
+0.2
+
+0.2
+
+0.2
+
+Table 1
+Model parameters for experiments discussed in this paper, fw is the ﬁlter width; grid is
+the number of gridpoints in (x, y, z); lon is the longitudinal grid-cell width; and lat is the
+latitudinal grid-cell width. The names are a concatenation of the meridional resolution, the
+type of smoothing, and the value of α or ﬁlter width.
+
+α
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+24
+
+algorithm Cor
+
+steps/day
+
+clock time
+
+resolution
+
+resolution
+
+0.8
+
+0.4
+
+0.2
+
+0.8
+
+0.4
+
+0.2
+
+40
+
+52
+
+4.16
+
+21.3
+
+195
+
+5.82
+
+28.4
+
+212
+
+POP
+
+POP
+
+POP-α F3
+
+POP-α F5
+
+POP-α F7
+
+POP-α F9
+
+imp
+
+exp
+
+exp
+
+exp
+
+exp
+
+exp
+
+12
+
+20
+
+18
+
+18
+
+18
+
+18
+
+12
+
+22
+
+32
+
+24
+
+24
+
+24
+
+24
+
+18
+
+POP-α Helm.
+
+exp
+
+5.09
+
+22.7
+
+5.68
+
+22.7
+
+6.18
+
+25.6
+
+6.89
+
+27.1
+
+10.21
+
+33.0
+
+Table 2
+Minimimum steps/day and the resulting clock time for various algorithms and resolu-
+tions. The second column states whether the barotropic Coriolis term is implicit or exlpicit.
+Clock time is in processor-hours per simulated decade. The fastest POP-α algorithm is the
+reduced algorithm with a ﬁlter. Even though the POP-α algorithms use explicit Coriolis
+discretization, the timestep is larger (fewer steps per day) than standard POP with explicit
+Coriolis.
+
+25
+
+eigenvector k=34, λ
+=0.02
+k
+
+2
+
+4
+
+6
+
+8
+
+10
+
+2
+
+4
+
+6
+
+8
+
+10
+
+eigenvector k=67, λ
+=0.06
+k
+
+2
+
+4
+
+6
+
+8
+
+10
+
+2
+
+4
+
+6
+
+8
+
+10
+
+eigenvector k=100, λ
+=0.81
+k
+
+2
+
+4
+
+6
+
+8
+
+10
+
+2
+
+4
+
+6
+
+8
+
+10
+
+

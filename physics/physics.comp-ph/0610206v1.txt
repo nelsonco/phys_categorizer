@@ -1,0 +1,3219 @@
+6
+0
+0
+2
+ 
+t
+c
+O
+ 
+4
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+6
+0
+2
+0
+1
+6
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Eﬃcient numerical diagonalization of hermitian 3
+
+3 matrices
+
+Joachim Koppa
+
+×
+
+Max–Planck–Institut f¨ur Kernphysik,
+Postfach 10 39 80, 69029 Heidelberg, Germany
+(Dated: 25 October 2006)
+
+A very common problem in science is the numerical diagonalization of symmetric or hermitian
+3 × 3 matrices. Since standard “black box” packages may be very ineﬃcient if the number of
+matrices is large, we study several alternatives. We consider optimized implementations of the
+Jacobi, QL, and Cuppen algorithms and compare them with a new, carefully designed analytical
+method relying on Cardano’s formula for the eigenvalues and on vector cross products for the
+eigenvectors. This analytical algorithm outperforms the other algorithms by more than a factor
+of 2, but may be less accurate if the eigenvalues diﬀer greatly in magnitude. Jacobi is the most
+accurate, but also the slowest method, while QL and Cuppen are good general purpose algorithms.
+For all algorithms, we give an overview of the underlying mathematical ideas, and present detailed
+benchmark results. C and Fortran implementations of our code are available for download from
+http://www.mpi-hd.mpg.de/∼jkopp/3x3/.
+
+1.
+
+INTRODUCTION
+
+In many scientiﬁc problems, the numerical diagonaliza-
+tion of a large number of symmetric or hermitian 3
+3
+matrices plays a central role. For a matrix A, this means
+calculating a set of eigenvalues λi and eigenvectors vi,
+satisfying
+
+×
+
+Avi = λivi.
+
+(1)
+
+An example from classical mechanics or molecular science
+is the determination of the principal axes of a solid ob-
+ject [1]. In high energy physics, 3
+3 matrices appear for
+example in the calculation of neutrino oscillation proba-
+bilities in matter [2], which requires the diagonalization
+of the Hamiltonian operator
+
+×
+
+H = U
+
+∆m2
+21
+
+U† +
+
+0
+
+.
+
+(2)
+
+0
+
+
+
+
+
+∆m2
+31
+
+
+
+
+
+V
+
+
+
+
+
+0
+
+
+21 and ∆m2
+Here, U is the leptonic mixing matrix, ∆m2
+31
+are the diﬀerences of the squared neutrino masses, and
+V is the MSW-Potential.
+
+There exist many publicly available software pack-
+ages for the calculation of matrix eigensystems, e.g. LA-
+PACK [3], the GNU Scientiﬁc Library [4], or the Nu-
+merical Recipes algorithms [5]. These packages exhibit
+excellent accuracy, but being designed mainly for very
+large matrices, they may produce a lot of computational
+overhead in the simple 3
+3 case. This overhead comes
+partly from the algorithms themselves, and partly from
+the implementational details.
+
+×
+
+In this letter we will study the performance of several
+algorithms which were optimized speciﬁcally for 3
+3
+matrices. We will discuss the well-known Jacobi, QL
+
+×
+
+aEmail: jkopp@mpi-hd.mpg.de
+
+Typeset by REVTEX
+
+and Cuppen algorithms, and compare their speed and
+accuracy to that of a direct analytical calculation using
+Cardano’s formula for the eigenvalues, and vector cross
+products for the eigenvectors.
+
+The outline of the paper is as follows:
+
+In Secs. 2
+and 3, we will describe the mathematical background
+of the considered algorithms as well as the most im-
+portant implementational issues, and analyze their nu-
+In Sec. 4 we will brieﬂy mention
+merical properties.
+some other algorithms capable of solving the 3
+3 eigen-
+problem, and give reasons why we do not consider them
+to be the optimal choice for such small matrices. Our
+purely theoretical discussion will be complemented in
+Sec. 5 by the presentation of detailed benchmark re-
+sults. Finally, we will draw our conclusions in Sec. 6.
+The appendix contains two alternative derivations of
+Cardano’s formulas, and the documentation of our C
+and Fortran code, which is available for download from
+http://www.mpi-hd.mpg.de/
+
+jkopp/3x3/.
+
+×
+
+∼
+
+2.
+
+ITERATIVE ALGORITHMS
+
+2.1. The Jacobi method
+
+One of the oldest methods for the diagonalization of an
+n matrix A is the
+arbitrary symmetric or hermitian n
+Jacobi algorithm. Discussions of this algorithm can be
+found in [5, 6, 7, 8, 9]. Its basic idea is to iteratively zero
+the oﬀ-diagonal elements of A by unitary transformations
+
+×
+
+2
+
+of the form
+
+Ppq =
+
+.
+
+(3)
+
+1
+
+. . .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+c
+...
+se−
+
+iα
+
+−
+
+· · ·
+1
+
+· · ·
+
+seiα
+...
+c
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+. . .
+
+1
+
+The matrices Ppq diﬀer from the unit matrix only in the
+(pp), (pq), (qp), and (qq) elements; c and s are required
+to satisfy s2 + c2 = 1, and can thus be expressed in the
+form
+
+with
+
+and
+
+contrast to the Jacobi reduction to diagonal form, the
+Givens reduction to tridiagonal form is non-iterative),
+and the Householder method, which we will discuss here.
+A Householder transformation is deﬁned by the unitary
+transformation matrix
+
+P = I
+
+ωuu†
+
+−
+
+u = x
+
+ei
+x
+|
+
+∓ |
+
+ω =
+
+1 +
+
+1
+2
+u
+|
+|
+
+x†u
+u†x
+
+.
+
+(4)
+
+(5)
+
+(cid:19)
+
+(cid:18)
+Here, x is arbitrary for the moment, and ei denotes the
+i-th unit vector. From a purely mathematical point of
+view, the choice of sign in Eq. (9) is arbitrary, but in the
+actual implementation we choose it to be equal to the
+sign of the real part of xi to avoid roundoﬀ errors. P has
+the property that Px
+
+ei because
+
+∼
+
+(I
+
+ωuu†)x = x
+
+−
+
+uu†x
+
+1 + x†u
+u†x
+2
+− (cid:16)
+x
+2
+|
+|
+(u†x + x†u)(x
+2
+x
+2
+|
+|
+2
+x
+(
+∓ |
+|
+|
+
+(cid:17)
+x
+(xi + x∗i )
+∓ |
+|
+ei)
+x
+∓ |
+|
+x
+(xi + x∗i )
+∓ |
+|
+2
+x
+x
+x
+x∗i )(x
+xi +
+∓ |
+|
+|
+|
+|
+2
+x
+x
+(xi + x∗i )
+2
+|
+∓ |
+|
+|
+
+= x
+
+−
+
+= x
+
+−
+ei.
+x
+|
+
+±|
+
+=
+
+ei)
+x
+|
+
+∓ |
+
+This means, that if we choose x to contain the lower n
+1
+elements of the ﬁrst column of A and set x1 = 0, ei = e2,
+then
+
+−
+
+P1 A P†1 = 
+
+
+
+
+
+× ×
+× × · · · ×
+...
+...
+. . .
+× · · · ×
+
+
+
+.
+
+
+
+
+
+
+(7)
+
+Note that the ﬁrst row and the ﬁrst column of this matrix
+are real even if A is not. In the next step, x contains the
+2 elements of the second column of P1AP†1,
+lower n
+x1 = x2 = 0, and ei = e3, so that the second row (and
+column) is brought to the desired form, while the ﬁrst
+remains unchanged. This is repeated n
+1 times, until
+A is fully tridiagonal and real.
+
+−
+
+−
+
+For the actual
+
+implementation of the Householder
+method, we do not calculate the matrix product PAP†
+directly, but instead evaluate
+
+c = cos φ,
+s = sin φ
+
+for some real angle φ. The complex phase α is absent if
+A has only real entries. φ and α are chosen in such a
+way that the similarity transformation
+
+A
+
+→
+
+P†pq A Ppq
+
+eliminates the (pq) element (and thus also the (qp) ele-
+ment) of A. Of course it will in general become nonzero
+again in the next iteration, where p or q is diﬀerent, but
+one can show that the iteration (5) converges to a diago-
+nal matrix, with the eigenvalues of A along the diagonal,
+if p and q cycle through the rows or columns of A [9].
+The normalized eigenvectors are given by the columns of
+the matrix
+
+Q = Pp1q1 Pp2q2 Pp3q3 · · ·
+
+.
+
+(6)
+
+2.2. The QR and QL algorithms
+
+The QR and QL algorithms are among the most widely
+used methods in large scale linear algebra because they
+are very eﬃcient and accurate although their implemen-
+tation is a bit more involved than that of the Jacobi
+method [5, 7, 10]. They are only competitive if applied
+to real symmetric tridiagonal matrices of the form
+
+× ×
+× × ×
+
+T =
+
+× × ×. . .
+
+
+
+
+
+
+
+
+
+
+
+.
+
+
+
+
+
+
+
+
+
+
+
+× × ×
+× ×
+
+Therefore, as a preliminary step, A has to be brought to
+this form.
+
+2.2.1. Reduction of A to tridiagonal form
+
+There are two main ways to accomplish the tridiago-
+nalization: The Givens method, which consists of succes-
+sively applying plane rotations of the form of Eq. (3) (in
+
+K =
+
+p = ω∗Au,
+ω
+2
+q = p
+
+u†p,
+
+Ku.
+
+−
+
+(8)
+
+(9)
+
+(10)
+
+(11)
+
+(12)
+
+(13)
+
+(14)
+
+(15)
+
+With these deﬁnitions, we have the ﬁnal expression
+
+P A P† = P(A
+
+pu†)
+
+= A
+
+= A
+
+−
+
+−
+
+−
+pu†
+
+qu†
+
+−
+
+−
+
+uq†.
+
+up† + 2Kuu†
+
+(16)
+
+Note that in the last step we have made use of the fact
+that K is real, as can be seen from Eqs. (14) and (13),
+and from the hermiticity of A.
+
+2.2.2. The QL algorithm for real tridiagonal matrices
+
+The QL algorithm is based on the fact that any real
+matrix can be decomposed into an orthogonal matrix Q
+and a lower triangular matrix L according to
+
+A = QL.
+
+(17)
+
+Equivalently, one could also start from a decomposition
+of the form A = QR, with R being upper triangular,
+to obtain the QR algorithm, which has similar proper-
+ties. For tridiagonal A, the QL decomposition is most
+eﬃciently calculated by a sequence of plane rotations of
+the form of Eq. (3). The iteration prescription is
+
+QT A Q,
+
+A
+
+→
+
+(18)
+
+−
+
+but to accelerate convergence it is advantageous to use
+kI
+the method of shifting, which means decomposing A
+instead of A.
+In each step, k is chosen in such a way
+that the convergence to zero of the uppermost non-zero
+oﬀ-diagonal element of A is maximized (see [10] for a
+discussion of the shifting strategy and for corresponding
+convergence theorems). Since in practice, the subtraction
+of k from the diagonal elements of A can introduce large
+numerical errors, the most widely used form of the QL
+algorithm is one with implicit shifting, where not all of
+these diﬀerences need to be evaluated explicitly, although
+the method is mathematically equivalent to the ordinary
+QL algorithm with shifting.
+
+2.3. Eﬃciency and accuracy of the Jacobi and QL
+algorithms
+
+≈
+
+As we have mentioned before, one of the main ben-
+eﬁts of the QL algorithm is its eﬃciency: For matrices
+30n2 ﬂoating point
+of large dimension n, it requires
+operations (combined multiply/add) if only the eigenval-
+6n3 operations if also the
+ues are to be computed, or
+≈
+complex eigenvectors are desired [5]. Additionally, the
+preceding complex Householder transformation requires
+8n3/3 resp. 16n3/3 operations. In contrast, the complex
+Jacobi algorithm takes about 3n2 to 5n2 complex Jacobi
+rotations, each of which involves 12n operations for the
+eigenvalues, or 24n operations for the complete eigensys-
+35n3 – 60n3 resp.
+tem. Therefore, the total workload is
+70n3 – 120n3 operations.
+
+≈
+
+3
+
+For the small matrices considered here, these estimates
+are not reliable.
+In particular, the QL method suf-
+fers from the fact that the ﬁrst few eigenvalues require
+more iterations than the later ones, since for these the
+corresponding oﬀ-diagonal elements have already been
+brought close to zero in the preceding steps. Further-
+more, the operations taking place before and after the
+innermost loops will play a role for small matrices. Since
+these are more complicated for QL than for Jacobi, they
+will give an additional penalty to QL. For these reasons
+we expect the performance bonus of QL over Jacobi to
+be smaller for 3
+
+3 matrices than for larger problems.
+
+The numerical properties of both iterative methods are
+independent of the matrix size and have been studied in
+great detail by others, so we will only give a brief overview
+here. For real symmetric positive deﬁnite matrices, Dem-
+mel and Veseli´c have shown that the Jacobi method is
+more accurate than the QL algorithm [11, 12]. In partic-
+ular, if the eigenvalues are distributed over many orders
+of magnitude, QL may become inaccurate for the small
+eigenvalues. In the example given in [12], the extremely
+fast convergence of this algorithm is also its main weak-
+ness: In the attempt to bring the lowest diagonal element
+close to the smallest eigenvalue of the matrix, a diﬀerence
+of two almost equal numbers has to be taken.
+
+×
+
+If the requirement of positive deﬁniteness is omitted,
+one can also ﬁnd matrices for which QL is more accurate
+than Jacobi [13].
+
+3. NON-ITERATIVE ALGORITHMS
+
+3.1. Direct analytical calculation of the eigenvalues
+
+For 3
+
+3 matrices, the fastest way to calculate the
+eigenvalues is by directly solving the characteristic equa-
+tion
+
+×
+
+P (λ) =
+
+A
+|
+
+λI
+|
+
+−
+
+= 0
+
+A =
+
+
+
+a11 a12 a13
+a∗12 a22 a23
+a∗23 a∗13 a33
+
+
+,
+
+If we write
+
+
+Eq. (19) takes the form
+
+with the coeﬃcients
+
+P (λ) = λ3 + c2λ2 + c1λ + c0 = 0
+
+(21)
+
+a11
+
+c2 =
+a22
+c1 = a11a22 + a11a33 + a22a33
+
+a33,
+
+−
+
+−
+
+−
+
+a12
+
+2
+|
+− |
+2 + a22
+a13
+|
+|
+a11a22a33
+
+2,
+|
+
+2
+a13
+− |
+− |
+|
+2 + a33
+a12
+|
+|
+2 Re(a∗13a12a23).
+
+a23
+2
+|
+
+−
+
+c0 = a11
+
+a23
+|
+
+−
+
+(19)
+
+(20)
+
+(22)
+
+(23)
+
+(24)
+
+(25)
+
+(26)
+
+(27)
+
+(28)
+
+(29)
+
+(30)
+
+To solve Eq. (21), we follow the method proposed by
+del Ferro, Tartaglia, and Cardano in the 16th cen-
+tury [14]. In Appendix A we will discuss two alternative
+approaches and show that they lead to the same algo-
+rithm as Cardano’s method if numerical considerations
+are taken into account.
+
+Cardano’s method requires ﬁrst transforming Eq. (21)
+
+4
+
+to the form
+
+by deﬁning
+
+3
+x
+
+−
+
+3x = t,
+
+3c1,
+
+p = c2
+2
+q =
+
+−
+27
+2 c0
+−
+3/2q,
+√p (λ + 1
+
+−
+t = 2p−
+x = 3
+
+3 c2).
+
+3
+2 + 9
+
+c
+
+2 c2c1,
+
+It is easy to check that a solution to Eq. (25) is then
+given by
+
+x =
+
++ u,
+
+1
+u
+
+with
+
+t2
+4 −
+
+3
+
+1.
+
+s
+
+u =
+
+t
+2 ± r
+There is a sixfold ambiguity in u (two choices for the
+sign of the square root and three solutions for the com-
+plex cube root), but it reduces to the expected threefold
+ambiguity in x.
+
+(31)
+
+To achieve optimal performance, we would like to avoid
+complex arithmetic as far as possible. Therefore, we will
+now show that √p, and thus t, is always real. We know
+from linear algebra that the characteristic polynomial
+P (λ) of the hermitian matrix A must have three real
+roots, which is only possible if the stationary points of
+1
+P (λ), ˜λ1/2 =
+3 √p are real.
+−
+Since c2 is real, this implies that also √p must be real.
+
+3c1 =
+
+1
+3 c2
+
+1
+3 c2
+
+c2
+2
+
+−
+
+±
+
+±
+
+−
+
+1
+3
+
+Furthermore, from the same argument, we have the re-
+P (˜λ2), which in turn implies
+1 is always purely
+= 1.
+
+quirement that P (˜λ1)
+that
+t
+−
+imaginary, and from this it is easy to see that
+Therefore we can write u = eiφ, with
+
+≥
+≥
+2. Therefore,
+
+t2/4
+
+u
+|
+
+p
+
+−
+
+≤
+
+≤
+
+0
+
+2
+
+|
+
+p
+
+φ = 1
+
+3 arctan
+
+= 1
+
+3 arctan
+
+1
+
+|
+
+−
+
+t2/4
+|
+t/2
+p
+1
+4 c2
+
+27
+
+q2
+
+= 1
+
+3 arctan
+
+p3
+−
+q
+c1) + c0(q + 27
+
+p
+
+4 c0)
+
+1(p
+
+−
+
+q
+
+(cid:2)
+
+q
+
+(32)
+
+.
+
+(cid:3)
+
+The last step is necessary to improve the numerical ac-
+curacy, which would suﬀer dramatically if we computed
+the diﬀerence p3
+
+q2 directly.
+
+When evaluating Eq. (32), care must be taken to cor-
+rectly resolve the ambiguity in the arctan by taking into
+
+−
+
+account the sign of q: For q > 0, the solution must lie
+in the ﬁrst quadrant, for q < 0 it must be located in the
+second. In contrast to this, solutions diﬀering by mul-
+tiples of 2π are equivalent, so x can take three diﬀerent
+values,
+
+(33)
+
+(34)
+
+x1 = 2 cos φ,
+
+x2 = 2 cos
+
+φ +
+
+(cid:16)
+
+x3 = 2 cos
+
+φ
+
+2π
+3
+2π
+3
+
+(cid:17)
+
+=
+
+=
+
+−
+
+−
+
+−
+
+cos φ
+
+√3 sin φ,
+
+−
+
+cos φ + √3 sin φ.
+
+(cid:17)
+These correspond to the three eigenvalues of A:
+
+(cid:16)
+
+λi = √p
+
+3 xi −
+
+1
+3 c2.
+
+Similar formulas have been derived in [15].
+
+The most expensive steps of Cardano’s algorithm are
+the evaluations of the trigonometric functions. Neverthe-
+less, the method is extremely fast, and will therefore be
+the best choice for most practical problems. However,
+from Eq. (34) we can see that it becomes unstable for
+matrices with largely diﬀerent eigenvalues: In general, c2
+is of the order of the largest eigenvalue λmax. Therefore,
+in order to obtain the smaller eigenvalues, considerable
+3 xi and 1
+cancellations between √p
+3 c2 must occur, which
+can yield large roundoﬀ errors and are very susceptible
+to tiny errors in the calculation of c2.
+
+Furthermore, the roots of Eq. (21) can be very sensitive
+to small errors in the coeﬃcients which might arise due
+to cancellations in Eqs. (22) – (24).
+
+If ε is the machine precision, we can estimate the abso-
+lute accuracy of the eigenvalues to be of
+(ελmax), which
+may imply a signiﬁcant loss of relative accuracy for the
+small eigenvalues.
+
+O
+
+Consider for example the matrix
+
+1040 1019 1019
+1019 1020 109
+1019 109
+
+,
+
+1 
+
+
+
+
+
+
+(35)
+
+5
+
+which has the (approximate) eigenvalues 1040, 1020, and
+1019, and
+1. However, Cardano’s method yields 1040, 5
+1019. Note that for the matrix (35), also the QL algo-
+−
+rithm has problems and delivers one negative eigenvalue.
+Only Jacobi converges to a reasonable relative accuracy.
+See [11] for a discussion of this.
+
+·
+
+·
+
+3.2. Direct analytical calculation of the
+eigenvectors
+
+Once the eigenvalues λi of A have been computed, the
+eigenvectors vi can be calculated very eﬃciently by using
+vector cross products, which are a unique tool in three-
+dimensional space.
+
+The vi satisfy by deﬁnition
+
+(A
+
+λiI)
+
+vi = 0.
+
+−
+
+·
+
+(36)
+
+(39)
+
+(40)
+
+Taking the hermitian conjugate of this equation and mul-
+tiplying it with an arbitrary vector x
+
+C3, we obtain
+
+∈
+
+(A
+
+v†i ·
+
+−
+
+λiI)
+
+x = 0.
+
+·
+
+(37)
+
+In particular, if x is the j-th unit vector ej and Aj is the
+j-th column of A, this becomes
+
+(Aj
+
+v†i ·
+Consequently, as long as A1
+linearly independent, we have
+
+−
+
+λiej) = 0
+
+−
+
+j.
+
+∀
+
+(38)
+
+λie1 and A2
+
+λie2 are
+
+−
+
+vi = (A1
+
+λie1)
+
+−
+
+(A2
+
+λie2).
+
+×
+−
+λie1 = µ(A2
+
+In the special case that A1
+immediately given by
+
+−
+
+λie2), vi is
+
+−
+
+vi =
+
+1
+
+1 +
+
+.
+
+1
+µ
+−
+0 
+
+
+2 
+µ
+|
+|
+
+
+
+p
+
+When implementing the above procedure, care must
+be taken if there is a degenerate eigenvalue because in
+this case, the algorithm will only ﬁnd one of the two
+corresponding eigenvectors. Therefore, if we detect a de-
+generate eigenvalue, say λ1 = λ2, we calculate the sec-
+ond eigenvector as the cross product of v1 with one of
+the columns of A
+In principle, this alternative
+formula would also work for non-degenerate eigenvalues,
+but we try to avoid it as far as possible because it abets
+the propagation of errors. On the other hand, we have
+to keep in mind that the test for degeneracy may fail if
+the eigenvalues have been calculated too inaccurately. If
+this happens, the algorithm will deliver wrong results.
+
+λ1I.
+
+−
+
+The calculation of the third eigenvalue can be greatly
+accelerated by using the formula v†3 = v1
+v2. Of course,
+this is again vulnerable to error propagation, but it turns
+out that this is usually tolerable.
+
+×
+
+For many practical purposes, the vector product algo-
+rithm is the method of choice because it is considerably
+faster than all other approaches. However, there are sev-
+eral limitations to its accuracy that need to be kept in
+mind. First, the eigenvectors suﬀer from errors in the
+eigenvalues. Under certain circumstances, these errors
+can even be greatly enhanced by the algorithm. For ex-
+ample, the matrix
+
+1020 109 109
+109 1020 109
+109
+109
+
+,
+
+1 
+
+
+
+
+
+
+has the approximate eigenvalues (1 + 10−
+10−
+are approximately
+
+−
+1020, and 0.98. The corresponding eigenvectors
+
+11)
+
+·
+
+·
+
+11)
+
+1020, (1
+
+v1 =
+
+,
+
+v2 =
+
+,
+
+v3 =
+
+.
+
+(42)
+
+√2
+√2
+0
+
+
+
+
+
+
+
+
+
+√2
+√2
+0
+
+
+
+−
+
+
+
+
+
+
+
+0
+0
+1
+
+
+
+
+
+
+5
+
+If we erroneously start the vector product algorithm with
+the values 1020, 1020, and 0.98, the error that is intro-
+duced when subtracting λ1 from the diagonal elements is
+(109) and thus comparable to the oﬀ-diagonal
+of order
+elements. Consequently, the calculated eigenvectors
+
+O
+
+v1 =
+
+,
+
+v2 =
+
+,
+
+v3 =
+
+√3
+√3
+√3
+
+
+
+
+
+−
+
+
+
+
+
+2/√6
+1/√6
+−
+1/√6
+
+
+
+
+
+
+
+
+
+0
+√2
+√2
+
+
+
+
+
+
+
+(43)
+
+are completely wrong.
+
+Another ﬂaw of the vector product algorithm is the fact
+that the subtractions (Aj
+λiej) and the subtractions
+−
+in the evaluation of the cross products are very prone to
+roundoﬀ errors.
+
+3.3. Cuppen’s Divide and Conquer algorithm
+
+×
+
+In recent years, the “Divide and Conquer” paradigm
+for symmetric eigenproblems has received considerable
+attention. The idea was originally invented by Cup-
+pen [16], and current implementations are faster than
+the QL method for large matrices [3]. One can estimate,
+3 matrices, a divide and conquer strategy
+that for 3
+might also be beneﬁcial, because it means splitting the
+problem into a trivial 1
+1 and an analytically accessible
+2
+
+×
+However, let us ﬁrst discuss Cuppen’s algorithm in its
+general form for n
+n matrices. As a preliminary step,
+the matrix has to be reduced to symmetric tridiagonal
+form, as discussed in Sec. 2.2.1. The resulting matrix T
+is then split up in the form
+
+2 problem.
+
+×
+
+×
+
+where T1 and T2 are again tridiagonal, and H is a very
+simple rank 1 matrix, e.g.
+
+T =
+
+T1
+0
+0 T2
+
+(cid:18)
+
+(cid:19)
+
++ H,
+
+H = 
+
+β β
+β β
+
+0
+
+
+
+
+.
+
+0
+
+
+
+
+
+
+(44)
+
+(45)
+
+Then, the smaller matrices T1 and T2 are brought to the
+diagonal form Ti = QiDiQT
+
+i , so that T becomes
+
+T =
+
+Q1D1QT
+1
+0
+
+0
+Q2D2QT
+2
+
+(cid:18)
+
+=
+
+Q1
+0
+0 Q2
+
+D1
+0
+0 D2
+
+(cid:19)
+
++ H
+
++ H′
+
+(41)
+
+QT
+0
+1
+0 QT
+2
+
+.
+
+(46)
+
+(cid:18)
+
+(cid:21) (cid:18)
+
+(cid:19) (cid:20)(cid:18)
+
+(cid:19)
+Here, H′ = z zT is another rank 1 matrix with a gener-
+ating vector z consisting of the last row of Q1 and the
+ﬁrst row of Q2, both multiplied with β. The remaining
+problem is to ﬁnd an eigenvalue λ and an eigenvector v,
+satisfying
+
+(cid:19)
+
+D1
+0
+0 D2
+
+(cid:20)(cid:18)
+
+(cid:19)
+
+−
+
+(cid:21)
+
++ z zT
+
+λI
+
+v = 0.
+
+(47)
+
+6
+
+diag((D1
+
+left with
+By multiplying this
+1) and dividing oﬀ the
+zT
+−
+scalar zT v, we obtain the characteristic equation in the
+form
+
+equation from the
+
+1, (D2
+
+λI)−
+
+λI)−
+
+−
+
+·
+
+1 +
+
+= 0,
+
+(48)
+
+z2
+i
+di −
+
+λ
+
+i
+X
+
+where the di are the diagonal entries of D1 and D2.
+
+×
+
+There are several obvious strategies for solving this
+equation in the 3
+3 case: First, by multiplying out the
+denominators we obtain a third degree polynomial which
+can be solved exactly as discussed in Sec. 3.1. This is very
+fast, but we have seen that it can be numerically unstable.
+Second, one could apply the classical Newton-Raphson
+iteration, which is fast and accurate in the vicinity of the
+root, but may fail altogether if a bad starting value is
+chosen. Finally, the fact that the roots of Eq. (48) are
+known to be separated by the singularities d1, d2 and d3
+suggests the usage of a bisection method to obtain the
+eigenvalues very accurately, but with slow convergence.
+To get the optimum results, we apply Cardano’s an-
+alytical method to get estimates for the roots, and
+reﬁne them with a hybrid Newton-Raphson/Bisection
+method based on [5]. This method usually takes Newton-
+Raphson steps, but if the convergence gets too slow or if
+Newton-Raphson runs out of the bracketing interval, it
+falls back to bisection.
+˜vij
+
+of
+diag(D1, D2) + H′ are then obtained by the simple
+formula
+
+eigenvectors ˜vi
+
+elements
+
+The
+
+the
+
+of
+
+˜vij =
+
+zj
+dj −
+and just need to be transformed back to the original basis
+by undoing the transformations Q1, Q2, and the tridiag-
+onalization.
+
+(49)
+
+λi
+
+If implemented carefully, Cuppen’s method can reach
+an accuracy comparable to that of the QL method. A
+λj
+major issue is the calculation of the diﬀerences di −
+in the evaluation of the characteristic equation, Eq. (48),
+and in the calculation of the eigenvectors, Eq. (49). To
+keep roundoﬀ errors as small as possible when solving
+for the eigenvalue λj, we subtract our initial estimate for
+λj from all di before starting the iteration. This ensures
+that the thus transformed eigenvalue is very close to zero
+and therefore small compared to the di.
+
+It also required
+
+As we have mentioned before, the Divide and Con-
+quer algorithm is faster than the QL method for large
+(n3) operations, but since
+matrices.
+O
+the expensive steps — the reduction to tridiagonal form
+and the back-transformation of the eigenvectors — are
+both outside the iterative loops, the coeﬃcient of n3 is
+signiﬁcantly smaller. For the small matrices that we are
+considering, however, the most expensive part is solving
+the characteristic equation. Furthermore, many condi-
+tional branches are required to implement necessary case
+diﬀerentiations, to avoid divisions by zero, and to handle
+
+special cases like multiple eigenvalues. Therefore, we ex-
+pect the algorithm to be about as fast as the QL method.
+It is of course possible to reduce the calculational ef-
+fort at the expense of reducing the accuracy and stability
+of the algorithm, but it will always be slower than Car-
+dano’s method combined with the vector product algo-
+rithm.
+
+4. OTHER ALGORITHMS
+
+Apart from the Jacobi, QL, Cuppen, and vector prod-
+uct algorithms there are several other methods for ﬁnding
+the eigensystems of symmetric matrices. We will brieﬂy
+outline some of them here, and give reasons why they are
+3 problems.
+inappropriate for 3
+
+×
+
+4.1.
+
+Iterative root ﬁnding methods
+
+In order to avoid the instabilities of Cardano’s method
+which were discussed in Sec. 3.1, one can use an itera-
+tive root ﬁnding method to solve the characteristic equa-
+tion. Root bracketing algorithms like classical bisection
+or the Dekker-Brent method start with an interval which
+is known to contain the root. This interval is then itera-
+tively narrowed until the root is known with the desired
+accuracy. Their speed of convergence is fair, but they
+are usually superseded by the Newton-Raphson method
+which follows the gradient of the function until it ﬁnds
+the root. However, the Newton-Raphson algorithm is not
+guaranteed to converge in all cases.
+
+Although these problems can partly be circumvented
+by using a hybrid method like the one discussed in
+Sec. 3.3, iterative root ﬁnders are still unable to ﬁnd
+multiple roots, and these special cases would have to be
+treated separately. Furthermore, the accuracy is limited
+by the accuracy with which the characteristic polyno-
+mial can be evaluated. As we have already mentioned
+in Sec. 3.1, this can be spoiled by cancellations in the
+calculation of the coeﬃcients c0, c1, and c2.
+
+4.2.
+
+Inverse iteration
+
+Inverse iteration is a powerful tool for ﬁnding eigen-
+vectors and improving the accuracy of eigenvalues. The
+method starts with some approximation ˜λi for the de-
+sired eigenvalue λi, and a random vector b. One then
+solves the linear equation
+
+(A
+
+−
+
+˜λiI)
+
+˜vi = b
+
+·
+
+(50)
+
+to ﬁnd and approximation ˜vi for the eigenvector vi. An
+improved estimate for λi is calculated by using the for-
+mula
+
+(A
+
+˜λiI)
+
+˜vi ≈
+
+·
+
+(λi −
+
+˜λi)
+
+˜vi.
+
+·
+
+−
+
+(51)
+
+We estimate that inverse iteration is impractical for small
+matrices because there are many special cases that need
+to be detected and handled separately. This would slow
+the computation down signiﬁcantly.
+
+4.3. Vectorization
+
+In a situation where a large number N of small ma-
+trices needs to be diagonalized, and all these matrices
+are available at the same time, it may be advantageous
+to vectorize the algorithm, i.e. to make the loop from 1
+to N the innermost loop 1. This makes consecutive op-
+erations independent of each other (because they aﬀect
+diﬀerent matrices), and allows them to be pipelined and
+executed very eﬃciently.
+
+A detailed discussion of this approach is beyond the
+scope of the present work, but our estimate is that, as
+long as only the eigenvalues are to be computed, a vec-
+torization of Cardano’s method would be most beneﬁ-
+cial, because this method requires only few performance-
+limiting conditional branches, so that the number of pro-
+cessor pipeline stalls is reduced to a minimum. However,
+the accuracy limitations discussed above would still ap-
+ply in the vectorized version.
+
+If we want to calculate the full eigensystem, a vec-
+torized vector product method can only give a limited
+performance bonus because in the calculation of the vec-
+tor products, many special cases can arise which need to
+be detected and treated separately. This renders eﬃcient
+vectorization impossible. The same is true for Cuppen’s
+Divide and Conquer algorithm. On the other hand, the
+iterative methods are problematic if the required number
+of iterations is not approximately the same for all matri-
+ces. Then, only the ﬁrst few iterations can be vectorized
+eﬃciently. Afterwards, matrices for which the algorithm
+has not converged yet need to be treated separately.
+
+5. BENCHMARK RESULTS
+
+In this section we report on the computational per-
+formance and on the numerical accuracy of the above
+algorithms. For the iterative methods we use implemen-
+tations which are similar to those discussed in [5]. Ad-
+ditionally, we study the LAPACK implementation of the
+QL/QR algorithm [3] and the QL routine from the GNU
+Scientiﬁc Library [4]. For the analytical methods we use
+our own implementations. Some ideas in our Cuppen
+routine are based on ideas realized in LAPACK.
+
+Note that we do not show results for the LAPACK im-
+plementation of a Divide and Conquer algorithm (routine
+ZHEEVD) because this algorithm falls back to QL for small
+
+1 We thank Charles van Loan for drawing our attention to this
+
+possibility.
+
+7
+
+matrices (n < 25) and would therefore not yield anything
+new. We also neglect the new LAPACK routine ZHEEVR
+3 problems considered here it is sig-
+because for the 3
+niﬁcantly slower than the other algorithms.
+
+×
+
+We have implemented our code in C and Fortran, but
+here we will only discuss results for the Fortran version.
+We have checked that the C code yields a similar numeri-
+cal accuracy, but is about 10% slower. This performance
+deﬁcit can be ascribed to the fact that C code is harder
+to optimize for the compiler.
+
+Our code has been compiled with the GNU compiler,
+using the standard optimization ﬂag -O3. We did not
+use any further compiler optimizations although we are
+aware of the fact that it is possible to increase the execu-
+tion speed by about 10% if options like -ffast-math are
+used to allow optimizations that violate the IEEE 754
+standard for ﬂoating point arithmetic.
+
+Our numerical tests were conducted in double precision
+arithmetic (64 bit, 15 – 16 decimal digits) on an AMD
+Opteron 250 (64-bit, 2.4 GHz) system running Linux. To
+maximize the LAPACK performance on this system, we
+used the highly optimized AMD Core Math Library for
+the corresponding tests. Note that on some platforms,
+in particular on Intel and AMD desktop processors, you
+may obtain a higher numerical accuracy than is reported
+here because these processors internally use 80 bit wide
+ﬂoating point registers.
+
+To measure the accuracy of the calculated eigensys-
+
+tems we use three diﬀerent benchmarks:
+
+•
+
+The relative diﬀerence of the eigenvalue ˜λ and the
+corresponding result of the LAPACK QL routine
+ZHEEV, ˜λLAPACK:
+
+∆1
+
+≡ (cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+˜λ
+
+˜λLAPACK
+
+−
+˜λLAPACK
+
+.
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+We use the LAPACK QL implementation as a ref-
+erence because it is very well tested and stable.
+
+The relative diﬀerence of the eigenvector ˜v and the
+corresponding LAPACK result, ˜vLAPACK:
+
+•
+
+(52)
+
+(53)
+
+∆2
+
+≡
+
+k
+
+˜v
+
+˜vLAPACK
+2
+
+−
+˜vLAPACK
+k
+
+k
+
+2
+
+k
+
+,
+
+k · k
+
+where
+2 denotes the Euclidean norm. This def-
+inition of ∆2 is of course not meaningful for matri-
+ces with degenerate eigenvalues because for these,
+diﬀerent algorithms might ﬁnd diﬀerent bases for
+the multidimensional eigenspaces. Even for non-
+degenerate eigenvalues, ∆2 is only meaningful if
+the same phase convention is chosen for ˜v and
+˜vLAPACK. Therefore, when computing ∆2, we re-
+ject matrices with degenerate eigenvalues, and for
+all others we re-phase the eigenvectors in such a way
+that the component which has the largest modulus
+in ˜vLAPACK is real.
+
+8
+
+•
+
+The deviation of the eigenvalue/eigenvector pair
+(˜λ, ˜v) from its deﬁning property Av = λv:
+
+∆3
+
+≡
+
+A˜v
+
+k
+
+˜λ˜v
+
+2
+
+k
+
+.
+
+−
+˜λ˜v
+
+k
+
+k
+
+(54)
+
+˜v
+
+k
+
+k
+
+Note that for the algorithms considered here,
+2 = 1,
+so the deﬁnitions of ∆2 and ∆3 can be slightly simpliﬁed.
+We have ﬁrst veriﬁed the correctness of the algorithms
+by diagonalizing 107 random hermitian resp. symmetric
+10, 10]
+matrices with integer entries from the interval [
+and (automatedly) checking that ∆1, ∆2 and ∆3 were as
+small as expected. We have repeated this test with log-
+arithmically distributed integer entries from the interval
+[0, 1010]. Such matrices tend to have largely diﬀerent
+eigenvalues and are therefore a special challenge to the
+algorithms.
+
+−
+
+For the results that we are going to present here, we
+used similar tests, but now we allowed the matrix entries
+to be real, which corresponds more closely to what is
+found in actual scientiﬁc problems. Furthermore, for the
+logarithmically distributed case we changed the interval
+to [10−
+
+5, 105].
+
+5.1. Performance
+
+The results of our timing tests are summarized in Ta-
+ble I. The most important observation from this table
+is the fact that the standard libraries are slower by a
+substantial factor than the specialized algorithms. This
+is due to the fact that in both LAPACK and the GSL,
+only the innermost loops, which determine the perfor-
+mance for large scale problems, are optimized. Outside
+these loops, the libraries spend a lot of time evaluat-
+ing their parameters and preparing data structures. LA-
+PACK QL additionally takes some time to decide at run-
+time whether a QR or QL algorithm is more favorable.
+
+On the other hand, our implementations of the itera-
+tive algorithms have a very simple parameter set, don’t
+require any internal reorganization of data structures,
+avoid function calls as far as possible, and contain some
+optimizations speciﬁc to the 3
+3 case. On the downside,
+they were not designed to avoid over- and underﬂows, and
+we believe that for some pathological matrices, LAPACK
+might be more accurate than our QL method.
+
+×
+
+It is interesting to observe that the iterative algorithms
+are slightly faster for matrices with logarithmically dis-
+tributed entries. The reason is that for many of these ma-
+trices, the oﬀ-diagonal entries are already small initially,
+so fewer iterations are required for the diagonalization.
+This is one of the reasons why QL is always faster than
+Cuppen in the logarithmically distributed scenario, but
+may be slower in the linear case. Another reason for
+this is the fact that logarithmically distributed matrices
+are more likely to create situations in which the hybrid
+root ﬁnder, which is used to solve Eq. (48), converges
+
+Real symmetric matrices
+
+Algorithm
+
+Eigenvalues Eigenvectors
+Lin. Log. Lin. Log.
+10.9
+12.0 10.0 12.9
+Jacobi
+QL
+6.9
+9.0
+6.3
+8.3
+11.5
+9.3
+8.7
+6.6
+Cuppen
+GSL
+15.7
+14.1 11.6 18.8
+LAPACK QL 21.5 19.3 49.9
+45.2
+4.1
+4.0
+2.9
+Analytical
+
+3.0
+
+Complex hermitian matrices
+
+Algorithm
+
+Eigenvalues Eigenvectors
+Lin. Log. Lin. Log.
+18.4
+17.0 15.4 21.0
+Jacobi
+QL
+11.2
+13.5
+8.9
+10.8
+Cuppen
+14.1
+8.3
+12.5
+9.8
+32.5
+20.4 17.8 38.2
+GSL
+LAPACK QL 29.6 26.7 61.9
+57.6
+Analytical
+6.0
+5.9
+3.5
+
+3.7
+
+Table I: Performance of diﬀerent algorithms for calculating
+the eigenvalues and eigenvectors of symmetric or hermitian
+3 × 3 matrices. We show the running times in seconds for
+the calculation of only the eigenvalues (left) and of the com-
+plete eigensystems (right) of 107 random matrices. Further-
+more, we compare the cases of linearly and logarithmically
+distributed matrix entries. For the scenarios with real ma-
+trices, specialized versions of the algorithms have been used.
+This table refers to the Fortran version of our code; the C
+version is about 10% slower.
+
+very slowly. This happens for example if the analytically
+calculated starting values have large errors.
+
+However, even in favorable situations, neither QL nor
+Cuppen can compete with the analytical methods. These
+do not require any pre-treatment of the matrix (like the
+transformation to tridiagonal form in the case of QL and
+Cuppen), and though their implementation may look a
+bit lengthy due to the many special cases that can arise,
+the number of ﬂoating point operations that are ﬁnally
+executed for each matrix is very small.
+
+If we compare the performance for real symmetric vs.
+complex hermitian matrices, we ﬁnd that purely real
+problems can be solved much more eﬃciently. This is
+especially true for the Jacobi algorithm since real Ja-
+cobi transformations are much cheaper than complex
+ones. For QL and Cuppen, the performance bonus is less
+dramatic because large parts of these algorithms always
+operate on purely real data structures. The Cardano
+and vector product algorithms contain complex arith-
+metic, but their speed is also limited by the evaluation of
+trigonometric functions (Cardano) and by several condi-
+tional branches (vector product), therefore they too do
+not beneﬁt as much as the Jacobi method.
+
+5.2. Numerical accuracy
+
+·
+
+10−
+
+The excellent performance of the analytical algorithms
+is relativized by the results of our accuracy tests, which
+are shown in Table II. While for linearly distributed ma-
+trix entries, all algorithms get close to the machine pre-
+16, the Cardano and vector prod-
+cision of about 2
+uct methods become unstable for the logarithmically dis-
+3)
+tributed case. In particular, the values of ∆3 >
+show that the calculated eigenvalues and eigenvectors do
+no longer fulﬁll their deﬁning property Av = λv as accu-
+rately as the eigensystems obtained with the other algo-
+9 (QL & Cup-
+rithms. For these, ∆3 is still of order 10−
+10 (Jacobi). The fact that Jacobi is more
+pen) resp. 10−
+accurate than QL and Cuppen conﬁrms our expectations
+from Sec. 2.3.
+
+(10−
+
+O
+
+Note that the values of ∆1 and ∆2 for the LAPACK
+QL algorithm are zero in the case of complex matrices
+and extremely small for real matrices. The reason is that
+LAPACK QL is the reference algorithm used in the deﬁ-
+nition of these quantities. In the case of real matrices, ∆1
+and ∆2 reveal the tiny diﬀerences between the LAPACK
+ZHEEV and DSYEV routines.
+
+It is interesting to observe that in the logarithmically
+distributed scenario, ∆1 and ∆2 are systematically larger
+for real than for complex matrices. This does not have
+a deeper reason but is simply due to the fact that in the
+real case, there are fewer random degrees of freedom, so
+there is a higher chance for ill-conditioned matrices to
+occur. The eﬀect is not visible in ∆3 because there it is
+compensated by the fact that this quantity receives large
+contributions mainly when in the evaluation of A˜vi in
+Eq. (54), a multiplication of a large matrix entry with
+a small and thus relatively inaccurate vector component
+occurs. It follows from combinatorics that this is more
+likely to happen if A and ˜v are complex.
+
+9
+
+sense that their eigenvalues do not diﬀer by more
+than a few orders of magnitude. However, one
+has to be aware that there are pathological situ-
+ations where large cancellations can spoil the per-
+formance.
+
+The QL algorithm is a good general purpose
+“black box” method since it is reasonably fast and
+— except in some very special situations like the
+example given in Eq. (35) — also very accurate. If
+speed is not an issue, one can use standard im-
+plementations of QL like the LAPACK function
+ZHEEV. For better performance we recommend sim-
+pler implementations like our function ZHEEVQ3 or
+the function tqli from Ref. [5], on which our rou-
+tine is based.
+
+Cuppen’s Divide and Conquer method can
+achieve an accuracy similar to that of the QL algo-
+rithm and may be slightly faster for complex prob-
+lems if the input matrix is not already close to di-
+agonal. The choice between Cuppen and QL will
+therefore depend on the details of the problem that
+is to be solved.
+
+If the highest possible accuracy is desired, Jacobi’s
+method is the algorithm of choice. It is extremely
+accurate even for very pathological matrices, but
+it is signiﬁcantly slower than the other algorithms,
+especially for complex problems.
+
+•
+
+•
+
+•
+
+Acknowledgments
+
+I would like to thank M. Lindner, P. Huber, and the
+readers of the NA Digest for useful discussion and com-
+ments. Furthermore I would like to acknowledge support
+from the Studienstiftung des Deutschen Volkes.
+
+6. CONCLUSIONS
+
+Appendix A: ALTERNATIVE DERIVATIONS OF
+CARDANO’S METHOD
+
+In this article, we have studied the numerical three-
+dimensional eigenproblem for symmetric and hermitian
+matrices. We have discussed the Jacobi, QL, and Cuppen
+algorithms as well as an analytical method using Car-
+dano’s formula and vector cross products. Our bench-
+marks reveal that standard packages are very slow for
+small matrices. Optimized versions of the standard algo-
+rithms are a lot faster while retaining similar numerical
+properties, but even their speed is not competitive with
+that of the analytical methods. We have however seen
+that the latter have limited numerical accuracy in ex-
+treme situations.
+
+Depending on what kind of problem is to be solved, we
+
+give the following recommendations:
+
+•
+
+The analytical algorithm is recommended for
+problems where computational speed is important,
+and the matrices are not too ill-conditioned in the
+
+In this appendix, we will discuss two alternative so-
+lution strategies for the third degree polynomial equa-
+tions (21), and show that in the end, numerical consid-
+erations lead again to Eq. (33).
+
+1. A trigonometric approach
+
+If we substitute x = 2 cos θ
+
+3 on the left hand side of
+Eq. (25) and use trigonometric transformations to obtain
+
+2 cos θ = t,
+
+(A1)
+
+we can show that the solutions to Eq. (25) can be written
+as
+
+x = 2 cos θ
+
+3 = 2 cos
+
+1
+3 arccos t
+2
+
+.
+
+(A2)
+
+(cid:16)
+
+(cid:17)
+
+10
+
+Linearly distributed real matrix entries
+
+∆1
+
+∆2
+
+∆3
+
+Avg.
+−9 4.01 · 10
+−9 4.09 · 10
+
+Max.
+−15 3.52 · 10
+−15 5.59 · 10
+
+Avg.
+1.34 · 10
+1.89 · 10
+1.95 · 10−15 9.53 · 10−9 6.83 · 10−16 1.80 · 10−12 4.21 · 10−15 1.45 · 10−8
+−9
+1.29 · 10
+
+Algorithm
+Jacobi
+QL
+Cuppen
+GSL
+LAPACK QL 5.80 · 10−17 3.61 · 10−11 3.17 · 10−17 6.10 · 10−13 2.69 · 10−15 8.28 · 10−9
+−8
+Analytical
+
+Avg.
+−12 2.01 · 10
+−12 3.58 · 10
+
+Max.
+−16 1.32 · 10
+−16 2.05 · 10
+
+Max.
+−15 1.02 · 10
+−15 1.24 · 10
+
+−12 2.40 · 10
+
+−15 3.18 · 10
+
+−15 1.80 · 10
+
+−15 9.53 · 10
+
+−8 1.36 · 10
+
+−9 3.56 · 10
+
+−9 6.19 · 10
+
+−15 5.02 · 10
+
+−14 4.32 · 10
+
+−16 2.18 · 10
+
+1.87 · 10
+
+−8
+
+−8
+
+Linearly distributed complex matrix entries
+
+∆1
+
+∆2
+
+∆3
+
+Algorithm
+Jacobi
+QL
+Cuppen
+GSL
+LAPACK QL
+Analytical
+
+Max.
+−15 7.66 · 10
+−14 5.46 · 10
+−15 6.54 · 10
+
+Avg.
+1.96 · 10
+2.08 · 10
+4.37 · 10
+8.01 · 10−15 1.88 · 10−7 4.56 · 10−16 8.36 · 10−14 2.14 · 10−14 5.26 · 10−7
+−7
+
+Avg.
+−13 1.42 · 10
+−14 4.27 · 10
+−13 3.95 · 10
+
+Max.
+−16 1.13 · 10
+−16 8.16 · 10
+−16 2.03 · 10
+
+Max.
+−14 3.44 · 10
+−14 1.14 · 10
+−14 1.03 · 10
+
+Avg.
+−9 4.64 · 10
+−7 4.83 · 10
+−8 6.60 · 10
+
+−6
+
+−6
+
+−7
+
+0.0
+4.19 · 10
+
+0.0
+−15 6.54 · 10
+
+0.0
+−8 5.66 · 10
+
+0.0
+−16 3.17 · 10
+
+2.41 · 10
+−11 3.05 · 10
+
+−14 6.03 · 10
+−14 7.95 · 10
+
+−7
+
+Logarithmically distributed real matrix entries
+
+∆1
+
+∆2
+
+∆3
+
+Avg.
+2.96 · 10
+4.88 · 10
+4.28 · 10
+1.86 · 10
+
+Algorithm
+Jacobi
+QL
+Cuppen
+GSL
+LAPACK QL 8.36 · 10−12 1.14 · 10−5 1.28 · 10−13 1.81 · 10−7 1.11 · 10−9 1.18 · 10−3
+−1 1.07 · 10+6
+Analytical
+
+Avg.
+−7 8.16 · 10
+−7 1.03 · 10
+−7 8.90 · 10
+−7 9.87 · 10
+
+Max.
+−11 1.10 · 10
+−9 1.18 · 10
+−10 1.12 · 10
+−10 2.04 · 10
+
+Max.
+−12 3.91 · 10
+−12 7.14 · 10
+−12 6.55 · 10
+−12 4.01 · 10
+
+Max.
+−10 1.94 · 10
+−10 4.29 · 10
+−10 4.29 · 10
+−10 1.62 · 10
+
+Avg.
+−4 3.05 · 10
+−4 2.59 · 10
+−4 3.58 · 10
+−4 2.78 · 10
+
+−7 1.36 · 10+0 3.47 · 10
+
+−3 1.80 · 10
+
+−9 7.20 · 10
+
+1.87 · 10
+
+−3
+
+−3
+
+−4
+
+−3
+
+Logarithmically distributed complex matrix entries
+
+∆1
+
+∆2
+
+∆3
+
+Algorithm
+Jacobi
+QL
+Cuppen
+GSL
+LAPACK QL
+Analytical
+
+Avg.
+
+Max.
+
+Avg.
+
+Max.
+
+Avg.
+
+Max.
+
+1.55 · 10−10 1.64 · 10−4 2.23 · 10−13 7.43 · 10−8 1.19 · 10−10 8.24 · 10−5
+−4
+2.25 · 10
+2.03 · 10
+1.06 · 10
+0.0
+
+−7 7.85 · 10
+−7 7.59 · 10
+−7 1.38 · 10
+1.27 · 10
+
+−10 5.93 · 10
+−10 5.86 · 10
+−9 1.15 · 10
+−9 1.24 · 10
+
+−13 1.17 · 10
+−13 1.30 · 10
+−13 1.30 · 10
+0.0
+
+−10 6.84 · 10
+−10 6.02 · 10
+−10 8.69 · 10
+0.0
+
+−4 1.96 · 10
+−4 2.71 · 10
+−5 2.17 · 10
+0.0
+
+−4
+
+−3
+
+−3
+
+1.16 · 10−9 7.10 · 10−4 6.10 · 10−9 8.29 · 10−2 2.88 · 10−3 2.84 · 10+3
+
+Table II: Numerical accuracy of diﬀerent algorithms for calculating the eigenvalues and eigenvectors of symmetric or hermitian
+3 × 3 matrices. This table refers to the Fortran implementation, but we have checked that the values obtained with the C code
+are similar.
+
+2
+
+Our previous result
+2 (see Sec. 3.1) ensures
+t
+that this is well-deﬁned. If we replace the arccos by a
+numerically more stable arctan, we immediately recover
+Eq. (33).
+
+≤
+
+−
+
+≤
+
+2. Lagrange resolvents
+
+The second alternative to Cardano’s derivation that
+we are going to consider employs the concept of La-
+grange resolvents. We start from the observation that
+the coeﬃcients of Eq. (21) can be expressed in terms of
+the roots λ1, λ2, and λ3 of P (λ), because we can write
+λi). In particular, c0, c1, and c2 are
+P (λ) =
+the so-called elementary symmetric polynomials in λ1,
+Q
+λ2, and λ3:
+
+i=1,2,3(λ
+
+−
+
+c2 =
+
+−
+
+c1 =
+
+λi,
+
+λiλj,
+
+X
+
+i<j
+X
+
+c0 =
+
+−
+
+λi.
+
+Y
+Next, we consider the Lagrange resolvents of Eq. (21),
+
+which are deﬁned by
+
+r1 = λ1 + λ2 + λ3,
+
+r2 = λ1 + ei
+
+r3 = λ1 + e−
+
+2
+3 πλ2 + e−
+
+i
+
+i
+
+2
+3 πλ2 + ei
+
+2
+3 πλ3,
+2
+3 πλ3.
+
+We observe, that r3
+is invariant under permutation of
+i
+the λi, and so, by the fundamental theorem of symmetric
+functions [17], can be expressed in terms of c0, c1, and
+c2. Indeed, with the deﬁnitions from Eq. (29), we obtain
+
+We can then recover λ1, λ2, and λ3 according to
+
+c3
+2,
+
+−
+
+r3
+1 =
+3
+r
+2 = q +
+r3
+3 = q
+
+−
+
+p
+
+p
+
+q2
+q2
+
+−
+
+−
+
+p3,
+p3.
+
+λ1 = 1
+
+3 (r1 + r2 + r3),
+
+λ2 = 1
+
+λ3 = 1
+
+i
+
+2
+3 πr2 + ei
+
+3 (r1 + e−
+2
+3 πr2 + e−
+
+3 (r1 + ei
+
+i
+
+2
+3 πr3),
+2
+3 πr3).
+
+(A3)
+
+(A4)
+
+(A5)
+
+(A6)
+
+11
+
+(A8)
+
+with φ = 1
+
+p3
+
+q2/q as before, and thus
+
+−
+
+c2 + 2ρ cos φ),
+
+3 arctan
+λ1 = 1
+3 (
+λ2 = 1
+3 (
+λ3 = 1
+3 (
+
+p
+−
+
+c2
+
+c2
+
+−
+
+−
+
+−
+
+−
+
+√3ρ sin φ),
+ρ cos φ
+ρ cos φ + √3ρ sin φ).
+
+−
+
+These expressions are equivalent to Eq. (33) after substi-
+tuting back Eqs. (29), so the practical implementation of
+the Lagrange method is again identical to the previous
+algorithms.
+
+Appendix B: DOCUMENTATION OF THE C AND
+FORTRAN CODE
+
+Along with the publication of this article, we provide C
+and Fortran implementations of the algorithms discussed
+here for download. They are intended to be used for fur-
+ther numerical experiments or for the solution of actual
+scientiﬁc problems.
+
+Our C code follows the C99 standard which provides
+the complex data type double complex. In gcc, this re-
+quires the usage of the compiler option -std=c99. The
+Fortran code is essentially Fortran 77, except for the
+fact that not all variable and function names obey the
+6-character limitation.
+
+Both versions of the code contain detailed comments,
+describing the structure of the routines, the purpose of
+the diﬀerent functions, and their arguments. The C ver-
+sion also contains detailed information about local vari-
+ables, which was omitted in the Fortran version to keep
+the code compact.
+
+Our nomenclature conventions for functions and sub-
+routines may seem a bit cryptical because we tried to
+keep as close as possible to the LAPACK conventions:
+The ﬁrst letter indicates the data type (“D” for double
+or “Z” for double complex), the second and third letters
+indicate the matrix type (“SY” for symmetric and “HE”
+for hermitian), while the remaining characters specify the
+purpose of the function: “EV” means eigenvalues and/or
+eigenvectors, “J” stands for Jacobi, “Q” for QL, “D” for
+Divide & Conquer (Cuppen), “V” for vector product, and
+“C” for Cardano. We also add the suﬃx “3” to indicate
+that our routines are designed for 3
+
+3 matrices.
+
+In the following we will describe the interface of the
+individual routines. We will discuss only those func-
+tions which are relevant to the complex case, because
+their real counterparts are similar, with the data types
+COMPLEX*16 resp. double complex being replaced by
+DOUBLE PRECISION resp. double.
+
+Furthermore, we will only discuss the Fortran code
+here because the corresponding C functions have iden-
+tical names and arguments. For example the Fortran
+subroutine
+
+×
+
+For a practical implementation of these formulas, one
+would like to avoid complex arithmetic. This is possi-
+p3 is always
+ble because we have seen before that
+purely imaginary. This observation allows us to write
+
+q2
+
+−
+
+p
+
+r2 = √peiφ,
+
+r3 = √pe−
+
+iφ,
+
+SUBROUTINE ZHEEVJ3(A, Q, W)
+
+COMPLEX*16 A(3, 3)
+COMPLEX*16 Q(3, 3)
+DOUBLE PRECISION W(3)
+
+(A7)
+
+12
+
+corresponds to the C function
+
+int zheevj3(double complex A[3][3],
+
+double complex Q[3][3], double w[3]).
+
+1. Main driver function
+
+SUBROUTINE ZHEEVJ3(A, Q, W)
+
+COMPLEX*16 A(3, 3)
+COMPLEX*16 Q(3, 3)
+DOUBLE PRECISION W(3)
+This routine uses Jacobi’s method (see Sec. 2.1) to ﬁnd
+the eigenvalues and normalized eigenvectors of a hermi-
+3 matrix A. The eigenvalues are stored in W, while
+tian 3
+the eigenvectors are returned in the columns of Q.
+
+×
+
+The upper triangular part of A is destroyed during the
+calculation, the diagonal elements are read but not de-
+stroyed, and the lower triangular elements are not refer-
+enced at all.
+
+SUBROUTINE ZHEEVQ3(A, Q, W)
+
+COMPLEX*16 A(3, 3)
+COMPLEX*16 Q(3, 3)
+DOUBLE PRECISION W(3)
+This is our implementation of the QL algorithm from
+Sec. 2.2. It ﬁnds the eigenvalues and normalized eigen-
+3 matrix A and stores them in
+vectors of a hermitian 3
+×
+W and in the columns of Q.
+
+The function accesses only the diagonal and upper tri-
+
+angular parts of A. The access is read-only.
+
+SUBROUTINE ZHEEVD3(A, Q, W)
+
+COMPLEX*16 A(3, 3)
+COMPLEX*16 Q(3, 3)
+DOUBLE PRECISION W(3)
+This is Cuppen’s Divide and Conquer algorithm, op-
+timized for 3-dimensional problems (see Sec. 3.3). The
+function assumes A to be a hermitian 3
+3 matrix, and
+calculates its eigenvalues Wi, as well as its normalized
+eigenvectors. The latter are returned in the columns of
+Q.
+
+×
+
+The function accesses only the diagonal and upper tri-
+
+angular parts of A. The access is read-only.
+
+SUBROUTINE ZHEEVC3(A, W)
+
+COMPLEX*16 A(3, 3)
+DOUBLE PRECISION W(3)
+This routine calculates the eigenvalues Wi of a hermi-
+3 matrix A using Cardano’s analytical algorithm
+tian 3
+(see Sec. 3.1). Only the diagonal and upper triangular
+parts of A are accessed, and the access is read-only.
+
+×
+
+SUBROUTINE ZHEEVV3(A, Q, W)
+
+COMPLEX*16 A(3, 3)
+
+COMPLEX*16 Q(3, 3)
+DOUBLE PRECISION W(3)
+This function ﬁrst calls ZHEEVC3 to ﬁnd the eigenvalues
+3 matrix A, and then uses vector
+of the hermitian 3
+cross products to analytically calculate the normalized
+eigenvectors (see Sec. 3.2). The eigenvalues are stored in
+W, the normalized eigenvectors in the columns of Q.
+
+×
+
+Only the diagonal and upper triangular parts of A need
+to contain meaningful values, but all of A may be used
+as temporary storage and might hence be destroyed.
+
+2. Helper functions
+
+SUBROUTINE DSYEV2(A, B, C, RT1, RT2, CS, SN)
+
+DOUBLE PRECISION A, B, C
+DOUBLE PRECISION RT1, RT2, CS, SN
+
+This subroutine calculates the eigenvalues and eigen-
+
+vectors of a real symmetric 2
+
+2 matrix
+
+×
+
+A B
+B C!
+
+.
+
+ 
+
+(B1)
+
+The result satisﬁes
+
+RT1
+0
+
+ 
+
+0
+RT2!
+
+=
+
+CS SN
+-SN CS!  
+
+A B
+B C!  
+
+CS -SN
+SN CS !
+
+ 
+
+(B2)
+
+≥
+
+and RT1
+RT2. Note that this convention is diﬀerent
+from the convention used in the corresponding LAPACK
+function DLAEV2, where
+RT2
+. We use a diﬀerent
+|
+convention here because it helps to avoid several condi-
+tional branches in ZHEEVD3 and DSYEVD3.
+
+RT1
+|
+
+| ≥ |
+
+SUBROUTINE ZHETRD3(A, Q, D, E)
+
+COMPLEX*16 A(3, 3)
+COMPLEX*16 Q(3, 3)
+DOUBLE PRECISION D(3)
+DOUBLE PRECISION E(2)
+
+This routine reduces a hermitian matrix A to real tridi-
+agonal form by applying a Householder transformation Q
+according to Sec. 2.2:
+
+A = Q
+
+D0 E0
+E0 D1 E1
+E1 D2
+
+· 
+
+
+
+QT .
+
+·
+
+
+
+
+
+
+(B3)
+
+The function accesses only the diagonal and upper trian-
+gular parts of A. The access is read-only.
+
+13
+
+[1] H. Goldstein, Classical Mechanics
+
+(Addison-Wesley,
+
+2002).
+
+[2] E. K. Akhmedov (1999), hep-ph/0001264.
+[3] E. Anderson, Z. Bai, C. Bischof, S. Blackford, J. Demmel,
+J. Dongarra, J. Du Croz, A. Greenbaum, S. Hammarling,
+A. McKenney, et al., LAPACK Users’ Guide (Society for
+Industrial and Applied Mathematics, Philadelphia, PA,
+1999), 3rd ed., ISBN 0-89871-447-8 (paperback).
+
+[4] M. Galassi et al., GNU Scientiﬁc Library Reference Man-
+ual (Network Theory Ltd., 2003), 2nd ed., ISBN 0-9541-
+617-34, URL http://www.gnu.org/software/gsl/.
+[5] W. H. Press, B. P. Flannery, S. A. Teukolsky, and W. T.
+Vetterlin, Numerical Recipes in C (Cambridge University
+Press, 1988).
+
+[6] A. Ralston and P. Rabinowitz, A First Course in Nu-
+merical Analysis (Dover Publications, 2001), 2nd ed.
+[7] D. Fadeev and V. Fadeeva, Computational Methods in
+Linear Algebra (Freeman, San Francisco, CA, 1963).
+[8] S¨uli, Endre and Mayers, David F., An Introduction to
+
+Numerical Analysis (Cambridge University Press, 2003).
+[9] G. E. Forsythe and P. Henrici, Trans. Am. Math. Soc.
+
+94, 1 (1960), ISSN 0002-9947.
+
+[10] J. Stoer and R. Bulirsch, Introduction to Numerical Anal-
+
+ysis (Springer-Verlag, Berlin, Germany, 1993), 2nd ed.
+
+[11] J. Demmel and K. Veselic, Tech. Rep., Knoxville, TN,
+
+USA (1989).
+
+[12] J.
+
+Demmel,
+
+LAPACK Working
+
+Note
+
+(1992),
+http://www.netlib.org/lapack/lawnspdf/lawn45.pdf;http://www.ne
+
+uT-CS-92-162,
+
+1992.,
+
+May
+
+[13] G. W. Stewart, Tech. Rep., College Park, MD, USA
+
+45
+URL
+
+[14] G. Cardano, Ars Magna (1545).
+[15] O. K. Smith, Commun. ACM 4, 168 (1961), ISSN 0001-
+
+[16] J. J. M. Cuppen, Numer. Math. 36, 177 (1981).
+[17] B. L. van der Waerden, Algebra 1 (Springer-Verlag,
+
+(1995).
+
+0782.
+
+2006).
+
+

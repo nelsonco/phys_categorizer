@@ -1,0 +1,7537 @@
+9
+9
+9
+1
+ 
+t
+c
+O
+ 
+4
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+4
+0
+0
+0
+1
+9
+9
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+UTHEP-99-10-01
+
+Foam: Multi-dimensional General Purpose Monte Carlo
+Generator With Self-adapting Symplectic Grid†
+
+S. Jadach
+Department of Physics and Astronomy,
+The University of Tennessee, Knoxville, Tennessee 37996-1200,
+DESY, Theory Group, Notkestrasse 85, D-22603 Hamburg, Germany
+and
+Institute of Nuclear Physics, ul. Kawiory 26a, Krak´ow, Poland
+
+Abstract
+
+A new general purpose Monte Carlo event generator with self-adapting grid con-
+sisting of simplices is described. In the process of initialization, the simplex-shaped
+cells divide into daughter subcells in such a way that: (a) cell density is biggest
+in areas where integrand is peaked, (b) cells elongate themselves along hyperspaces
+where integrand is enhanced/singular. The grid is anisotropic, i.e. memory of the
+axes directions of the primary reference frame is lost. In particular, the algorithm
+is capable of dealing with distributions featuring strong correlation among variables
+(like ridge along diagonal). The presented algorithm is complementary to others
+known and commonly used in the Monte Carlo event generators. It is, in principle,
+more eﬀective then any other one for distributions with very complicated patterns
+of singularities – the price to pay is that it is memory-hungry. It is therefore aimed
+at a small number of integration dimensions (< 10). It should be combined with
+other methods for higher dimension. The source code in Fortran77 is available from
+http://home.cern.ch/
+
+jadach.
+
+∼
+
+To be submitted to Comput. Phys. Commun.
+
+†
+
+Work supported in part by Polish Government grants KBN 2P03B08414, KBN 2P03B14715, the
+US DoE contracts DE-FG05-91ER40627 and DE-AC03-76SF00515, the Maria Sk lodowska-Curie
+Joint Fund II PAA/DOE-97-316, and the Polish-French Collaboration within IN2P3 through LAPP
+Annecy.
+
+UTHEP-99-10-01
+October 1999
+
+1 Introduction
+
+Generation of artiﬁcial random events within multidimensional (phase) space according
+to a positive probability distribution deﬁned by a theoretical model is a standard exercise
+in the particle physics, and in may areas of research. The above is usually called “Monte
+Carlo simulation” or generation of unweighted (weight equal one) events, while more
+modest task of calculating the integral only, using weighted events is usually termed
+“Monte Carlo integration”. In this work, primary interest is in the Monte Carlo (MC)
+simulation, which is a more diﬃcult problem than MC integration. A computer MC
+program doing this is usually called a “MC event generator”.
+
+With the advent of ever faster computers, one is able to perform Monte Carlo simula-
+tion or integration in more dimensions and for more and more complicated distributions.
+All MC methods/algorithms for the eﬃcient, i.e. fast, MC simulation/integration can be
+reduced to a surprisingly small number of the basic methods, see e.g. ref. [1, 2], that is
+to mapping variables into more natural ones, weighting/rejecting and splitting the prob-
+ability distribution into sum of simpler ones (branching). For MC event generators which
+are used widely it is worth the eﬀort to develop very eﬃcient algorithm of MC genera-
+tion, custom-made for the individual problem. There is no better guide for constructing
+an eﬃcient custom-made MC generation algorithm than insight into the physics of the
+process to be simulated. There are many examples of very eﬃcient MC event generators
+of the custom-made type.
+
+On the other hand, it is often necessary to perform quickly “brute force” MC integra-
+tion or generate events according to a probability density with strong peaks (singularities)
+spanned along complicated hyperspaces of not very well known shape, or in the case when
+the change of input data induces not very well controlled variations in the structure of
+the singularities. In all such cases it would be highly desirable to have at our disposal a
+numerical tool (program) with a MC generation algorithm featuring built-in capability of
+adjusting automatically the generation procedure to an arbitrary pattern of singularities
+in the probability distribution. Such a general-purpose tool was always a dream of people
+using MC methods. This is an utopian dream in the sense that we shall never get an
+ideal tool of this kind, i.e. working for an arbitrary distribution. Nevertheless, we may
+hope to develop a MC tool with an algorithm which is fairly eﬃcient for a relatively wide
+range of multidimensional probability distributions. In reality, for each such method it is
+possible to ﬁnd a distribution for which the particular general-purpose MC method (tool)
+fails badly. A similar situation exists for the problem of ﬁnding the absolute minimum of
+a multi-parameter function or in many other numerical problems.
+
+The best known and widely used general-purpose algorithm for the Monte Carlo in-
+tegration of an arbitrary density function in n-dimensions is probably that of Lepage
+described in ref. [3], and embodied in the widely used Fortran code VEGAS. In this
+classical algorithm, the integrand function in n dimensions is assumed to be fairly well
+approximated by a product of functions, each one depending just on one variable. The in-
+tegration range of each variable is divided into k bins of unequal width, with binning (bin
+sizes) diﬀerent for each variable. The entire integration domain, that is an n-dimensional
+
+1
+
+rectangle, is divided into kn sub-rectangles. The whole structure is explored by means of
+the MC generation of random points within each sub-rectangle, with a uniform distribu-
+tion. The result of repeated MC exploration runs is used to improve the binning. The
+binning is adjusted iteratively, such that the minimum value of the ratio of the dispersion
+to the average weight is achieved. In this way VEGAS is able to do MC integration quite
+eﬃciently. The original VEGAS was not really aimed for MC generation, but with a little
+bit oﬀ eﬀort, it can be adapted to MC generation, as seen below.
+
+As we see, the generation technique of VEGAS is essentially an example of a multi-
+branching method with each branch corresponding to one of kn rectangles.
+In many
+practical applications (maybe even a majority) the assumption of factorizability of the
+integrand function is not violated too strongly and the VEGAS algorithm works ﬁne. As
+expected, it fails when singularities tend to follow diagonal of the rectangle, i.e. variables
+are strongly correlated, also on the case of big voids, singularities on thin hyperspaces
+etc. In such cases VEGAS algorithm fails badly, and increasing the number of bins k, or
+number of iterations, does not help to reduce weight dispersion σ at all. The only method
+to improve the integration precision is the brute force method of increasing the number
+σ/√N , or changing
+of MC points N, leading to a slow decrease of statistical error
+analytically integration variables (mapping).
+
+∼
+
+As already stressed, our primarily interest is in MC simulation. The VEGAS algorithm
+with almost no modiﬁcation can produce MC weighted events. A little bit more eﬀort
+is required to produce constant weight events, by means of additional rejection, knowing
+the maximum weight. This can be done by recording during the last iteration, for each
+integration variable, a maximum weight in each of the n bins. The multichannel generation
+of the sub-rectangles is then done using not the probability related to the average weight
+or its dispersion but instead using the maximum weight (product of them). This simple
+recipe works fairly well for an almost factorizable distribution. It fails really very badly
+for an integrand departing from the factorizability assumption, much worse then for the
+task of the MC integration only. Essentially, the VEGAS algorithm has no means to
+reduce the ratio of the maximum weight to average weight below a certain value, for a
+given integrand. The only way out is then to apply mapping from the actual variables to
+new ones, in which the integrand hopefully factorizes much better. This requires detailed
+knowledge of the integrand distribution – it means going back to a labor-hungry custom-
+made MC.
+
+There were several eﬀorts to improve on the shortcomings of the VEGAS method, still
+assuming no detailed knowledge about the structure of singularities in the integrand. For
+example, in ref. [4], several improvements are done. The most important one is adding
+the possibility of treating a subgroup of variables (wild) which cause strong variation in
+the integrand, while the other ones (mild) are “averaged over”. This is particularly useful
+for problems with many variables
+100, of which only some are “trouble-makers” and
+require special treatment.
+
+∼
+
+Another improvement is described in ref. [5], where the VEGAS algorithm is up-
+graded with the possibility of approximating the wild integrand not with one product of
+n functions, each for one dimension, but with a sum of such products, with automatic
+
+2
+
+adjustments of the relative importance of the component products. It is essentially an
+application of the ideas of ref. [6] to the VEGAS algorithm. The modiﬁed algorithm
+should be eﬃcient for a wider class of probability distributions.
+
+In this note, I describe an independent eﬀort which is not rooted in VEGAS algorithm,
+but rather in the algorithm used in subprogram VESKO2 of MC generator LESKOF for
+deep inelastic scattering published in ref. [7] (in fact it was already used in the much older
+LESKOC MC). In VESKO2 the 2-dimensional integration area is divided into rectangular
+cells which gradually were subdivided by half along x or y direction (the choice of the
+division direction was random). The division was always performed for the cell which
+contained the biggest value of the integrand. Note that this algorithm does not require
+factorizability of the integrand – it is not very eﬃcient, but numerically rather stable.
+Obviously, the rule of division by half is rather primitive, one could do it better. The
+random (or arbitrary) choice of division line (along x or y ) could be replaced by a better
+rule of dividing along the maximum gradient of the function. However, from inspection
+of the way the grid of cells evolves, it was obvious that this algorithm has the following
+intrinsic problem, even if such improvements were implemented: the edges of the cells
+are always parallel to the axes. Consider, for instance, a narrow diagonal “ridge” along
+x = y line. Of course, the algorithm of VESKO2 is obviously superior to VEGAS, because
+cells multiply and concentrate along the diagonal. However, the adjustment of the cells
+would be much faster if cells could turn themselves to be parallel to the “ridge”. The
+self-suggesting solution is the replacement of rectangular cells with the triangular ones.
+Then, hopefully in the process of subdivision, the cells could align along singular lines,
+if the division rule was deﬁned in an intelligent way. In n-dimensions the generalization
+of triangular plaquette is simplex-shaped cell.
+In the following, I shall present certain
+variant of such a method to which we refer as a “Foam” algorithm.
+
+After completing the essential part of this work, I have found in ref. [8] a description
+
+of a similar algorithm1; see last section for more comments.
+
+The outline of the paper is the following: Section 1 describes the Foam algorithm,
+Section 2 its implementation, Section 4 the usage of the program, and Section 5 presents
+results of numerical tests.
+
+2 The Foam algorithm
+
+Let me deﬁne the aims which I have in mind with the new Foam algorithm:
+
+•
+
+The algorithm is thought to be in the future a part of a bigger algorithm and it
+is supposed to take care of several (< 10) “wildest variables”, i.e. variables with
+the strongest singularities, while the other variables I imagine are dealt with the
+VEGAS method, or are “averaged over” like in BASES of ref. [4]
+
+•
+
+I assume that the integrand is completely arbitrary, in particular singularities may
+lie on arbitrarily shaped hyperspaces. (For extremely narrow peaks, it always make
+
+1 I would like to thank Viacheslav Ilyin for bringing my attention to this work.
+
+3
+
+sense to map variables.) In particular the algorithm should be able to deal with sin-
+gularity along diagonals, with big voids and along “thin” hypersurfaces like surfaces
+of the cube, sphere etc.
+
+•
+
+•
+
+I imagine that in the algorithm a grid of vertices forming a “foam of cells” is built,
+which adapts automatically to the integrand in such a way that the resulting ratio
+of average weight to maximum weight, i.e. eﬃciency, is arbitrarily good.
+In the
+subsequent MC generation the foam of cells is used to generate one cell and a point
+within this cell.
+
+For strong peaks the foam of cells may develop into a wrong direction, not knowing
+at the early stage of the development the positions of the sharp peaks containing
+most of the integral. I therefore require that the algorithm has a built-in capacity
+to “collapse” (recess) i.e. possibility of removing a part of the foam (returning
+to a coarser granularity in some region). The iterative succession of “grow” and
+“collapse” should be available as an option, in order to stabilize the ﬁnal optimal
+foam of cells.
+
+•
+
+The integrand should be positive and integrable. Weak integrable singularities of
+the type √x or ln(1/x) are allowed. Such singularities are typically on the edges of
+the integration domain – so there should be an option to include or not the vertices
+at the corners of the simplex cell in the evaluation of the integral over the cell.
+
+2.1 Data structures
+
+The basic data structure is the foam being a linked list of cells. A simplex cell is deﬁned
+by its vertices. Each cell has also many other attributes such as pointers to parent and
+daughter cells, its volume, an estimate of the integral over the cell which I call the proper
+integral, average weight, maximum weight etc. Cells actually contain only pointers to
+vertices, while n-component vectors deﬁning vertices are in a separate list of all vertices.
+This organization is well justiﬁed, because one vertex may enter into several cells. The
+foam is in fact a hierarchical list of cells organized into one big tree. There are two kinds
+of of cells, inactive cells which underwent division and got split into daughter cells and
+active cells (with no daughter). Active cells actually cover the entire integration area.
+In the MC simulation one active cell is chosen randomly according to its crude integral
+which is usually bigger then its proper integral. For the relation between crude and proper
+integral see below. Each inactive cell knows the sum of crude integrals of all active cells
+it contains (all its daughter and granddaughter cells). It is done in such a way in order to
+make generation of the active cell as natural and simple as possible. In fact, generation
+starts with inactive root cell at the top of the tree – one of the daughter cells is chosen
+randomly according to its crude integral. This process continues down the tree until an
+active cell (with no daughters) is randomly chosen. The root cell is the entire integration
+region, being a cube of unit size. In present algorithm, the root cell is the only one which
+
+4
+
+has more than 2 daughters. It splits into n! simplices2.
+
+2.2
+
+Initialization: growth and collapse of the foam
+
+The foam structure described in previous section is constructed during the initialization
+phase. It consists of subsequent growths and collapses of the foam. Let me ﬁrst describe
+the phase of the growth. The initial cube is divided into n! equal simplices, daughter
+cells, and each daughter cell immediately subjected to an MC exploration procedure, eg.
+a certain number of MC events is generated within the cell in order to calculate the average
+weight, dispersion, maximum weight, minimum weight, proper integral (MC estimator)
+and more. In the rest of the growth phase each cell has a chance to get divided into 2
+daughters.
+In present version of the program two options of choosing cell for division
+are implemented: In the ﬁrst method, the active cell picked up for division is always
+this one which actually contains the biggest crude integral. In the second method, the
+choice of the (active) cell for division is done randomly, with probability proportional to
+its crude integral. The user may check empirically which option ﬁts better his integrand.
+This division process continues until the memory buﬀer reserved for the foam ﬁlls up3.
+The active cell chosen for division, is tagged as inactive and divided into 2 daughter cells
+(active) and each daughter cell undergoes MC exploration. The recipe for the cell division
+is the most important part of the algorithm; see below for its detailed description. The
+division of a cell into two daughter cells involves a creating new vertex. The new vertex
+is added to the list of vertices. The sum of crude integrals calculated for the new two
+daughters is not necessarily equal to the crude of the parent – in order to maintain our
+algorithm of picking randomly the active cell following the tree, the crude integral of the
+divided cell and of all parent cells is corrected up to the root cell, in such a way that the
+crude integral of parent is always equal to sum of crude integrals of the daughters. In
+particular the root cell contains always the crude integrals of all active cells, i.e. the total
+crude integral.
+
+As already indicated, in the case of a strongly peaked distribution, growth may go
+into a “wrong area”, so one is interested in a possibility of trimming/downsizing the
+foam, which is termed the collapse of the foam. The algorithm of the collapse is very
+simple and intuitively understandable. When growth is stopped by the buﬀer limits, the
+maximum value I C
+max of the crude in all active cells is determined. Next, all inactive cells
+are checked, starting from the top cell, looking for cells which have crude integral smaller
+than I C
+max times some adjustable factor close to one (default is one, the user may reset
+it easily). Every such inactive cell is reset as active and all its daughters, down to the
+bottom of the tree, are tagged for removal. Finally, the removal of the tagged cells is
+done, releasing free space in the buﬀer. All vertices are also checked, to see if they are
+2This already shows why we are limited to n < 10. N.B. I do not favour the other possible solution in
+which the unit cube is mapped into single simplex, because such a transformation is “singular” at certain
+vertices.
+
+3 In fact, the user may only request for a maximum number of cells in the foam smaller than the total
+
+length of the entire buﬀer. For the moment, there is no dynamical memory allocation in the program.
+
+5
+
+members of any cell, and the orphan vertices are also removed. In this way, the entire
+“un-successful” branches are eliminated from the tree of cells, or, in other words, several
+cells which are product of the division get replaced by the single (parent) cell, just like in
+the real foam! Typically, about half of the cells are eliminated in this way, and one may
+start another phase of the growth. Note that after reviving an inactive cell, one needs to
+attribute to it the original (uncorrected) crude integral. This original crude integral from
+ﬁrst exploration is memorized as one of attributes of the cell, and is therefore available. In
+tests I have found out that the collapse and subsequent growth usually leads to the same or
+very similar foam. The above option is useful only for very sharply peaked distributions.
+It is switched on only on explicit request of the user.
+
+2.3 Division of the cell
+
+Each newly created cell undergoes exploration, just after its creation, in order to determine
+its proper crude integral and the other weight parameters. The division of the symplectic
+cell is the essence of the algorithm. Let me therefore describe it in a more detail. The
+division procedure is deﬁned in a maximally simple way. A simplex of n + 1 vertices
+x1, x2, ..., xn, xn+1 has n(n + 1)/2 edge lines joining every possible pair of vertices of a
+given cell. In our division algorithm, one such edge between xi and xj is chosen and a
+new vertex Y is put somewhere on the line
+
+where 0 < λ < 1. The two daughter simplices are deﬁned with two new list of vertices:
+
+Y = λxi + (1
+
+λ)xj
+
+−
+
+(x1, x2, ..., xi−1, Y, xi+1, ..., xj−1, xj, xj+1, ..., xn, xn+1),
+(x1, x2, ..., xi−1, xi, xi+1, ..., xj−1, Y, xj+1, ..., xn, xn+1).
+
+At this stage, it has do be determined which (i, j) pair and which value of λ to choose.
+The aim is generally to make this choice in such a way that the function varies the most
+strongly in the direction of the edge deﬁned by the (i, j) pair of vertices. How to ﬁnd
+it out? To this end, the information from the relatively short sample of the MC events
+(100-1000) generated inside the cell, during its MC exploration is exploited. First of all,
+from geometrical considerations which I omit, one is able to “project” each MC point X
+into a point Y on a given edge (i, j), i
+
+= j:
+
+where
+
+Y = λijxi + (1
+
+λij)xj
+
+−
+
+,
+
+|
+
+λij(X) =
+
+|
+Deti|
+
+Deti|
++
+|
+Deti = Det(r1, ..., ri−1, ri+1, ...rn, rn+1),
+Detj = Det(r1, ..., rj−1, rj+1, ...rn, rn+1),
+rk = xk −
+
+Detj|
+
+X,
+
+6
+
+6
+and Det(x1, x2, ..., xn) is the standard determinant. The condition 0 < λi,j(X) < 1 is
+obviously fulﬁlled. With help of the MC series of vectors X (from MC exploration of the
+cell) we determine for each edge (i, j) the MC distribution of the variable < λi,j >, the
+average < λi,j >, its variance σ(λi,j) etc. For the division procedure I am looking for
+an edge (i, j) along which the integrand is varying most rapidly. How do I quantify the
+the “rapidness” of the distribution of λi,j within its domain (0,1)? For instance, I could
+use the ratio of the dispersion to the average σ/ < w > of λi,j. This would work if the
+distribution of λi,j had a single maximum, in the middle of the (0,1) interval, or at one of
+its ends λi,j = 0, 1. This criterium of the “rapidness” of the distribution of λi,j would fail,
+however, if the distribution of λi,j had two or more maxima within (0,1) interval. It would
+be an annoying failure in many practical cases like a double ridge or closed hyperspaces
+(like sphere). A more sophisticated measure of the “rapidness” of the distribution of λi,j
+is therefore used in the algorithm. For each (i, j) the full distribution dN/dλ is recorded
+(histogrammed) and the value of the integral
+
+Ri,j =
+
+Z (cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+dN
+dλi,j −
+
+N
+
+dλi,j
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+is calculated. The edge (i, j) with the biggest Ri,j is chosen for the cell division. As easily
+N, if
+seen, the Ri,j is close to zero for ﬂat (uniform) dN/dλi,j and has high value,
+dN/dλi,j has one or multiple narrow peaks. As a value λ for the division λ =< λi,j > is
+taken. In this way one makes attempt to divide the cell in such a way that two daughters
+cells contain roughly half of the parent integral (as in VESKO2). In the MC exploration of
+the new cell, the index of the (optimal) edge (i, j) and its < λi,j > are readily determined
+and memorized for future use – when later on, an active cell is picked up for division, the
+division direction (i, j) and its ratio < λi,j > is already predetermined.
+
+∼
+
+Let me ﬁnally comment on the weight normalization, and the related question of
+reduction of the variance and/or maximum weight. Before I enter details it is very im-
+portant to remember that my ﬁnal aim and highest priority is to generate events with the
+weight equal one i.e. unweighted events. This is a much harder task than generate the
+variable weight events. As usual, one may produce variable weight events and turn them
+into unweighted events by means of rejection. However, one cannot do it eﬃciently if one
+does not control very strictly the maximum weight for weighted events. Weighted events
+(without strict control of maximum weight) are good enough for evaluating the value of
+the integral. In this less interesting case, the appropriate choice of the foam of cells, can
+minimize the variance of the weight. Our primary aim is, however, to construct the foam
+of cells which will allow us to control the maximum of the weight, while decent variance
+of the weight is of secondary importance.
+
+In the initialization phase, the basic weight is deﬁned w = f (x)VCart where f is
+integrand function, and VCart is Cartesian volume of the cell. The above weight is therefore
+normalized such that the proper integral is equal the average weight, i.e., for inﬁnite
+number of MC events < w > is just equal to the integral over the cell.
+
+In order to gain good control over the maximum of the weight (and/or its variance) I
+introduce the crude integral of the cell, which is typically an overestimated integral over
+
+7
+
+the cell. In the subsequent MC generation, the MC weight wM C will compensate for the
+fact that crude integral is not equal the true value of the integral over the cell. Since the
+control of the maximum weight is our main priority, in the default case, the crude integral
+of the cell is chosen
+
+Icrude = wmax = VCartMaxXf (X),
+
+i.e.
+it is equal the maximum value of the integrand function times the volume of the
+cell. Of course, the true maximum of the integrand function is not know, and instead,
+one employs its estimate obtained in the course of the MC exploration of the cell. This
+above choice ensures that the condition wM C ≤
+1, essential for turning weighted events
+into wM C = 1 events by means of the rejection, will not be violated too often.
+
+Note that if one is interested only in the variable weight events, for instance for calcu-
+lating the integral, then a more economical choice of the crude integral of the cell would
+be
+
+Icrude = √< w >2 +σ2 = √< w2 >,
+
+i.e. this quantity is either the average weight < w > or its variance σ, depending which one
+is bigger, see also discussion in refs. [3,6]. This would provide a reasonable reduction of the
+variance by populating more densely cells which have bigger ratio of the proper variance
+to proper average weight σ(w)/ < w >, and therefore reducing the overall σ(w)/ < w >.
+The above choice of the crude integral is also optionally available in the program.
+
+In any case, the compensating weight for the MC generation is always the same:
+
+wM C = f (x)VCart/Icrude.
+
+3 Program structure
+
+The program consists of one source ﬁle and one header ﬁle. It is written in Fortran77
+with the popular extensions like long variable names, long source lines, etc., which are
+available on all platforms. In the makeﬁle there is a collections of f77 compilation ﬂags,
+for Linux, AIX HPUX and ALPHA compilers which should be used to activate these
+extensions. The program is written in such a way that its translation to c++ or Java
+should be not too diﬃcult. In fact the program has structure of the c++ class as much
+as it is possible to do it within f77. Below I characterize the rules according to which
+program was written. Variables obey the following rules:
+
+•
+
+There is only one common block /c FoamA/ which contains all class member vari-
+ables, which is placed in the header ﬁle FoamA.h . Each subroutine in FoamA.f
+source ﬁle includes an INCLUDE ’FoamA.h’
+statement. The outside programs
+should never include directly /c FoamA/ . All input/output communication is done
+with the help of dedicated, easy to use, subroutines.
+
+8
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+Variables in /c FoamA/ are class members and all have special preﬁx “m ” in their
+name, for example m Iterat is number of iterations.
+
+User has access to some class members through “getters” and “setters”; see below.
+
+Strong typing is imposed with help of IMPLICIT NONE.
+
+•
+Subprograms in the class are loosely organized in several categories:
+
+Constructor with name FoamA PreInitialize which pre-sets default values of many
+variables, including input variables. It is invoked automatically.
+
+Initializator with name FoamA Initialize, which performs initialization of the foam
+grid.
+
+Finalizator with name FoamA Finalize, which summarizes the whole run, sets out-
+put values in /c FoamA/, prints output etc.
+
+Maker with the name FoamA MakeSomething or similar a one, which does the essen-
+tial part of job, in our case a maker FoamA MakeEvent generates single MC event.
+
+Setter with the name FoamA SetVariable, is called from the outside world to set
+m Variable in /c FoamA/. For example CALL FoamA SetIterat( 5) sets variable
+m Iterat=5. Only certain privileged variables have a right to be served by their own
+setter, the other ones are in principle “private”. Most of setters should be called
+before initialization.
+
+Getter with the name FoamA SetVariable, is called from the outside world to get
+m Variable from /c FoamA/. It is a preferred way of sending output information to
+outside world. For example, with CALL FoamA GetMCwt(MCwt) one gets MC weight
+MCwt in the user program.
+
+The full list of class member variables in /c FoamA/ is shown in the Appendix A. Addi-
+tional information on all subprograms of the Foam package can be found in Tables 1 and
+2, where I list all subprograms with short descriptions of their role.
+
+9
+
+Subprogram
+
+FoamA PreInitialize
+FoamA Initialize(FunW)
+FoamA InitVertices
+FoamA InitCells
+FoamA DefCell
+
+FoamA SetVertex(iVe,k1,k2,k3)
+FoamA Explore(iCell,funW)
+
+description
+Initialization of the foam grid
+
+Pre-initialization, set all default values (constructor)
+Initialization of the grid etc.
+Initializes ﬁrst vertices of the basic cube
+Initializes ﬁrst n-factorial cells inside original cube
+Creates new (daughter) cell and append at end of the
+buﬀer
+Helps to deﬁne vertex
+Short MC sampling in iCell, determine < wt >, wtmax
+etc.
+
+FoamA RanDiscr(Crud,nTot,Pow,iRnd) Random choice of cell division direction
+Auxiliary procedure for FoamA Explore
+FoamA MakeLambda(Lambda)
+Determinant of matrix R
+FoamA Determinant(R,Det)
+Laplace formula for 2-dim. determinant
+FoamA Det2Lapl(R,i1,i2)
+Laplace formula for 3-dim. determinant
+FoamA Det3Lapl(R,i1,i2,i3)
+Laplace formula for 4-dim. determinant
+FoamA Det4Lapl(R,i1,i2,i3,i4)
+Laplace formula for 5-dim. determinant
+FoamA Det5Lapl(R,i1,i2,i3,i4,i5)
+Grow cells until buﬀer is full
+FoamA Grow(funW)
+Choose randomly one cell, used also in MC generation
+FoamA PeekMax(iCell)
+Generates randomly pointer iCell of (active) cell
+FoamA Peek(iCell)
+Divide iCell into two daughters; iCell tagged as inac-
+FoamA Divide(iCell,funW,RC)
+tive
+Finds and removes some cells, revives some nonactive
+cells
+Generation
+Generates point/vector Xrand with the weight MCwt
+Provides point/vector MCvector generated by Ma-
+keEvent
+Provides MC weight MCwt calculated by MakeEvent
+Alternative entry, Generates point X with the weight
+MCwt
+Finalization
+Calculates integral and its error after MC run
+Integral estimate from MC generation
+
+FoamA Finalize(MCresult,MCerror)
+FoamA GetIntegral(MCresult,MCerror)
+
+FoamA GetMCwt(MCwt)
+FoamA MCgenerate(funW,X,MCwt)
+
+FoamA MakeEvent(funW)
+FoamA GetMCvector(MCvector)
+
+FoamA Collapse
+
+Table 1: List of all subprograms with short description.
+
+10
+
+Subprogram
+
+description
+Other Getters and Setters
+Provides Crude used in MC generation
+Sets Ndim= no. of dimensions (called before Initialize)
+Provides Ndim, miscellaneous, for tests
+Sets nBuf, length of working area in the buﬀer
+Sets Iterat= no. of iterations (called before Initialize)
+Sets output unit number
+Sets chat level Chat=0,1,2 in the output, Chat=1 normal
+Sets nSampl; No of MC sampling before dividing cell
+
+FoamA GetCrude(Crude)
+FoamA SetNdim(Ndim)
+FoamA GetNdim(Ndim)
+FoamA SetnBuf(nBuf)
+FoamA SetIterat(Iterat)
+FoamA SetOut(Out)
+FoamA SetChat(Chat)
+FoamA SetnSampl(nSampl)
+FoamA SetOptCrude(OptCrude) Sets OptCrude; type of Crude =0,1,2.
+FoamA SetOptBeta(OptBeta)
+FoamA SetOptPeek
+FoamA SetOptEdge(OptEdge)
+FoamA SetKillFac(KillFac)
+
+Sets type of method in cell division
+Sets type of method in cell division
+Sets OptEdge; (inclusion of vertices in the cell exploration)
+Sets KillFac; threshold factor for collapse procedure
+
+FoamA Check(mout,level)
+FoamA ActUpda
+FoamA BufPrint(mout)
+FoamA BufActPrint(mout)
+FoamA VertPrint(mout)
+FoamA PltBegin
+FoamA PltVert(mout)
+FoamA PltCell(mout)
+FoamA PltEnd
+
+Debugging and miscellaneous
+
+Checks all pointers (after compression) debugging!
+Miscellaneous, Creates list of active cells (pointers)
+Prints all cells, debugging
+Prints all active cells, debugging
+Prints all vertices, debugging
+Plotting 2-dim. cells and vertices
+Plotting 2-dim. cells and vertices
+Plotting 2-dim. cells and vertices
+Plotting 2-dim. cells and vertices
+
+Table 2: List of all subprograms with short description, continuation.
+
+11
+
+Parameter
+m nDim
+m nBuf
+
+m nSampl
+
+m Iterat
+
+m KillFac
+
+Meaning
+Number of dimensions.
+Actual dynamic length of the buﬀer m nBuf<m nBufMax. Larger
+m nBuf has to be used for higher dimensions and for strongly singu-
+lar integrand. For larger m nBuf the CPU time of the initialisation will
+increase but the total CPU time of the event generation will be shorter
+because the acceptance rate < w > /wmax will improve. Default is
+m nBuf=1000.
+Number of MC sampling per cell in the MC exploration of the new cell
+daughter cell. The MC eﬃciency < w > /wmax seems to depend weakly
+on m nSampl. However, if one cannot increase m nBuf any more then
+enlarging m nSampl may still help a little bit. Default is m nSampl=200.
+No of iterations in the initialization of the grid, m Iterat=0 is the lowest
+possible value. In most cases it is enough. Each iteration consists of the
+grow and collapse of the grid. Several iterations are recommended for
+very strongly peaked distributions.
+threshold factor for reviving inactive cells in the “collapse” procedure
+of the iteration. Its change seems to be without much eﬀect. May be
+in some rare cases the user will ﬁnd proﬁtable to readjust it. Default is
+m KillFac=1.
+
+m OptEdge
+
+m OptCrude Type of the crude integral used for the MC generation of the active cell.
+For OptCrude=0 estimator of the “true” integral in the cell is take as
+crude, for OptCrude=1 the value of √< w2 > and for OptCrude=2 the
+maximum weight wmax. Default is m OptCrude=2.
+Option parameter deciding whether vertices are included in the MC ex-
+ploration of the cell. For m OptEdge=0 they are not included and for
+m OptEdge=1 they are included. Generally it is good to include ver-
+tices, but if there are some weak singularities or numerical instabilities
+of the integrand close to boundary of the integration domain, then it
+better to set m OptEdge=0. Default is m OptEdge=1.
+Option parameter deciding method of selecting the cell for division. Opt-
+Peek=0 cell with maximum crude (default), OptPeek=1 randomly.
+Type of choice of the edge in the division of the cell, Default OptBeta=0
+described in the text, OptBeta=1, OptBeta=2 for tests.
+Output unit number. For redirecting output from Foam to separate disk
+ﬁle. Default is m Out=6.
+Chat=0,1,2 increasing chat level in the output unit, Chat=1 is the de-
+fault normal level
+
+m OptPeek
+
+m OptBeta
+
+m Chat
+
+m Out
+
+Table 3:
+importance.
+
+Important input parameters of the Foam. They are listed in the order of their
+
+12
+
+4 Program usage, input parameters
+
+Basic input variables are listed in in Table (3) together with their explanation. Typical
+user program using Foam package may look as follows:
+*------------------------------------------------------------------------
+
+Density
+Density
+
+2000) ! length of buffer
+
+3) ! number of dimensions
+
+DOUBLE PRECISION
+EXTERNAL
+CALL FoamA_SetNdim(
+CALL FoamA_SetnBuf(
+CALL FoamA_SetIterat(
+CALL FoamA_SetnSampl(
+CALL FoamA_SetOptCrude(
+CALL FoamA_SetOptEdge(
+CALL FoamA_SetChat(
+CALL FoamA_Initialize(Density) ! initialize foam grid
+DO loop = 1, 200000
+
+1) ! number of iterations
+
+500) ! no. of MC events/cell (initialization)
+2) ! type of crude, =2 is default anyway
+1) ! edge point are included, (=0 excluded)
+1) ! printout level
+
+CALL FoamA_MakeEvent(Density)
+CALL FoamA_GetMCvector(MCvector) ! get MC event, vector
+CALL FoamA_GetMCwt(MCwt)
+CALL GLK_Fil1(1000, MCwt,1d0)
+
+! get MC weight
+! users histogramming
+
+! generate MC event
+
+ENDDO
+CALL FoamA_Finalize(MCresult,MCerror) ! printouts, get integral & error
+CALL FindWtLimit(1000)
+
+! users routine, check on MC efficiency
+
+*------------------------------------------------------------------------
+In fact user has to set only the number of dimensions Ndim. The other input variables
+nBuf, Iterat, nSampl, OptCrude, OptEdge, Chat are already preset for the user thus
+calling setters for them is optional. User needs to provide his own integrand function which
+in the example is Density. Below is an example of a simple integrand function (3-dim.
+sphere).
+*------------------------------------------------------------------------
+
+DOUBLE PRECISION FUNCTION Density(X)
+
+*////////////////////////////////////////////////////////////////////////
+*// 3-dimensional testing function, Thin sphere centred at (A1,A2,A3) //
+*// with Radius and Thickness defined below
+//
+*////////////////////////////////////////////////////////////////////////
+
+IMPLICIT NONE
+DOUBLE PRECISION X(*)
+DOUBLE PRECISION Radius,Thickness,A1,A2,A3,R
+DATA
+DATA
+DATA
+
+A1,A2,A3 / 0.25, 0.40, 0.50 / ! centre of sphere
+Radius
+/ 0.35 /
+Thickness / 0.020 /
+
+! radius of sphere
+! thickness of sphere
+
+*------------------------------------------------------------------------
+
+= SQRT( (x(1)-A1)**2 +(x(2)-A2)**2 +(x(3)-A3)**2 )
+
+R
+Density = Thickness/( (R-Radius)**2 + Thickness**2)
+END
+
+*------------------------------------------------------------------------
+
+13
+
+5 Numerical tests
+
+A minimum of testing was done. It is even more important that the program was already tested
+in a real practical application. The present version of Foam is implemented as a part of KK
+Monte Carlo event generator [9] for the up to 3-dimensional problem of the simulation of the
+initial state photon radiation (ISR) and beamstrahlung for future Linear Colliders4.
+
+In the following I present the comparisons of the Foam program with VEGAS [3] for n = 2, 3.
+
+For n = 2 I use three testing functions:
+
+x1
+
+0.5
+
+− |
+
+−
+
+| −
+
+x1
+
+0.5
+
+− |
+
+−
+
+γ
+
+), γ = 0.05,
+|
+
+−
+
+fa(x1, x2) = 1
+fb(x1, x2) = 1/4πR2
+
+−
+
+Θ(0.5
+
+fc(x1, x2) =
+
+π[(R
+− p
+γ
+π[(x1 + x2)2 + γ2)]
+
+(x1
+
+−
+
+, γ = 0.02.
+
+γ) Θ(0.5
+
+γ
+0.25)2 + (x2
+
+0.40)2)2 + γ2)]
+
+−
+
+, γ = 0.02, R = 0.35
+
+(1)
+
+All above functions are deﬁned within unit square 0
+1. The ﬁrst density function is
+peaked along one of diagonals of the square, the second one is peaked along a 2% wide ring
+centered at (0.25,0.40) of radius 0.25, and the last one represents 5% wide band along four edges
+of the square.
+
+xi ≤
+
+≤
+
+In Fig. 1 the resulting 2-dimensional foam of cells is plotted. In each case, the foam consists
+of about 75 active cells and the exploration of the single cell in the initialization was based on
+1000 MC events per cell. Only active cells are plotted. As expected, cells of the foam concentrate
+in the areas of the enhancement of the integrand functions. They clearly try tend to elongate
+along the lines of the “ridges” in the integrand functions.
+
+Functions
+fa(x1, x2) (diagonal ridge)
+fb(x1, x2) (circular ridge)
+fc(x1, x2) (edge of square)
+
+Foam VEGAS
+0.05
+0.15
+0.53
+
+0.94
+0.83
+0.57
+
+max, for ε = 10−4, of Foam and VEGAS for 3 examples of the 2-
+Table 4: Eﬃciency wε
+dimensional integrand function deﬁned in eq. (1). After initialization, eﬃciency was determined
+from sample of 106 MC events. Results from Foam are for 5000 cells (about 2500 active cells)
+and cell exploration was based on 200 MC events per cell.
+
+The three test functions of eq. (1) are intended to be of the “non-factorizable” type, such
+that Foam should be more eﬃcient than VEGAS. I deﬁnitely want to adjusted the concept of
+“eﬃciency” of the MC to the task of MC generation of weight one events. (It should not be
+confused with the statistical error of the integral.) Generally, I deﬁne eﬃciency as the ratio of
+the average weight to maximum weight < w > /wmax, such that it is equal to the rejection
+rate in the process of turning variable-weight events into w = 1 events. In practice, however,
+wmax has to be deﬁned unambiguously and in a numerically stable way. The straightforward
+deﬁnition of wmax as a maximum weight determined empirically in the MC test run, or during
+the initialization of the grid, can be prone to large ﬂuctuation. For practical reasons I do not
+want to exclude from our considerations the case of the weak integrable singularities in the
+
+4 It this practical application Foam is more eﬃcient than VEGAS by factor of order 100.
+
+14
+
+(a)
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❙
+❙
+
+❙
+❙
+
+❙
+❙
+
+❙
+❙
+
+❙
+❙
+
+❙
+❙
+
+❙
+❙
+
+❙
+❙
+
+❙
+❙
+
+❙
+❙
+
+❙
+❙
+
+❙
+❙
+
+❙
+❙
+
+❙
+❙
+
+❙
+❙
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❩
+❩
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❅
+❅
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❅
+❅
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+94
+
+93
+
+81
+
+92
+
+86
+
+64
+
+51
+
+87
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+❡
+❡
+❜
+❜
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+❅
+❅
+❅
+❅
+❧
+❧
+❝
+❝
+
+(cid:0)
+(cid:0)
+
+❡
+❡
+❅
+❅
+
+137
+
+136
+
+106
+
+107
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+❧
+❧
+❅
+❅
+
+❜
+❜
+❅
+❅
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+❅
+❅
+❅
+❅
+❧
+❧
+❝
+❝
+
+❡
+❡
+❜
+❜
+
+❧
+❧
+❅
+❅
+❙
+❙
+
+❅
+❅
+❅
+❅
+❧
+❧
+❝
+❝
+
+❜
+❜
+❅
+❅
+
+1
+(cid:0)
+(cid:0)
+✉
+
+⋆43
+❡
+❜
+❜❡
+
+❜
+❜
+❡
+❡
+
+❡
+❡
+❜
+❜
+
+49
+✉
+❏
+❏
+
+(cid:0)
+(cid:0)
+(cid:0)
+
+46
+✉
+❩
+❩
+
+4
+✉
+(cid:0)
+(cid:0)
+
+❅
+❅
+❅
+❅
+❝
+❝
+❧
+❧
+❅
+❅
+❅
+❅
+
+71
+(cid:0)
+(cid:0)
+✉
+(cid:0)
+❡
+❡(cid:0)
+
+⋆35
+(cid:0)
+(cid:0)
+(cid:0)
+❜❡
+❜
+❡(cid:0)
+❜
+❜
+(cid:0)
+❡
+❡
+
+❩
+❩
+❡
+❡
+❅
+❅
+❩
+❩
+❩
+❩
+❡
+❡
+❅
+❅
+❡
+❡
+❅
+❅
+❡
+❡
+
+❏
+❏
+❏
+❏
+❩
+❩
+⋆24
+(cid:0)
+❏
+❩
+❩
+(cid:0)
+❏
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+
+❙
+❙
+❩
+❩
+❙
+❙
+(cid:0)
+❩
+❩
+(cid:0)
+⋆14
+❩
+(cid:0)
+❙
+❙❩
+(cid:0)
+(cid:0)
+(cid:0)
+
+62
+40
+⋆17
+⋆11
+⋆3
+57
+✉
+✉
+❩
+❅❩
+❅❧
+❧❅
+✉
+❡❅
+❅❅
+❅ ❅
+❅ ❡
+❅❅
+❅
+❡❅
+❅❅
+⋆19
+❧
+❧
+❅
+❅
+❡
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+119
+118
+❧
+❧
+⋆45
+❡
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❧
+❧
+108
+❡
+❅
+❅
+❩
+❩
+❅
+❅
+65
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+109
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❅
+❅
+❧
+❧
+❧
+❅
+❅
+❅❅
+❡
+❩
+❩
+✉
+❅
+❅
+❅
+❅
+❅
+❅
+125
+69
+❧
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅❧
+❅
+❅
+132
+⋆10
+❅
+❅
+❅
+❅
+❡
+❅
+✉
+❅
+❅
+❧
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❧
+❡
+❅
+❡
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❅❧
+❧
+❧
+❧
+❅
+❅
+❧
+❙❅
+❙
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❡
+❅
+❡
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+144
+❅
+❧
+❧
+❧
+❅
+❅
+❧
+74
+75
+❧
+❅
+❅
+⋆33
+❅
+❅
+❅
+❅
+❙
+❙
+❅
+❅
+❅
+❅
+❅
+❡
+❡
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❅
+124
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❅
+❅
+❅
+❅
+❅
+141
+❅
+❅
+❙
+❙
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❡
+❅
+❡
+❅
+❧
+133
+❧
+❧
+❅
+❅
+❅
+❅
+❧
+111
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+⋆30
+⋆21
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+❧
+❧
+❅❧
+❅❅
+❡
+❅
+❡
+❧
+❅
+❅
+❅
+84
+❅
+❅
+❧
+❧
+63
+⋆44
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❅❧
+❅
+❅
+❅
+❧
+❅
+❅
+❅❧
+⋆26
+❙
+❙
+❡
+❅
+❡
+❅
+❅
+✉
+❅
+❅
+❡❅
+❭❡
+❅❅
+❭
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❧❅
+❅
+❡
+❙
+❙
+❡
+❅
+❡
+❅
+❧
+❧
+❭
+❅
+❡
+❭
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+145
+❅❧
+❅
+❅
+❅
+❅
+120
+❧
+❅❅
+❅
+❅
+❅
+❅
+❧
+❅
+❅
+❅
+121
+❧
+❡
+❅
+❅
+❧
+❭
+❡
+❡
+❅
+❅
+❅
+❡
+❅
+❭
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❧
+❅
+❅
+❅
+❅
+❧
+❅
+❅
+❅
+66
+❅
+❅
+❅
+❅
+75
+❅
+❅
+❧
+❅
+❧
+❡
+❭
+❅
+❅
+❅
+❡
+❅
+❭
+❡
+❡
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❧
+❅
+❅
+❅
+✉
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+✉
+110
+❅
+❅
+❅
+❅
+95
+❅
+❧
+❧
+❡
+❅
+❅
+❭
+❅
+❡
+❅
+❅
+❅
+❧
+❧
+❡
+❅
+❡
+❅
+❅
+❅
+❭❅
+❅
+❧
+❧
+❅
+❅
+140
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❅
+❧
+❡
+❅
+❅
+❅
+❅
+❭
+❭
+❧
+❧
+❅
+❅
+❡
+❅
+❅
+❡
+❅
+❡
+❧
+❅
+58
+❅
+❅
+❧
+126
+102
+❅
+❅
+❅
+❅
+⋆36
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅❅
+❅
+❭
+❡
+123
+❅
+❅
+❧
+❅
+❅
+❧
+❭
+⋆37
+✉
+❅
+❅
+❡
+❧
+64
+❧
+73
+❅
+❅
+❡
+❡
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❭
+❧
+114
+❅❧
+❅
+❅
+❅
+❅
+❅
+❡
+❅
+❅
+✉
+✉
+❧
+❅
+❅
+❧
+❅
+❅
+❡
+❭
+60
+❡
+❡
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❡❧
+❧
+❅
+❅
+❅127
+❭❅
+❅❅
+❡
+❡
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❭
+✉
+116
+❅
+❅
+❡
+❅
+❅
+❡
+❡
+❅
+❅
+❅
+❅
+103
+❧
+❧
+117
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❭
+❅
+❡
+❡
+❅
+❅
+❧
+❅
+❅
+❅❅
+❅
+❧
+❅
+❭
+❅
+❅
+❅
+❡
+❅
+❅
+❧
+❧
+❡
+❅
+❡
+❅
+54
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+⋆13
+❅
+❅
+❧
+❅
+❅
+❡
+❡
+❅
+❅
+❭
+❅
+❅
+❅
+❭
+❅
+❅
+❅
+❅
+❅
+❅
+(cid:0)
+❅
+❅
+❧
+❡
+❧
+✉
+(cid:0)
+❅
+❅
+50
+❡
+❡
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+❡
+❡
+❅
+(cid:0)
+❅
+❅
+❅
+❅
+❅
+❭
+❅
+❜
+❜
+❅
+❧
+❅
+❅
+❭
+❅
+❧
+❅
+❅
+❅
+❅
+❡
+✉
+❅
+❅(cid:0)(cid:0)
+❅
+❅
+55
+❡
+❡
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+112
+❅
+❅
+115
+❧
+❡
+❡
+❧
+❅
+❅
+(cid:0)(cid:0)
+❅
+❅
+❭
+⋆7
+❅
+❅
+113
+❅
+❅
+❭
+❅
+❅
+❅
+❅
+❅
+❡
+✉
+⋆18
+❧
+❡
+❅
+❧
+❡
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+61
+❅
+❅
+❧
+❧
+122
+❅
+❅
+❅
+❅
+❅
+❅
+68
+❭
+❅
+❅
+❅
+❅
+❭
+❅
+❅
+⋆27
+❅
+❅
+❅
+❡
+✉
+⋆5
+❧
+❧
+❅
+❅
+❅❅
+❅
+❅
+⋆25
+❡
+❡
+❧❅
+❧
+⋆31
+✉
+❅
+76
+❅
+❅
+59
+❅
+❅
+❭
+❅
+❅
+❅❅
+❡❅
+❅
+❅
+❅
+❭
+❅
+⋆20
+❧
+❧
+❧
+❧
+❅
+❅
+⋆6
+❧
+❧
+❅
+❅
+❡
+❡
+✉
+130❝
+❝
+✉
+❅
+❅
+⋆42
+❅
+❅
+❅❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅❅
+❅❅
+❧
+❭
+❅
+❭
+❅❧
+❧
+❧
+❅
+❅❅
+❅
+❝
+❧
+❧
+❅
+❅
+❝
+131
+⋆39
+❅
+❅
+❡
+❡
+❅
+❅
+❅❅
+❅❅
+❅❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❧
+❧
+⋆8
+(cid:0)(cid:0)
+⋆28
+❧
+❧
+❅
+❅
+❅
+❝
+❅
+❅❅
+❅
+❅(cid:0)(cid:0)
+❅
+❅
+❅
+❅
+❡
+❡
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅❅
+❅
+❅
+❝
+❧
+❧
+❅
+❅
+❅
+❅
+❝❧
+❝
+❧❅
+❅
+❅
+❝
+❅
+❅❅
+❅(cid:0)
+❅
+(cid:0)
+❅
+❅
+❅
+❅
+149
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❝
+❅
+❧
+❅
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+99
+104
+❝
+❝
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+146
+❅
+❧
+❧
+❅
+❅
+❝
+❅
+❅
+❅
+❝
+❅
+❅
+147
+❅
+❅
+❅
+❧
+❧
+⋆23
+❅
+❅
+105
+❅
+❅
+⋆32
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+129
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧❅
+❝❧
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❝
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+78
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❧
+❧
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❝
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+58
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❝
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❝
+77
+❧
+❧
+❅
+❅
+❅
+❅
+48
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❧
+❅
+❧
+❅
+❅
+❅❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+✉
+❝
+❅
+❅
+72
+❧
+❧
+✉
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❧
+❧
+❝
+128
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+91
+❝
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❝
+❅
+❅
+148
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+67
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❝
+134
+❝
+❅
+❧
+❧
+52
+❅98
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+✉
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+88
+❅
+❅❅
+❅
+❅
+❅
+❅
+❝
+❅
+139
+❅
+❝
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+✉
+❧
+❧
+❅
+❝
+❅
+❅
+⋆47
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+70
+❝
+❝
+❅❅
+❅
+❅❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❧
+❧
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+138
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+✉
+❅
+❅
+❅
+❝
+❅
+❅
+❝
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❝
+62
+❅
+❅
+❅
+100
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❅
+96
+❅
+❅
+❅
+❅
+❅
+❅
+97
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+101
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+77
+76
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❧
+❧
+⋆34
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+⋆22
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝❅
+❅❅
+❅
+❅
+❅
+❅
+⋆9
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅❅
+❝❧
+❧❅
+90
+❅
+❅
+❅
+❅
+❝❧
+❅
+❧❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❅
+❝
+❅
+❧
+❧
+72
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+135
+❧
+❧
+❝❅
+❅
+❅
+❅
+❅
+❅
+❅
+✉
+❝
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+53
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❧
+❝
+❧
+❧
+❅
+❅
+❅
+❅
+❅
+⋆38
+❅
+❅
+❅
+✉
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧❅
+❅
+❧
+❧
+❅
+❅
+❅
+❝
+❧
+❧
+143
+142
+⋆15
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❝
+❅
+❅
+❧
+❧
+❅❅
+❅
+❅
+❅❅
+❝
+❧
+❧
+❅
+❅
+❝
+⋆29
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❅
+❧
+❧
+❝
+❧
+❧
+51
+❅
+❅❅
+❅❅
+❝
+⋆12
+⋆16
+74
+⋆2
+41
+56
+❅❅
+✉
+❅
+❅
+❅
+❧
+❝
+❜
+❅
+❧
+❡
+❧
+❡
+❅
+❧
+❅❅
+❅❅
+❜❅
+❝❅
+✉
+✉
+✉
+⋆6
+⋆21
+❳❳❳❳❳❳❳
+❳❳❳❳❳❳
+❛❛❛❛❛❛❛❛❛❳❳❳❳❳❳❳❳❳❳ 66
+❛❛❛❛❛❛❛❛❛
+36
+64
+✂
+✆
+❊
+✆
+✂
+40
+❳❳❳❳❳❳❳❳❳❳❵❵❵❵❵❵❵❵❵ 74
+✉
+⋆10
+45
+77
+❳❳❳
+46
+✉
+16
+47
+48
+51
+❵❵❵❵❵❵❵❵❵❵❵❵❵❵❵❵❵❵ 84❵❵❵❵❵❵❵❵❵❤❤❤❤❤❤❤❤❤ 86❤❤❤❤❤❤❤❤❤❤❤❤❤❤❤❤❤❤ 88
+24
+52
+✂
+✉
+❊
+✂
+✆
+✆
+✉
+✉
+✉
+❤❤❤❤❤❤❤❤❤❤❤❤❤❤❤❤❤❤ 96❤❤❤❤❤❤❤❤❤❤❤❤❤❤❤❤❤❤ 98❤❤❤❤❤❤❤❤❤
+✉
+✉
+✉
+✉
+✉
+✉
+✂
+✜
+✁☞
+✜✔
+✔✁
+❊
+⋆30
+✂
+✆
+✆
+☞☞
+❊
+☞
+71
+✂
+✜
+✜
+✁
+☞
+✔
+✁
+✔
+❊
+✂
+☞
+✆
+✆
+☞
+✉
+❊
+☞
+✓
+✓✂
+✜
+✜
+☞
+☞
+✁
+✔
+✁
+✔
+❊
+✂
+✆
+✆
+☞
+☞
+❊
+✓
+✓
+✂
+☞
+✜
+✜
+☞
+✁
+✔
+✔
+✁
+❊
+✂
+✆
+✆
+☞
+☞
+❊
+☞
+✂
+38
+✜
+✜
+☞
+✁
+✔
+✔
+✁
+❊
+✂
+☞
+✆
+✆
+☞
+❊
+☞
+✂
+✉
+☞
+✔
+✔
+✁
+✁
+❊
+✂
+☞
+✆
+✆
+☞
+❊
+☞
+✂
+43
+☞
+✁
+✔
+✔
+✂
+✁
+❊
+☞
+☞
+✆
+✆
+☞
+❊
+✂
+91
+☞
+☞
+☞
+✂
+✔
+✔
+✁
+✁
+❊
+✆
+✆
+☞
+❊
+✂
+☞
+☞
+✂
+☞
+✁
+✔
+✔
+✁
+❊
+✆
+✆
+☞
+❊
+✂
+☞
+25
+☞
+✂
+☞
+✁
+✁
+❊
+✆
+✆
+☞
+❊
+☞
+✂
+✉
+☞
+✂
+☞
+✁
+❊
+✁
+✆
+✆
+☞
+❊
+☞
+53
+✂
+☞
+✓
+✓
+✂
+☞
+✁
+✉
+❊
+✁
+101
+☞
+✆
+✆
+☞
+❊
+✂
+137
+☞
+✜
+✜
+✂
+☞
+✁
+☞
+❊
+✁
+☞
+✆
+✆
+❊
+✂
+⋆28
+☞
+✜
+✂
+✜
+☞
+☞
+✁
+❊
+✁
+☞
+✆
+❊
+✆
+✂
+☞
+☞
+✂✄
+✄✆
+✆
+✄✄
+☞
+✁
+❊
+✁
+☞
+✆
+❊
+✆
+✂
+☞
+✄
+✄
+☞
+✄
+✄
+✆
+✆
+✂
+☞
+✔
+✔
+✁
+❊
+✁
+☞
+✆
+❊
+✆
+✂
+☞
+✄
+✄
+✄
+✄
+☞
+✆
+✆
+✂
+☞
+✔
+✔
+✁
+❊
+✁
+☞
+❊
+✆
+✆
+✂
+129
+☞
+✄
+✄
+✄
+✄
+☞
+✆
+✆
+✂
+☞
+✔
+✔
+✁
+❊
+✁
+☞
+❊
+✆
+✆
+✂
+✄
+✄
+☞
+✄
+✄
+☞
+✆
+✆
+✂
+☞
+✁
+❊
+✄
+✄
+✁
+☞
+❊
+✆
+✆
+✄
+✄
+☞
+✂
+☞
+✆
+✧
+✧
+✆
+⋆17
+✂
+✄
+✄
+☞
+✁
+✄
+✄
+❊
+✁
+✧
+☞
+☞
+✧
+☞
+❊
+✆
+✆
+✂
+✆
+✆
+✂
+✄
+✄
+✄
+✄
+☞
+✁
+❊
+✆
+✁
+☞
+❊
+✂
+✆
+✆
+✆
+67
+✄
+✂
+✄
+✄
+✄
+☞
+✆
+✔
+✔
+✁
+❊
+❊
+☞
+✂
+✁
+✆
+✆
+✉
+✄
+✆
+✄
+✂
+✄
+✄
+⋆23
+☞
+✆
+✁
+❊
+☞
+❊
+✂
+✁
+✆
+✆
+✄
+✄
+✆
+✄
+✄
+✂
+✆
+☞
+✁
+☞
+✂
+✁
+✆
+✆
+✄
+✄
+✄
+✄
+✆
+125
+✂
+✆
+☞
+✁
+✄
+✄
+☞
+✂
+✆
+✆
+✁
+✄
+✄
+✆
+✂
+✆
+117
+✄
+✄
+☞
+✁
+☞
+✂
+✆
+✄
+✆
+✄
+✁
+✆
+✂
+✆
+✄
+✄
+☞
+✄
+✄
+✁
+☞
+✂
+✆
+✆
+✁
+✆
+✂
+✆
+✄
+✄
+69
+✄
+✄
+19
+☞
+✁
+☞
+✂
+✆
+✆
+✁
+79
+✆
+✆
+✄
+✂
+✄
+✄
+✄
+☞
+☞
+✁
+✆
+✆
+✂
+✁
+✆
+✆
+✄
+✄
+✂
+✄
+✄
+42
+☞
+☞
+✁
+✆
+✆
+✂
+✆
+✆
+✁
+✄
+✄
+✂
+✉
+✄
+✄
+☞
+☞
+✄
+✄
+✁
+✆
+✆
+✂
+✁
+✄
+✄
+✂
+✄
+✄
+☞
+☞
+✁
+✆
+✆
+✂
+✁
+73
+✄
+✄
+✂
+✄
+✄
+☞
+☞
+✁
+✄
+✄
+✆
+✆
+✁
+✂
+65
+✂
+✄
+✄
+☞
+✄
+✄
+☞
+✁
+✆
+✁
+✆
+✂
+✂
+✄
+✄
+✄
+✄
+☞
+☞
+✁
+✁
+✆
+✆
+✂
+✂
+✄
+✄
+✄
+✄
+☞
+☞
+✁
+✁
+✆
+✆
+✄
+✄
+✂
+✂
+✄
+✄
+⋆65
+☞
+☞
+✄
+✄
+✁
+✁
+✆
+✆
+✂
+✂
+✄
+✄
+✄
+✄
+☞
+(cid:0)
+☞
+✁
+61
+✁
+✆
+✆
+✂✂
+✂
+✄
+✄
+(cid:0)
+✄
+(cid:0)
+(cid:0)
+✄
+✉
+☞
+(cid:0)
+☞
+✁
+✁
+✆
+(cid:0)
+(cid:0)
+✆
+(cid:0)
+(cid:0)
+✄
+✄
+✂
+(cid:0)
+(cid:0)
+(cid:0)
+✂
+12
+✄
+✄
+(cid:0)
+(cid:0)
+☞
+(cid:0)
+☞
+✁
+✄
+✄
+✁
+(cid:0)
+(cid:0)
+✆
+✆
+(cid:0)
+(cid:0)
+✂
+✟✟✟✟✟
+✉
+✂
+(cid:0)
+(cid:0)
+(cid:0)
+✄
+✄
+39
+37
+(cid:0)
+(cid:0)
+(cid:0)
+✁
+✄
+✄
+✂
+(cid:0)
+(cid:0)
+✁
+✆
+✆
+(cid:0)
+(cid:0)
+✂
+✉
+✉
+✄
+✄
+(cid:0)
+(cid:0)
+(cid:0)
+41
+76
+19
+35
+(cid:0)
+(cid:0)
+(cid:0)
+⋆70
+63
+18✉
+✁✁
+✂
+68
+(cid:0)
+(cid:0)
+✁
+✆
+✆
+(cid:0)
+(cid:0)
+✄
+✂
+✄
+(cid:0)
+(cid:0)
+15
+(cid:0)
+✉
+✘✘
+✉
+✉
+(cid:0)
+✉
+✉
+✂
+59
+✘✘✘
+(cid:0)
+✟✟(cid:0)
+✉
+14 ✉
+74
+✁
+✆
+✆
+✂
+✁
+13✉
+(cid:0)
+(cid:0)
+✂
+✘✘✘✘
+✉
+⋆1
+✉
+✟✟
+✉
+(cid:0)
+✁
+✆
+✂
+✁
+✂
+✆
+
+51
+(cid:0)
+(cid:0)
+✉
+(cid:0)
+▲(cid:0)
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+▲
+❏
+❏
+▲
+▲
+❡
+❏
+❏
+▲
+▲
+❡
+❧
+❧
+❡
+▲
+❏
+❏
+▲
+❡
+❧
+❧
+❏
+▲
+❏
+❡
+▲
+❡
+❧
+❧
+❏
+❏
+❡
+▲
+▲
+❡
+❧
+❧
+⋆2
+❧❡
+❏▲
+❡❏
+▲
+
+❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛
+❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛❧
+
+✜
+✜
+✜
+✜
+23
+21
+27
+✜
+✉
+
+21
+(cid:0)
+✉
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+
+✜
+✜
+128
+✔
+✔
+
+❧
+❧
+127
+
+❏
+❏
+❏
+❏
+130
+
+4
+✉
+(cid:0)
+(cid:0)
+
+❡
+❡
+76
+
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+
+❏
+❏
+❡
+❡
+
+❅
+❅
+❜
+❜
+
+❏
+❏
+❡
+❡
+
+54
+✉
+
+⋆26
+
+❅
+❅
+❜
+❜
+
+3
+✉
+
+131
+
+147
+
+113
+
+100
+
+136
+
+121
+
+102
+
+103
+
+135
+
+128
+
+❧
+❧
+
+(cid:0)
+(cid:0)
+
+❧
+❧
+
+❧
+❧
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+❅
+❅
+❜
+❜
+
+(cid:0)
+(cid:0)
+
+❧
+❧
+
+❡
+❡
+
+❧
+❧
+
+(cid:0)
+(cid:0)
+
+❡
+❡
+
+(cid:0)
+(cid:0)
+
+❧
+❧
+
+❅
+❅
+❅
+❅
+❧
+❧
+❝
+❝
+
+(cid:0)
+(cid:0)
+
+❧
+❧
+
+❡
+❡
+
+❡
+❡
+
+(cid:0)
+(cid:0)
+
+❡
+❡
+
+45
+
+29
+
+54
+
+36
+
+97
+
+96
+
+(cid:0)
+(cid:0)
+
+❡
+❡
+
+❡
+❡
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✑
+✑
+
+❅
+❅
+
+❅
+❅
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❜
+❜
+
+❅
+❅
+
+✪
+✪
+
+✪
+✪
+
+✪
+✪
+
+✪
+✪
+
+✪
+✪
+
+✪
+✪
+
+❡
+❡
+
+❡
+❡
+
+❡
+❡
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✓
+✓
+
+✓
+✓
+
+✓
+✓
+
+✓
+✓
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+4
+✉
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+⋆33
+⋆29
+75
+(cid:0)
+(cid:0)
+✉
+(cid:0)
+(cid:0)
+
+122
+
+148
+
+60
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✓
+✓
+
+✓
+✓
+
+✓
+✓
+
+✓
+✓
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+✧
+✧
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+50
+
+52
+
+26
+
+70
+
+71
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+145
+
+144
+
+149
+
+❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳
+❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳
+❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳❳
+(c)
+✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✧
+✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘
+
+⋆7 ⋆8
+✧(cid:0)
+(cid:0)
+✧
+✧
+✔✜
+✜✪
+❈✔
+(cid:0)(cid:0)
+(cid:0)(cid:0)
+✪(cid:0)
+❈
+(cid:0)(cid:0)
+(cid:0)(cid:0)
+✧
+✧
+(cid:0)
+✧
+✧
+❈
+❈
+✪
+✪
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✜
+✔
+✜
+✔
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+❈
+✪
+✪
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✜
+✜
+(cid:0)
+(cid:0)
+(cid:0)
+✔
+✔
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+❈
+✪
+✪
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✜
+✜
+(cid:0)
+(cid:0)
+(cid:0)
+✔
+✔
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+❈
+✪
+✪
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✜
+✜
+(cid:0)
+✔
+✔
+(cid:0)
+(cid:0)
+❈
+(cid:0)
+❈
+✪
+✪
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✜
+✜
+(cid:0)
+(cid:0)
+(cid:0)
+✔
+✔
+(cid:0)
+(cid:0)
+❈
+❈
+(cid:0)
+✪
+✪
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✜
+✜
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+❈
+(cid:0)
+✪
+✪
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+✜
+✜
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+(cid:0)
+(cid:0)
+(cid:0)
+✪
+✪
+❈
+❈
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✜
+✜
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✪
+✪
+❈
+❈
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✜
+✜
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✪
+✪
+❈
+❈
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✜
+✜
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+✪
+✪
+❈
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✜
+✜
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+❈
+(cid:0)
+✪
+✪
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✜
+✜
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+❈
+✪
+✪
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+(cid:0)
+❈
+(cid:0)
+✪
+✪
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+(cid:0)
+(cid:0)
+✪
+✪
+(cid:0)
+❈
+(cid:0)
+(cid:0)
+❈
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✪
+✪
+(cid:0)
+❈
+❈
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+⋆11
+(cid:0)
+(cid:0)
+✪
+✪
+(cid:0)
+❈
+❈
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+⋆73
+✪
+✪
+(cid:0)
+(cid:0)
+❈✑
+(cid:0)
+❈
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✪
+✪
+(cid:0)
+(cid:0)
+❈
+66
+(cid:0)
+❈❈
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+(cid:0)
+(cid:0)
+(cid:0)
+✪
+✪
+✉
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+(cid:0)
+(cid:0)
+❈
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✪
+✪
+(cid:0)
+(cid:0)
+❈
+❈
+(cid:0)
+⋆9
+60
+⋆69
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✪
+✪
+(cid:0)
+(cid:0)
+(cid:0)
+82
+❈
+(cid:0)
+(cid:0)
+✉
+(cid:0)
+❈✑
+✑
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+✚
+(cid:0)
+❈
+(cid:0)
+(cid:0)
+✑
+✑
+(cid:0)
+83
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+❈
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+77
+33
+(cid:0)
+❈
+31
+❈
+✪
+(cid:0)
+✪
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+25
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+❈
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+⋆5
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+❈
+(cid:0)
+✘✘✘✘
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+⋆31
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+❊✑
+(cid:0)
+(cid:0)
+❇❈
+▲
+(cid:0)
+▲❇
+❈❉
+❉❊
+❉❉
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+❉
+❉
+▲
+▲
+❊
+❊
+❉
+❉
+❈
+❇
+❇
+❈
+(cid:0)
+(cid:0)
+56
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+❉
+❉
+▲
+▲
+❊
+❊
+❈
+❈
+❉
+❉
+❇
+❇
+❉
+❉
+▲
+▲
+❊
+❊
+❉
+❉
+❈
+❈
+❇
+❇
+❉
+❉
+▲
+▲
+❊
+❊
+❉
+❉
+❈
+❈
+❇
+❇
+106
+104
+94
+92
+80
+❉
+❉
+▲
+▲
+❊
+❊
+❉
+❉
+❈
+❈
+❇
+❇
+❉
+❉
+▲
+▲
+❊
+❊
+❉
+❉
+❈
+❈
+❇
+❇
+❉
+❉
+▲
+▲
+57
+56
+50
+55
+49
+43
+⋆22
+❊
+❊
+❉
+❉
+❉
+❉
+❈
+❈
+❇
+❇
+▲
+▲
+✉
+✉
+✉
+✉
+✉
+✉
+62
+✉
+2
+✉
+
+✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟
+✑✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟
+✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟
+✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟✟
+✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦❈
+✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
+✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✚✚✚✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
+✚✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏
+✘✘✘✘✘✘✘✘✘✘✘✘✘❈
+✟✟✟✟✟✟✟✟✟✟✔
+✑✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘
+✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✑
+✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏✏
+✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✚
+✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✘✦✦✦✦✦
+✟✟✟✟✟✜
+✘✘✘✘✘✘✘✘✘✘✘✘✘✘
+
+72
+✚
+✑
+✑
+✉
+✚
+132
+✑
+✑
+✚
+✑
+✑
+✚
+✚
+✑
+✑
+62
+✚
+✚
+✑
+✑
+
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+44
+✪
+✪
+✉
+143
+
+✑
+✑
+⋆32
+✑
+139
+
+140
+126
+
+20
+✔
+✉
+142
+
+118
+119
+
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+(cid:0)
+
+✑
+✑
+138
+
+⋆34
+✑
+✚✑
+
+✑
+✑
+58
+
+58
+✑
+✑
+✉
+
+111
+
+114
+
+109
+
+110
+
+146
+
+✚
+✚
+✑
+✑
+
+✚
+✚
+✑
+✑
+
+✚
+✚
+✑
+✑
+
+34
+
+48
+
+✚
+✚
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✑
+✑
+
+✪
+✪
+
+✪
+✪
+
+✪
+✪
+
+✪
+✪
+
+✪
+✪
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✜
+✜
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+✔
+✔
+
+❚
+❚
+
+❜
+❜
+
+✧
+✧
+
+✧
+✧
+
+◗
+◗
+
+149
+
+❡
+❡
+❩
+❩
+
+❜
+❜
+◗
+◗
+
+❜
+❜
+◗
+◗
+❝
+❝
+
+❜
+❜
+◗
+◗
+
+❜
+❜
+◗
+◗
+❝
+❝
+
+❡
+❡
+❩
+❩
+
+❜
+❜
+◗
+◗
+
+❜
+❜
+95
+◗
+◗
+
+53
+✧
+✧
+✉
+
+❜
+❜
+◗
+◗
+❝
+❝
+
+❜
+❜
+◗
+◗
+❝
+❝
+
+❜
+❜
+◗
+◗
+❝
+❝
+
+❩
+❩
+❩
+124
+❩
+
+148
+77
+✉
+115
+
+❜
+❜
+◗
+◗
+❜
+❜
+❝
+◗
+❝
+◗
+❝
+❝
+107
+
+❜
+❜
+❜
+❜
+◗
+◗
+◗
+◗
+44
+❝
+✉
+❝
+❝
+
+(b)
+
+⋆3
+❜❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍
+❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍
+◗❜
+❝◗
+❚❝
+❊❚
+❊
+❜
+❜
+◗
+◗
+❝
+❝
+❜
+❜
+❚
+❊
+❊
+◗
+◗
+❚
+❝
+❝
+❚
+❊
+❊
+❚
+❚
+❊
+❊
+❚
+❚
+❊
+❊
+❚
+❚
+❊
+❊
+❚
+❜
+❜
+❚
+❊
+❊
+119
+❜
+❜
+❚
+◗
+◗
+137
+❚
+❊
+❊
+◗
+◗
+❚
+❝
+❝
+❚
+⋆54
+❊
+❊
+56
+⋆15
+❝
+❝
+❚
+144
+✉
+❚
+❍❍❍❍❍❍❍❍❍❍
+❍❍❍❍
+❝❍❍❍❍
+◗❍❍❍❍❍❍❍❍❍❍
+❊
+❊
+❵❵❵❵❵❵❵❵❵❵❵
+❝❵❵❵❵❵❵❵❵❵❵❵
+62
+❝PPPPPPPPPPPPP
+PPPPPPPPPPPPP✭✭✭✭❍❍❍❍❍❍❍❍❍❍
+❍❍❍❍❍❍❍✟✟✟✟
+106
+❝
+❜
+❜
+⋆14
+❚✭✭✭✭
+✭✭✭✭
+❚
+✉
+❝
+❊
+❊
+94
+❜
+❜
+❝
+❛❛❛❛❛❛
+❚❛❛❛❛❛❛ 118
+❝
+◗
+◗
+❚
+❚
+❩
+❩
+❊
+82
+❊❭
+❭
+❍❍❍❍❍❍
+❍❍❍❍❍❍
+◗
+◗
+❜
+❜
+❚
+❩
+❩
+⋆28
+52
+❚
+89
+❜
+❜
+125
+47
+❊
+❭
+40
+❊
+❭
+❩
+❩
+✉
+98
+❜
+❜
+❝
+◗
+◗
+57
+❚
+❝
+✉
+109
+⋆61
+❩
+❩
+71
+✉
+❍❍❍❛❛❛❛❛❛❛❛❛❛❛❛❛ 103
+❭
+❩❛❛❛❛❛❛
+✟✟❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛
+⋆32
+✡✂
+✆❊
+✂✆
+✡
+❭
+❊
+❜
+❜
+136
+92
+❚
+◗
+65
+✉
+⋆18
+❩
+❩
+❚
+✉
+✭✭✭✭
+❩❍❍❍❍❍
+❍❍❍❍❍✏✏✏❭
+❍❍❍❍❍❍❍❍❍❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛❛PPPPPPPP
+✟✟✟❍❍❍❍❍❍❍❍❍PPPPPPPPPPP
+❭
+◗
+⋆19
+✂
+❚
+✂
+◗
+✡
+✡
+❊
+❊
+✉
+✆
+✆
+❩
+❩
+❩
+❭
+❩
+❍❍❍❍❍
+❍❍❍❍❍
+❩❍❍❍❍❍❍❍❍❍❍❍❍❍
+❚
+75
+72
+◗
+◗
+❚
+❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍PPPPPPPPPPPPPP
+❩
+❩
+121
+✂
+✂
+❭
+(cid:0)
+(cid:0)
+❜
+❜
+✡
+✡
+❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍❍
+⋆35
+❊
+❊
+145
+✆
+✆
+❭
+116
+✉
+✉
+❛❛❛❛❛❛❛
+❚❩
+(cid:0)
+(cid:0)
+❚
+❜
+❜
+⋆49
+63
+✏✏✏
+✂
+✂
+139
+❭
+❊
+❊
+(cid:0)
+(cid:0)
+❡
+❡
+❜
+✆
+❜
+✆
+50
+❩
+146
+❩
+❚
+✉
+❚
+◗
+◗
+❜
+(cid:0)
+❜
+✂
+✂
+◗❍❍❍
+❭
+(cid:0)
+❊
+✉
+❊❏
+❏
+❩
+✆
+✆
+❩
+◗
+◗
+❭
+⋆10⋆11
+❚
+❚
+138
+✂
+✂
+(cid:0)(cid:0)
+❭
+◗
+(cid:0)
+❏
+❏
+❊
+❊
+58
+✆
+✆
+60
+❭
+36
+✂
+✂
+100
+❏
+❏
+✉
+❭
+❊
+(cid:0)
+❏
+❏▲
+▲
+(cid:0)
+✉
+PPPPP
+❊
+❡
+❡
+✆
+✆
+76
+❭
+✉
+❩
+⋆29
+❩
+(cid:0)
+❚
+❚
+❏
+❏
+⋆8
+❏
+❏
+❭
+111
+✉
+(cid:0)
+❏
+▲
+❏
+▲
+✄❊
+✄
+67
+❊
+❡
+❩
+❡
+(cid:0)
+❭
+✆
+✆
+114
+120
+⋆9
+✧
+✧✆
+❚
+❚
+✄
+✄
+✆❭
+(cid:0) 61
+▲
+▲
+❊
+❏
+❏
+❭
+❊
+(cid:0)
+✆
+✆
+❏
+❏
+✄
+✄
+(cid:0)
+❭
+✆
+✆
+❡▲
+❡
+❊(cid:0)
+▲❊
+▲
+▲
+❊
+❏
+❏
+⋆23
+❭
+❊
+✆
+✆
+❏
+(cid:0)
+❏
+✄
+✄
+❡
+(cid:0)
+▲
+▲
+❊
+❊
+❡
+✆
+✆
+▲
+▲
+❊
+❊
+✆
+✆
+✄
+✄
+❡
+(cid:0)
+(cid:0)
+▲
+▲
+❊
+❊
+❡
+✆
+✆
+▲
+▲
+❊
+✄
+✄
+❊
+✆
+✆
+133
+❡
+131
+▲
+▲
+❊
+❊
+33
+⋆7
+❡
+✆
+✆
+✄
+✄
+❡
+▲
+▲
+(cid:0)
+❊
+132
+❊
+✆
+✆
+147
+(cid:0)
+▲
+▲
+✉
+❊
+❊
+❛❛❛❛❛❛❛❛❛❛❛
+❛❛❛❛❛❊
+❡
+✄
+✄
+❧
+❧❚
+104
+✆
+✆
+▲
+▲
+❡
+❚❇
+❇❊
+❊
+(cid:0)
+❊
+▲
+▲
+(cid:0)
+❊
+❊
+✆
+❊
+✆
+❧
+69
+❡
+❧
+✄
+✄
+▲
+▲
+❇
+❇
+❊
+❊
+✆
+❚
+✆
+❊
+❚
+▲
+▲
+❡
+❊
+✆
+✆
+❊
+❧
+✉
+❧
+55
+❛❛▲
+✄
+✄
+❡
+▲
+63
+❇
+❇
+❊
+❊
+❚
+❚
+✆
+✆
+▲
+▲
+❡
+❊
+✉
+✆
+✆
+❊
+❛❛❛❛❛❡
+✄
+✄
+❡
+❧
+⋆20
+❧
+❇
+❇
+❊
+❊
+34
+❚
+⋆27
+❚
+⋆26
+✆
+✆
+▲
+▲
+❡
+❊
+✄
+✆
+✄
+✆
+❊
+❧
+❧
+✉
+68
+134
+❇
+❇
+❊
+❊
+❚
+❚
+77
+✆
+✆
+▲
+❡▲
+❡✑
+✑
+❊
+❧
+❚
+❊
+❚
+❧❇
+✉
+❇❊
+❊
+❇
+❇
+❚
+❧
+❧
+❚
+31
+✆
+✆
+❡
+❊
+41
+❊
+❊
+❊
+❡
+❧
+❇
+❇
+❇
+❇
+✑
+❧✑
+❚
+✉
+❚
+✉
+122
+✆
+✆
+❊
+64
+❊
+❊
+❊
+❧❊
+❇
+❇
+❊
+❇
+❇
+❧
+❚
+❚
+✉
+❊
+❊
+✆
+✆
+❊
+❊
+❊
+❊
+❇
+❇
+⋆5
+❇
+❇
+❊
+❊
+(cid:0)
+❚
+56
+❧
+(cid:0)
+❚
+54
+❊
+❊
+❧
+✆
+✆
+66
+❊
+❊
+❛❛❛❛❛❛❛❛
+❊
+❊
+❇
+❇
+70
+❇
+❇
+❊
+❊
+(cid:0)
+❧
+❚
+135
+❊
+❊
+❚
+▲(cid:0)
+▲
+✉
+❧
+✉
+✆
+✆
+❊
+❊
+❊
+❇
+❇
+❊
+126
+❇
+❇
+❊
+❊
+❧☞
+❚
+☞
+▲
+▲
+❧
+❚
+❊
+❊
+❇
+❇
+✆
+✆
+❊
+❊
+42
+❇
+❇
+❊
+❊
+❚
+☞
+☞
+▲
+▲
+❚
+❊
+❊
+❇
+❇
+✉
+✆
+✆
+123
+❊
+❛❛❛❊
+❊
+⋆17
+❇
+❇
+❊
+❊
+❚
+30
+48
+☞
+☞
+▲
+▲
+❚
+73
+❊
+❇
+❇
+❛❛
+✆
+✆
+✉
+✉
+❊
+❊
+❛❛❛❛❛❛
+❛❛❛❇
+❚❛❛❛❛❛❛
+❇
+❇
+❊
+❊
+⋆25
+❚
+▲
+▲
+☞
+☞
+✉
+⋆22
+❚
+✡✱
+❛❛❛
+✡
+❇
+✪
+✪
+✆
+✆
+❊
+❚
+❊
+❚
+❛❛❛❛❚
+▲
+▲
+❇
+❇
+❊
+❊
+✱
+✱
+❚
+☞
+☞
+❚
+✡
+✡
+✄★
+★
+⋆12
+⋆16
+✄
+✪
+✪
+(cid:0)
+⋆39
+✱
+✱
+▲
+▲
+❊❚
+(cid:0)
+❊
+✆
+✆
+❚
+❇
+❊
+❇
+☞
+❊
+☞
+★
+★
+⋆24
+✡
+✡
+140
+43
+46
+✄
+✄
+✪
+✪
+142
+(cid:0)
+141
+❍❍❍❍
+❍❍❍❍
+▲
+▲
+❵❵❵❵❵❵❵❵❵❵❵❵▲
+❵❵❵❵❵❵❵❵❵❵❵❵
+(cid:0)
+✉
+✉
+❳❳❳❳❳❳❳❳❳❳❳❳❳❳❛❛❛❛❛❛❛❛❛❛❛❛❛❛
+❛❛❛❛❛❛❛❛❛❛❛❛❛❛▲
+✄
+✡
+✄
+✡
+(cid:0)
+✪
+✪
+74
+★
+★
+(cid:0)
+▲
+▲
+45
+(cid:0)
+✄
+✄
+✡
+✡
+✉
+★
+★
+▲
+✪
+✪
+▲
+(cid:0)
+37
+38
+❤❤❤❤❤❤❤❤❤❤❤❤❤❤❤❳❳❳❳❳❳❳❳❳❳❳❳❳❳
+✉
+✄
+✄
+(cid:0)
+★
+★
+✱
+✱
+▲
+✡
+✡
+59
+✉
+✪
+✪
+✉
+129
+(cid:0)(cid:0)
+✄
+✄
+★
+❤❤❤❤❤❤❤❤❤❤❤❤❤❤❤
+★
+✉
+(cid:0)
+▲
+✡
+✡
+▲
+✪
+✪
+✄
+✄
+★
+★
+(cid:0)
+(cid:0)
+▲
+✡
+✡
+▲
+✪
+✪
+✄
+✄
+★
+★
+(cid:0)
+67
+⋆13
+✄
+✡
+★
+✡
+★
+✪
+✄
+▲
+✪
+✉
+
+✦✦✦✦✦✦✦✦✦❛❛❛❛❛❛❛❛❛❛❛
+✱✦✦✦✦✦✦✦✦✦
+
+❚
+❚
+❚
+❚
+❭
+❭
+❚
+❚
+❭
+❭
+⋆6
+❭
+❚❭
+(cid:0)
+❚
+(cid:0)
+(cid:0)
+(cid:0)
+
+❚
+❚
+90
+
+❚
+❚
+❭
+❭
+
+❚
+❚
+❭
+❭
+
+1
+(cid:0)
+(cid:0)
+✉
+
+❚
+❚
+❭
+❭
+
+❚
+❚
+❭
+❭
+
+✱
+✱
+71
+
+113
+
+112
+
+143
+
+101
+
+❧
+❧
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+❊
+❊
+❊
+❊
+❊
+❊
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+52
+
+41
+
+66
+
+69
+
+78
+
+84
+
+91
+
+80
+
+86
+
+81
+
+79
+
+87
+
+❧
+❧
+
+(cid:0)
+(cid:0)
+
+❭
+❭
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+(cid:0)
+(cid:0)
+
+✑
+✑
+
+★
+★
+
+✱
+✱
+
+✱
+✱
+
+❏
+❏
+
+❏
+❏
+
+❏
+❏
+
+❚
+❚
+
+❚
+❚
+
+❚
+❚
+
+❚
+❚
+
+❚
+❚
+
+❚
+❚
+
+❚
+❚
+
+❚
+❚
+
+Figure 1: Two dimensional foam of the cells for three density functions fa, fb and fc deﬁned in
+eq. (1). For fa the boundary of the nonzero integrand is marked with a dashed line.
+
+integrand function like, for instance, x−1/10 which may lead to a tail in the weight distribution.
+(numerical instabilities due to rounding errors may produce similar eﬀect.) Quite often, such a
+tail will not inﬂuence the average weight < w > and the MC estimate of the integral at all. It
+will, however, render wmax ill-deﬁned, that is dependent on the number of the events in the MC
+sample and/or wildly ﬂuctuating. In order to avoid such a problem, in all presented tests, the
+following alternative deﬁnition of the wmax is applied: For a given precision level ε << 1 wmax
+is determined from the weight distribution in such a way that the contribution to < w > (that
+is to total integral) from “under-rejected” (“over-weighted”) events with w > wmax is equal ε.
+
+15
+
+Such a quantity is referred to as wε
+from the weight distribution. One has to create a histogram of the weight with at least
+bins, in order to determine wε
+
+5. In practice it is a little bit of eﬀort to determine wε
+
+max with 2 digit precision.
+
+max
+
+∼
+
+max
+1000
+
+In order to understand correctly the following comparisons of the Foam and VEGAS, it
+is important to remember that for Foam the eﬃciency < w > /wε
+max can be improved by
+means of a brute force increase of the number of cells and/or manipulating its other input
+parameters while for VEGAS it is not possible. More precisely in practical applications one
+has to face the following fundamental deﬁciency of the VEGAS (from the point of view of the
+MC simulation): For a given type of the integrand function, its eﬃciency is limited in a rigid
+way – the increase of function calls and/or number of iteration in VEGAS cannot improve the
+eﬃciency < w > /wε
+max beyond certain asymptotic value which I call asymptotic eﬃciency.
+This annoying feature is excluding VEGAS from many practical MC applications. In order to
+improve eﬃciency of VEGAS beyond the above asymptotic value, it is necessary to map the
+integration variables or employ other MC techniques like branching etc. However, this is exactly
+contrary to the spirit of a general purpose MC tool like VEGAS or Foam.
+
+In Tab. 4 the MC eﬃciency of Foam and VEGAS is compared for three testing integrand
+functions of eq. (1). As expected, Foam is signiﬁcantly more eﬃcient for fa and fb which clearly
+do not comply with the factorizability assumption. The case of fb is a little bit more complicated;
+see below. Tab. 4 shows the asymptotic eﬃciencies for VEGAS, that is the best possible one.
+Even worse, for functions fa and fb these asymptotic eﬃciencies of VEGAS are of
+(γ) and can
+be even worse for sharper singularities in test functions (smaller γ parameter). As indicated,
+the case of fc is more involved. Although at ﬁrst sight fc looks clearly a non-factorizable,
+however, it is well approximated by the product of two functions and its asymptotic eﬃciency is
+equal 1/2+
+(γ). Even more interestingly, although for the Foam algorithm there is no limiting
+asymptotic eﬃciency (its asymptotic eﬃciency for large number of cells is arbitrarily close one),
+nevertheless the increase of number of cells for fc does lead to rather slow increase of its eﬃciency.
+This phenomenon is also seen in Fig. 1(c) where the foam of cells ﬁts visually the shape of fc
+worse than in other two cases6. The amount of CPU time necessary for producing the results
+in Tab. 4 was about the same for the Foam and VEGAS programs.
+
+O
+
+O
+
+Functions
+fa(x1, x2) (thin diagonal)
+fb(x1, x2) (thin sphere)
+fc(x1, x2) (surface of cube)
+
+Foam VEGAS
+0.04
+0.10
+0.33
+
+0.67
+0.36
+0.37
+
+max, for ε = 10−4, of Foam and VEGAS for 3 examples of the 3-
+Table 5: Eﬃciency wε
+dimensional integrand functions, the analogs of the integrand of eq. (1). After initialization,
+eﬃciency was determined from sample of 106 MC events. Results from Foam are for 5000
+cells (about 2500 active cells) and cell exploration was based on 200 MC events per cell.
+
+In Tab. 5results of comparison of Foam and VEGAS are shown for 3 dimensional integrands
+being straightforward extension to 3 dimensions of the functions of eq. (1). Again Foam is clearly
+superior, and again the eﬃciency of VEGAS already is at its limiting/asymptotic value while the
+
+5 The concept of such a maximum weight was already used in BHLUMI MC [10].
+6 Apparently, a grid with rectangular cells would do better in this case.
+
+16
+
+eﬃciency of Foam can be still improved by adding more cells in the initialization phase. In this
+3-dimensional case the CPU time consumption of Foam is noticeably smaller than of VEGAS.
+As it was already discussed in the description of the Foam algorithm, the actual implementa-
+tion has several operational modes corresponding to several variants of the algorithm. The user
+may switch to one of them by changing input parameters/switches. All these operational modes
+were tested and the default conﬁguration corresponds to a mode which is the best, according
+to our present knowledge. One disappointing result of these tests of various operational modes
+is that the iterative grow/collapse of the foam does not really improve the grid. Nevertheless
+I leave this option in the actual program, because it might be a useful as a starting point for
+some fresh idea in the future development of the algorithm.
+
+Concerning similar algorithms proposed in ref. [8] it may be noted that the algorithm pre-
+sented here is deﬁned more narrowly but it is deﬁned very clearly, while in ref.
+[8] authors
+propose the whole family of algorithms exploiting the idea of symplectic grid, without going
+much into details. In particular they contemplate an interesting possibility of adapting the grid
+to the integrand, by moving vertices and deforming cells.
+It is an attractive idea, but it is
+diﬃcult to judge how diﬃcult it would be to implement it and how important a gain would be
+in the eﬃciency, without deﬁning ﬁne details of the algorithm. The other idea in ref. [8] is that
+of division of a cell in several cells, while I deliberately limited ourselves to division into only
+two cells. Even the division into two cells can be realized in several ways, and I have realized
+two scenarios with the resulting eﬃciency being quite diﬀerent. Without a clear guiding idea,
+entering into a game of multi-division of cells looks like taking risk of getting lost in hundreds
+of options and scenarios. It is also important to remember that the main concern in the present
+work is MC simulation with constant weight events, while ref. [8] is rather aiming at the eas-
+ier task of the MC integration with weighted events. This pre-determines the priorities in the
+construction of the algorithm very strongly and diﬀerently.
+
+6 Conclusions
+
+A new general purpose Monte Carlo tool based on a symplectic self-adapting grid is available.
+Numerical tests show that for non-factorizable integrand functions it is more eﬀective than the
+classical VEGAS solution. The ﬁrst real application to beamstrahlung and ISR in KK the Monte
+Carlo conﬁrms maturity of the solution. The main limitation is that program is adapted for
+relatively small dimensions, n < 8. The algorithm and the program should not be treated as a
+ﬁnal solution – it is rather a beginning of a new development direction in MC methods.
+
+Acknowledgements
+
+Most of this work was done during my visit in DESY – I am greatly indebted to DESY Direc-
+torate for its generous support. I am also thankful for support of the Physics Department of the
+University of Tennessee, where the ﬁnal touches on this work were done. I would like to thank
+W. P laczek, F. Tkachov and S. Yost for reading the manuscript and useful comments.
+
+17
+
+7 Appendix A
+
+COMMON /c_FoamA/
+
+Below the entire “class common block” of the Foam class is show explicitly.
+
+! List of all pointers to ACTIVE cells
+! Estimate of Volume total, without error
+
+! Cell member: status=0 inactive, =1 active
+! Cell member: parent cell pointer
+! Cell member: daughter1 cell pointer
+! Cell member: daughter2 cell pointer
+
+! Cell member: integral estimator
+! Cell member: Crude integral estimate
+! Cell member: Cartesian volume
+! Cell member: Average best X
+! Cell member: Best pair of vertices, pointer
+! Cell member: weight summaries
+
+$ m_CeStat(m_nBufMax),
+$ m_CePare(m_nBufMax),
+$ m_CeDau1(m_nBufMax),
+$ m_CeDau2(m_nBufMax),
+$ m_CeVert(m_nBufMax,m_NdiMax+1),! Cell member: vertex pointers
+$ m_CeIntg(m_nBufMax),
+$ m_CeCrud(m_nBufMax),
+$ m_CeVolu(m_nBufMax),
+$ m_CeXave(m_nBufMax),
+$ m_CeBest(m_nBufMax),
+$ m_CeSum( m_nBufMax,m_sMax),
+$ m_VerX( m_vMax, m_NdiMax), ! List of all VERTEX positions
+$ m_ActC(m_cMax),
+$ m_VolTot,
+$ m_Crude,
+$ m_SumWt,
+$ m_SumWt2,
+$ m_NevGen,
+$ m_WtMax,
+$ m_WtMin,
+$ m_MCresult,
+$ m_MCerror,
+$ m_MCwt,
+$ m_MCvector(m_NdiMax),! M.C. generated vector
+$ m_KillFac,
+$ m_Ndim,
+$ m_nBuf,
+$ m_LastVe,
+$ m_LastAc,
+$ m_LastCe,
+$ m_nSampl,
+$ m_Iterat,
+$ m_Ncalls,
+$ m_OptCrude,
+$ m_OptEdge,
+$ m_Chat,
+$ m_Out
+
+! M.C. generation Crude value of integral
+! M.C. generation sum of Wt
+! M.C. generation sum of Wt**2
+! M.C. generation sum of 1d0
+! M.C. generation maximum wt
+! M.C. generation minimum wt
+! M.C. generation Final value of ITEGRAL
+! M.C. generation Final walue of ERROR
+! M.C. generation current event weight
+
+! Threshold factor for collapse of cells
+! dimension of the problem
+! Actual dynamic lenth of the buffer m_nBuf<m_nBufMax
+! Last vertex
+! Last active cell
+! Last cell in buffer
+! No. of sampling when dividing cell
+! No. of iterations in consolidation process
+! No. of function calls, total
+! type of Crude =0,1,2 for TrueVol,Sigma,WtMax
+! decides whether vertices are included in the sampling
+! Chat level in output, Chat=1 normal level
+! Output unit
+
+References
+
+18
+
+[1] S. Jadach, Practical guide to Monte Carlo, 1999, e-print physics/9906056, also available
+jadach (unpublished).
+
+from http://home.cern.ch/
+
+[2] S. Jadach, Acta Phys. Polon. B16, 1007 (1985).
+
+[3] G. P. Lepage, J. Comput. Phys. 27, 192 (1978).
+
+∼
+
+[4] S. Kawabata, Comp. Phys. Commun. 88, 309 (1995).
+
+[5] T. Ohl, Vegas revisited: Adaptive Monte Carlo integration beyond factorization, 1998,
+
+eprint: hep-ph/9806432.
+
+[6] R. Kleiss and R. Pittau, Comput. Phys. Commun. 83, 141 (1994).
+
+[7] S. Jadach and W. Placzek, Comput. Phys. Commun. 72, 221 (1992).
+
+[8] G. I. Manankova, A. F. Tatarchenko, and F. V. Tkachev, MILXy way: How much better
+than VEGAS can one integrate in many dimensions?, 1995, a Contribution to AINHEP-95,
+Pisa, Italy, Apr 3-8, 1995 (extended version).
+
+[9] S. Jadach, Z. W¸as, and B. F. L. Ward, The Precision Monte Carlo Event Generator
+
+KK
+For Two-Fermion Final States In e+e− Collisions, To be submitted to Computer Physics
+Communications, 1999, preprint DESY-99-106, CERN-TH/99-235,UTHEP-99-08-01.
+
+[10] S. Jadach, E. Richter-W¸as, B. F. L. Ward, and Z. W¸as, Comput. Phys. Commun. 70, 305
+
+(1992).
+
+19
+
+

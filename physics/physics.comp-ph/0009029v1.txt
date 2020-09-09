@@ -1,0 +1,3969 @@
+0
+0
+0
+2
+
+ 
+
+p
+e
+S
+8
+
+ 
+
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+
+1
+v
+9
+2
+0
+9
+0
+0
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Time-Symmetric ADI and Causal Reconnection: Stable Numerical Techniques for
+
+Hyperbolic Systems on Moving Grids.
+
+Miguel Alcubierre and Bernard F. Schutz
+
+Department of Physics and Astronomy, University of Wales,
+
+College of Cardiﬀ, P.O. Box 913, Cardiﬀ CF1 3YB, UK.
+
+Moving grids are of interest in the numerical solution of hydrodynamical problems and in nu-
+merical relativity. We show that conventional integration methods for the simple wave equation in
+one and more than one dimension exhibit a number of instabilities on moving grids. We introduce
+two techniques, which we call causal reconnection and time-symmetric ADI, which together allow
+integration of the wave equation with absolute local stability in any number of dimensions on grids
+that may move very much faster than the wave speed and that can even accelerate. These methods
+allow very long time-steps, are fully second-order accurate, and oﬀer the computational eﬃciency of
+operator-splitting.
+
+We develop causal reconnection ﬁrst in the one-dimensional case: we ﬁnd that a conventional
+implicit integration scheme that is unconditionally stable as long as the speed of the grid is smaller
+than that of the waves nevertheless turns unstable whenever the grid speed increases beyond this
+value. We introduce a notion of local stability for diﬀerence equations with variable coeﬃcients. We
+show that, by “reconnecting” the computational molecule at each time-step in such a way as to ensure
+that its members at diﬀerent time-steps are within one another’s causal domains, one eliminates the
+instability, even if the grid accelerates. This permits very long time-steps on rapidly moving grids.
+The method extends in a straightforward and eﬃcient way to more than one dimension.
+
+However, in more than one dimension, it is very desirable to use operator-splitting techniques
+to reduce the computational demands of implicit methods, and we ﬁnd that standard schemes
+for integrating the wave equation — Lees’ First and Second Alternating Direction Implicit (ADI)
+methods — go unstable for quite small grid velocities. Lees’ ﬁrst method, which is only ﬁrst-order
+accurate on a shifting grid, has mild but nevertheless signiﬁcant instabilities. Lees’ second method,
+which is second-order accurate, is very unstable.
+
+By adopting a systematic approach to the design of ADI schemes, we develop a new ADI method
+that cures the instability for all velocities in any direction up to the wave speed. This scheme is
+uniquely deﬁned by a simple physical principle: the ADI diﬀerence equations should be invariant
+under time-inversion. (The wave equation itself and the full implicit diﬀerence equations satisfy this
+criterion, but neither of Lees’ methods do.) This new time-symmetric ADI scheme is, as a bonus,
+second-order accurate. It is thus far more eﬃcient than a full implicit scheme, just as stable, and
+just as accurate.
+
+By implementing causal reconnection of the computational molecules, we extend the time-
+symmetric ADI scheme to arrive at a scheme that is second order accurate, computationally ef-
+ﬁcient and unconditionally locally stable for all grid speeds and long time-steps. We have tested the
+method by integrating the wave equation on a rotating grid, where it remains stable even when the
+grid speed at the edge is 15 times the wave speed. Because our methods are based on simple phys-
+ical principles, they should generalize in a straightforward way to many other hyperbolic systems.
+We discuss brieﬂy their application to general relativity and their potential generalization to ﬂuid
+dynamics.
+
+I. INTRODUCTION.
+
+In the numerical study of wave phenomena it is often necessary to use a reference frame that is moving with respect
+to the medium in which the waves propagate. This could be the case, for example, when studying the waves generated
+by a moving source, where it may prove convenient to use a reference frame attached to this source. In some cases,
+one may even need to use a frame that moves faster than the waves themselves, as in the case of a supersonic ﬂow.
+In general relativity, especially in black-hole problems, one may have to use a grid that shifts rapidly, even faster
+than light. All these problems arise in more than one spatial dimension, where computational eﬃciency may make
+stringent demands on the algorithm. It is a common experience to ﬁnd that standard algorithms seem to go unstable
+in realistic problems. In this paper, by studying the simple wave equation, we show that the consistent application of
+two fundamental physical principles — causality and time-reversal-invariance — produces remarkably stable, eﬃcient
+
+1
+
+and accurate integration methods. These principles can easily be applied to more complex physical systems, where
+we would expect similar beneﬁts.
+
+Our principal motivation for studying these techniques is the development of suitable algorithms for the numerical
+simulation of moving, interacting black holes. Relativists have long acknowledged the importance of using shifting
+grids in some problems, but to our knowledge there has been no systematic study of the eﬀects of such shifts on the
+stability of numerical algorithms. In the next two paragraphs we develop this motivation. Readers not concerned
+with numerical relativity may skip these without loss of continuity.
+
+Let us consider the requirements that black-hole problems will make of our algorithms. Within the context of
+the 3 + 1 formalism of General Relativity ( [1], [2]), it would seem to be desirable to develop methods on a quasi-
+rectangular 3-dimensional grid, so that no special coordinate features would prevent one from studying quite general
+problems. If we imagine a picture in which a black hole moves “through” such a grid, much the way a star would if
+it were interacting with another, then some requirements become clear:
+
+1. Grid points will move from outside to inside the horizon, but the grid as a whole should not be sucked in.
+This may require an inner boundary to the grid, say on a marginally trapped surface, and this boundary will
+have to move at faster than the speed of light. Grid points may cross this boundary and be forgotten, at least
+temporarily, but others will emerge on the other side of the boundary.
+
+2. Grid points that so emerge will then move from inside to outside the horizon as the hole passes over them; this
+will require grids that shift faster than light. This is inescapable unless one ties the grid to the hole as it moves.
+
+3. If two black holes begin in orbit around one another, then it may be desirable to adopt a grid that rotates with
+respect to inﬁnity, in which the holes move relatively slowly at ﬁrst. In such a grid one would expect that one
+could take long time-steps without losing accuracy, since not much happens initially. One therefore would like
+to be free of the Courant condition on time-steps, i.e. one wants to use implicit methods.
+
+4. Integrating the equations of general relativity on a grid with reasonable resolution will tax the capacity of the
+best available computers for some time to come. Full implicit schemes are very time-consuming in more than
+one spatial dimension, because they require the inversion of huge sparse matrices. Alternating-direction-implicit
+(ADI) schemes reduce this burden enormously by turning the integration into a succession of one-dimensional
+implicit integrations, so an ADI scheme that can cope with grid shifts is very desirable.
+
+In this paper we show that it should be possible to develop stable methods that satisfy the last three requirements
+above: ADI schemes that are absolutely stable and computationally eﬃcient even on grids that shift at many times
+the speed of light. As a bonus, our ADI methods preserve the second-order accuracy of the full implicit equations.
+The ﬁrst requirement, that of dealing with an inner boundary that moves faster than light, is closely related to these
+techniques and will be addressed elsewhere.
+
+Having these requirements in mind, we have studied the eﬀects that the use of a moving reference frame has on
+the ﬁnite diﬀerence approximation to the simple wave equation, centering our attention particularly in the stability
+properties. The wave equation is the simplest system, so the instabilities we ﬁnd in the standard ADI methods should
+certainly also be present when they are applied to more realistic physical systems. Of course, the wave equation is
+much simpler than other systems, so it is possible that methods that stabilize its integration will not extend to other
+systems. However, the principles that we ﬁnd here are of such a fundamental physical nature that it seems certain
+that they should be applied wherever possible. Other kinds of instabilities may of course arise in complex systems,
+especially those directly due to nonlinearity, but we feel that moving-grid instabilities are likely to be cured by the
+methods we describe here.
+
+We shall conclude this introductory section by summarizing the approach and results of the following sections.
+In the second section we develop the mathematical framework of shifting grids. Then in Section III we study the
+one-dimensional wave equation. We ﬁnd simple implicit ﬁnite diﬀerence schemes that are locally stable for any speed
+up to that of the waves, even when the grid is accelerating as well as moving. When formulated on a grid that is
+moving, and even accelerating, it is not immediately obvious how one deﬁnes stability: solutions of the diﬀerential
+equation do not have simple harmonic time-dependence in this frame. We ﬁnd that a satisfactory criterion for local
+stability of these simple schemes is that no solutions of the diﬀerence equations should grow faster anywhere on the
+grid than local solutions of the diﬀerential equation.
+
+However, as soon as the reference frame moves faster than the wave speed, these schemes become highly unstable.
+We trace the origin of this instability to the fact that the computational molecules no longer represent in an adequate
+way the causal relationships between the grid points. We ﬁnd that by modifying the molecules so that they link
+
+2
+
+a given point on one time-slice with one on the next one that is within the ﬁrst point’s cone of characteristics (its
+forward “light cone”), one can restore stability. We discuss one algorithm for doing this in Appendix B.
+
+We call this causal reconnection. It is important to note that this has a minimal impact on the integration scheme:
+for implicit schemes, the matrix that must be solved for the solution at a given time-step is constructed only from the
+relations between grid-points at that time-step, while causal reconnection aﬀects only the relations between points on
+diﬀerent time-steps. Thus, it can be incorporated into the part of the algorithm that constructs the “inhomogeneous
+terms” that generate the right-hand-side of the implicit matrix equation. For the 1-dimensional wave equation, the
+extra work involved in seeking out causally related grid points can be signiﬁcant, but it becomes a smaller proportion
+of the overhead in more than one dimension, and for complicated systems of equations, such as one has in general
+relativity, the overhead will be a negligible fraction of the total work per time-step. We have tested causal reconnection
+and found it to be stable even on grids moving at many times the speed of the waves. It is also insensitive to the
+acceleration of the grid.
+
+We then move our attention in Section IV to operator-splitting ADI methods [4], which are computationally eﬃcient
+ways of implementing implicit schemes in more than one dimension. We ﬁnd it helpful to derive ADI schemes from a
+more systematic point of view than one usually ﬁnds in expositions of this technique. The goal is to add extra terms
+to a set of diﬀerence equations that (i) do not change its accuracy, but (ii) replace the large sparse non-tridiagonal
+matrix which has to be solved in implicit schemes with a matrix that is a simple product of tridiagonal matrices of
+the 1-D implicit form for each dimension, which are easy to solve. The extra terms are related to the “left-over” terms
+that appear as the diﬀerence between the true operator and its factored replacement acting on the data values on the
+ﬁnal time-step. These ﬁnal-time-step terms must be eliminated. They are in eﬀect replaced by similar terms from
+earlier time-steps, which replacement makes no diﬀerence when ∆t → 0, but which removes them from the matrix
+inversion and allows them to be included as part of the inhomogeneous terms in the matrix solution. Then the new
+equations will be a valid approximation to the diﬀerential equation but can be solved by a succession of (rapid) 1-D
+tridiagonal matrix solutions.
+
+When subjected to the same stability analysis as we devised for causal reconnection, the standard ADI methods
+show instabilities even when the reference frame moves very slowly. The instability is most marked in Lees’ second
+method, in which the extra terms added in are of second order and therefore do not degrade the accuracy of the full
+implicit scheme. The instability is also present, albeit more weakly, in Lees’ ﬁrst scheme, which is only ﬁrst-order
+accurate.
+
+We trace these instabilities to the fact that the extra terms added in either of the standard methods break the
+time-reversal invariance exhibited by the original diﬀerential equation and by the full implicit diﬀerence equations.
+Demanding that the extra terms be time-symmetric uniquely determines an ADI scheme that is essentially a hybrid of
+Lees’ ﬁrst and second methods. This time-symmetric ADI method turns out to be fully stable for all grid shifts up to
+the wave speed. Although not built in as a requirement, the new method also turns out to be second-order accurate.
+The method can then be extended to grid speeds larger than the wave speed by a direct generalization of the causal
+reconnection approach developed for the one-dimensional case. We demonstrate this by performing an integration on
+a rotating grid whose edge moves faster than the wave speed.
+
+In Appendix A, we derive the wave equation in the accelerating coordinate system using the eﬃcient tensorial
+
+techniques of relativity. In Appendix B, we discuss one method of implementing causal reconnection.
+
+II. THE WAVE EQUATION ON A MOVING GRID.
+
+The wave equation is a good testing ground for any new algorithms for hyperbolic systems. The equations governing
+many wave systems can be reduced to the standard wave equation, and its cone of characteristics has the causal
+structure of space-time. We shall use it to test methods for integrating hyperbolic systems on moving grids.
+
+We consider the wave equation in an arbitrary number of spatial dimensions n ,
+
+∇2φ −
+
+1
+c2
+
+∂2φ
+∂t2 = 0 .
+
+(II.1)
+
+written in a standard inertial coordinate system denoted by (t, ξi).
+We are interested in ﬁnding a ﬁnite diﬀerence approximation to this equation using a grid of points that moves with
+an arbitrary non-uniform speed. Moreover, we will assume that the speed of each grid point can change with time. In
+order to represent this situation, we need to introduce a second coordinate system (t, xi) that will be comoving with
+the grid. We introduce these coordinates in the continuous case by a transformation of the form
+
+3
+
+xi = xi(t, ξk) .
+
+(II.2)
+
+We have not changed the time coordinate, so we assume that the identiﬁcation of surfaces of constant time does
+not change. This is thus not the usual Lorentz transformation of special relativity, so there is no reason for the form
+of the wave equation to remain invariant. This will have the implication that, in ﬁnite diﬀerences, the time interval
+between t = const slices will be constant, independent of position. For problems in general relativity, this is somewhat
+of a restriction, but we do not feel it is a serious one. If the causal relations are properly taken into account, then a
+spatial dependence in the lapse function ought not to change our physical conclusions.
+
+In Appendix A we show that the wave equation takes the following form in the new coordinates (t, xi):
+
+(gi k − βiβk)
+
+∂2φ
+
+∂xi ∂xk +
+
+2βi
+c
+
+∂2φ
+
+∂xi ∂t − Γi ∂φ
+
+∂xi −
+
+1
+c2
+
+∂2φ
+∂t2 = 0 .
+
+The following quantities derived from the coordinate transformation appear in the last equation:
+
+1
+c
+
+g i j :=
+
+n
+
+βi := −
+Xl=1
+Xl=1
+
+n
+
+g i j :=
+
+∂xi
+∂t
+
+,
+
+∂ξl
+∂xi
+
+∂ξl
+∂xj ,
+
+∂xi
+∂ξl
+
+∂xj
+∂ξl ,
+
+g := det (gij) ,
+
+Γi := −
+
+1
+
+√g (cid:26) ∂
+
+∂t(cid:0)√gβi(cid:1) +
+
+∂
+
+∂xj (cid:2)√g(cid:0)gij − βiβj(cid:1)(cid:3)(cid:27) .
+
+(II.3)
+
+(II.4)
+
+(II.5)
+
+(II.6)
+
+(II.7)
+
+(II.8)
+
+Each of these quantities has a physical interpretation, which we now explain. Readers familiar with these ideas
+
+may skip to the next section.
+
+The shift vector βi gives the relationship between the two coordinate systems on nearby surfaces of constant time.1
+t+dt} at the upper hypersurface.
+
+Let the line of constant {ξi} have coordinates {xi
+From the deﬁnition of the shift vector in Equation II.4, it is clear that
+
+t} at the lower hypersurface and {xi
+
+xi(ξj , t + dt) ≈ xi(ξj, t) − c βidt .
+
+(II.9)
+
+As we illustrate in Figure 1, if one starts at any given point at time t, then by time t + dt the {xi} coordinates will
+have shifted by an amount equal to the shift vector times c dt relative to the {ξi} (inertial) coordinates. The shift
+vector βi will in general be a function of both {xi
+We now introduce the spatial metric tensor g i j, which we have deﬁned in Equation II.5. Its name comes from the
+fact that the distance dl between two points whose coordinates diﬀer by dξl in the original coordinates and by dxi
+in the shifting coordinates is given by the Pythagorean Theorem:
+
+t} and t.
+
+dl 2 =
+
+n
+
+Xl=1
+
+dξl dξl =
+
+n
+
+Xi,j=1
+
+g i j dxidxj
+
+(II.10)
+
+That this gives Equation II.5 for gij is readily seen by substituting the following transformation from dξl to dxi
+
+into the ﬁrst version of the Pythagorean Theorem:
+
+dξl =
+
+∂ξl
+∂xi dxi.
+
+n
+
+Xi=1
+
+(II.11)
+
+1This is just the standard deﬁnition of the shift vector in the 3+1 formalism of Numerical Relativity [1].
+
+4
+
+line of constant (cid:8)xi(cid:9)
+✟✟✟✟✟✟
+
+xi
+t
+
+✟✟✟✟✟✟
+
+xi
+t
+
+✁
+✁
+
+✁
+
+✻
+
+cβidt
+
+✛
+
+✁
+✁
+✁
+✁
+
+✁✁
+✁
+
+✁
+✁
+
+✁
+✁✕
+✁
+✁
+
+✻
+
+✁
+✁
+✁
+✁
+
+✁
+✁
+
+✁
+✁
+
+✁
+✁✕
+✁
+
+xi
+t+dt
+
+line of constant (cid:8)ξi(cid:9)
+✟✟✟✟✟✟
+
+t + dt
+
+✟✟✟✟✟✟
+
+t
+
+FIG. 1. Shift vector βi.
+
+The next tensor that appears in the general form of the wave equation is the inverse metric tensor given by
+
+Equation II.6. This is the matrix inverse of the metric tensor,
+
+gij gjk = δi
+k,
+
+n
+
+Xj=1
+
+(II.12)
+
+as can easily be seen by substituting Equations II.5 and II.6 into the above.
+
+The ﬁnal quantity we need is Γi, a measure of the acceleration of the shifting coordinates with respect to the old
+ones, given by Equation II.8. We will leave the full derivation of Γi to Appendix A, but to illustrate our interpretation
+of it as an acceleration term, we shall explicitly evaluate it in the case where the new coordinates are obtained from
+the inertial ones by a simple shift independent of position. Then the shift vector βi
+is only a function of time, and
+the spatial metric g i j is just the unit matrix:
+
+It is not diﬃcult to see that in this case the coeﬃcients Γi reduce to:
+
+∂βi
+∂xj = 0 ,
+
+g i j = δ i j .
+
+Γi = −
+
+1
+c
+
+dβi
+dt
+
+.
+
+(II.13)
+
+(II.14)
+
+Since the shift vector gives the speed of the {xi} coordinates, the last expression implies that the Γi coeﬃcients are
+essentially the acceleration.
+Notice that if there is no acceleration, the only essential diﬀerence from the normal wave equation is the transport
+term ~β · ∇ ˙φ, which arises as well in hydrodynamical problems. We will see that the local stability properties of the
+algorithms we study are determined mainly by βi, not Γi, which is one reason we expect our analysis to have much
+wider applicability than just to problems involving the wave equation.
+
+Having derived the form of the wave equation in our new coordinates, we now establish a grid for formulating
+diﬀerence equations in these coordinates. By assumption, we take the time-interval ∆t between successive surfaces of
+constant time to be uniform (independent of position) and constant (the same for any pair of surfaces). We take each
+grid point to have a ﬁxed spatial coordinate position xi, and for convenience we take the spacing between grid points
+∆xi to be uniform in each coordinate direction. As seen in the inertial frame, the grid deforms itself as in Figure 2.
+The corresponding picture in the xi-coordinate frame looks much more regular (Figure 3).
+
+5
+
+t
+
+✻
+
+t
+
+✻
+
+✇
+❈
+❈
+❈
+
+❈❖
+❈
+
+❈
+❈
+
+✲
+
+ξi
+
+❈
+❈
+✇
+❈
+❈
+
+❈
+
+❈❖
+❈
+❈
+❈
+
+❈
+❈
+
+✇
+
+✇
+
+✄
+✄
+
+✄
+
+✄✗
+✄
+
+✄
+✄
+✄
+✄
+✇
+
+✇
+
+✻
+
+✇
+
+✻
+
+✇
+
+✄
+
+✄
+
+✄
+✄✗
+✄
+
+✄
+✄
+✄
+✄
+✇
+
+✇
+
+✁
+
+✁
+✁
+
+✁✕
+✁
+✁
+✁
+✁
+✁
+✇
+✁
+
+✇
+✂✂
+
+✂
+
+✂
+✂✂✍
+✂
+
+✂
+✂
+✂
+✂
+✇
+✂
+
+✂
+
+✂
+✂✂✍
+✂
+
+✂
+✂
+✂
+✂
+✇
+
+✁
+✁
+
+✁✕
+✁
+✁
+✁
+✁
+✁
+✇
+
+FIG. 2. Grid in original coordinates, showing true distances.
+
+✇
+
+✻
+
+✻
+
+✇
+
+✇
+
+✻
+
+✻
+
+✇
+
+✇
+
+✻
+
+✻
+
+✇
+
+∆ x
+
+✇
+
+∆ t
+
+✻
+
+✻
+
+✇
+
+✇
+
+✻
+
+✻
+
+✇
+
+✲
+
+xi
+
+FIG. 3. Grid in new coordinates.
+
+III. THE ONE DIMENSIONAL CASE.
+
+A. Finite diﬀerence approximation.
+
+The one-dimensional wave equation allows us to study shifting grids in a relatively simple fashion. The added
+
+complication of extra dimensions will be treated in the next section.
+
+In one spatial dimension, the metric, shift, and acceleration coeﬃcients reduce to scalar functions:
+
+(III.1)
+
+g 1 1(x, t) = g(x, t) ,
+
+β1(x, t) = β(x, t) ,
+
+Γ1(x, t) = Γ(x, t) .
+
+
+
+
+Because the metric scales the squares of the coordinate distances (Equation II.10), it is convenient to deﬁne the
+
+linear scale function s(x, t) by
+
+so that the spatial proper distance is given by
+
+s(x, t) := pg(x, t) =
+
+∂ξ
+∂x
+
+,
+
+dξ = s(x, t) dx .
+
+6
+
+(III.2)
+
+(III.3)
+
+t
+
+✻
+
+✲
+
+x
+
+∆ t
+
+②
+
+②
+
+②
+
+i − 1
+
+∆ x
+
+②
+
+j + 1
+
+②
+
+j
+
+②
+
+j − 1
+
+i + 1
+
+②
+
+②
+
+②
+
+i
+
+FIG. 4. Computational molecule.
+
+Using this expression, Equation II.3 becomes:
+
+(
+
+1
+s2 − β2)
+
+∂2φ
+∂x2 +
+
+2β
+c
+
+∂2φ
+∂x ∂t − Γ
+
+∂φ
+∂x −
+
+1
+c2
+
+∂2φ
+∂t2 = 0 .
+
+For the ﬁnite diﬀerence approximation to this equation we employ the usual notation:
+
+We deﬁne the ﬁrst and second centered spatial diﬀerences as:
+
+φj
+i
+
+:= φ (i ∆x, j ∆t) .
+
+i + φj
+It is important to note that with the last deﬁnitions (δx)2 6= δ2
+time direction.
+
+:= φj
+
+x φj
+δ2
+
+i
+
+i−1 .
+
+δx φj
+i
+
+:= φj
+
+i−1 ,
+
+i+1 − φj
+i+1 − 2φj
+
+
+
+
+(III.4)
+
+(III.5)
+
+(III.6)
+
+(III.7)
+
+(III.8)
+
+(III.9)
+
+(III.10)
+
+(III.11)
+
+We now write the ﬁnite diﬀerence approximation to the diﬀerential operators that appear in Equation III.4 using
+
+the computational molecule shown in Figure 4. We have:
+
+x. We can also deﬁne analogous diﬀerences for the
+
+where Ett is the truncation error whose principal part is:
+
+i =
+
+t φ(cid:1)j
+(cid:0)∂2
+
+φj+1
+i − 2φj
+(∆t)2
+
+i + φj−1
+
+i
+
++ Ett ,
+
+Similarly, for the mixed derivative in space and time we ﬁnd:
+
+with:
+
+(∂x∂t φ)j
+
+i =
+
+(∆t)2
+
+Ett = −
+
+12
+
+i + . . . .
+
+t φ(cid:1)j
+(cid:0)∂4
+i − δx φj−1
+4 ∆x ∆t
+
+i
+
+δx φj+1
+
++ Ext ,
+
+For the second derivative in the x direction we use an implicit approximation of the following form:
+
+1
+
+Ext = −
+
+6h(∆x)2 (cid:0)∂3
+2 " δ2
+
+x φj+1
+(∆x)2 +
+
+ii + . . . .
+
+x∂t φ(cid:1)j
+t φ(cid:1)j
+i + (∆t)2 (cid:0)∂x∂3
+(∆x)2# + Exx ,
+(∆x)2 # + (1 − θ1) " δ2
+
+x φj−1
+δ2
+
+x φj
+
+i
+
+i
+
+i
+
+θ1
+
+i =
+
+xφ(cid:1)j
+(cid:0)∂2
+
+7
+
+where θ1 is an arbitrary parameter that gives the weight of the implicit terms.
+If θ1 = 0 the approximation is
+explicit, while if θ1 = 1 all the weight is given to the initial and ﬁnal time-steps of the molecule in the ﬁgure. Note
+that the last equation is symmetric in time. The error for this x derivative is:
+
+where we have used again an implicit approximation with a diﬀerent parameter θ2 . The truncation error Ex is:
+
+(III.12)
+
+(III.13)
+
+(III.14)
+
+(III.15)
+
+(III.16)
+
+(III.17)
+
+Finally, for the ﬁrst derivative in x we take:
+
+Exx = −
+
+(∆x)2
+
+12
+
+(∂x φ)j
+
+i =
+
+θ2
+
+2 " δx φj+1
+
+2 ∆x
+
+i
+
++
+
+i + . . . .
+
+x φ(cid:1)j
+(cid:0)∂4
+
+(∆t)2
+
+2
+
+x∂2
+
+i − θ1
+
+(cid:0)∂2
+
+t φ(cid:1)j
+2 ∆x # + (1 − θ2) " δx φj
+
+i
+
+δx φj−1
+
+i
+
+2 ∆x# + Ex ,
+
+Ex = −" (∆x)2
+
+6
+
+i + θ2
+
+x φ(cid:1)j
+(cid:0)∂3
+
+(∆t)2
+
+2
+
+i# + . . . .
+
+t φ(cid:1)j
+(cid:0)∂x∂2
+
+We can now write down a second order ﬁnite diﬀerence approximation to Equation III.4:
+
+ρ2 (cid:18) 1
+
+s2 − β2(cid:19) (cid:26) θ1
+
++
+
+ρ (c ∆t)
+
+2
+
+−
+
+x φj−1
+
+ρβ
+
+x φj+1
+
+i + δ2
+
+2 hδ2
+2 hδx φj+1
+i − δx φj−1
+Γ (cid:26) θ2
+2 hδx φj+1
+
+i
+
+i + δx φj−1
+
+i
+
+i
+
+x φj
+
+i + (1 − θ1) hδ2
+i − 2φj
+
+i − hφj+1
+i + (1 − θ2) hδx φj
+
+ii(cid:27)
+i
+ii(cid:27) = 0 ,
+
+i + φj−1
+
+i
+
+where ρ is the ‘Courant parameter’ [3] given by:
+
+ρ :=
+
+c ∆t
+∆x
+
+.
+
+The coeﬃcients {s, β, Γ} appearing in Equation III.15 should be evaluated at the point (i, j) that corresponds to
+the center of the molecule.
+To arrive at the ﬁnal form of the diﬀerence equation we multiplied it through by (∆t)2 . This means that the overall
+
+truncation error is now
+
+EIII.15 = Oh(∆x)2 (∆t)2i + Oh(∆t)4i .
+
+Equation III.15 is well studied in the particular case when β = Γ = 0 and s = 1 [4]. It is important to note
+that, because we use centered diﬀerences in the transport term, the above ﬁnite diﬀerence approximation will be
+implicit whenever the shift vector is diﬀerent from zero, even when θ1 = θ2 = 0 . Therefore the use of implicit
+approximations for the spatial derivatives does not add any extra numerical diﬃculty.
+
+We shall need to know how much numerical work is involved in using the implicit scheme. Suppose there are N
+spatial grid points. Then Equation III.15 is to be solved for the N values {φj+1
+, i = 1, . . . , N} at the ﬁnal time-step.
+The equation for index i relates three such values, at points {i − 1, i, i + 1}. The system of equations therefore has
+the matrix form
+
+i
+
+ˆQx φj+1 = f (φj, φj−1),
+
+(III.18)
+where ˆQx is a tridiagonal N × N matrix, and the inhomogeneous term f is constructed from ﬁeld values at the ﬁrst
+two time-steps. Solving a tridiagonal matrix involves O (N ) operations. Since we also need O (N ) operations for the
+solution of an explicit scheme, we see that the use of an implicit method in one dimension will increase the number of
+operations per time-step by at most a multiplier, independent of the number of grid points. Against this, the implicit
+scheme for certain choices of θ1 and θ2 can, on a ﬁxed grid, take much larger time-steps, limited only by accuracy
+considerations. In the next section, we shall show that this property of the implicit scheme in one dimension can,
+with suitable modiﬁcations, be extended to grids that shift essentially arbitrarily fast.
+
+8
+
+B. Local stability:
+
+deﬁnition and analysis of the implicit scheme on a shifting grid.
+
+It is well known [4] that the implicit approximation to the wave equation can be made unconditionally stable in
+the case when β = Γ = 0 and s = 1 by using an implicit parameter θ1 ≥ 1/2 . We are interested in studying
+under what conditions this property is preserved in the case of a shifting grid. The shifting grid introduces a major
+diﬃculty: the coeﬃcients in the equation generally depend on both position and time. This complicates the deﬁnition
+of stability.
+
+This diﬃculty means that an analytic stability analysis must be local: we will actually only consider the stability of
+the diﬀerence equation obtained from Equation III.15 by, at each point (x, t), taking the coeﬃcients to be constant,
+with the values corresponding to that point. We feel that this is not a very restrictive assumption, since in practice
+instabilities usually appear as local phenomena [4], with the fastest growing modes having wavelengths comparable to
+the grid spacing. Moreover, if the coeﬃcients in the diﬀerence equation are not practically constant over a few grid
+points, then we are probably not approximating the original diﬀerential equation adequately anyway.
+
+We will start then by considering the nature of the solutions of the diﬀerential equation in a very small region
+
+around the point (x, t) . As usual, we look for a solution of the form:
+
+Substituting this in Equation III.4 gives the following “dispersion relation” for α:
+
+φ(x, t) = eıαt eıkx .
+
+The general solution for a wavenumber k is
+
+α± = kβc ± c (cid:20) k2
+
+s2 + ikΓ(cid:21)1/2
+
+.
+
+(III.19)
+
+(III.20)
+
+(III.21)
+
+(III.22)
+
+φ(x, t) = eıkx(cid:2)Z+eıα+t + Z−eıα−t(cid:3) .
+
+(cid:12)(cid:12)eıα+teıα−t(cid:12)(cid:12) = 1 .
+
+Clearly, if Γ 6= 0, then one of the independent solutions will grow with time, but the other one will decay because
+
+of what we shall call the analytic boundedness condition:
+
+This does not mean that the system is physically unstable, but only that in an accelerating coordinate system (Γ 6= 0)
+the wave equation does not have purely sinusoidal solutions. One can understand this intuitively in the following way:
+Consider a sinusoidal solution in a static coordinate system. From the point of view of an accelerating observer, the
+frequency of this solution will be changing with time (he will be seeing more and more crests per unit time). This
+change in frequency will have important local eﬀects. As a crest approaches our accelerated observer, he will see
+the wave function rising faster than an observer moving at the same speed, but not accelerating, would. Hence the
+appearance of locally growing modes in our analysis. Similarly, after a crest is reached, the accelerated observer will
+see the value of the wave function falling faster than a uniformly moving observer would. It is not diﬃcult to see that
+the diﬀerence between the growth rate in the ﬁrst case and the decay rate in the other, as seen by our two observers,
+will be the same. This is the origin of the analytic boundedness condition given above.
+
+The presence of the growing modes is crucial for our local stability analysis. Since the solutions of the diﬀerential
+equation can grow with time, we can not ask the solutions of the ﬁnite diﬀerence approximation not to do so. What
+we are entitled to ask is for the numerical solutions not to grow faster than the corresponding normal modes of the
+diﬀerential equation. Our stability criterion is, therefore: a diﬀerence equation is locally stable if every solution for a
+given wavenumber k is bounded in time by a solution of the diﬀerential equation for the same k.
+
+Bearing this in mind, we now proceed to an analogous analysis of the solutions of the ﬁnite diﬀerence scheme. We
+
+look for a local stability condition around the point (n, m) by making the substitution:
+
+n = (ψ)m ei k n ∆x .
+φm
+
+(III.23)
+
+Substituting the last expression in the ﬁnite diﬀerence approximation (Equation III.15) we ﬁnd a quadratic equation
+in ψ of the form:
+
+A (ψ)2 + B ψ + C = 0 ,
+
+(III.24)
+
+with coeﬃcients given by:
+
+9
+
+A = (cid:26)θ1 ρ2(cid:18) 1
+
+s2 − β2(cid:19)(cid:20)cos (k ∆x) − 1(cid:21) − 1(cid:27)
+
++ iρ sin (k ∆x) (cid:20)β −
+
+θ2
+2
+
+(c ∆t) Γ(cid:21) ,
+
+B = (cid:26)2 (1 − θ1) ρ2(cid:18) 1
+
+s2 − β2(cid:19)(cid:20)cos (k ∆x) − 1(cid:21) + 2(cid:27)
+
+− iρ (1 − θ2) (c ∆t)Γ sin (k ∆x) ,
+
+C = (cid:26)θ1 ρ2(cid:18) 1
+
+s2 − β2(cid:19)(cid:20)cos (k ∆x) − 1(cid:21) − 1(cid:27)
+
+− iρ sin (k ∆x) (cid:20)β +
+
+θ2
+2
+
+(c ∆t) Γ(cid:21) .
+
+The two roots of this equation are:
+
+ψ± = −B ±(cid:0)B2 − 4AC(cid:1)1/2
+
+2A
+
+,
+
+and the general solution of the diﬀerence equation is
+
+n = eıkn∆x [Z+ (ψ+)m + Z− (ψ−)m] .
+φm
+
+It is not diﬃcult to see that the coeﬃcients A and C have the property:
+|A|2 = |C|2 − 2 θ2 ρ2β (c ∆t) Γ sin (k∆x) ,
+
+which implies:
+
+|ψ+ψ−| =(cid:12)(cid:12)(cid:12)(cid:12)
+
+C
+
+A(cid:12)(cid:12)(cid:12)(cid:12)
+
+6= 1 .
+
+This contrasts with the diﬀerential case, Equation III.22, where the product of the magnitudes of the two funda-
+mental solutions was 1. Since the ratio |C/A| depends on the value of k in Equation III.30, there will always exist
+wavenumbers for which the product |ψ+ψ−| exceeds 1. This would seem to be undesirable from the point of view of
+stability, but we can eliminate it as a potential problem by setting from now on
+
+This means that we will use an implicit approximation only for the second spatial derivatives (θ1 6= 0) , and not for
+the ﬁrst spatial derivatives (θ2 = 0) . Since from now on we will have only one θ parameter, we will change notation
+now and deﬁne θ := θ1 . The solutions of the diﬀerence equation now satisfy:
+
+θ2 = 0 .
+
+(III.32)
+
+(III.25)
+
+(III.26)
+
+(III.27)
+
+(III.28)
+
+(III.29)
+
+(III.30)
+
+(III.31)
+
+(III.33)
+
+(III.34)
+
+Next we introduce the ampliﬁcation measure M :
+
+|ψ+ψ−| = 1 .
+
+M := max
+
+k (cid:16)|ψ+|2 ,|ψ−|2(cid:17) ,
+
+and analogously for the solutions of the diﬀerential equation. The ampliﬁcation measure bounds the growth in the
+magnitude of any normal mode in one time-step. Our local stability condition is then equivalent to
+
+where MNum and MAnal are the ampliﬁcation measures for the ﬁnite diﬀerence approximation and the diﬀerential
+equation respectively.
+
+MNum ≤ MAna ,
+
+(III.35)
+
+10
+
+FIG. 5. Stability on a static grid. In the left-hand ﬁgure, we treat the explicit scheme, where we ﬁnd, as expected, that
+instability sets in for Courant parameter ρ/s > 1. On the right, we see that a fully implicit scheme (θ = 0.5) is stable for all
+time-steps, again as expected.
+
+When all the parameters are free to take any value, Equation III.35 is very complicated, and it is then diﬃcult to
+ﬁnd its consequences analytically. We shall therefore study this equation numerically, in order to ﬁnd regions of the
+parameter space in which the ﬁnite diﬀerence scheme is stable.
+
+First let us consider the case of a static grid, β = 0 , Γ = 0. This case has, of course, been studied analytically [4],
+
+and it is known that if θ < 1/2 the generalized Courant stability condition is:
+
+s(cid:17)2
+(cid:16) ρ
+
+≤
+
+1
+
+(1 − 2θ)
+
+,
+
+(III.36)
+
+while if θ ≥ 1/2 the scheme is absolutely stable. In Figure 5 we show graphs of both the numerical ampliﬁcation
+measure (solid line) and the one corresponding to the diﬀerential equation (dotted line). We have only plotted the
+functions for k ∆x = π because this turns out to be the worst case. The ﬁrst graph shows how for θ = 0 the scheme
+is stable for values of the Courant parameter ρ/s smaller than one. However, when this parameter takes values
+slightly larger than one, the numerical ampliﬁcation measure begins to grow very fast. In the second case we see
+that for θ = 1/2 the scheme is locally stable for all values of the Courant parameter, in agreement with the known
+stability condition given above.
+
+The next group of graphs (Figure 6) shows the eﬀect of a uniform shift. In both graphs we have assumed that there
+is no acceleration (Γ = 0) , and we have taken θ = 1/2 in order to avoid any instability of the type seen in Figure 5.
+The ﬁrst of these shows that the scheme remains locally stable for all values of the Courant parameter, even when
+the grid shift speed sβ is very close to 1. However, in the second graph we see that, as soon as sβ becomes larger
+than 1, the scheme turns unstable for all values of ρ . In this last case there is no stable choice of time-step. This is
+a very important property: The ﬁnite diﬀerence scheme becomes unconditionally unstable whenever the shift is faster
+than the speed of the waves.
+
+Finally, in Figures 7 and 8 we consider the eﬀects of an accelerating grid for the particular case when: θ = 1/2 ,
+s β = 1/2 , and s2 Γ ∆x = 1 . In Figure 7 we show the behavior of the ampliﬁcation measure for the ﬁnite-diﬀerence
+equation and the diﬀerential equation for two diﬀerent normal modes (two values of k). As we expect, the ampliﬁcation
+measure corresponding to the diﬀerential equation, MAna is no longer 1 . For the ﬁrst graph we have k ∆x = 1 and
+for the second k ∆x = 2 . For the smaller wave number (larger wavelength) the ampliﬁcation measures for the
+diﬀerential and ﬁnite-diﬀerence cases are relatively close to each other. As the wavenumber increases, the ﬁnite-
+diﬀerence ampliﬁcation measure falls further below that of the diﬀerential equation, so that the ﬁnite-diﬀerence
+scheme remains stable (although less accurate). Figure 8 shows a surface plot of (MAna − MNum) in the region:
+
+11
+
+FIG. 6. Stability on a uniformly shifting grid. The ﬁgure on the left has a grid speed 0.9 times the wave speed. On the right
+
+the grid moves at 1.1 times the wave speed. In both cases we have set θ = 1/2 and Γ = 0 (no acceleration).
+
+ρ/s ∈ (0, 2)
+
+k ∆x ∈ (0, π) ,
+
+We clearly see how (MAna − MNum) ≥ 0 in the whole region. Since k ∆x = π corresponds to the smallest wavelength
+that can be represented on the grid (λ = 2 ∆x) , we ﬁnd that the ﬁnite-diﬀerence scheme will be stable for all modes.
+We have searched through other values of Γ , and we have found that, although the details of the graphs change,
+the qualitative behavior is preserved. The acceleration parameter Γ thus seems to have no important eﬀect on the
+stability of the scheme.
+
+In summary, our stability analysis shows that the ﬁnite diﬀerence scheme given by Equation III.15 will be locally
+
+stable for all values of the Courant parameter ρ if the following conditions are satisﬁed:
+
+θ1 ≥ 1/2 ,
+θ2 = 0 ,
+
+| sβ | < 1 ,
+Γ
+
+irrelevant .
+
+•
+•
+•
+•
+
+
+
+
+(III.37)
+
+The limit on β is inconvenient in many problems, where it is desirable to have grids shifting faster than the wave
+speed. We turn now to a method for removing this restriction.
+
+C. Causal reconnection of the computational molecules.
+
+1. Causality problem.
+
+The causal structure of a grid shifting faster than the wave speed is particularly clearly illustrated in the original
+(ξ, t) coordinates. In Figure 9a we see how, for a very large shift, the individual grid points move faster than the
+
+12
+
+FIG. 7. Stability on an accelerating grid. For two diﬀerent modes, the ﬁnite-diﬀerence ampliﬁcation measure (solid curve)
+lies below that of the diﬀerential equation (dotted curve). This means the ﬁnite-diﬀerence scheme is stable, at least for these
+modes.
+
+FIG. 8. Stability on an accelerating grid. Here we show a surface plot of the diﬀerence between the analytical and numerical
+ampliﬁcation measures. This diﬀerence is always positive, which means that the ﬁnite-diﬀerence scheme is stable in the whole
+region.
+
+13
+
+waves, that is, they move outside the light-cone.2 Since the diﬀerential equation propagates data along this cone, it
+seems plausible that the instability found in the previous section arises in the fact that the diﬀerence scheme attempts
+to determine the solution at points on the ﬁnal time-step using data that are outside the past light-cone of these
+points.
+
+This suggests that we should not build the computational molecules from grid points with ﬁxed index labels,
+but instead use those points that have the closest causal relationship (Figure 9b). We shall now proceed to show
+analytically how such a reconnection can stabilize the scheme.
+
+In order to build this causal molecule let us consider then an individual grid point at the last time level. We look
+for that grid point in the previous time level that is closest to it in the causal sense. Having found this point, we
+repeat the procedure to ﬁnd the closest causally connected point in the ﬁrst time level. In Appendix B we give a
+simple algorithm for ﬁnding these points in an integration of the wave equation. The algorithm adapts easily to
+other linear hyperbolic systems. We shall return in a later paper to its generalization to nonlinear equations, and in
+particular to the case of shocks in hydrodynamics. First we consider the general constraints on the time-step that
+causal reconnection imposes, and then address the issue of how much extra computational eﬀort causal reconnection
+may involve.
+
+2. The causal reconnection condition.
+
+Since we permit the grid to move with an arbitrary non-uniform speed, there is no reason that these causally con-
+nected points should be in a straight line in either the original inertial reference frame (ξ, t) or in the moving reference
+frame (x, t). In the moving coordinate system (x, t) the relationship among these three points may generically look
+something like that shown in Figure 10.
+
+Accordingly, we introduce a new local coordinate system (x′, t′) adapted to the three given points. In order to do
+this, it is convenient to introduce the interpolating second order polynomial that can be obtained from these three
+points:
+
+P (t) = A
+
+(t − t0)2
+
+2
+
++ B (t − t0) + x0 ,
+
+where t0 is the time at the central point of the molecule, xt0 the position of that point, and:
+
+A :=   xt0+∆t − 2xt0 + xt0−∆t
+
+(∆t)2
+
+! ,
+
+B := (cid:18) xt0+∆t − xt0−∆t
+
+2 ∆t
+
+(cid:19) .
+
+We deﬁne the new local coordinate system adapted to the causal molecule by:
+
+(III.38)
+
+(III.39)
+
+(III.40)
+
+x′ := (x − xt0 ) − P (t) ,
+t′
+
+:= t .
+
+
+
+
+It can easily be seen that this new coordinate system (x′, t′) moves with respect to the old one (x, t) with a speed
+B at time t = t0 , and with a constant acceleration A . Since in general the value of the coeﬃcients A and B will
+change from molecule to molecule, the above change of variables must be repeated for each molecule. We assume that
+this can be done in a smooth manner; this may not be possible in a nonlinear system, if the characteristics depend
+on the solution.
+
+In the primed coordinate system, the diﬀerential equation has exactly the same form as before (see Equation III.4),
+
+except for the following substitutions:
+
+β −→ β +
+
+A (t − t0) + B
+
+c
+
+,
+
+Γ −→ Γ −
+
+A
+c2 .
+
+(III.41)
+
+2From here on we will adopt the language of relativity and refer to the characteristic cone of the hyperbolic equation as the
+
+‘light-cone’.
+
+14
+
+Light  cone
+
+(a)  Non-causal molecule.
+
+Light  cone
+
+t
+
+t
+
+(b) Causal molecule.
+
+FIG. 9. Causal computational molecule. In both ﬁgures, the dashed lines represent the light-cone, and the thick solid lines
+show the computational molecule. Figure (a) shows the usual molecule that follows the motion of the grid points. Figure (b)
+shows the reconnected molecule, where we pay attention to the causal structure instead.
+
+15
+
+t
+
+✻
+
+✲
+
+x
+
+✇
+
+✡✡
+
+✡
+
+✡
+
+✡
+
+✡
+✡
+✇
+
+✚
+
+✚
+
+✚
+
+✚
+
+✚
+
+✚
+
+✚
+
+✚
+✇
+
+xt0−∆t
+
+xt0
+
+xt0+∆t
+
+FIG. 10. Causally connected grid points.
+
+t0 + ∆t
+
+t0
+
+t0 − ∆t
+
+In the same way, the ﬁnite diﬀerence approximation will have the same form as before (Equation III.15), except for
+the substitutions:
+
+β −→ β +
+
+B
+c
+
+,
+
+Γ −→ Γ −
+
+A
+c2 ,
+
+(III.42)
+
+where the term with (t − t0) has disappeared because in this case the coeﬃcients should be evaluated at the center
+of the molecule where t = t0 .
+Since the original ﬁnite diﬀerence approximation could be made stable as long as Equation III.37 was satisﬁed (and
+θ ≥ 1/2), the analogous condition for a ﬁnite-diﬀerence scheme adapted to the new local coordinates takes the form:
+
+1
+
+s2 − (cid:18)β +
+
+B
+
+c (cid:19)2
+
+≥ 0 .
+
+(III.43)
+
+We will say that the three given points form a proper causal molecule when the last condition is satisﬁed. In order
+to ﬁnd when this happens, we will start by deﬁning the eﬀective numerical light-cone of the point xt0 as the region
+between the lines:
+
+x± (t) := xt0 + (cid:18)−β ±
+
+1
+
+s(cid:19) c (t − t0) +
+
+1
+2
+
+Γc2 (t − t0)2 .
+
+This numerical light-cone will coincide with the exact light-cone when:
+
+We will also deﬁne the axis of the numerical light-cone as the line:
+
+∂β
+∂x
+
+= 0
+
+∂Γ
+∂x
+
+=
+
+∂Γ
+∂t
+
+= 0 .
+
+xa (t) := xt0 − βc (t − t0) +
+
+1
+2
+
+Γc2 (t − t0)2 .
+
+(III.44)
+
+(III.45)
+
+(III.46)
+
+We will now show that if xt0+∆t and xt0−∆t are inside the numerical light-cone of xt0 then the three points will
+form a proper causal molecule. From the deﬁnition of the numerical light-cone we see that if xt0+∆t and xt0−∆t are
+inside it then
+
+xt0+∆t = xa (∆t) + D+
+
+xt0−∆t = xa (−∆t) + D− ,
+
+with
+
+The coeﬃcients A and B will then be given by
+
+D+, D− ∈ (cid:20)−
+
+c ∆t
+
+s
+
+,
+
+c ∆t
+
+s (cid:21) .
+
+(III.47)
+
+(III.48)
+
+16
+
+B = −β c +
+
+D+ − D−
+2 (∆t)
+
+,
+
+A = Γ c2 +
+
+D+ + D−
+
+(∆t)2
+
+,
+
+which in turn means
+
+(cid:18)β +
+
+B
+
+c (cid:19) ∈ (cid:20)−
+
+1
+s
+
+,
+
+1
+
+s (cid:21) ,
+
+(cid:18)Γ −
+
+A
+
+c2(cid:19) ∈ (cid:20)−
+
+2
+
+s (c∆t)
+
+,
+
+2
+
+s (c∆t)(cid:21) .
+
+(III.49)
+
+(III.50)
+
+From this it is easy to see that condition III.43 is indeed satisﬁed, that is, the three points do form a proper causal
+molecule. Moreover, the absolute value of the acceleration in the new local coordinates will be bounded, and even
+though this doesn’t aﬀect the stability of the ﬁnite diﬀerence scheme, it does improve its accuracy.
+
+In order to be able to form proper causal molecules everywhere, we must guarantee that two logically distinct
+conditions hold. If we call the central point at t0 as the “parent” and the points at t0 ± ∆t the “children”, then every
+parent must have two children and every child must have a parent:
+
+1. Every parent must have two children. There must always be at least one grid point in the upper and lower time
+levels inside the numerical light-cone of any given point in the middle time level. This can be guaranteed if we
+ask for the distance between grid points to be smaller than the spread of the smallest light-cone, that is,
+
+which implies
+
+∆x ≤
+
+2c ∆t
+max (s)
+
+,
+
+2 ρ min(cid:18) 1
+
+s(cid:19) ≥ 1 .
+
+(III.51)
+
+(III.52)
+
+(Without loss of generality, we assume in this section that ∆t and hence ρ are positive.)
+
+2. Every child must have a parent. All the grid points in the upper and lower time levels must be inside the
+numerical light-cone of at least one point in the middle time level. This requires that the distance between the
+axes of the numerical light-cones of two consecutive grid points must be smaller than the spread of the minimum
+light-cone.
+
+Let us therefore consider two consecutive grid points x1 and x2 = x1 + ∆x . The distance between the axis of
+their light-cones at the next time level is given by:
+
+Using the deﬁnition of xa we ﬁnd that:
+
+d+ = (cid:12)(cid:12)(cid:12)(cid:12)
+
+(xa)2 (∆t) − (xa)1 (∆t) (cid:12)(cid:12)(cid:12)(cid:12)
+
+.
+
+d+ = (cid:12)(cid:12)(cid:12)(cid:12)
+d− = (cid:12)(cid:12)(cid:12)(cid:12)
+d = (cid:12)(cid:12)(cid:12)(cid:12)
+
+∆x − c ∆t (cid:20)β (x2) − β (x1)(cid:21) +
+
+1
+2
+
+∆x + c ∆t (cid:20)β (x2) − β (x1)(cid:21) +
+
+1
+2
+
+∆x + c ∆t (cid:12)(cid:12)(cid:12)(cid:12)
+
+β (x2) − β (x1)(cid:12)(cid:12)(cid:12)(cid:12)
+
++
+
+1
+2
+
+(III.53)
+
+.
+
+(III.54)
+
+.
+
+(III.55)
+
+(III.56)
+
+(c ∆t)2 (cid:20)Γ (x2) − Γ (x1)(cid:21)(cid:12)(cid:12)(cid:12)(cid:12)
+(c ∆t)2 (cid:20)Γ (x2) − Γ (x1)(cid:21)(cid:12)(cid:12)(cid:12)(cid:12)
+(c ∆t)2 (cid:20)Γ (x2) − Γ (x1)(cid:21)(cid:12)(cid:12)(cid:12)(cid:12)
+
+.
+
+Let us assume now that both β and Γ are continuous functions. Then we can expand them in a Taylor series
+around the point:
+
+17
+
+In the same way we ﬁnd that the distance between the axis of the light-cones at the previous time level is:
+
+The maximum of these two is:
+
+We then ﬁnd that, to second order in ∆x :
+
+¯x :=
+
+x1 + x2
+
+2
+
+.
+
+where the derivatives are evaluated at the point ¯x .
+
+d = (cid:12)(cid:12)(cid:12)(cid:12)
+
+∆x + c ∆t (cid:12)(cid:12)(cid:12)(cid:12)
+
+∂β
+∂x
+
+∆x(cid:12)(cid:12)(cid:12)(cid:12)
+
++
+
+1
+2
+
+(c ∆t)2 (cid:20) ∂Γ
+
+∂x
+
+,
+
+∆x(cid:21)(cid:12)(cid:12)(cid:12)(cid:12)
+
+(III.57)
+
+(III.58)
+
+The condition that the maximum value of this distance should be smaller than the spread of the minimum
+light-cone is now:
+
+max (d) ≤
+
+2c ∆t
+max (s)
+
+,
+
+(III.59)
+
+Using now the expression for d , we can rewrite this as:
+
+2 ρ min(cid:18) 1
+
+s(cid:19) ≥ (cid:12)(cid:12)(cid:12)(cid:12)
+
+1 + ρ ∆x max(cid:12)(cid:12)(cid:12)(cid:12)
+
+∂β
+
+∂x (cid:12)(cid:12)(cid:12)(cid:12)
+
++
+
+1
+2
+
+∂x (cid:21)(cid:12)(cid:12)(cid:12)(cid:12)
+ρ2 (∆x)2 max(cid:20) ∂Γ
+
+This is the “no orphans” condition, that every child point should have a parent. Since we want this to be true
+for all grid points, it must hold for all x .
+
+.
+
+(III.60)
+
+We call equations III.52 and III.60 the causal reconnection conditions: when they are satisﬁed, one is guaranteed
+
+that causal molecules can be formed everywhere.
+
+It is clear that if the derivatives of β and Γ are too large, it will be impossible to satisfy the second of the causal
+reconnection conditions, Equation III.60 (no orphans). This can be avoided if we require that β and Γ change very
+little from one grid point to another:
+
+∆x max(cid:12)(cid:12)(cid:12)(cid:12)
+
+∂β
+
+∂x (cid:12)(cid:12)(cid:12)(cid:12)
+
+≪ 1
+
+∆x max(cid:12)(cid:12)(cid:12)(cid:12)
+
+∂Γ
+
+∂x (cid:12)(cid:12)(cid:12)(cid:12)
+
+≪ 1
+
+(III.61)
+
+As we mentioned before, if this is not the case our ﬁnite diﬀerence approximation is unlikely to be good anyway,
+
+and a more reﬁned grid spacing should be used.
+
+Another interesting feature of condition III.60 is the fact that, whenever Γ is not uniform, there will always be
+a value of ρ large enough for the condition to be violated. These sets an upper bound on the time-step, which can
+be understood if we examine the eﬀects of a non-uniform acceleration on two adjacent numerical light-cones. If the
+acceleration increases with x , the numerical light-cones will eventually converge and pass through each other at a
+large enough time, even if they were diverging initially. Similarly, if the acceleration decreases with x , the numerical
+light-cones will eventually diverge, even if they intersect each other for a while. Clearly these situations do not arise
+in the exact (diﬀerential) case because they would break the causal structure of the solutions. We must therefore
+conclude that the numerical light-cones will not approximate the real light-cones properly when we have a time-step
+large enough for these eﬀects to occur. However, if Γ is such that III.61 holds, then the upper limit on ∆t will be
+very large indeed, much larger than the Courant limit, and so large that the accuracy of the integration must be
+breaking down anyway. Moreover, for any given time-step condition III.60 can always be satisﬁed for a small enough
+grid spacing ∆x .
+
+3. Numerical overheads of causal reconnection.
+
+Notice that causal reconnection does not change the fundamental structure of the diﬀerence equation, since it does
+not aﬀect the relations between points at the ﬁnal time-step. Therefore, even with causal reconnection, the equation
+will have the form
+
+where f ′ is a diﬀerent function, which reﬂects the fact that causal reconnection identiﬁes diﬀerent points at time-steps
+j and j− 1 to use to generate the points at the ﬁnal time-step. Therefore, any algorithms that are used without causal
+reconnection for the solution of this tridiagonal system of equations can be used equally well with causal reconnection.
+
+ˆQx φj+1 = f ′(φj , φj−1) ,
+
+(III.62)
+
+18
+
+There will, of course, be an overhead associated with the search for causally related grid points. In a one-dimensional
+problem with N grid points, this will require only O(N ) operations, since once the causal molecule of one grid point
+has been constructed, the causal molecule of its neighbor will, by continuity, usually diﬀer by at most one spatial shift
+at any time level. In more than one dimension, the search should still scale linearly with the number of grid points,
+since again by continuity the causal molecule of any point can usually be guessed from that of any of its neighbors.
+We have found that for the one-dimensional wave equation, the implementation of causal reconnection given in
+Appendix B can multiply the computation time by something like a factor of two. But for a more realistic problem,
+such as general relativity, where there are many dependent variables per grid point, the overhead of searching for the
+causal structure will be no diﬀerent than for the simple wave equation, so it will represent a small percentage of the
+overall computing time.
+
+D. Numerical examples of causal reconnection.
+
+As an example of the methods that we have developed in the last sections, we will consider a grid that is oscillating
+
+in the original coordinates (ξ, t) . The scale and shift functions are given by:
+
+s (x, t) = 1 ,
+
+β (x, t) = A cos (ωt) ,
+
+from which we deduce
+
+Γ = A ω sin (ωt) .
+
+(III.63)
+
+(III.64)
+
+This grid turns out to give a very good illustration of all the properties we have mentioned so far. In the calculations
+
+we have taken c = 1 .
+
+In Figure 11 we show two calculations using the ﬁnite diﬀerence approximation given by Equation III.15. In these
+examples we have not taken into consideration the causal structure. The ﬁgures show the evolution of a Gaussian
+wave packet that was originally at rest at the center of the grid. In both cases we have taken ω = 6, and we show
+the situation after 35 time-steps (3.5 periods of oscillation of the grid).
+
+In the ﬁrst graph A = 1: the maximum shift equals the speed of the waves, but for all the rest of the time the
+shift is less than 1. At the end of the calculation there is no evidence of any instabilities. In fact, we have integrated
+this for a very large number of time-steps with the same result: no instabilities appear.
+
+For the second graph we have takenA = 1.1: the maximum shift is now slightly larger than the speed of the waves,
+although even here the grid spends most of its time at speeds less than 1. By the end of the calculation an instability
+has started to form. It exhibits the characteristic feature of ﬁnite-diﬀerence instabilities, that the shortest wavelengths
+are the most unstable.
+
+In Figure 12 we compare the direct, non-causal, approach and the causal approach for a larger shift amplitude. We
+use the same initial Gaussian wave packet as before and take A = 1.3, ω = 6. Here the instability appears very fast
+in the direct approach (after only 25 time-steps). With causal reconnection, however, the calculation remains stable.
+We have carried out the same calculation for many more time-steps, and also for larger values of A (up to A = 15 ),
+and the results are the same: no instabilities develop in the causal approach.
+
+Therefore causal reconnection of the computational molecules seems to cure all the local instabilities on grids that
+move faster than the waves. We will see that in more than one dimension it will also guarantee local stability for
+rapid shifts, but only after we cure a further instability that arises in operator-splitting methods for small velocities.
+
+IV. THE MULTI-DIMENSIONAL CASE.
+
+A. How to design an ADI scheme for a hyperbolic system.
+
+1. Fully implicit scheme.
+
+We shall begin our discussion of stable integration schemes in more than one dimension by introducing ADI schemes
+in a way that makes our time-symmetric ADI method emerge naturally, and which makes it clear how to generalize
+it to other hyperbolic systems in a straightforward manner. ADI is basically a device for implementing an im-
+plicit integration scheme in many dimensions without the enormous computational overheads that the direct implicit
+
+19
+
+FIG. 11. Oscillating grid, non-causal approach.
+
+20
+
+FIG. 12. Oscillating grid, causal reconnection.
+
+21
+
+scheme would involve. We begin our discussion, therefore, with an examination of the direct implicit scheme and its
+computational demands. We shall concentrate on two dimensions, but the generalization to more is straightforward.
+
+The general wave equation (Equation II.3) in two dimensions is
+
+hgx x − (βx)2i ∂2φ
+
+∂x2 + 2 (gx y − βxβy)
+2βx
+∂2φ
+c
+
+∂2φ
+∂x ∂t
+
+2βy
+c
+
++
+
++
+
+∂y ∂t − Γx ∂φ
+
++hgy y − (βy)2i ∂2φ
+∂x − Γy ∂φ
+∂y −
+
+∂y2
+∂2φ
+∂t2 = 0 .
+
+1
+c2
+
+∂2φ
+∂x ∂y
+
+In the ﬁnite diﬀerence approximations to this equation, we will use the notation
+
+φj := φj
+
+ix,iy
+
+;
+
+(IV.1)
+
+(IV.2)
+
+that is, we will suppress the spatial indices and write them only when the possibility of confusion arises. The ﬁnite
+diﬀerence approximations to all the diﬀerential operators that appear in Equation IV.1 have the same form as in the
+one dimensional case, except for a new term that did not exist before:
+
+where the spatial diﬀerences are deﬁned in the same way as before, and the truncation error is:
+
+(∂x∂y φ)j =
+
+δxδy φ
+4 (∆x)2 + Exy ,
+
+As we learned to do in the one-dimensional case, we will use only explicit approximations for the ﬁrst spatial
+derivatives. We can then write our second-order implicit ﬁnite diﬀerence approximation to Equation IV.1 in the form:
+
+Exy = −
+
+1
+6
+
+(∆x)2 h(cid:0)∂3
+
+x∂y φ(cid:1)j
+
++(cid:0)∂x∂3
+
+y φ(cid:1)ji + . . . .
+
+ρ2hgx x − (βx)2i(cid:20) θ
++ ρ2hgy y − (βy)2i(cid:20) θ
+
+2 (cid:0)δ2
+2 (cid:0)δ2
+
+x φj+1 + δ2
+
+y φj+1 + δ2
+
++
+
+ρ2
+2
+
+(gx y − βxβy)(cid:0)δxδy φj(cid:1) +
+
+x φj−1(cid:1) + (1 − θ) (cid:0)δ2
+y φj−1(cid:1) + (1 − θ) (cid:0)δ2
+
+x φj(cid:1)(cid:21)
+y φj(cid:1)(cid:21)
+(cid:0)δx φj+1 − δx φj−1(cid:1)
+Γx (cid:0)δx φj(cid:1)
+
+ρβx
+2
+
+ρ (c ∆t)
+
+2
+
++
+
+ρβy
+2
+−
+
+(cid:0)δy φj+1 − δy φj−1(cid:1) −
+
+ρ (c ∆t)
+
+2
+
+Γy (cid:0)δy φj(cid:1) − (cid:0)φj+1 − 2φj + φj−1(cid:1) = 0 .
+
+(IV.3)
+
+(IV.4)
+
+(IV.5)
+
+(IV.6)
+
+In this equation we have assumed for convenience that the spatial increment is the same in both directions, and we
+have deﬁned the Courant parameter in the same way as before. As in the one dimensional case, to arrive at the last
+expression we have multiplied through by (∆t)2 . The truncation error is therefore of order:
+
+EIV.5 = Oh(∆x)2 (∆t)2i + Oh(∆t)4i .
+
+Equation IV.5 is the most direct ﬁnite diﬀerence approximation to the original diﬀerential equation in 2 dimensions.
+
+We call it the “fully implicit” scheme. As in the one-dimensional case, it takes the form of a matrix equation
+
+ˆQ2φj+1 = f (φj, φj−1).
+
+(IV.7)
+
+However, as is well-known, the numerical solution of this equation is considerably more time-consuming than in the
+one dimensional case, and the computational demands increase very rapidly with the number of dimensions. This
+is due to the fact that, if we have N grid points in each of n spatial directions, the matrix ˆQn will have N n rows
+and columns. Most importantly, this matrix will not be tridiagonal: it may be possible to arrange that the nearest
+neighbors in, say, the x-direction of any point should occupy adjacent columns, but those in other directions will be
+far away in another part of the matrix. The matrix will still be sparse, but the number of operations involved in
+solving it may be very large indeed, in the worst case involving of order N 3n operations at each time-step. Even if a
+well-designed relaxation method is used, the number of operations will in general increase faster than N n.
+
+ADI schemes oﬀer a systematic way around this problem, usually aﬀording considerable savings in computational
+eﬀort with, as we will show, no sacriﬁce in accuracy. However, while the fully implicit scheme may be expected to be
+as stable against grid shifts in n dimensions as in one, this is not true of ADI schemes, and we shall have to be careful
+to design a stable one.
+
+22
+
+2. Designing ADI schemes: how to make the operator factorizable.
+
+Alternating Direction Implicit (ADI) methods [4] reduce the numerical work involved in an n-dimensional problem
+by modifying the ﬁnite-diﬀerence scheme in such a way as to replace the original large sparse matrix ˆQn by one that
+can be factored into a product of tridiagonal matrices related to ˆQx for each spatial direction. If we assume that we
+have the same number N of grid points in all directions, we will have to invert a series of N n−1 tridiagonal matrices
+of size N × N for each spatial dimension. This means that we will need only O(nN n) operations to solve the system.
+We see then that the number of operations for the ADI scheme will scale with the number of grid points in the same
+way as it does for an explicit method.
+
+The reason that one can contemplate replacing the original operator ˆQn with a diﬀerent one is that the fully implicit
+ﬁnite-diﬀerence equation is only an approximation to the diﬀerential equation, so if we modify it by adding extra
+high-order terms that are of the same order as those neglected in the original approximation, the accuracy of the
+scheme will not be aﬀected. If we can then choose these extra terms to change the operator acting on the function at
+the last time level φj+1 into a factorizable one, we will have speeded up the solution by a huge amount.
+
+For our two-dimensional wave equation, the operator acting on φj+1 is (see Equation IV.5):
+
+ρ
+2
+
+(βx δx + βy δy)
+
+ˆQ2 := − 1 +
++ ρ2 θ
+
+2 nhgx x − (βx)2i δ2
+
+yo .
+x +hgy y − (βy)2i δ2
+
+(IV.8)
+
+We want to add high-order terms to this expression to transform it into a product of one-dimensional operators of
+the form of the similar term we had in the one-dimensional case (Equation III.15 with θ2 = 0 ) 3:
+
+2 = ˆQx ˆQy
+ˆQ′
+:= −(cid:26) 1 −
+×(cid:26) 1 −
+
+ρ βx
+
+2
+
+δx − ρ2 θ
+
+x(cid:27)
+2 hgx x − (βx)2i δ2
+y(cid:27) .
+2 hgy y − (βy)2i δ2
+
+δy − ρ2 θ
+Let us deﬁne ˆS to be the diﬀerence between these operators:
+2 − ˆQ2.
+
+ˆS := ˆQ′
+
+ρ βy
+2
+
+Then we can rearrange the fully implicit equation (Equation IV.7) to read
+
+ˆQ′
+2φj+1 = f (φj, φj−1) + ˆSφj+1.
+
+(IV.9)
+
+(IV.10)
+
+(IV.11)
+
+Now, this is not directly any help, since although we have the factorizable operator ˆQ′
+unknown terms in φj+1 on the right. However, let us consider the following related equation:
+
+2 on the left-hand-side, we have
+
+2φj+1 = f (φj, φj−1) + ˆSφj .
+ˆQ′
+
+(IV.12)
+This equation is in a form that can be solved easily, since the unknown φj+1 appears only with the operator ˆQ′.
+Moreover, since in the limit ∆t → 0 we have φj → φj+1, in that limit Equation IV.12 approaches Equation IV.11,
+which is the original fully implicit equation. This fully implicit approximation is itself only a valid approximation
+to the original diﬀerential equation in the same limit, so it follows that Equation IV.12 also approximates the diﬀer-
+ential equation in that limit. (It need not be as good an approximation, of course: the error terms of the original
+Equation IV.11 may be smaller than those introduced by the change to Equation IV.12. We will address this point
+below.)
+
+There is nothing unique about changing ˆSφj+1 to ˆSφj to make the equation factorizable. One could change ˆSφj
+to any combination of terms that limits to ˆSφj+1 as ∆t → 0. The diﬀerent ADI methods make diﬀerent choices of
+
+3This form of the factorized operator is not unique, there are many diﬀerent operators that one could choose instead of ˆQx ˆQy .
+See for example [5] and [6].
+
+23
+
+these terms. We shall see that the standard choices produce equations that are very unstable when the grid shifts,
+but that by imposing the simple physical requirement of time-reversibility one gets a uniquely deﬁned ADI scheme
+that is stable and just as accurate as the original fully implicit method.
+
+It will be helpful to write out explicitly what the operator ˆS deﬁned in Equation IV.10 is:
+yo + hgx x − (βx)2i δ2
+4 hβx δxnhgy y − (βy)2i δ2
+yo(cid:21) .
+xnhgy y − (βy)2i δ2
+
+hgx x − (βx)2i δ2
+
+ˆS = −(cid:20) ρ2
+
+βx δx (βyδy) +
+
+4
+
++
+
+ρ4θ2
+
+4
+
+ρ3θ
+
+x (βyδy)i
+
+(IV.13)
+
+It is important to note here that the expression for the operator ˆS includes terms in which the diﬀerence operators
+in the x direction act on the functions gyy and βy , because these functions in general depend on both x and y .
+2 as ˆQy ˆQx we would have had a diﬀerent expression for ˆS , because, whenever the coeﬃcients in
+Had we deﬁned ˆQ′
+the ﬁnite diﬀerence approximation change with position, the operators ˆQx and ˆQy do not commute.
+
+3. ADI schemes old and new.
+
+We ﬁrst cast the two original, and still standard, ADI methods for the wave equation, Lees’ ﬁrst and second
+methods, into the notation we have used above. They serve to illustrate how our approach to ADI methods works
+on a familiar method, and we will subsequently analyze the stability of these schemes. Then we will introduce the
+scheme that will turn out to be stable for shifting grids, the time-symmetric scheme.
+
+a. Lees’ ﬁrst method. The most straightforward approach is that introduced by Lees in 1962 ( [7], [8]) for the case
+of the ordinary wave equation on a ﬁxed grid. It is convenient to describe it in terms of the extra terms that one adds
+to the left-hand-side of Equation IV.5 to produce a factorizable equation:
+
+This eﬀectively produces the equation
+
+ˆS (cid:0)φj+1 − φj−1(cid:1) .
+
+ˆQ′
+2φj+1 = f (φj, φj−1) + ˆSφj−1.
+
+(IV.14)
+
+(IV.15)
+
+This is a simple change from Equation IV.12.
+
+It is clear that as ∆t → 0 the extra term (IV.14) will vanish, and we will recover the original diﬀerential equation.
+However, we will see below that the extra terms do not vanish as fast as the errors in Equation IV.5, which are given
+in Equation IV.6. Lees’ ﬁrst method is only ﬁrst-order accurate on a shifting grid. It is known that Lees’ ﬁrst method
+is absolutely stable on a static grid. However, it will turn out to be subject to weak but signiﬁcant instabilities when
+used on shifting grids.
+
+b. Lees’ second method. Another way to modify the equation is to add instead a second-time-diﬀerence term. This
+
+is known as Lees’ second method:
+
+ˆS (cid:0)φj+1 − 2φj + φj−1(cid:1) .
+
+(IV.16)
+
+Here again we recover the original diﬀerential equation in the limit ∆t → 0. The result is in fact a linear combination
+of Equations (IV.12) and (IV.15). We will see below that this method does not sacriﬁce accuracy: the introduced
+terms are of the same order as the original truncation error on shifting grids. Moreover, it is absolutely stable on
+a static grid. However, our stability analysis will reveal that this method shows strong instabilities when used on
+shifting grids.
+
+c. The time-symmetric ADI method. A more general approach would be to separate the operator ˆS into diﬀerent
+pieces and use a ﬁrst time diﬀerence with some of them, and a second time diﬀerence with the rest. We will call this
+a mixed ADI method. One can try many diﬀerent mixed methods, but there is one that is natural from the point of
+view of the original diﬀerential equation. This is the one we call the time-symmetric ADI method.
+
+The original diﬀerential equation, Equation IV.1, has, in common with all fundamental physics diﬀerential equations,
+
+the property of time-reversal invariance. In this case, the equation is invariant if we make the replacements
+
+t −→ −t
+
+and
+
+βi −→ −βi.
+
+(IV.17)
+
+24
+
+The fully implicit diﬀerence equation, Equation IV.5, also has this property, since the approximations used for the time-
+derivatives are centered diﬀerences: they do not bias the direction of time. In our case, time-reversal is implemented
+by the exchange of the time-step indices j + 1 and j − 1. However, replacing the fully implicit operator ˆQ2 with
+ˆQ′
+2 breaks this invariance, because this change modiﬁes the way that φj+1 enters the equation without automatically
+modifying the φj−1 terms in a symmetrical way.
+If we look at the deﬁnition of the operator ˆS in Equation IV.13, we see that it is not itself invariant: it contains
+terms both linear and quadratic in βi. Therefore, since Lees’ ﬁrst and second schemes both add terms in which ˆS
+operates on an expression with a deﬁnite time-symmetry, neither scheme is time-reversal invariant. What we need to
+do is to separate ˆS into parts ˆSe and ˆSo that are even and odd with respect to βi and then to allow them to act,
+respectively, on even and odd extra terms. That is, we add to Equation IV.5 the term
+
+where the even and odd parts of the operator ˆS are deﬁned by
+
+ˆSe (cid:0)φj+1 − 2φj + φj−1(cid:1) + ˆSo (cid:0)φj+1 − φj−1(cid:1) ,
+
+ρ2
+4
+ρ3θ
+
+ˆSe := −
+ˆSo := −
+
+ρ4θ2
+
+βx δx (βyδy) −
+4 hβx δxnhgy y − (βy)2i δ2
+
+hgx x − (βx)2i δ2
+yo + hgx x − (βx)2i δ2
+
+yo ,
+xnhgy y − (βy)2i δ2
+x (βyδy)i .
+
+4
+
+(IV.18)
+
+(IV.19)
+
+(IV.20)
+
+This eﬀectively ensures that we apply the same modiﬁcation to the φj−1 terms as to the φj+1 terms in producing
+a factorizable equation that limits to the fully implicit equation as the time-step goes to zero. We will see that, by
+so preserving the time-symmetry of the original equation, we have also produced a method that is just as accurate
+as the fully implicit method and, perhaps more importantly, is unconditionally locally stable on grids shifting at any
+speed up to the wave speed.
+
+4. Intermediate values and the implementation of ADI schemes.
+
+Whichever ADI method we choose to use, we will always produce an equation of the form:
+
+(IV.21)
+where ˆA and ˆB are spatial ﬁnite diﬀerence operators whose speciﬁc form will depend on the method chosen. Looking
+at the deﬁnition of ˆQ′
+2 in Equation IV.9, we see that the last equation can be decomposed into a system of two coupled
+equations in the following way:
+
+ˆQ′
+2 φj+1 = ˆA φj + ˆB φj−1 ,
+
+(cid:26) 1 −
+(cid:26) 1 −
+
+ρ βy
+2
+ρ βx
+
+2
+
+δy − ρ2 θ
+δx − ρ2 θ
+
+2 hgy y − (βy)2i δ2
+2 hgx x − (βx)2i δ2
+
+y(cid:27) φj+1 := φ∗ j+1 ,
+x(cid:27) φ∗ j+1 = ˆA φj + ˆB φj−1,
+
+(IV.22)
+
+(IV.23)
+
+where the ﬁrst equation deﬁnes the so-called intermediate value φ∗j+1.
+
+These two equations give the simplest ADI split of the ﬁnite diﬀerence approximation. In order to solve the system,
+one ﬁrst solves the second equation for φ∗ j+1 using values of φ in the previous time levels. This operation involves
+solving a tridiagonal system of equations for each ﬁxed value of the y-index. One then solves for φj+1 using the ﬁrst
+equation, again solving only tridiagonal equations. In the general case of an n dimensional problem, this procedure
+will take us to a system of n equations and n − 1 intermediate values. Each equation employs an operator acting
+only in one of the spatial directions.
+It is important to realize that the splitting of Equation IV.21 given above is by no means unique. One may ﬁnd
+many diﬀerent splittings of the same equation, and some may prove to be more computationally eﬃcient than the one
+we have given above. However, the diﬀerences will only be in the algebra (and in roundoﬀ errors): diﬀerent splittings
+are only diﬀerent ways of writing the same ADI scheme.
+
+25
+
+5. Accuracy of ADI methods.
+
+The diﬀerent methods of forming ˆA and ˆB will diﬀer in general in their accuracy and stability. To ﬁnd the accuracy
+of the diﬀerent ADI schemes on shifting grids, we start by considering Lees’ ﬁrst method. In this case we must add
+to the left hand side of Equation IV.5 the following term:
+
+y (cid:0)φj+1 − φj−1(cid:1)i
+
+The order of this term is found by replacing diﬀerences with derivatives:
+
+ρ2
+4
+ρ3θ
+
+βx δx(cid:2)βy δy (cid:0)φj+1 − φj−1(cid:1)(cid:3)
+4 nβx δxh(cid:16)gy y − (βy)2(cid:17) δ2
+
+ˆS(cid:0)φj+1 − φj−1(cid:1) = −
+−
++ (cid:16)gx x − (βx)2(cid:17) δ2
+−
+
+ρ4θ2
+
+y(cid:0)φj+1 − φj−1(cid:1)i .
+
+x(cid:2)βy δy(cid:0)φj+1 − φj−1(cid:1)(cid:3)o
+xh(cid:16)gy y − (βy)2(cid:17) δ2
+∂x(cid:20)βy ∂2φ
+∂y∂t(cid:21)
+∂x(cid:20)(cid:16)gy y − (βy)2(cid:17) ∂3φ
+∂y2∂t(cid:21)
+∂x2 (cid:20)βy ∂2φ
+∂y∂t(cid:21)(cid:27)
+∂x2 (cid:20)(cid:16)gy y − (βy)2(cid:17) ∂3φ
+c4 (∆t)5 (cid:16)gx x − (βx)2(cid:17) ∂2
+∂y2∂t(cid:21)
+
+4 (cid:16)gx x − (βx)2(cid:17) δ2
+ˆS (cid:0)φj+1 − φj−1(cid:1) ≈ − 2c2 (∆t)3 βx ∂
+− θc3 (∆t)4 (cid:26) βx ∂
++ (cid:16)gx x − (βx)2(cid:17) ∂2
+−
+= O(cid:16)(∆t)3(cid:17) + O(cid:16)(∆t)4(cid:17) + O(cid:16)(∆t)5(cid:17) .
+
+θ2
+2
+
+(IV.24)
+
+(IV.25)
+
+From this we can see that the principal part of the truncation error introduced by the new terms is of order (∆t)3 ,
+which is in fact one order less than the original accuracy of Equation IV.5. Using Lees’ ﬁrst ADI decomposition
+reduces the accuracy of the original scheme. This is only true, however, when we consider a moving grid. From the
+last expression it is clear that for a ﬁxed grid (βx = βy = 0) , the truncation error introduced by this method will
+only be of order (∆t)5 , as is well known.
+
+When we do the same analysis for the case of the ADI scheme based on Lees’ second method, we ﬁnd that the
+principal part of the truncation error introduced by the new terms is of order (∆t)4 for a shifting grid. The accuracy
+of the original equation is therefore preserved. In principle, one would therefore prefer Lees’ second method. However,
+we will see below that the second method is far more unstable than the ﬁrst when the grid shifts, so its higher accuracy
+is of limited usefulness.
+
+For the time-symmetric ADI scheme, the principal part of the truncation error introduced by the extra terms is
+
+again of order (∆t)4 . This method is thus as accurate as the fully implicit one. We will see that it is also stable.
+
+B. Local stability analysis.
+
+We turn now to the all-important question of the stability of the ADI schemes that we have described in the last
+section. In the same way as in the one dimensional case, we will start by studying the nature of the solutions of the
+diﬀerential equation (Equation IV.1), and we will again consider the solutions in a very small region around the point
+
+(cid:0)xi, t(cid:1) , assuming that the coeﬃcients remain constant in this region.
+Moreover, for simplicity we will assume that we can take the functions gyy and βy out of the diﬀerence operators
+in the expression for ˆS (Equation IV.20). Again, if these functions change rapidly from one grid point to the next,
+the accuracy of the ﬁnite-diﬀerence scheme on this grid is probably poor anyway.
+
+1. Solutions of the diﬀerential equation.
+
+Following the same procedure as in the one-dimensional case, we will look for solutions of the diﬀerential equation
+
+Equation IV.1 that take the form:
+
+26
+
+where ~k is the 2-dimensional wave vector. We denote its components by ki, and deﬁne the associated covector
+(one-form) components ki by
+
+φ (x, t) = eı α(~k) t eı ~k·~x ,
+
+(IV.26)
+
+Substituting into Equation IV.1 and solving for α, we ﬁnd the dispersion relation:
+
+ki = gij kj.
+
+This is a simple generalization of Equation III.20. Again we have the analytic boundedness condition
+
+α± = c (cid:0)kjβj(cid:1) ± c(cid:2)(cid:0)kj kj(cid:1) + i(cid:0)kj Γj(cid:1)(cid:3)1/2
+
+.
+
+Therefore, if one of the solutions is growing, the other is dying at the same rate.
+
+2
+
+= 1 .
+
+(cid:12)(cid:12)eıα+teıα−t(cid:12)(cid:12)
+
+(IV.27)
+
+(IV.28)
+
+(IV.29)
+
+2. Local stability of the diﬀerence equations.
+
+We will now proceed to the local stability analysis of the diﬀerent numerical approximations. We look for numerical
+
+solutions to the ﬁnite diﬀerence approximations of the following form:
+
+nxny = ψm ei (kxnx+kyny) ∆x ,
+φm
+
+(IV.30)
+
+where we have used our simplifying assumption that ∆y = ∆x. By substituting this equation into any of the ﬁnite
+diﬀerence approximations, we shall always obtain a quadratic equation for ψ of the form:
+
+A φ2 + B ψ + C = 0 .
+
+(IV.31)
+
+The coeﬃcients in this equation will depend on the particular approximation used. We call the two solutions of this
+equation ψ±.
+
+As in the one-dimensional case, we deﬁne the numerical ampliﬁcation measure:
+
+and we take our local stability condition to be:
+
+MNum := max
+
+~k (cid:16)|ψ+|2 ,|ψ−|2(cid:17) ,
+
+MNum ≤ MAna .
+
+(IV.32)
+
+(IV.33)
+
+One general consideration applies to all diﬀerence schemes. It is not diﬃcult to see that the analytic boundedness
+condition Equation IV.29 will also hold in the ﬁnite diﬀerence case when the following condition on the coeﬃcients
+in Equation IV.31 is satisﬁed:
+
+a. Lees’ ﬁrst scheme. Lees showed that his methods are stable for all time-steps if θ ≥ 1/2, for a static grid. In
+
+the shifting case, the coeﬃcients of the quadratic equation for Lees’ ﬁrst method are:
+
+|A| = |C|.
+
+(IV.34)
+
+A =n1 − iρβx sin (kx∆x) − ρ2θ hgxx − (βx)2i [cos (kx∆x) − 1]o
+
+×n1 − iρβy sin (ky∆x) − ρ2θ hgyy − (βy)2i [cos (ky∆x) − 1]o ,
+
+B = −(cid:16)2ρ2 (1 − θ)nhgxx − (βx)2i [cos (kx∆x) − 1] +hgyy − (βy)2i [cos (ky∆x) − 1]o
+
+− 2ρ2 (gxy − βxβy) sin (kx∆x) sin (ky∆x)
+− iρ2∆x [Γx sin (kx∆x) + Γy sin (ky∆x)] + 2(cid:1) ,
+
+(IV.35)
+
+(IV.36)
+
+27
+
+C = −(cid:16)n1 − iρβx sin (kx∆x) − ρ2θ hgxx − (βx)2i [cos (kx∆x) − 1]o
+
+×n1 − iρβy sin (ky∆x) − ρ2θ hgyy − (βy)2i [cos (ky∆x) − 1]o
++ 2ρ2θ nhgxx − (βx)2i [cos (kx∆x) − 1] +hgyy − (βy)2i [cos (ky∆x) − 1]o
+− 2(cid:17) .
+
+It is clear that these coeﬃcients do not satisfy the boundedness condition Equation IV.34.
+
+(IV.37)
+
+We shall test the stability condition given by Equation IV.33 on Lees’ ﬁrst method by numerically calculating the
+
+ampliﬁcation measure from the roots of Equation IV.31. For simplicity, we consider the case where:
+
+gxx = gyy = 1 ,
+gxy = 0 .
+Γi = 0 .
+
+
+
+
+(IV.38)
+
+We do not believe this restricts the generality of our conclusions: from our analysis of the one-dimensional case, the
+restriction on Γi should not cause a problem, and the particular values of the metric tensor are unlikely to have a
+determining eﬀect on stability.
+
+The results of our local stability analysis appear in Figure 13, where we show the following region of the shift vector
+
+space:
+
+βx, βy ∈ (0, 1.2) .
+
+Since (cid:12)(cid:12)(cid:12)
+
+~β(cid:12)(cid:12)(cid:12)
+
+= 1 corresponds to a grid shifting with a speed c , the region considered in the graphs will include grids
+that shift faster than the waves. We have considered 50 × 50 uniformly spaced values of the shift vector inside this
+region. For a given point in the shift vector space, we ﬁnd the maximum value of the quantity:
+
+R :=
+
+MNum
+MAna
+
+,
+
+using 10 × 10 diﬀerent values of the wave vector ~k :
+
+kx, ky ∈ (0, 2π) ,
+
+and, for each wave vector, 100 diﬀerent values of the Courant parameter ρ in the interval (0, 10) .
+
+Having found Rmax we plot its value on a logarithmic scale. In the graphs, values of log10(Rmax) smaller than
+or equal to 0 (Rmax ≤ 1) are represented by clear regions, and values larger than 2 (Rmax ≥ 100) by the darkest
+regions. It is not diﬃcult to see that the clear regions will correspond to values of the shift vector for which the ﬁnite
+diﬀerence scheme is locally stable (at least for ρ ∈ (0, 10) ), and dark regions to values of the shift that give rise to
+instabilities. The darker the region, the more violent the instabilities. Finally, the solid arc in the graphs marks the
+end of the light-cone.
+
+It is important to note that the presence of a dark region does not mean that for the given value of !pvecβ the
+scheme will be unstable for all ρ ∈ (0, 10) , but only that we must expect instabilities for at least some values of the
+ρ in that interval.
+In the upper graph in Figure 13, we show the case where θ = 1/4 . The ﬁnite diﬀerence scheme is unstable for at
+least some value of ρ at all values of the shift vector. This instability becomes much stronger whenever one of the
+components of the shift vector is greater than the speed of the waves. We recall that even in the one-dimensional
+case, the implicit scheme for θ = 1/4 is only conditionally stable, so the behavior here is no surprise. This ﬁgure
+also shows how the introduction of an operator splitting has broken the rotational symmetry of our problem: it is no
+longer the light-cone which is the important feature, but the rectangular region in which the light-cone is inscribed.
+The lower graph corresponds to the case θ = 1/2 , which is unconditionally stable in the one-dimensional case. In
+two dimensions, the scheme is still locally stable for values of the shift vector along the direction of the coordinate
+axis, just as the 1-D scheme was. However, instabilities appear for speeds in other directions. These instabilities are
+weak compared to those for speeds faster than the wave speed, but their presence will nevertheless be signiﬁcant, as
+we will show in the examples of numerical integrations that we give below.
+
+We have looked at larger values of the parameter θ , but the situation doesn’t improve beyond θ = 1/2. Lees’ ﬁrst
+
+scheme is therefore not very useful for grid speeds that are not aligned with the coordinate axis.
+
+28
+
+FIG. 13. Stability for a method of Lees’ ﬁrst type.
+
+29
+
+b. Lees’ second scheme. We next turn to Lees’ second method, for which the coeﬃcients of the quadratic equation
+
+are:
+
+A =n1 − iρβx sin (kx∆x) − ρ2θ hgxx − (βx)2i [cos (kx∆x) − 1]o
+
+×n1 − iρβy sin (ky∆x) − ρ2θ hgyy − (βy)2i [cos (ky∆x) − 1]o ,
+
+B = − (cid:16)2ρ2 (1 − θ)nhgxx − (βx)2i [cos (kx∆x) − 1] + hgyy − (βy)2i [cos (ky∆x) − 1]o
+− 2ρ2 gxy sin (kx∆x) sin (ky∆x) − iρ2∆x [Γx sin (kx∆x) + Γy sin (ky∆x)]
++ 2iρ3θ nβx hgyy − (βy)2i sin (kx∆x) [cos (ky∆x) − 1]
++ βy hgxx − (βx)2i sin (ky∆x) [cos (kx∆x) − 1]o
++ 2ρ4θ2hgxx − (βx)2ihgyy − (βy)2i [cos (kx∆x) − 1] [cos (ky∆x) − 1]
++ 2(cid:17) ,
+
+C = − (cid:16)ρ2θnhgxx − (βx)2i [cos (kx∆x) − 1] + hgyy − (βy)2i [cos (ky∆x) − 1]o
+− iρ [βx sin (kx∆x) + βy sin (ky∆x)] + ρ2βxβy sin (kx∆x) sin (ky∆x)
+− iρ3θnβx hgyy − (βy)2i sin (kx∆x) [cos (ky∆x) − 1]
++ βy hgxx − (βx)2i sin (ky∆x) [cos (kx∆x) − 1]o
+− ρ4θ2hgxx − (βx)2ihgyy − (βy)2i [cos (kx∆x) − 1] [cos (ky∆x) − 1]
+− 1(cid:17) .
+
+(IV.39)
+
+(IV.40)
+
+(IV.41)
+
+(IV.42)
+
+(IV.43)
+
+(IV.44)
+
+Again, these do not satisfy the boundedness condition Equation IV.34. In Figure 14 we again portray the cases for
+θ = 1/4 and θ = 1/2 . The situation is even worse than before: the instabilities in Lees’ second scheme grow faster
+than for the ﬁrst scheme, and even for θ > 1/2 there is only a very small region of stability just around the origin.
+Clearly, this scheme will not be practical for any moving grid.
+
+c. The time-symmetric scheme. We have found that both standard ADI methods become unstable when the
+reference frame is moving. Neither satisﬁes the symmetry condition Equation IV.34. Now we look in the same way at
+the time-symmetric scheme. The fact that this scheme does indeed satisfy Equation IV.34 can readily be seen from
+the form that the coeﬃcients of the quadratic equation take in this case:
+
+A =n1 − iρβx sin (kx∆x) − ρ2θ hgxx − (βx)2i [cos (kx∆x) − 1]o
+
+×n1 − iρβy sin (ky∆x) − ρ2θ hgyy − (βy)2i ([cos (ky∆x) − 1]o ,
+
+B = − (cid:16)2ρ2 (1 − θ)nhgxx − (βx)2i [cos (kx∆x) − 1] +hgyy − (βy)2i [cos (ky∆x) − 1]o
+− 2ρ2 gxy sin (kx∆x) sin (ky∆x) − iρ2∆x [Γx sin (kx∆x) + Γy sin (ky∆x)]
++ 2ρ4θ2hgxx − (βx)2ihgyy − (βy)2i [cos (kx∆x) − 1] [cos (ky∆x) − 1]
++ 2(cid:17) ,
+
+C =n1 + iρβx sin (kx∆x) − ρ2θ hgxx − (βx)2i [cos (kx∆x) − 1]o
+
+×n1 + iρβy sin (ky∆x) − ρ2θ hgyy − (βy)2i [cos (ky∆x) − 1]o .
+
+Figure 15 shows the local stability analysis for this scheme, where again we show what happens for θ = 1/4 and
+
+θ = 1/2 .
+
+30
+
+FIG. 14. Stability for a method of Lees’ second type.
+
+31
+
+FIG. 15. Stability for the time-symmetric scheme.
+
+32
+
+For the ﬁrst case, the situation is no better than before: the scheme is unstable for practically every value of the shift
+vector. However, when we set θ = 1/2, the value that gave absolute stability in the one-dimensional case, the scheme
+becomes locally stable for every value of the shift vector inside the rectangular region that inscribes the light-cone. We
+ﬁnd that this stability is maintained for larger values of θ .
+
+What we see here is eﬀectively a ‘light-cone stability condition’, except for the fact that instead of a cone we now
+have a rectangle, as a consequence of the fact that the ADI splitting breaks the rotational symmetry of the problem.
+In the general case, this local stability condition can be expressed in the following way:
+
+where i may refer to any spatial direction.
+
+gi i − (cid:0)βi(cid:1)2
+
+≥ 0
+
+(no sum) ,
+
+(IV.45)
+
+The time-symmetric scheme has also the important property that in the stable region the numerical solutions will
+
+always be non-dissipative (at least in the non-accelerating case), that is:
+
+max(cid:18) MNum
+
+MAna(cid:19) = min(cid:18) MNum
+
+MAna(cid:19) = 1
+
+This can be easily proved from the fact that this scheme satisﬁes condition IV.34: If the scheme has a dissipative so-
+lution with MNum < MAna , then condition IV.34 together with the analytic boundedness condition (Equation IV.29)
+implies that it must also have an unstable solution with MNum > MAna .
+
+With the time-symmetric scheme we have then found what we are looking for: an absolutely locally stable, second-
+order accurate ADI decomposition for the ﬁnite diﬀerence approximation to the wave equation in a reference frame
+moving at any speed up to the wave speed in any direction. This scheme can be easily generalized to any number of
+spatial dimensions, as can be seen from its deﬁnition in the last section.
+
+The restriction to frames moving slower than the wave speed is expected, of course. To remove it, we now deﬁne
+
+causal reconnection for the 2-dimensional case, using the time-symmetric ADI scheme as our starting point.
+
+C. Causal reconnection in 2 dimensions.
+
+In the last section we found that the time-symmetric ADI scheme had stability properties superior to both the
+schemes of Less’ ﬁrst and Lees’ second types. However, even for the time-symmetric scheme, instabilities appear as
+soon as one of the components of the grid speed becomes larger than the speed of the waves. In the one dimensional
+case, we saw that this instability could be avoided if we used a computational molecule based on the causal structure
+of the wave equation, and not in the motion of the individual grid points. We now want to generalize this approach
+to the two dimensional case.
+
+We will again look for a computational molecule that guarantees that the light-cone is properly represented in the
+immediate vicinity of the central point. For the moment we will assume that we have already found the points that
+, t′} adapted to the causal molecule as a
+
+form such a molecule. We then introduce the local coordinate system { xi ′
+
+direct generalization of the one dimensional case:
+
+where {xi
+
+t0 , t0} are the coordinates of the central point of the molecule, and where
+
+xi ′
+
+t′
+
+:= (cid:0)xi − xi
+
+t0(cid:1) − P i (t) ,
+
+:= t ,
+
+
+
+
+P i (t) = Ai (t − t0)2
+
+2
+
++ Bi (t − t0) + xi
+0 ,
+! ,
+t0 + xi
+
+t0−∆t
+
+t0+∆t − 2xi
+(∆t)2
+
+Ai :=  xi
+Bi :=  xi
+
+t0+∆t − xi
+2 ∆t
+
+t0−∆t
+
+! .
+
+(IV.46)
+
+(IV.47)
+
+(IV.48)
+
+(IV.49)
+
+In the new coordinate system, the wave equation has the same form as before, except for the substitutions:
+
+33
+
+βi −→ βi +
+
+Ai (t − t0) + Bi
+
+c
+
+,
+
+Γi −→ Γi −
+
+Ai
+c2 .
+
+(IV.50)
+
+Since in the ﬁnite diﬀerence approximation the coeﬃcients should be evaluated at the center of the molecule, the
+above expressions will reduce to:
+
+βi −→ βi +
+
+Bi
+c
+
+,
+
+Γi −→ Γi −
+
+Ai
+c2 .
+
+(IV.51)
+
+We know that the original ﬁnite diﬀerence approximation was locally stable as long as Equation IV.45 was satisﬁed.
+
+This implies that the approach based on the reconnected molecule will be stable if
+
+gi i −(cid:18)βi +
+
+Bi
+
+c (cid:19)2
+
+≥ 0
+
+∀i .
+
+(IV.52)
+
+As in the one-dimensional case, we will say that the given three points form a proper causal molecule if the last
+
+condition is satisﬁed.
+
+We will now deﬁne a generalization to two dimensions of the concept of eﬀective numerical light-cone. We do this
+
+by deﬁning ﬁrst the axis of this numerical light-cone as the line:
+
+xi
+a (t) := xi
+
+t0 − βic (t − t0) +
+
+1
+2
+
+Γic2 (t − t0)2 .
+
+(IV.53)
+
+The numerical light-cone will then be deﬁned by taking at each time the region covered by a rectangle that is centered
+at the axis and has sides:
+
+With this deﬁnition, the numerical “light-cone” is really a prism and not a cone. It is not diﬃcult to prove now
+
+2c ∆t (cid:0)gi i(cid:1)1/2
+
+.
+
+(IV.54)
+
+that if the points xi
+
+t0−∆t and xi
+
+t0+∆t are inside the numerical light-cone of xi
+
+t0 , then we will have:
+
+Bi
+
+(cid:18)βi +
+(cid:18)Γi −
+
+c (cid:19) ∈"−(cid:0)gi i(cid:1)1/2
+2(cid:0)gi i(cid:1)1/2
+c2(cid:19) ∈"−
+
+(c∆t)
+
+, (cid:0)gi i(cid:1)1/2 # ,
+2(cid:0)gi i(cid:1)1/2
+(c∆t) # .
+
+Ai
+
+,
+
+(IV.55)
+
+(IV.56)
+
+This means that the three points do form a proper causal molecule, and also that the acceleration in the new local
+coordinates will be bounded.
+
+As in the one-dimensional case, we can guarantee that proper causal molecules can be formed everywhere if we ask
+
+for two conditions:
+
+1. Every parent has at least two children. There must always be at least one grid point in the upper and lower
+time levels inside the numerical light-cones of all points in the middle time level. It is easy to see that this will
+require:
+
+2 ρ min(cid:0)gi i(cid:1)1/2
+
+≥ 1
+
+∀i .
+
+(IV.57)
+
+2. Every child has a parent. All the grid points in the upper and lower time levels must be inside the numerical
+light-cone of at least one point in the middle time level. We guarantee this by asking that the light-cones of the
+points in the middle time level should cover completely the upper and lower time levels, in other words that the
+union of the intersections of these light-cones with both the upper and lower levels should be the entire grid.
+
+Let us consider a square of nearest neighbours in the middle time level. We want their numerical light-cones to
+cover the whole quadrilateral area deﬁned by the points where the axis of those light-cones intersect the adjacent
+time levels. A suﬃcient condition for this to happen is to ask for the sides of this quadrilateral to be smaller
+than the spread of the smallest light-cone divided by √2 (this factor arises from the fact that the diagonals of
+a square are √2 times larger than its sides).
+Following now the same procedure as before, we can show that this condition takes the form:
+
+34
+
+2
+√2
+
+ρ min(cid:0)gi i(cid:1)1/2
+
+≥(1 + 2 max (d11, d22) + (cid:20)max (d11, d12)(cid:21)2
++ (cid:20)max (d21, d22)(cid:21)2)1/2
+∀i .
+
+where the quantities djk are deﬁned as:
+
+(IV.58)
+
+(IV.59)
+
+djk = ρ   ∆x (cid:12)(cid:12)(cid:12)(cid:12)
+
+∂βj
+
+∂xk(cid:12)(cid:12)(cid:12)(cid:12)
+
+! + ρ2 (∆x)2
+
+2
+
+(cid:18) ∂Γj
+∂xk(cid:19)
+
++
+
+(∆x)2
+
+2
+
+(cid:12)(cid:12)(cid:12)(cid:12)
+
+∂2βj
+
+∂x1 ∂x2(cid:12)(cid:12)(cid:12)(cid:12)
+
+and the maximum should be taken over all values of xi . As in the one-dimensional case, the last condition is
+valid only to second order in ∆x .
+
+Conditions IV.57 and IV.58 are the causal reconnection conditions in the two dimensional case. They will guarantee
+
+that proper causal molecules can always be formed.
+
+To test the ﬁnite diﬀerence methods that we have developed, we will consider two diﬀerent situations: a grid moving
+
+with a uniform speed, and a grid rotating with constant angular velocity.
+
+D. Numerical examples.
+
+We will ﬁrst study the case of the grid moving with uniform speed, in order to show the advantages of the time-
+
+symmetric scheme. If the grid is moving with velocity ~v = (vx, vy) , it is not diﬃcult to see that:
+
+1. Uniformly moving grid.
+
+gi j = δi j
+βi = vi/c,
+Γx = Γy = 0 .
+
+and
+
+(IV.60)
+(IV.61)
+
+(IV.62)
+
+Using these values for the coeﬃcients, we have studied the numerical solution to the wave equation for a number of
+examples, comparing the three diﬀerent ADI methods developed earlier. The ﬁrst set of graphs (Figure 16) show the
+result of one such calculation for a scheme of Lees’ ﬁrst type. In the graphs we show the grid region [(0, 10) × (0, 10)] ,
+and we calculate the evolution of a Gaussian wave packet originally at rest at the point (7, 7) . For simplicity, we have
+imposed reﬂecting boundaries. We have taken a time-step such that ρ = 1, which means that we are well beyond the
+Courant limit.4 The evolution is followed using a grid with a speed given by:
+
+~v = (
+
+1
+2
+
+,
+
+1
+2
+
+),
+
+|~v| = 0.707 < 1,
+
+where we have taken c = 1 .
+
+We see how an instability is beginning to grow even though the grid is moving slower than the wave speed. This
+is precisely in accordance with the results of our local stability analysis. This instability grows slowly, as expected.
+Nevertheless, it is clear that its presence is unacceptable in a calculation of any duration. If we use a method of
+Lee’s second type, the instability takes longer to develop, but once it appears it grows very fast, much faster that
+with Lees’ ﬁrst method. The fact that the instabilities in general take longer to appear with Lees’ second method
+can be traced to the particular wave modes that are involved. As we can see in the graphs, the instabilities in Lees’
+ﬁrst method are associated with relatively long wavelengths (several grid points), and since these modes are already
+present in the initial data, they start growing right away. In Lees’ second method, however, the instabilities turn out
+
+4 In a n dimensional problem, the Courant limit for the stability of an explicit scheme is ρ = 1/√n .
+
+35
+
+FIG. 16. Uniform shift vector: Lees’ ﬁrst scheme.
+
+36
+
+to be associated with very short wavelengths (one or two grid points), which do not contribute signiﬁcantly to the
+initial data. These means that, even though the instabilities are more violent with this method, it will take a long
+time for the unstable modes to grow to the scale of the real solution.
+
+In the next set of graphs (Figure 17) we have applied the time-symmetric scheme to the same problem. The
+instability has completely disappeared. This is again in agreement with our previous conclusions, and shows the
+superiority of this method.
+
+We have performed similar calculations for many diﬀerent values of the grid speed and we have found the essentially
+similar results. The time-symmetric scheme remains stable as long as the grid moves slower than the waves, while
+the other schemes present instabilities for quite small grid velocities.
+
+2. Rotating grid.
+
+In order to show the advantage of causal reconnection of the computational molecules when the grid moves very
+fast, we will consider now an example with a grid rotating with the constant angular velocity ω . It is not diﬃcult
+to show that:
+
+ω2
+c2 y .
+To test for local stability when using causal reconnection, we take
+
+x ,
+
+βy =
+
+ω
+c
+Γy = −
+
+gi j = δi j
+
+y ,
+
+ω
+βx = −
+c
+ω2
+Γx = −
+c2 x ,
+
+(IV.63)
+
+(IV.64)
+
+(IV.65)
+
+ω = 0.25
+
+in units in which c = 1 and the grid extends over the range [(−5, 5) × (−5, 5)] . This means that the centers of the
+edges of the grid will be moving faster than the wave speed, with a linear velocity of 1.25, while the corners will be
+going even faster.
+
+The next graphs show the results of a time-symmetric calculation, ﬁrst using a “direct” calculation (ﬁxed compu-
+tational molecule) and second using causal reconnection. Again we use a time-step such that ρ = 1. In Figure 18, we
+show the evolution of a Gaussian wave packet originally at rest at the center of the grid, using the direct approach.
+We see how after 32 time-steps an instability has appeared close to the boundaries. Only ﬁve time-steps later, this
+instability has grown so large that the original wave is no longer visible (the scale is automatically adjusted to display
+the largest value of the function).
+
+Figure 19 shows the same calculation using causal reconnection. The instability is not present. In fact, we have
+done the same calculation with much larger values of the angular velocity (up to ω = 3.0 , where the edge is travelling
+at 15 times the wave speed), and the scheme remains locally stable.
+
+These examples demonstrate dramatically that time-symmetric ADI can be married with causal reconnection, and
+that together the two techniques provide a robust diﬀerence approximation to the wave equation on a moving grid.
+These methods are stable, oﬀer all the computational advantages of ADI schemes, and remain second order accurate
+in ∆x and ∆t .
+
+A comment on how to enforce causal reconnection at the boundaries seems in order here. In all our examples we
+have taken the practical approach of setting the value of the wave function to zero whenever a complete causal molecule
+cannot be formed. This can happen not only at the boundaries, but also at inner points close to the boundaries for
+large enough grid speeds. The philosophy behind this approach is simple: If the causal molecule is incomplete, then
+we would need information from outside the grid to evolve the wave function at that place. If we impose the condition
+that no information can come from the outside, then we must take the value of the wave function as zero at that
+point. This requirement can be relaxed somewhat be using an outgoing wave boundary condition whenever we can
+still ﬁnd a causally related point in the previous time level, but not before that. At places where one can’t even ﬁnd
+a causally related point in the previous time level, the only legitimate thing one can do is to set the value of the wave
+function to zero.
+
+37
+
+FIG. 17. Uniform shift vector: time-symmetric scheme.
+
+38
+
+FIG. 18. Rotating grid: non-causal approach.
+
+39
+
+FIG. 19. Rotating grid: causal reconnection.
+
+40
+
+V. CONCLUSIONS.
+
+The wave equation we have studied here is a prototype for more complex equations of mathematical physics, such as
+the Einstein ﬁeld equations. In fact, many hyperbolic systems in mathematical physics can be formulated in terms of
+the wave operator. One would expect the instabilities we have found here to be generic: any numerical approximation
+to a hyperbolic system on a shifting grid should exhibit them.
+
+Only experience will show us just how well our cures for these generic instabilities transfer to more interesting
+equations. However, the instabilities we have described here are cured by the application of two clear physical
+principles, causality and time-reﬂection invariance. It seems clear that it would be asking for trouble not to incorporate
+these principles into the design of algorithms for the numerical integration of any fundamental physical equations.
+
+We have, of course, studied in detail only one second-order diﬀerential equation in one and two dimensions. The
+restriction to two dimensions is not important. The physical principles involved do not depend on the number of
+dimensions, and the savings obtained by using an ADI scheme instead of a fully-implicit formulation increase rapidly
+with the number of dimensions. In many physical systems, it is advantageous to formulate the equations of the theory
+as ﬁrst-order diﬀerential equations. This is true in hydrodynamics and in many studies of general relativity. The
+general principles of causality and time-reﬂection invariance extend in a simple way to such systems. Time-symmetric
+ADI should prove relatively straightforward to apply to more complicated systems of equations, provided the original
+diﬀerential equations embody time symmetry.
+
+Causality may be less straightforward in nonlinear equations, where the structure of the characteristic cone will
+depend on the solution, and so the exact causal relationships between time-levels cannot be decided independently of
+solving the equations. However, causal reconnection is implemented via an inequality: one requires that grid points
+should be within the characteristic cones of their relatives at the previous time-step. In most cases, one would hope
+that the inequality can be assured simply by extrapolation from the behavior of the characteristic cones on the known
+time-steps.
+
+An important area for the application of the techniques we have developed here would be numerical ﬂuid dynamics,
+where the study of wave phenomena in supersonic ﬂows is a natural place to expect causality problems, and where
+the interest in three-dimensional problems makes ADI essential in many cases.
+
+In some restricted situations, it may be straightforward to apply these techniques; for example, a neutron star moving
+supersonically through a grid in general relativity will, if treated in the standard way, use acausal computational
+molecules. Using causal reconnection, adapted to the characteristics of the ﬂuid problem, should prevent instabilities
+of the type we have found here.
+
+But the application of our techniques to more general problems in ﬂuid dynamics will not be automatic. Causal
+reconnection will have to be generalized to deal with hydrodynamic shocks. At a shock, the regular causal structure of
+the ﬂuid breaks down. This does not mean that causal reconnection cannot be implemented there. On the contrary,
+the fact that a causal algorithm is constantly mapping the structure of the characteristics means that it can be
+programmed automatically to locate and to identify shocks.
+
+The idea of correctly representing the causal structure of the original diﬀerential equation is not new, existing
+methods for handling shocks and related transport problems, such as upwind diﬀerencing [9] and Godunov methods
+[10], are already based on the local structure of the characteristics of the ﬂuid. These ideas have also been introduced
+in the numerical study of steady supersonic ﬂows, where the direction of ﬂow behaves like a time coordinate and the
+equations become hyperbolic. Integration methods have been developed that use retarded diﬀerences in the upstream
+direction to maintain stability [11], [12]. All these methods diﬀer from causal reconnection in the fact that they keep
+using only the nearest neighbours to build the computational molecules. We have recently become aware, however,
+of a paper by E. Seidel and Wai-Mo Suen that introduces an idea they call “causal diﬀerencing”, that is very similar
+to our causal reconnection [13].
+
+Fluid dynamics also presents special challenges to time-symmetric ADI. The usual equations of inviscid gas dynamics
+are time-symmetric, but the presence of viscosity or shocks introduces a fundamental irreversibility into the problem.
+We hope to treat the ﬂuid dynamic problem in a future paper.
+
+We are conﬁdent, however, that the present techniques will generalize easily to problems in numerical general
+relativity, such as that of the motion of black holes through ﬁxed grids. Causal reconnection should allow the equations
+to remain stable and causal. Moreover, the computational advantages oﬀered by ADI schemes, of permitting stable
+large time-steps (provided the physical situation allows such steps to remain accurate) while avoiding time-consuming
+sparse-matrix solutions, can be obtained without sacriﬁcing accuracy or stability.
+It is hard now to imagine any
+situation in numerical integrations of the vacuum ﬁeld equations of general relativity where one would use implicit
+methods without employing time-symmetric ADI.
+
+41
+
+.APPENDIX A. DERIVATION OF WAVE EQUATION ON A SHIFTING GRID.
+
+In this appendix we will sketch the derivation of Equation II.3 by making use of elegant tensorial techniques. There
+are many alternative approaches, of course, and a reader unfamiliar with tensors can obtain the same result in a
+straightforward, but rather long, way simply by making the following general change of variables in the original wave
+equation from the physical (inertial) coordinates {ξµ} to the computational coordinates {xα}:
+
+with the associated change of derivatives
+
+xi = xi(ξµ) ,
+
+x0 = ξ0 ,
+
+∂
+∂ξi =
+
+∂xk
+∂ξi
+
+∂
+∂xk ,
+
+∂
+∂ξ0 =
+
+∂xk
+∂ξ0
+
+∂
+∂xk +
+
+∂
+∂x0 .
+
+(A.1)
+
+(A.2)
+
+The functions that we have identiﬁed as the shift vector βi , the spatial metric g i j and the Γi coeﬃcients in
+Equations (II.4), (II.5) and (II.8) come out as part of the algebra. A reader who wants an introduction to the use of
+tensors in mathematical physics is invited to consult reference [14].
+
+We will start from the expression of the wave equation in a general coordinate system:
+
+✷2 φ = (γµν φ; µ); ν = 0 ,
+
+(A.3)
+
+where the semicolon stands for covariant derivative. Using the explicit expression for the covariant derivatives, the
+last equation takes the form:
+
+γµν
+
+∂2φ
+
+∂xµ ∂xν − Γλ ∂φ
+
+∂xλ = 0 ,
+
+where the coeﬃcients Γλ are deﬁned in terms of the Christoﬀel symbols as:
+
+Γλ := γµν Γλ
+
+µν .
+
+Our ﬁrst task is, then, to ﬁnd the inverse metric γµν. The metric in the new coordinates is given by
+
+(A.4)
+
+(A.5)
+
+(A.6)
+
+(A.7)
+
+(A.8)
+
+(A.9)
+
+with ηαβ the Minkowski metric tensor:
+
+γµν =
+
+∂ξα
+∂xµ
+
+∂ξβ
+∂xν ηαβ ,
+
+η00 = −1 ,
+η i i = 1
+ηµν = 0
+
+(no sum) ,
+µ 6= ν .
+
+We now note that for a line of constant {ξi} we have
+
+0 =
+
+which implies
+
+
+
+
++
+
+∂ξi
+∂t
+
+,
+
+∂ξi
+∂t
+
+dxj
+
+.
+
+=
+
+dξi
+
+dt (cid:12)(cid:12)(cid:12)(cid:12){ξi}
+
+dxj
+
+∂ξi
+∂xj
+
+dt (cid:12)(cid:12)(cid:12)(cid:12){ξi}
+dt (cid:12)(cid:12)(cid:12)(cid:12){ξi}
+∂x0 = βj ∂ξi
+∂xj .
+
+∂ξi
+∂xj
+
+= −
+
+∂ξi
+
+Using now the deﬁnition of the shift vector (Equation II.4) and writing x0 = ct we ﬁnd:
+
+This is an important relation, and we will use it to rewrite the metric coeﬃcients given by Equation A.6.
+
+For the mixed components in space and time of γµν we ﬁnd:
+
+42
+
+γ 0 i = γ i 0 =
+
+n
+
+Xl=1
+
+= βj
+
+∂ξl
+∂xi
+
+∂ξl
+∂x0
+
+∂ξl
+∂xi
+
+∂ξl
+∂xj ,
+
+n
+
+Xl=1
+
+and ﬁnally:
+
+In a similar way we can ﬁnd the coeﬃcient γ00 :
+
+γ0 i = γ i 0 = γ i j βj = g i j βj .
+
+(A.10)
+
+∂x0(cid:19)2
+γ00 = −(cid:18) ∂ξ0
+Xl=1
+= −1 +
+
+n
+
+n
+
++
+
+∂x0(cid:19)2
+Xl=1 (cid:18) ∂ξl
+βj ∂ξl
+∂xj βi ∂ξl
+∂xi ,
+
+and from this we obtain:
+
+We will adopt the convention that the indices of the shift vector can be raised and lowered by using only the spatial
+
+γ00 = −1 + g i j βiβj .
+
+(A.11)
+
+metric:
+
+where gi j are the coeﬃcients of the inverse of the spatial metric matrix g i j .
+
+The coeﬃcients of γµν can now be written as:
+
+β i = g i j βj ,
+
+βi = gi j β j ,
+
+(A.12)
+
+(A.13)
+
+Using the last expression it is not diﬃcult to see that the coeﬃcients of the inverse metric γµν will be given by:
+
+γµν = 
+
+γµν = 
+
+
+(−1 + βiβi) βk
+
+βj
+
+gj k
+
+−1
+
+βk
+
+βj (gj k − βjβk)
+
+.
+
+
+
+
+
+
+.
+
+(A.14)
+
+Having found γµν , we will now look for an expression for the coeﬃcients Γi . Since the original coordinates {ξα}
+deﬁne an inertial reference frame, the Christoﬀel symbols can be expressed in terms of their transformation to the
+general coordinates:
+
+Γλ
+
+µν =
+
+∂xλ
+∂ξα
+
+∂2ξα
+∂xµ ∂xν .
+
+From the last expression it is easy to see that:
+
+which in turn means:
+
+Γ0
+
+µν = 0 ,
+
+Γ0 = 0 .
+
+On the other hand, from the general expression for the Christoﬀel symbols:
+
+Γλ
+
+µν :=
+
+1
+2
+
+γλα(cid:20) ∂γµα
+∂xν +
+
+∂γνα
+∂xµ −
+
+∂γµν
+
+∂xα (cid:21) ,
+
+43
+
+(A.15)
+
+(A.16)
+
+(A.17)
+
+(A.18)
+
+it is not diﬃcult to show that:
+
+Γi := γµν Γi
+
+µν = −
+
+1
+
+√g (cid:26) ∂
+
+∂t(cid:0)√gβi(cid:1) +
+
+∂
+
+∂xj (cid:2)√g(cid:0)gij − βiβj(cid:1)(cid:3)(cid:27) .
+
+Using the previous results, we can ﬁnally rewrite Equation A.4 in the following way:
+
+(gi k − βiβk)
+
+∂2φ
+∂xi ∂xk +
+
+2βi
+c
+
+∂2φ
+
+∂xi ∂t − Γi ∂φ
+
+∂xi −
+
+1
+c2
+
+∂2φ
+∂t2 = 0 .
+
+This is the ﬁnal form of the wave equation in the coordinate system adapted to the motion of the grid.
+
+.APPENDIX B. IMPLEMENTATION OF CAUSAL RECONNECTION.
+
+In this appendix, we discuss one algorithm that determines the positions of the points that form the causal compu-
+tational molecules. We will consider the case of an arbitrary number of spatial dimensions n . The particular cases
+of one and two dimensions can then be found in a straightforward way.
+
+There are many diﬀerent ways of ﬁnding the closest causally connected grid points. For example, if it is possible
+
+to ﬁnd the transformation of coordinates that takes us back to the original inertial reference frame
+
+(A.19)
+
+(A.20)
+
+(B.1)
+
+ξi = ξi(cid:0)xj, t(cid:1) ,
+
+then we could use the fact that in that reference frame the causal structure is particularly simple: we would simply
+
+select those points in the diﬀerent time levels that have the closest values of (cid:8)ξi(cid:9) . This method, however, will only
+
+be useful in a few special cases. Indeed, in the general case it may prove almost impossible to ﬁnd the functional
+relation (B.1).
+
+With this in mind, we have developed a method that can be applied in the general case. Let us then assume that
+
+we are given a point in the last time level {t0 + ∆t} with position xi
+t0−∆t
+in the two previous time levels in such a way as to guarantee that a proper causal molecule will be formed. We have
+already seen that this will happen if both xi
+
+t0+∆t . Our aim is to ﬁnd points xi
+
+t0+∆t are inside the numerical light-cone of xi
+
+t0−∆t and xi
+
+t0 and xi
+
+t0 .
+
+Our algorithm to ﬁnd the proper causal molecules linking the grids at time-steps t0 + ∆t, t0, and t0 − ∆t assumes
+that the causal reconnection condition holds. (If it doesn’t, then remedial action, changing ∆t or ∆xi, is required.)
+Our procedure is the following.
+
+1. Choose some point xi
+
+t0+∆t . The center of its causal molecule will be that grid point yi
+
+t0 for which the following
+
+function reaches a minimum:
+
+f1(cid:0)yi(cid:1) :=
+
+N
+
+Xi=1(cid:26)(cid:20)yi − βi(cid:0)yj, t0(cid:1) ∆t +
+
+1
+2
+
+Γi(cid:0)yj, t0(cid:1) (∆t)2(cid:21) − xi
+
+t0+∆t(cid:27)2
+
+.
+
+(B.2)
+
+This minimum can easily be found by standard multi-dimensional search techniques. Once the minimum is found,
+we have our best approximation to the exact inverse coordinate transformation: the point xi is approximately
+at the same spatial location as yi in the original inertial frame.
+
+2. Once we have found the appropriate yi
+
+t0 , we look in the third time level {t0 − ∆t} for the completion of the
+
+causal molecule, the point zi
+
+t0−∆t that minimizes the function:
+
+f2(cid:0)zi(cid:1) :=
+
+N
+
+Xi=1(cid:26)(cid:20)yi
+
+t0 + βi(cid:16)yj
+
+t0 , t(cid:17) ∆t +
+
+1
+2
+
+Γi(cid:16)yj
+
+t0 , t(cid:17) (∆t)2(cid:21) − zi(cid:27)2
+
+.
+
+(B.3)
+
+This is much easier than the previous step because we already have the point yi
+again the functions β and Γ . In fact, minimizing f2 is equivalent to ﬁnding the point zi
+level that is closest to the axis of the light cone of yi
+through the grid again to ﬁnd this point.
+
+t0 , so we don’t have to calculate
+in the third time
+t0 in the original inertial frame. We do not have to go
+
+44
+
+3. So far we have constructed only one molecule. One needs to repeat the above steps for all points at time-step
+t0 + ∆t, but of course the best guess for a causal molecule for any grid point is simply to translate the molecule
+found for its neighbor. This will occasionally fail, but only by one grid point. So the minimization steps will
+require a computing eﬀort that is only proportional to the number of grid points.
+
+It is not diﬃcult to prove that, whenever the causal reconnection conditions hold, this algorithm does indeed produce
+a proper causal molecule. For reasons indicated above, the computational eﬀort is proportional to the number of grid
+points. In complex problems, such as general relativity, this is likely to be a very small overhead.
+
+.ACKNOWLEDGEMENTS.
+
+We want to thank G.D. Allen for many useful discussions and comments. One of the authors (M. Alcubierre) also
+
+thanks the ‘Universidad Nacional Aut´onoma de M´exico’ for ﬁnancial support.
+
+[1] C.W. Misner, K.S. Thorne and J.A. Wheeler, Gravitation, W.H. Freeman and Co., U.S.A., 1973.
+[2] J.W. York, ‘Kinematics and Dynamics of General Relativity’
+
+in: Sources of Gravitational Radiation, ed. L.L. Smarr, pp.
+
+83-126, Cambridge University Press, U.S.A., 1979.
+
+[3] W.H.
+
+Press,
+
+B.P.
+
+Flannery,
+
+S.A.
+
+Teukolsky
+
+and
+
+W.T.
+
+Vetterling,
+
+Numerical
+
+recipes: The Art of Scientiﬁc Computing, Cambridge University Press, U.S.A., 1989.
+
+[4] R.D.
+
+Richtmyer
+
+and
+
+K.W.
+
+Morton,
+
+Diﬀerence
+
+Methods
+
+for
+
+Initial-Value
+
+Problems, 2nd. ed., Interscience, U.S.A, 1967.
+
+[5] G. Strang, SIAM J. Num. Anal., 5, p. 506 (1968).
+[6] G.I. Marchuck, Methods of Numerical Mathematics, 2nd. Ed., Springer-Verlag, U.S.A., 1982.
+[7] M. Lees, J. Soc. ind. appl. Math., 10, p. 610 (1962).
+[8] G. Fairweather and A.R. Mitchell, J. Inst. Maths. Applics., 1, p. 309 (1965).
+[9] G.E. Farsythe and W.R. Wasow, Finite-Diﬀerence Methods for Partial Diﬀerential Equations, John Wiley and Sons,
+
+U.S.A., 1967.
+
+[10] M. Holt, Numerical Methods in Fluid Dynamics, Springer-Verlag, U.S.A., 1977.
+[11] E.M. Murman and J.D. Cole, AIAA Journal, 9, p. 114, (1971).
+[12] A. Jameson, Comm. Pure Appl. Math., 27, p. 283 (1974).
+[13] E. Seidel and Wai-Mo Suen, Phys. Rev. Lett., 69 No. 13, p. 1845 (1992).
+[14] B.F. Schutz, Geometrical Methods of Mathematical Physics, Cambridge University Press, Cambridge, UK, 1980.
+
+45
+
+

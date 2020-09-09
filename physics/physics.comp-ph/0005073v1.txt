@@ -1,0 +1,1367 @@
+Eﬃcient Dynamic Importance Sampling of Rare Events in One
+
+Dimension
+
+Daniel M. Zuckerman∗ and Thomas B. Woolf∗†
+
+∗Department of Physiology and †Department of Biophysics,
+
+Johns Hopkins University School of Medicine, Baltimore, MD 21205
+
+dmz@groucho.med.jhmi.edu, woolf@groucho.med.jhmi.edu
+
+(February 21, 2014)
+
+Abstract
+
+Exploiting stochastic path integral theory, we obtain by simulation sub-
+stantial gains in eﬃciency for the computation of reaction rates in one-
+dimensional, bistable, overdamped stochastic systems. Using a well-deﬁned
+measure of eﬃciency, we compare implementations of “Dynamic Importance
+Sampling” (DIMS) methods to unbiased simulation. The best DIMS algo-
+rithms are shown to increase eﬃciency by factors of approximately 20 for a
+5kBT barrier height and 300 for 9kBT , compared to unbiased simulation. The
+gains result from close emulation of natural (unbiased), instanton-like cross-
+ing events with artiﬁcially decreased “waiting times” between events that are
+corrected for in rate calculations. The artiﬁcial crossing events are generated
+using the closed-form solution to the most probable crossing event described
+by the Onsager-Machlup action. While the best biasing methods require the
+second derivative of the potential (resulting from the Jacobian term in the
+action, which is discussed at length), algorithms employing solely the ﬁrst
+derivative do nearly as well. We discuss the importance of one-dimensional
+models to larger systems, and suggest extensions to higher-dimensional sys-
+tems.
+
+0
+0
+0
+2
+
+ 
+
+y
+a
+M
+6
+2
+
+ 
+
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+
+1
+v
+3
+7
+0
+5
+0
+0
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+1
+
+FIGURES
+
+T
+B
+k
+
+ 
+/
+ 
+)
+x
+(
+U
+
+10
+
+5
+
+0
+
+−1.0
+
+FIG. 1. The symmetric bistable potential studied in the text, Eq. (5.1), shown for a barrier
+
+0.0
+x
+
+1.0
+
+height of Eb = 7kBT and length parameter l = 1.
+
+2
+
+I. INTRODUCTION
+
+The rapid computation of the transition rate by numerical simulation for an overdamped
+stochastic particle conﬁned to a one-dimensional double-well potential (Fig. 1) is a decep-
+tively simple problem, and of crucial importance to making progress in multi-dimensional
+systems. While straightforward unbiased simulation ultimately yields the rate to any de-
+sired precision (e.g., [1]), it requires the simulator to endure many times the waiting period
+between the rare transition events (Fig. 2a). Such unbiased simulation, moreover, is ut-
+terly impracticable for larger systems — particularly biomolecules possessing thousands of
+atoms, for which simulating a waiting time of 1 millisecond could require tens or hundreds
+of centuries of computer time. The well-known analytic methods for rate computations in
+simple systems [2] are also insuﬃcient for high-dimensional, rough energy landscapes be-
+cause many barriers and metastable states of unknown geometry intercede along multiple
+unknown pathways between the two states of interest (see, e.g., [3,4]).
+
+The inadequacy of both analytic methods and straightforward simulation for large bio-
+chemical systems points directly to the need for importance sampling and related methods
+[5–18]. Importance sampling techniques focus computational eﬀort on transition events, typ-
+ically generating an ensemble of transition trajectories from which to estimate rates and/or
+paths. Yet despite the early successes and formal appeal of these methods, a quantita-
+tively successful computational tool for large protein systems with 104 atoms has not been
+achieved. We believe the apparently trivial bistable one-dimensional system must be com-
+pletely understood in a simulation context before substantial progress can be expected for
+importance sampling in larger systems.
+
+The present paper is explicitly computational, or “simulational”: the sole objective is
+to develop eﬃcient simulation methods for one-dimensional systems which are directly or
+indirectly applicable to large systems. We concern ourselves only with the “dynamic impor-
+tance sampling” (DIMS) methods developed by Woolf [8] and Zuckerman and Woolf [14],
+which generate ensembles of fully independent transition trajectories. We hope and believe
+our results will be of practical use in other multi-dimensional methods, but such applica-
+tions are beyond the scope of this work. Rather, the “bottom-line” questions we attempt to
+answer are: (i) Within the DIMS framework, what are the most eﬃcient methods for rate
+computation? (ii) Using a well-deﬁned measure, how eﬃcient are these methods compared
+to unbiased simulation? We will also discuss the maximum eﬃciency possible using DIMS
+and related methods in one-dimensional (1D) problems, as well as attempting to extrapolate
+to larger systems.
+
+Achieving eﬃciency for a 1D problem using dynamic importance sampling, as we will
+show, requires the appreciation of a variety of theoretical results — particularly relating
+to stochastic path integrals. These approaches have been used, for example, to address
+the question of the most likely crossing event (see Figs. 2b, 3) [19–27]. In the 1960s and
+1970s, uniqueness and other aspects of the Onsager-Machlup formulation were discussed
+by a variety of workers (e.g., [28–31]). Formal properties of stochastic functional integrals
+also play an important role in the present investigation. The review by Mortensen [32] and
+Gardiner’s book [33] give excellent introductions to these integrals — of which Ito’s and
+Strantonovich’s are the most basic types. Related functional integral approaches directly
+address the Smoluchowski (overdamped Fokker-Planck) equation for the evolution of the
+
+3
+
+entire probability distribution [28,34,19,35,36].
+
+Path integral formulations lead naturally to the notion of an average path, which is
+critical to the present discussion — even in one dimension. While the geometric pathway
+for barrier crossing is trivial in a one-dimensional potential like that of Fig. 1, the “speed”
+(average displacement) at every position constitutes another dimension of the average path
+— and a critical one to the present discussion. Such 1D average paths (average speeds and
+distributions) were considered by Dykman, McClintock and coworkers [37] and by Luchinsky
+and McClintock [38], both theoretically and experimentally. Zuckerman and Woolf [14]
+considered average paths in higher dimensions, computationally, while the general problem
+of ﬁnding optimal reaction paths in multi-dimensional systems has a long history (e.g.,
+[39–42,6,25].
+
+The paper is organized as follows. We ﬁrst review the basic formalism for overdamped
+Langevin dynamics and importance sampling in Section II. Section III introduces pertinent
+path-integral results based on the Onsager-Machlup action, and argues for the presence of
+the Jacobian term based both on previous analytical results, as well as on new numerical
+data. Section IV discusses a new method for producing an eﬃcient, biased ensemble of
+trajectories, while Section V gives the actual results from the new biasing technique. Section
+VI addresses the relevance of the results to multidimensional problems. Finally, a summary
+of the results and conclusions are given in Section VII.
+
+4
+
+II. OVERDAMPED LANGEVIN DYNAMICS AND IMPORTANCE SAMPLING
+
+This section brieﬂy reviews the fundamental stochastic dynamics equations and the dy-
+namic importance-sampling formalism for rate computations. We consider solely stochastic
+dynamics governed by the overdamped Langevin equation in the presence of Gaussian white
+noise. In the notation of [14], such “Brownian dynamics” are described by
+
+dx/dt = f /mγ + R(t),
+
+(2.1)
+
+where x is the conﬁgurational coordinate, t is time, f (x) = −∇U(x) is the force, m is the
+particle’s “mass”, γ is the friction constant, and the noise term R is taken to have zero mean
+and variance given according to
+
+h R(t) R(t′) i = (2kBT /mγ) δ(t − t′) ,
+
+(2.2)
+
+where kB is Boltzmann’s constant and T the temperature. The equation (2.1) is presumed
+to be simulated according to the “Ito-like” (Euler) discretization [43,44]
+
+xj+1 = xj + (fj/mγ)∆t + ∆xR,
+
+(2.3)
+
+where the subscripts j indicate quantities evaluated at time j∆t ≡ tj, so that fj = f (xj),
+and ∆xR is chosen from a Gaussian distribution of zero mean and variance
+
+σ2 = 2∆tkBT /mγ .
+
+(2.4)
+
+The discretization (2.3) is considered to be Ito-like because the force — assumed to be
+constant over the interval ∆t — is evaluated at the beginning of the interval; a Stratonovich-
+like approach would instead consider [33]
+
+fj → (fj + fj+1)/2 .
+
+(2.5)
+
+It is useful to consider, in parallel, the equivalent probabilistic description of the dynamics
+(2.3). In particular, the explicit single-step transition probability density described above is
+given by
+
+T∆t(xj+1|xj) = (2πσ2)−1/2 exph− [ (xj+1 − xj) − (fj/mγ)∆t ]2 /2σ2i .
+
+(2.6)
+
+Thus the probability density for a whole trajectory ζ = ( x0, x1, x2, . . . , xn) is given by the
+product of the single-step densities:
+
+˜Q(ζ) =
+
+n−1
+
+Yj=0
+
+T∆t(xj+1|xj).
+
+(2.7)
+
+Importance sampling is eﬀected [8,14] by performing biased simulations which follow a
+prescription diﬀerent from (2.3). Naturally, trajectories generated from a biased simulation
+are distributed not according to ˜Q, but according to some other function, D(ζ). This
+alternative distribution can be used to compute transition rates. One ﬁrst requires the
+conditional probability PB(t|0; x0) to be in the ﬁnal state (“B”) at time t having started at
+x0 at t = 0, which can be written in two equivalent ways for non-vanishing D:
+
+5
+
+PB(tn|0; x0) ≃ Z dζ ˜Q(ζ) hB(xn) = Z D(ζ)dζ
+
+˜Q(ζ)
+D(ζ)
+
+hB(xn),
+
+(2.8)
+
+where dζ = Qn
+
+j=1 dxj, and hB(x) is an indicator function which is unity for x in state B and
+zero otherwise. The approximation here is simply the neglect of the discretization error. In
+a biased simulation, the integral is estimated by
+
+PB(tn|0; x0) ≃
+
+1
+
+M Xζ∈SD
+
+˜Q(ζ)
+D(ζ)
+
+hB(xn)
+
+(2.9)
+
+where SD is a sampling ensemble of M trajectories chosen according to D. Note that the
+function D must be known for the simulation to be performed, just as (2.6) and (2.7) are
+the distributions from which unbiased steps and trajectories are sampled. Ultimately, rates
+are estimated by computing the slope of the linear regime in a probability vs. time plot, as
+in Fig. 4.
+
+(a)
+
+0
+
+200
+
+400
+
+600
+
+800 1000
+
+(b)
+
+1.5
+
+0.5
+
+x
+
+−0.5
+
+−1.5
+
+1.5
+
+0.5
+
+x
+
+−0.5
+
+−1.5
+
+136.3
+
+136.4
+
+136.5
+
+t / 1000τ
+
+0
+
+136.6
+
+FIG. 2. Time scales and crossing events. An unbiased trajectory exhibits two vastly diﬀerent
+time scales: for a substantial barrier height, the waiting time between events greatly exceeds the
+time for a single crossing event. (a) The top plot shows an unbiased trajectory of an overdamped
+particle in the double well of Eq. (5.1), with a barrier height of Eb = 7kBT . (b) The bottom plot
+isolates a single crossing event from the trajectory in (a) and highlights the rapidity (steepness) of
+the crossing, including of the ascent.
+
+6
+
+ 
+
+x
+ 
+t
+a
+p
+e
+t
+S
+e
+g
+a
+r
+e
+v
+A
+
+ 
+
+0.03
+
+0.02
+
+0.01
+
+Unbiased Crossing Events
+OM+Jacobian
+OM − No Jacobian
+OM+Const. − No Jacobian
+
+0.00
+
+−0.8
+
+−0.4
+
+0.0
+x
+
+0.4
+
+0.8
+
+FIG. 3. Average step sizes from many unbiased crossing events. Solid circles and error bars
+are the data from unbiased simulation following Eq. (2.3), for the potential of Eq. (5.1), with
+a barrier height Eb = 7kBT . The solid line is the most probable path Eq. (3.6) based on the
+Onsager-Machlup action with the Jacobian term; the dashed lines depict the Onsager-Machlup
+extremal path, Eq. (3.7) with C = 0; and, the dotted lines show the Onsager-Machlup path with
+a non-vanishing constant — i.e., Eq. (3.7) with C = −2kBT U ′′(0)/(mγ)2. Note that the error
+bars shown represent the standard error of the mean, which is normally a fraction of the true
+conﬁdence interval, as can be gauged by the noise in the data. The turn-up of the data for x > 0.6
+appears to be an artifact of the procedure by which crossing events were extracted from the long
+trajectories. These data were generated using the parameters ∆t = 10−4τ0, γ = τ −1
+0 , m = 10.98,
+and kBT = 249.462, largely following Refs. 8 and 14.
+
+7
+
+III. PATH INTEGRALS AND MOST PROBABLE CROSSING EVENTS
+
+Achieving eﬃciency for a 1D problem using dynamic importance sampling requires a
+variety of theoretical results for stochastic path integrals and their “instantons.” These ap-
+proaches have been used, for example, to address the question of the most probable crossing
+event (see Figs. 2b, 3), which can be derived in a straightforward way from the contin-
+uum Onsager-Machlup action used in the path integral formulation [19–27]. However, there
+have been conﬂicting reports regarding the exact formulation of this action; in particu-
+lar, a “Jacobian” term (with quotes used advisedly) has sometimes been omitted. Using
+previously derived analytic results as well as new numerical evidence, we argue that the
+Onsager-Machlup action requires the Jacobian term — even to describe a standard Ito-like
+simulation.
+
+In this section, we discuss the Onsager-Machlup action and its optimization at somewhat
+greater length than is required for the computational aims of this paper. This is because,
+beyond the theoretical interest in the action and the Jacobian term, some older literature
+deserves a fresh look and detailed discussion. The Jacobian term, ironically, will not prove
+critical to obtaining eﬃciency.
+
+The path-integral story begins with Onsager and Machlup [45] and their well-known
+action for weighting continuum representations of overdamped Brownian trajectories.
+In
+that formulation, a continuous trajectory — presumably intended to represent a smoothed
+stochastic trajectory — is weighted according to
+
+where
+
+probability ∝ exp"−
+4 Z tf
+LOM(t; x, ˙x) = " ˙x −
+
+(kBT /mγ)#
+dt L(t),
+mγ #2
+f (x)
+and where ˙x = dx/dt and f (x) = −dU/dx.
+Machlup applied the Euler-Lagrange equation for functional minimization,
+
+S = 1
+
+ti
+
+In their original paper [45], Onsager and
+
+S
+
+,
+
+and
+
+(3.1)
+
+(3.2)
+
+(3.3)
+
+∂L
+∂x −
+
+d
+dt
+
+∂L
+∂ ˙x
+
+= 0 ,
+
+(3.4)
+
+to the case of a single harmonic well.
+
+Subsequent contributions questioned the very propriety of the action (3.2). First,
+Stratonovich realized in 1962 [28] that if one starts from the product of discrete-step proba-
+bility densities (2.7) and determines the continuum limit in a rigorous fashion, an additional
+term arises in the integral representation of the action (3.2), so that instead of (3.3), the
+eﬀective Lagrangian becomes
+
+LOMJ = LOM +
+
+2kBT
+(mγ)2 U ′′(x) .
+
+(3.5)
+
+This result was conﬁrmed by Bach et al. [30]. In other words, the original description by
+Onsager and Machlup was incomplete for simulations performed according to the Ito-like
+
+8
+
+algorithm (2.3). Note that this new term is proportional to the curvature of the potential
+and dominant at the barrier top.
+
+In the mid 1970s Graham [34,19] re-derived the term as a Jacobian resulting from chang-
+ing variables from the ﬂuctuation coordinate to the conﬁguration coordinate — assuming a
+Stratonovich-like discretization (2.5). Thereafter, apparently, the term has been viewed as a
+Jacobian, although the propriety of that name in a simulation context is questionable since
+only the Ito discretization (2.3) is usable, and that results in a constant Jacobian.
+
+Both Stratonovich and Graham indicated, importantly, that the inclusion of the “Jaco-
+bian term” led to a path-integral representation of the probability distribution consistent
+with the overdamped Fokker-Planck (Smoluchowski) equation.
+
+Graham also derived the most probable crossing event associated with the Jacobian-
+
+augmented action using the Euler-Lagrange equation (3.4), namely [19],
+
+c
+
+h ˙xOMJ
+
+i2
+
+mγ #2
+= "f (x)
+
+2kBT
+(mγ)2 U ′′(x) + C ,
+
+−
+
+(3.6)
+
+where C is a constant of integration. This result is called an “instanton” by ﬁeld theorists
+(e.g., [46]) because it describes a rapid transition, as illustrated in Fig. 2. To appreciate this,
+note that at an inﬂection point (U ′′(x) = 0) the velocity of ascent is the same as for descent!
+Yet this feature was apparently not appreciated until later; see below. Nevertheless, (3.6)
+will prove central to our goal of obtaining eﬃciency in simulations. Below, we also address
+the computational cost associated with computing a second derivative of the potential.
+
+It is worth noting that although the extremal path, formally, results when C < 0 in (3.6)
+[from minimizing (3.2) with (3.5)], one cannot necessarily take the constant to be negative
+or even to vanish. Observe that the left-hand side of (3.6) must be positive. Thus, in
+regions of relatively large positive curvature — such as near a well bottom — the second
+term of the right-hand side could exceed the ﬁrst in magnitude, requiring C > 0. While this
+observation appears to be immaterial to our investigation of the simple bistable well (see
+Fig. 3), one could imagine the positivity of the constant having physical consequences in a
+more complicated potential with metastable intermediate states.
+
+Further comments have proved of greater interest. In a series of papers begun in 1989
+and aimed primarily at systems with colored (non-Gaussian) noise, Bray, McKane and
+coworkers [20–24] provided some insights pertinent to the case of white noise without the
+Jacobian term. While they included the Jacobian term formally, it was omitted from their
+most careful analysis, of the low-temperature limit. Thus, they derived essentially a special
+case of Graham’s result (3.6)
+
+c
+
+h ˙xOM
+
+i2
+
+mγ #2
+= " f (x)
+
++ C,
+
+(3.7)
+
+where C is again a constant of integration which vanishes for the most probable case. It
+also is equivalent to Graham’s result at inﬂection points of the potential. Bray, McKane
+and coworkers were apparently the ﬁrst to note the crucial fact that the ascent described
+by ˙xOM
+(with C = 0) was equally rapid as, and symmetric with the descent (see Fig. 2b).
+Furthermore, they recognized that paradoxically the extremal trajectory (C = 0) never
+occurs [23] because an inﬁnite amount of time is required to reach (or descend from) a
+parabolic barrier top! This may be seen by computing the barrier crossing time,
+
+c
+
+9
+
+tb = Z tf
+
+ti
+
+dt = Z xf
+
+xi
+
+dx
+˙xc
+
+.
+
+(3.8)
+
+This point was also realized by Elber and Shalloway [27], who suggested a temperature
+dependence for the integration constant of (3.7) to overcome the diﬃculty. Their approach
+successfully distinguished optimal paths for diﬀerent regimes of the eﬀective temperature
+parameter. Olender and Elber [25] also discussed the Onsager-Machlup extremal barrier
+crossing, and employed a discrete version in developing an algorithm for steepest-descent
+path ﬁnding between known initial and ﬁnal states. Bier et al. [26] discussed extremal
+crossings in the context of rate calculations for ﬂuctuating barriers.
+
+Yet worries over the constant of integration in (3.7) may be unnecessary if one believes
+the Jacobian term is present, as seems to be the case based on several lines of argument.
+First, as noted by Stratonovich and Graham, inclusion of the Jacobian term is consistent
+with the Smoluchowski equation [28,34,19,35] which, in turn, is well known to correspond
+to the over-damped Langevin equation (e.g., [33]). Of course it is possible that the Ito-
+like discretization (2.3) could generate a probability distribution governed by a diﬀerent
+Fokker-Planck equation. This hypothesis could be readily tested by numerical simulation of
+candidate Fokker-Planck equations, but is beyond the scope of this report.
+
+Direct analytical work accounting for the subtleties of stochastic calculus [32,33] also
+seems to conﬁrm the presence of the Jacobian term [28,30,47,48]; see too [49]. The work of
+Stratonovich [28] and Bach et al. [30] appear to be especially careful accounts. As noted,
+these reports suggest that the “Jacobian term” arises not as a Jacobian per se (which is
+simply a constant in the Ito case), but from carefully taking the continuum limit of the
+product (2.7) of probability distributions for discrete steps generated according to an Ito-
+like simulation. Their claim, then, is that the Jacobian term is necessary to answer the
+question: “What continuous path integral (in the sense of ordinary, non-stochastic, path-
+integral calculus) properly weights continuum limits of discrete trajectories generated by
+Ito-like simulation?”
+
+Finally, the simulations themselves may be studied — and they too point to the presence
+of the Jacobian term as shown in Fig. 3. We performed very long unbiased simulations of a
+particle moving according to (2.3) in a one-dimensional bistable well (Fig. 1) and “snipped
+out” a large number of crossing events like the one shown in Fig. 2b. Binning the observed
+step sizes of the crossing events according to the x position, Fig. 3 shows that the average
+step sizes closely follow the prediction (3.6) which includes the Jacobian term. The two
+theoretical predictions lacking the Jacobian term — namely (3.7) with two values for C —
+appear far less adequate by contrast. We note that the binned distributions appear to be
+highly Gaussian so that the average and most probable values essentially coincide. Thus,
+the simulations themselves appear to argue for the presence of the Jacobian term.
+
+10
+
+y
+t
+i
+l
+i
+
+b
+a
+b
+o
+r
+P
+
+ 
+l
+
+a
+v
+
+i
+r
+r
+A
+
+y
+t
+i
+l
+i
+
+b
+a
+b
+o
+r
+P
+
+ 
+l
+a
+v
+i
+r
+r
+A
+
+0.0003
+
+0.0002
+
+0.0001
+
+0.0000
+
+0.0
+
+0.0003
+
+0.0002
+
+0.0001
+
+0.0000
+
+0.0
+
+105 Unbiased Trajectories
+
+0.1
+
+Time: γ t
+
+0.2
+
+0.3
+
+105 DIMS Trajectories
+
+0.1
+
+Time: γ t
+
+0.2
+
+0.3
+
+FIG. 4. Evolution of end-state probability distribution. The probability to arrive in the right
+well of the potential Eq. (5.1) with Eb = 9kBT , depicted in Fig. 1, is plotted against time, based
+on trajectories initiated at the bottom of the left well (x = −1) at time t = 0. Both unbiased
+(TOP) and DIMS (BOTTOM) results are shown, with the latter using Eqs. (4.1) and (3.6). The
+rate, k, is computed as the slope of the linear regime. The DIMS computation (bottom) shows a
+dramatic improvement in eﬃciency, which is quantiﬁed in Fig. 5.
+
+11
+
+IV. A HIGHLY EFFICIENT BIAS METHOD FOR DIMS CALCULATIONS
+
+The primary goal of the present work is to improve and quantify the level of eﬃciency
+in one-dimensional rate calculations. To that end we now introduce and evaluate a new
+biasing method, which is a variation on those discussed in our earlier work [8,14]. The
+method combines two essential ingredients: biased crossing events which emulate the most
+probable path, together with a threshold at which the biasing is triggered.
+
+A. Motivation
+
+Computing reaction rates by simulation requires the generation of an ensemble of ap-
+propriately weighted trajectories (or a correspondingly long trajectory) exhibiting many
+barrier-crossing events. While many sampling methods are capable of generating a suitable
+ensemble of trajectories in a long period of time, it is no easy task to rapidly generate a truly
+important ensemble — containing highly probable crossing events — even for an apparently
+trivial potential like a symmetric, one-dimensional double well. The reason is not hard to
+see. In an unbiased simulation (2.3), each step is chosen from a Gaussian distribution cen-
+tered at the deterministic step in the direction of the force. For crossing events which climb
+over a barrier, a trajectory necessarily takes steps in a direction opposing the force. As the
+center of the Gaussian distribution is always downhill from the present step, the typical step
+in the ascent of a crossing event is in the “tail” of the Gaussian distribution (more or less
+so depending on the parameters entering into the width, σ). As the full probability for a
+crossing event is then a product of steps in the tail of the distribution, it seems clear that
+only small ﬂuctuations about the most probable crossing event will occur. Large ﬂuctuations
+away from the most probable path will be exponentially damped out, as they require steps
+yet further out in the tail of the distribution.
+
+Our interest in the most probable path for a crossing event, then, is hardly surprising:
+to generate an “important” (albeit biased) ensemble of trajectories, one must hew to the
+most probable path. This we shall do explicitly below, using the results quoted in Sec. III.
+But once one knows the most probable path for a single crossing event, the DIMS method
+still requires the generation of such events at appropriate intervals. That is, there is an ideal
+distribution of waiting times between events in a biased simulation (cf. Fig. 2a for the
+unbiased case). To see the reason why a distribution of wait times (ﬁrst passage times) is
+required, consider Fig. 4, which demonstrates the rate calculation for biased and unbiased
+simulation. One ﬁrst calculates the probability to arrive in the ﬁnal state (the right well in
+Fig. 1), having started in the initial state (the left well), as a function of time. One then
+determines the slope of the linear regime. While an unbiased simulation of suﬃcient length
+will automatically generate data with roughly the same precision for all times shown along
+the horizontal axis in Fig. 4, a biased DIMS simulation must be designed to do so. As
+discussed in [14], one essentially has to evaluate a separate integral for each time point, so
+part of the goal is to spread the information gathered evenly over the necessary times. This
+is the motivation behind the “thresholding” detailed below.
+
+12
+
+B. The Algorithm: Most Probable Crossings above a Threshold
+
+Speciﬁcally, trajectories are generated according to the following algorithm. Each tra-
+jectory is started from the minimum of the left well, x = −1, of the potential (5.1) shown in
+Fig. 1, and run for a ﬁxed total amount of time exceeding the transient time, tb. Pre-deﬁning
+a threshold value, −1 < xh < 0, of the coordinate x, we perform unbiased simulation while
+x < xh according to (2.3). If and when the threshold value is exceeded (x > xh), we select
+steps according to
+
+xi+1 = xi + ˙xc(xi) ∆t + ∆xR,
+
+(4.1)
+
+with ˙xc given by either the Jacobian-augmented result (3.6) or that without (3.7), and with
+∆xR chosen from the same Gaussian distribution as in the unbiased case. In other words,
+instead of using the deterministic step fi∆t/mγ as in (2.3), we use the most probable step
+in a crossing event to emulate unbiased crossing events. The use of a threshold away from
+the well minimum ensures a suﬃciently broad distribution of waiting times between the
+artiﬁcial crossing events, which in turn permits the acquisition of data for the range of times
+necessary to compute the rate as in Fig. 4. We note, however, that it is no more diﬃcult to
+run a single long trajectory and compute correlation functions to determine rates (e.g., [1]).
+
+C. Curvature-Adjusted Sampling Width
+
+Yet another reﬁnement for the one-dimensional biasing techniques is possible, motivated
+by the time-dependent width of the Gaussian noise, σj, required for the provably optimal
+computation of the probability density at a single point [44]. Note that the biasing methods
+just described always used a constant width, σj = σ given in (2.4). In a spirit similar to
+Wagner’s result described in [44], one can ask the question: “What is the optimal sampling
+scheme to travel between two ﬁxed points, with one intermediate step, on a surface with
+arbitrary curvature?” Answering this question is not diﬃcult and suggests that the local
+curvature inﬂuences the optimal width.
+
+Following Wagner (see [44]), one needs to observe ﬁrst that the optimal sampling density
+at time t = ∆t is exactly the distribution of unbiased two-step paths which begin at x0 at
+t = 0 and end at x2 at t = 2∆t. This constitutes the perfect sampling distribution because
+it is precisely that (tiny) subset of unbiased trajectories which end at the pre-deﬁned value
+of interest, and which are distributed naturally. Using the single-step Gaussian distributions
+(2.6), the two-step distribution is
+
+T∆t(x2|x1)T∆t(x1|x0) =
+
+1
+
+2πσ
+
+exp(−
+
+[(x2 − x1) − (f1/mγ)]2 + [(x1 − x0) − (f0/mγ)]2
+
+2σ2
+
+) ,
+
+(4.2)
+
+where σ still represents the unbiased value and fi again gives the force at xi. By rearranging
+the terms, completing the square and approximating fi ≃ f0 − (xi − x0) U ′′(x0), one ﬁnds
+
+T∆t(x2|x1)T∆t(x1|x0) ≃ c × exp
+
+
+(cid:16)
+
+1−α+α2/2(cid:17)i2
+2hσ/q2(1 − α + α2/2)i2
+−hx1 − x0+x2
+
+
+13
+
+1−α
+
+2
+
+,
+
+(4.3)
+
+where c is a constant independent of x1 in this approximation, and the dimensionless cur-
+vature is α ≡ U ′′(x0)∆t/mγ.
+The result (4.3) for the optimal distribution of x1 values illustrates several interesting
+points. First, the distribution is independent of the force to ﬁrst order in α. Second, while
+the correction to the expected mean of the distribution, (x0 + x2)/2, is second order in α,
+that for the width, σ, is ﬁrst order — noting that the factor √2 is expected from the work
+of Wagner and actually approaches unity for a large number of time steps [44]. The optimal
+sampling width in fact decreases at the barrier top, where α < 0, in the small ∆t limit
+(α ≫ α2). Thus, the distribution (4.3) motivates a further bias for sampling, namely use of
+the width
+
+σsamp = σ/q1 − α + α2/2
+
+(4.4)
+
+for sampling from Gaussian distributions near the point x, where α is to be computed using
+U ′′(x). We investigate this reﬁnement in the next section.
+
+14
+
+10−2
+
+10−3
+
+10−4
+
+10−5
+10−3
+
+10−4
+
+10−5
+
+k
+
+σ
+ 
+:
+n
+o
+s
+
+i
+
+i
+
+c
+e
+r
+P
+
+k
+
+σ
+ 
+:
+n
+o
+s
+
+i
+
+i
+
+c
+e
+r
+P
+
+10−6
+
+0.00100
+
+0.00095
+
+0.00090
+
+0.00085
+
+k
+ 
+:
+e
+t
+a
+m
+
+ 
+
+i
+t
+s
+E
+e
+t
+a
+R
+
+5 kBT
+
+Unbiased
+DIMS−Wagner
+DIMS − No Jacobian
+DIMS + Jacobian
+DIMS + Jacobian + CURV
+
+103
+
+104
+
+105
+
+106
+
+107
+
+9 kBT
+
+Unbiased
+DIMS−Wagner
+DIMS − No Jacobian
+DIMS + Jacobian
+DIMS + Jacobian + CURV
+
+103
+
+104
+
+105
+
+106
+
+107
+
+Unbiased
+DIMS − No Jacobian
+
+0.00080
+
+103
+
+104
+
+105
+
+Number of Trajectories
+
+106
+
+107
+
+15
+
+FIG. 5. Eﬃciency in Rate Computations using the DIMS approach. (TOP 2 PLOTS) The
+standard deviation, σk, of a set of 20 rate estimates computed by either unbiased or DIMS simula-
+tion is plotted against the length of each simulation. The spans of the horizontal arrows measure
+the eﬃciency by indicating the diﬀerences in simulation length required to obtain a given variance
+(i.e., precision). For example, when the barrier height is Eb = 9kBT , the best DIMS approaches
+are roughly 300 times faster in obtaining a precision given by σk = 10−4. The “DIMS-Wagner”
+algorithm is from our earlier work [14]. while the other DIMS simulations use the algorithm of Eq.
+(4.1) and the surrounding text. For the latter, the most probable step is chosen according to either
+the Jacobian-augmented formulation (3.6) or that without (3.7), as indicated. The label “CURV”
+indicates that the Gaussian sampling width was modiﬁed according to (4.4). (BOTTOM) The
+lower plot shows rate estimates for the 9kBT barrier height. Both DIMS [Eqs. (4.1) and (3.6)] and
+unbiased estimates converge toward a common result with increasing simulation length. The error
+bars indicate the standard error of the mean, and under-estimate the 95% conﬁdence interval.
+
+16
+
+V. RESULTS: COMPARISON OF EFFICIENCY
+
+We demonstrate the capability of the DIMS algorithms of the previous section by quan-
+tifying their eﬃciency for rate computations in the simple bistable potential shown in Fig.
+1,
+
+U(x) = Eb(cid:16)(x/l)2 − 1(cid:17)2
+
+,
+
+(5.1)
+
+where Eb is the barrier height and l is the length scale of the problem. The central result
+is that one must account for the most probable crossing to gain maximum speed-up in rate
+computation as compared with unbiased simulation. Not surprisingly, the eﬃciency increases
+with barrier height. Yet even for the relatively low barrier height of Eb = 5kBT , we achieve
+roughly a 20-time eﬃciency improvement — i.e., DIMS rate calculations are approximately
+20 times as fast for a given level of precision. That factor increases to 300 for a 9kBT barrier.
+While such gains will not be readily extendible to multi-dimensional systems, it is important
+to understand and demonstrate the ingredients necessary for optimal performance.
+
+Fig. 5 shows our results for the potential (5.1) for two diﬀerent barrier heights, Eb/kBT =
+5 and 9. The biasing methods accounting for the most probable crossing are signiﬁcantly
+superior for the larger barrier. The “DIMS-Wagner” algorithm — which takes no account
+of the most probable path — refers to the technique described in Ref. [14]. It performs only
+modestly well for the 9kBT barrier, and its eﬃciency is very sensitive to the ﬁxed simulation
+length. All the other DIMS procedures employed the algorithm of the previous section, (4.1),
+above a threshold xh = −0.7, with trajectories initiated at x = −1. The presence or absence
+of the Jacobian reﬂects whether (3.6) or (3.7) was used to complete (4.1), and “CURV”
+indicates that the curvature-modiﬁed width (4.4) was used in place of the unbiased width
+(2.4). Rates, k, were calculated using the method noted in Sec. IV A and Fig. 4. Eﬃciency
+is computed by estimating the relative simulation lengths needed to obtain a desired degree
+of precision, given by the variance of the rate estimates,
+
+σ2
+k =
+
+1
+n
+
+n
+
+Xi=1
+
+(ki − hki)2 ,
+
+(5.2)
+
+where n = 20 is the number of simulations performed for each data point, ki is the rate
+computed for the ith simulation, and hki is the mean of the n rate estimates. The horizontal
+arrow spanning the DIMS and unbiased results for Eb = 9kBT at a precision of σk = 10−4,
+for example, exceeds two decades — indicating that the DIMS computations are 100 times
+faster.
+
+The eﬀectiveness of the DIMS formulation excluding the Jacobian — i.e., based on (4.1)
+and (3.7) with C = 0 — deserves further comment. While the Jacobian-augmented DIMS
+simulation is slightly superior for Eb = 9kBT , the insensitivity to including the Jacobian
+term is surprising given the sharp contrast demonstrated in Fig. 3. The lesson appears to
+be that, at least for the parameters studied, the motion in the immediate neighborhood of
+the barrier top (where the Jacobian term, proportional to the curvature, has greatest eﬀect)
+is less important to the anatomy of a crossing event than the (rapid) climb and descent. In
+the long term, the success of the non-Jacobian approach could facilitate the extension of
+DIMS to multi-dimensional systems, since that approach does not require computation of
+
+17
+
+second derivatives of the potential. Future work may show this to save a substantial amount
+of computer time.
+
+We note that our eﬃciency estimates have excluded the “overhead” cost of implementing
+the DIMS method. This cost depends on the optimization of one’s code, and as it happens,
+our code is sub-optimal for unbiased simulation, so that there is no overhead at all. There
+are, however,
+inherent overhead costs in DIMS that cannot be optimized away. While
+the dynamics employing the Jacobian-augmented most probable path (3.6) requires the
+computation of a second derivative at every step, our results show that the simpler form
+(3.7) is nearly as good and requires only the force. Calculating the force, it should be
+remembered, is not an overhead cost because this must be done in unbiased simulation
+(2.3) anyway. The only notable cost inherent in the DIMS method, then, is computing the
+error associated with biased computation — in order to correct for it as discussed in Refs.
+[8,14]. This correction entails computing the ratio of two Gaussian terms (or, equivalently,
+the diﬀerence of two logarithms) at every step. Compared with the ﬁxed cost of unbiased
+simulation — computing the force and generating a high quality pseudo-random number at
+every step — and its inherent ineﬃciency with long waiting times, the DIMS costs are far
+overshadowed by the eﬃciency gains which here are one and two orders of magnitude.
+
+For completeness, we give a number of further details, which apply to both the unbiased
+and DIMS results. A simulation consisted of N trajectories (see Fig. 5) initiated at x = −1
+at time t = 0. The time steps were ∆t = 0.003τ0 for Eb = 5kBT and ∆t = 0.001τ0 for
+Eb = 9kBT , with τ0 = γ−1. These were determined to be close to the maximum values
+for which the rate estimates did not change as ∆t increased in unbiased simulation. As
+discussed above, the rate is computed as the slope of the linear regime in a plot of the
+arrival probability (to be in the right well, x > 0) as a function of time; see Fig. 4. The
+slopes (rates, ki) were computed from a least-squares ﬁt to 10 data points, the t values of
+which were held ﬁxed for a given barrier height. The particle mass, m, and the thermal
+energy, kBT , were both set to 1.
+
+A. What is the Optimal Eﬃciency?
+
+“The system is so simple. How does one know whether a 300-time improvement in
+eﬃciency is impressive?” So a skeptic might wonder, and the attempt to answer seems a
+worthwhile exercise.
+
+The basic point is that computing a rate by simulation involves the simultaneous calcu-
+lation of a serious of diﬃcult integrals of the form (2.8) discussed in Sec. II. Each data point
+in Fig. 4 is an estimate for such an integral.
+
+We can try to estimate the minimum number of trajectories needed for the rate com-
+putation by multiplying together estimates for the following: (i) the number of trajectories
+needed to estimate the probability density to be at a single location, x, in state B at a given
+time, P (tj; x ∈ B|0; A); (ii) the number of discrete locations x in state B required to estimate
+the probability for the whole state; and, (iii) the number of independent time points needed
+to estimate a slope in the linear regime. Regarding (i), only in the case of a constant force
+can P (tj; x ∈ B|0; A) be computed exactly [44] — equivalently, with a single trajectory. One
+might expect that at least 10 trajectories would be required for any real surface, setting (i).
+In a similar manner for (ii), at least 10 points should be required to characterize a state
+
+18
+
+(which, in principle, is known only numerically). The number of independent time points
+is a slightly more complex issue since some (though not all) trajectories from a given time
+point may also be used to estimate another. Conservatively, then, we use the estimate three
+for (iii). Our estimate for the minimum number of trajectories required to calculate a rate
+is thus 300. We believe our DIMS results of Fig. 5 compare favorably with this heuristic —
+and conservative — theoretical minimum.
+
+19
+
+VI. POSSIBLE EXTENSIONS TO MULTI-DIMENSIONAL PROBLEMS
+
+While the results presented here for a one-dimensional potential seem a far cry from
+a high-dimensional biomolecular system, we believe they teach important lessons for the
+large system. The simplest point is that a biased trajectory must closely mimic the natural
+barrier-crossing dynamics if eﬃciency in rate computations is to be obtained. Indeed, we
+have found that a poor bias can be worse than no bias at all. It is not enough to know
+— as one does automatically in one dimension — even the optimal geometric channel for a
+transition: the size of the steps along that geometric path are critical, as we have shown.
+
+Although the problem of ﬁnding channels is extremely challenging in itself, let us ask
+“How can one compute the rate for a large system assuming the channels are known?” A
+natural choice would be to start with an initial trajectory within each channel, and then
+attempt either to optimize it [50,40–42,6,25,51,52] or to generate an ensemble of trajectories
+from it [7,15]. Given the importance of closely following the optimal course, it seems natural
+to use an optimization or sampling scheme which builds in the knowledge of the most
+probable path (3.7) and its multi-dimensional analog. The risks, otherwise, could be great:
+since a high-dimensional path will be very rough, it is easy to imagine a multi-step segment
+of a trajectory becoming trapped in a region of the potential surface with far too few or
+too many steps to be even close to optimal. One idea for overcoming this diﬃculty would
+be to use a scheme capable of removing and inserting time steps, in order to search for an
+appropriate distribution of steps along a pre-deﬁned geometric path. We intend to pursue
+further investigations along these lines.
+
+Returning to the issue of ﬁnding multi-dimensional channels in the ﬁrst place, we note
+that the DIMS method is ideally suited to attack this problem since it generates an en-
+semble of completely independent trajectories.
+Indeed, we have already developed an al-
+gorithm which has proved capable of eﬃciently ﬁnding distinct, important channels in a
+multi-dimensional system [53]. We have named the idea the “soft-ratcheting algorithm,”
+and we note that its eﬃciency is thus far limited to ﬁnding channels, rather than determin-
+ing rates. The essence of the technique is simple: generate an unbiased step and accept
+it with a probability (hence the “softness”) depending on how far the trajectory has pro-
+gressed toward the target state. To complete the calculation in the DIMS formulation, one
+then estimates the overall acceptance probability — which is an inexpensive calculation in a
+large system. Note that the soft-ratcheting algorithm requires no second derivatives of the
+potential.
+
+Finally, a timescale problem could prove serious, even though we do not expect it to be
+nearly the handicap it is for molecular dynamics. In particular, a fundamental limitation
+of applying the DIMS method (or a related approach [5–15]) to multi-dimensional problems
+is the barrier-crossing time, tb. In practical terms, tb shows up as the transient time prior
+to the linear regime in a plot used for rate evaluation (Fig. 4). Probability cannot accrue,
+after all, until crossing events have occurred. In a large system, tb is the limiting timescale
+for applying a method like DIMS to computing rates. Since a reasonable number, say N,
+crossing events will be needed to estimate the rate, one would have to simulate for a time
+exceeding Ntb. The authors are unaware of any estimates of tb for biomolecular systems,
+but we note that — for the DIMS method to potentially yield a rate estimate — tb would
+have to be less than a nanosecond for a large, explicitly-solvated protein. Recent work on
+
+20
+
+large time steps [54,51,52,15] holds promise, however, for attacking the timescale problem.
+
+21
+
+VII. SUMMARY AND CONCLUSIONS
+
+We have demonstrated substantial increases in eﬃciency for calculations of transition
+rates in bistable potentials with modest barrier heights, 5kBT and 9kBT , using new biasing
+methods within the dynamic importance sampling (DIMS) formulation [8,14]. Computations
+were sped up by a factor of approximately 300 for the 9kBT barrier, and the primary results
+(Fig. 5) suggest the speed-up will increase substantially for larger barriers. The critical
+ingredient in our eﬃciency was close emulation of probable crossing events suggested by the
+Onsager-Machlup action (3.2).
+
+The simple one-dimensional problem has been addressed from a variety of theoretical
+and numerical perspectives in an eﬀort to pave the way for more diﬃcult problems. In Sec.
+III we discussed theoretical and numerical evidence supporting the presence of the Jacobian
+term in the Onsager Machlup action. We then used the resulting most probable crossing
+events (computed by others) to motivate and construct a highly eﬀective biased sampling
+scheme in Sec. IV. There, we also discussed the desired distribution of waiting times between
+artiﬁcial crossing events, as well as the eﬀect (and utility) of the curvature of the potential.
+After presenting the explicit results for eﬃciency levels in rate computations, we discuss the
+optimal eﬃciency one could hope to attain in principle.
+
+In commenting on the extension of the DIMS method to large, high-dimensional systems
+in Sec. VI, we noted that the problem may be conceptually broken up into two parts: ﬁnding
+the geometric channels, and then sampling trajectories within those channels. The DIMS
+method is ideally suited for the ﬁrst step, channel-ﬁnding, and we described an explicit
+algorithm eﬀective in that capacity. Our hope is that the results of the present paper will be
+useful in constructing techniques for the second stage, single-channel trajectory sampling.
+
+22
+
+ACKNOWLEDGMENTS
+
+Ron Elber, Alan Grossﬁeld, Christopher Jarzynksi, Rohit Pappu, Horia Petrache,
+Jonathan Sachs, and Katharina Vollmayr-Lee generously read and oﬀered comments on
+early versions of the manuscript. The authors also thank David Chandler for informative
+discussions, Phillip Geissler for pointing out Ref. [32], and Shlomo Raz for providing addi-
+tional computing facilities for this work. We gratefully acknowledge funding provided by
+the NIH (under grant GM54782), the AHA (grant-in-aid), the Bard Foundation, and the
+Department of Physiology.
+
+23
+
+REFERENCES
+
+[1] R. W. Pastor, in The Molecular Dynamics of Liquid Crystals, edited by G. R. Luckhurst
+
+and C. A. Veracini (Kluwer Academic, Dordrecht, Netherlands, 1994), pp. 85–138.
+
+[2] P. H¨anggi, P. Talkner, and M. Borkovec, Rev. Mod. Phys. 62, 251 (1990).
+[3] D. Chandler, in Clasical and Quantum Dynamics in Condensed Phase Simulations,
+edited by B. Berne, G. Ciccotti, and D. Coker (World Scientiﬁc Press, Singapore, 1998),
+pp. 3–23.
+
+[4] D. Chandler, in Clasical and Quantum Dynamics in Condensed Phase Simulations,
+edited by B. Berne, G. Ciccotti, and D. Coker (World Scientiﬁc Press, Singapore, 1998),
+pp. 51–66.
+
+[5] L. R. Pratt, J. Chem. Phys. 85, 5045 (1986).
+[6] E. M. Sevick, A. T. Bell, and D. N. Theodorou, J. Chem. Phys. 98, 3196 (1993).
+[7] C. Dellago, P. G. Bolhuis, F. S. Csajka, and D. Chandler, J. Chem. Phys. 108, 1964
+
+(1998).
+
+[8] T. B. Woolf, Chem. Phys. Lett. 289, 433 (1998).
+[9] C. Dellago, P. G. Bolhuis, and D. Chandler, J. Chem. Phys. 108, 9236 (1998).
+[10] F. S. Csajka and D. Chandler, J. Chem. Phys. 109, 1125 (1998).
+[11] P. G. Bolhuis, C. Dellago, and D. Chandler, Faraday Discuss. 110, 421 (1998).
+[12] C. Dellago, P. G. Bolhuis, and D. Chandler, J. Chem. Phys. 110, 6617 (1998).
+[13] O. Mazonka, C. Jarzy´nski, and J. Blocki, Nuc. Phys. A 641, 335 (1998), Erratum: Nuc.
+
+Phys. A, 650, 499-500 (1999).
+
+[14] D. M. Zuckerman and T. B. Woolf, J. Chem. Phys. 111, 9475 (1999).
+[15] P. Eastman, N. Grønbech-Jensen, and S. Doniach (unpublished).
+[16] S. Huo and J. Straub, J. Chem. Phys. 107, 5000 (1997).
+[17] M. J. Ruiz-Montero, D. Frenkel, and J. J. Brey, Molec. Phys. 90, 925 (1997).
+[18] A. Ulitsky and D. Shalloway, J. Chem. Phys. 109, 1670 (1998).
+[19] R. Graham, in Fluctuations, Instabilities, and Phase Transitions, edited by T. Riste
+
+(Plenum Press, New York, 1975), pp. 215–280, note slips in Eq. (2.49).
+
+[20] A. J. Bray and A. J. McKane, Phys. Rev. Lett. 62, 493 (1989).
+[21] A. J. McKane, H. C. Luckock, and A. J. Bray, Phys. Rev. E 41, 644 (1990).
+[22] A. J. Bray, A. J. McKane, and T. J. Newman, Phys. Rev. E 41, 657 (1990).
+[23] H. C. Luckock and A. J. McKane, Phys. Rev. E 42, 1982 (1990).
+[24] A. J. McKane, J. Phys. A 26, 5629 (1993).
+[25] R. Olender and R. Elber, J. Molec. Struc. (Theochem) 398-399, 63 (1997).
+[26] M. Bier, I. Der´enyi, M. Kostur, and R. D. Astumian, Phys. Rev. E 59, 6422 (1999).
+[27] R. Elber and D. Shalloway, J. Chem. Phys. 112, 5539 (2000).
+[28] R. L. Stratonovich, Sel. Trans. Math. Stat. Prob. 10, 273 (1972), translation of 1962
+
+work in Russian.
+
+[29] H. Haken, Z. Physik B 24, 321 (1976).
+[30] A. Bach, D. D¨urr, and B. Stawicki, Z. Physik B 26, 191 (1977).
+[31] C. Wissel, Z. Physik B 35, 185 (1979).
+[32] R. E. Mortensen, J. Stat. Phys. 1, 271 (1969).
+[33] C. Gardiner, Handbook of Stochastic Methods (Springer-Verlag, Berlin, 1985), Ch. 4.
+[34] R. Graham, in Quantum Statistics in Optics and Solid-State Physics, edited by G.
+
+24
+
+H¨ohler (Springer-Verlag, Berlin, 1973), pp. 1–97, Springer Tracts in Modern Physics,
+Vol. 66.
+
+[35] U. Weiss, Phys. Rev. A 25, 2444 (1982).
+[36] V. Baibuz, V. Zitserman, and A. Drozdov, Physica 127A, 173 (1984).
+[37] M. I. Dykman et al., Phys. Rev. Lett. 68, 2718 (1992).
+[38] D. G. Luchinsky and P. V. E. McClintock, Nature 389, 463 (1997).
+[39] K. M¨uller and L. D. Brown, Theoret. Chim. Acta (Berlin) 53, 75 (1979).
+[40] R. Czerminski and R. Elber, J. Chem. Phys. 92, 5580 (1990).
+[41] C. Choi and R. Elber, J. Chem. Phys. 94, 751 (1991).
+[42] S. Fischer and M. Karplus, Chem. Phys. Lett. 194, 252 (1992).
+[43] M. P. Allen and D. J. Tildesley, Computer Simulation of Liquids (Oxford University
+
+Press, Oxford, 1987).
+
+[44] P. E. Kloeden and E. Platen, Numerical Solution of Stochastic Diﬀerential Equations
+
+(Springer-Verlag, Berlin, 1992), Ch. 16.
+
+[45] L. Onsager and S. Machlup, Phys. Rev. 91, 1505 (1953).
+[46] S. Coleman, in The Whys of Subnuclear Physics, edited by A. Zichichi (Plenum Press,
+
+New York, 1979), pp. 805–942.
+
+[47] H. Nakazato, K. Okano, L. Sch¨ulke, and Y. Yamanaka, Nuc. Phys. B 346, 611 (1990).
+[48] M. Namiki, Prog. Theoret. Phys. (Supp.) 111, 1 (1993).
+[49] R. Durrett, Stochastic Calculus, A Practical Introduction (CRC Press, Boca Raton,
+
+1996), Ch. 2.
+
+[50] M. Berkowitz, J. D. Morgan, J. A. McCammon, and S. H. Northrup, J. Chem. Phys.
+
+79, 5563 (1983).
+
+[51] R. Olender and R. Elber, J. Chem. Phys. 105, 9299 (1996).
+[52] R. Elber, J. Meller, and R. Olender, J. Phys. Chem. B 103, 899 (1999).
+[53] D. M. Zuckerman, K. Hinsen, and T. B. Woolf (unpublished).
+[54] R. E. Gillilan and K. R. Wilson, J. Chem. Phys. 97, 1757 (1992).
+
+25
+
+

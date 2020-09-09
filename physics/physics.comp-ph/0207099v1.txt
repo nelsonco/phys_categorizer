@@ -1,0 +1,677 @@
+2
+0
+0
+2
+ 
+l
+u
+J
+ 
+4
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+9
+9
+0
+7
+0
+2
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+LA-UR-02-3761
+The Software Anatomy of a Flexible Accelerator
+Simulation Engine
+
+Nicholas D. Pattengale
+
+Christopher K. Allen
+
+nickp,ckallen@lanl.gov
+
+June 10, 2002
+
+Abstract
+
+A modular, maintainable and extensible particle beam simulation
+architecture is presented. Design considerations for single particle,
+multi particle, and rms envelope simulations (in two and three dimen-
+sions) are outlined. Envelope simulation results have been validated
+against Trace3D. Hybridization with a physics-centric contol-system
+abstraction provides a convenient environment for rapid deployment
+of applications employing model-reference control strategies.
+
+1 Background
+
+1.1 Discovering a Simulation Architecture
+
+Our group has designed and implemented a uniﬁed accelerator Application
+Programming Interface (API) called XAL[1]. XAL is designed to aid in the
+development of science control applications for beam physics. Accordingly,
+the XAL API is a physics-centric software programming interface. The
+physics applications interact with a model of an accelerator that resides
+in computer memory. XAL also contains the software infrastructure that
+creates the accelerator model. XAL loads a text-based (XML) description of
+an accelerator and assembles software objects such that an accurate model
+of the accelerator exists in computer memory. XAL is based on UAL [2],
+the Uniﬁed Accelerator Library.
+
+The original motivation for XAL was to provide an accelerator indepen-
+dent interface for applications to interact with I/O from a live accelerator.
+This allows physicists to write beam physics control applications (Orbit
+Correctors, Beam Proﬁle Monitors, RF Tuners, etc.) to the XAL API so
+that they can run on any accelerator. Some pseudo-code illustrating the
+principles of an XAL-based Orbit Correction Application may illustrate the
+essence of the concept.
+
+1
+
+LA-UR-02-3761
+
+Accelerator theAccel = XALFactory.newAccel(‘‘sns.xml’’)
+BPM[]
+= theAccel.getNodesOfType(BPM)
+HorzDipole[] theCorrectors = theAccel.getNodesOfType(DCH)
+for each BPM in theBPMs
+
+theBPMs
+
+read BPM.avgPos() and set a corrector magnet accordingly
+
+To aid in writing applications that take into account design values, the
+accelerator description ﬁle contains all design information for the accelerator.
+This condition allows, for example, a physics application to compare the
+design ﬁeld of a quadrupole with its read-back (runtime) ﬁeld.
+
+With all design information incorporated into a software model of an
+accelerator, we have discovered an excellent simulation engine. As long as
+the software accelerator has a convenient means for traversing beam-line
+devices in a spatially sequential manner, we can use design values along the
+way to simulate beam-dynamics.
+
+This scenario allows for a drastic departure from traditional accelerator
+simulation codes. Traditionally simulators have been isolated software prod-
+ucts. They load some type of lattice description of an accelerator and apply
+predeﬁned beam-dynamics to an initial beam. Ultimately this design has
+led to huge codes (to account for various beam-line element types). Further,
+these codes typically operate with only one type of simulation (multi-particle
+or rms envelope, but not both).
+
+The architecture presented here contains a novel approach to the simu-
+lation domain. It is our conjecture that the method presented here better
+captures reality in that there is some sort of software beam actually travers-
+ing a software model of a real accelerator.
+
+1.2 The Architecture
+
+Our approach is based upon the Element-Algorithm-Probe Design Pattern
+[3]. The core concept of this design pattern is the separation of beam-
+dynamics code from the actual beam-line elements. It is desirable to keep
+the code that corresponds to beam-line elements as simple as possible so
+that the application writer has a clean interface to a beam-line element.
+The Element-Algorithm-Probe pattern enforces this concept by requiring
+beam-dynamics code to exist in a separate entity, called an IAlgorithm .
+
+Deferred until runtime is the binding of beam-dynamics to actual beam-
+line elements. This deployment strategy allows for conceptually correct sim-
+ulations. First it is truly modular. The three concepts, beam-line elements,
+beam-dynamics, and the beam are compartmentalized into separate code.
+Second it is truly maintainable. To support a new beam type or new beam-
+line element type does not cause code bloat. Finally it is truly extensible.
+Via the mechanism of a Java interface, various beam-dynamics algorithms
+can be written for the same type of beam-line element and switched at will at
+
+2
+
+LA-UR-02-3761
+
+runtime. Modularity, maintainability, and extensibility provide true power
+and ﬂexibility to our architecture.
+
+2
+
+IProbe, IAlgorithm, and IElement
+
+2.1 Technology Introduction
+
+It may help to understand the facets of Java that we exploit in order to
+implement the Element-Algorithm-Probe Design Pattern.
+
+At the center of the Element-Algorithm-Probe pattern is the concept of
+a Java interface. Essentially, an interface is a contract between a user and
+an implementor. The contract says that the implementor of an interface
+is required to provide an implementation of the methods deﬁned in the
+interface.
+
+For example, consider the interface
+
+public interface Thermometer {
+
+public double getTemperature();
+
+Using this interface, a programmer can assume being able to perform
+operations on a thermometer no matter how the thermometer actually ob-
+tains the temperature. This is desirable because a thermometer implementor
+can change how the temperature is actually obtained (if, say, a new sensor
+system was installed) without requiring all thermometer users to recompile
+their code.
+
+We use the same idea with beam-dynamics code. Beam-dynamics re-
+side in ﬁles that implement (the computer science term for acknowledg-
+ing involvement in the contract from the implementors point of view) the
+IAlgorithm interface. Since the simulation engine knows how to do beam-
+dynamics calculations solely by interacting with IAlgorithms, it is trivial
+to swap beam-dynamics algorithms at will.
+
+The IAlgorithm interface looks like this.
+
+public interface IAlgorithm {
+
+public void propagate(IElement, IProbe);
+public Class legalElementType();
+public Class legalProbeType();
+
+}
+
+}
+
+Conceptually, an IAlgorithm implementor is required provide an imple-
+mentation of the method propagate() to modify the the beam (IProbe)
+according to the beam dynamics of the the beam-line element (IElement).
+In essence, all that the simulation engine knows about are the three data
+types (all deﬁned in interfaces) IAlgorithm, IProbe, and IElement.The
+
+3
+
+LA-UR-02-3761
+
+beauty of this design is that there are separate code locations for beam-line
+elements, beam-dynamics, and the beam itself.
+
+2.2 Probes
+
+The IProbe interface should ideally contain the bare minimum information
+to fully represent a beam. Such beam information consists of beam current,
+beam charge, particle charge, particle rest energy, particle kinetic energy,
+etc. Further, since a probe represents the state of the beam at a position
+in the beam-line, a probe also contains a beam-line-position attribute. The
+current IProbe speciﬁcation serves the purpose of representing a beam for
+a single particle , particle ensemble, and envelope simulations (in both two
+and three dimensions). Figure 1 represents a suitable inheritance hierarchy
+of probe types to handle the aforementioned simulation types.
+
+2.3 Propagation
+
+It is important to note that there are various approaches toward simulat-
+ing beam-dynamics. For example, accurate approaches may involve slic-
+ing nodes up into small pieces. An aggregate of approximations done on
+suﬃciently small elements is typically more accurate than one overall ap-
+proximation. However, normally this is only practical in elements that have
+special behavior. So the question arises: How are probes propagated through
+elements?
+
+It is the responsibility of the IAlgorithm implementor to handle all
+beam-dynamics, including the propagation mechanism. Sample propagation
+mechanisms will be presented later in this paper. However, keep in mind the
+most appropriate propagation mechanism when implementing algorithms for
+the particular problem at hand.
+
+2.4 Algorithms
+
+We have already introduced the concept of the IAlgorithm interface. Now
+let us pursue a few more details regarding its implementation.
+
+The IAlgorithm interface provides a generic way of assembling algo-
+rithms in a simulation engine. In practice any particular IAlgorithm im-
+plementation only makes sense in the context of a particular beam-line
+element type and probe type. For example, a hypothetical IAlgorithm
+called QuadParticleMapper would expect a Quadrupole as its IElement
+and a Particle as its IProbe . Providing such speciﬁcity is the job of the
+legalElementType() and legalProbeType() methods. An implementa-
+tion of the QuadParticleMapper could look like this.
+
+4
+
+LA-UR-02-3761
+
+«Interface»
+IProbe
++getPosition(): double
++advanceProbe(): void
++getBeamCharge(): double
++getBeamCurrent(): double
++getBeamPerveance(): double
++getParticleCharge(): double
++getParticleKineticEnergy(): double
++getParticleRestEnergy(): double
+
+DefaultProbe
+
++getPosition(): double
++advanceProbe(): void
++getBeamCharge(): double
++getBeamCurrent(): double
++getBeamPerveance(): double
++getParticleCharge(): double
++getParticleKineticEnergy(): double
++getParticleRestEnergy(): double
+
+Particle
+
++getCoordinates(): double[6]
+
+Envelope
+
++getSigma(): double[6][6]
+
+Figure 1: UML Diagram of Probe Type Hierarchy
+
+5
+
+QuadrupoleParticleMapper
+
++computeSigma(): Matrix
+
+RFCavityParticleMapper
+
++computeSigma(): Matrix
+
+LA-UR-02-3761
+
+ParticleMapper
+
++propagate(pNode:IElement,pProbe:IProbe): void
++computeSigma(): Matrix
+
+Figure 2: UML Diagram of ParticleMapper Type Hierarchy
+
+public class QuadParticleMapper(IElement p_elem,
+IProbe p_probe){
+
+public Class legalElementType(){return Quadrupole.class;}
+public Class legalProbeType(){return Particle.class;}
+public void propagate(){Quadrupole/Particle beam dynamics}
+
+}
+
+By providing these methods, the simulation engine can do type checking
+upon algorithm binding. It would not make sense to bind this algorithm to
+a WireScanner. Providing these methods helps to avoid that condition.
+
+3 Design of a Single Particle Simulation
+
+Designing an actual simulation merely involves putting together Elements,
+It turns out
+Algorithms, and Probes in a semantically meaningful way.
+that, to the ﬁrst order, the beam dynamics through a particular node type
+can be captured by a transfer matrix. This property allows for a straight-
+forward means of simulating a particle traveling down a beam-line. An
+object-oriented approach would be to create a ParticleMapper class that
+transforms the Particle probe by the simple vector-matrix multiplication
+
+~zn+1 = Φn · ~zn
+
+where ~zn is the coordinate vector of the particle (cid:16) x x′ y y′
+at the start of the node, and Φn is the transfer matrix of the node. Fur-
+ther, Φn can be obtained by the ParticleMapper via the use of an abstract
+method that is implemented by beam-dynamics algorithms for individual
+nodes (QuadrupoleParticleMapper, RFCavityParticleMapper, etc.). A suit-
+able class design can be seen in Figure 2.
+
+z′
+
+(cid:17)
+
+z
+
+T
+
+6
+
+LA-UR-02-3761
+
+To further illustrate some of these concepts, the basic layout of the
+
+ParticleMapper class looks like this.
+
+abstract public Matrix computeTransferMatrix();
+
+public void propagate(IElement pElem, IProbe pProbe)
+{
+
+//type-cast the probe and element to what we expect
+Particle theProbe = ((Particle)pProbe);
+AcceleratorNode theNode = ((AcceleratorNode)pElem);
+
+//do the vector-matrix multiplication
+theProbe.setCoords(computeTransferMatrix
+
+.times(theProbe.getCoords()));
+
+//advance the probe the length of the node
+theProbe.advancePosition(theNode.getLength());
+return;
+
+}
+
+Once the computeTransferMatrix() operations are implemented for
+the node-speciﬁc dynamics, all that remains is writing a driver program. A
+driver program binds algorithms to nodes and injects the probe. Here is a
+pseudo-code driver1.
+
+//instantiate the XAL accelerator model
+Accelerator theAccel = XALFactory.newAccel(‘‘sns.xml’’)
+
+//bind the algorithms
+Quadrupole[] theQuads
+RFCavity[]
+for each QUAD in theQuads
+
+theCavities
+
+= theAccel.getNodesOfType(QUAD)
+= theAccel.getNodesOfType(RFC)
+
+bind a QuadParticleMapper instance to QUAD
+
+for each RFCav in theCavities
+
+bind a RFCavityParticleMapper instance to RFCav
+
+//instantiate a probe
+Particle p1 = new Particle(initial conditions...)
+
+1It is anticipated as a logical extension to these ideas that an AlgorithmManager GUI
+will be written so that simulations can be bound at run-time to the XAL accelerator model
+and easily hooked into analysis software.
+
+7
+
+LA-UR-02-3761
+
+//run the probe down the beam-line
+AcceleratorNode[] theNodes = theAccel.getAllNodes();
+for each NODE in theNodes
+NODE.propagate(p1)
+
+And that is it!1
+The particle probe will be transformed by each beam-line element ac-
+cording the the bound algorithm. Note that the pseudo-code is a basic proof
+of concept and does not contain the code necessary to broadcast probe in-
+crement intermediate data to produce, for example, a plot.
+
+The single particle simulation can be applied to a two-dimensional case
+by only considering the ﬁrst four elements of ~z. Further, the single parti-
+cle simulation can be extended to a multi-particle simulation (in two and
+three dimensions) by constructing a container of particle probes and writing
+beam-dynamics algorithms that properly transform the collection. The only
+matter that complicates (and complicate it does!) a multi-particle simula-
+tion is the concept of space-charge. Before biting oﬀ this task, however, a
+presentation of another type of simulation that accounts for space-charge is
+warranted.
+
+4 Design of an RMS Envelope Simulation
+
+4.1 The Concept
+
+The RMS qualities of a beam can be represented by the 6x6 symmetric
+matrix σ that statistically expresses the boundaries of a beam in transverse,
+longitudinal, and phase space by using moments of the beam distribution.
+RMS Envelopes are convenient because applying beam-dynamics involves
+a simple matrix operation. Namely, the same transfer matrix Φ used in
+single particle simulations can propagate rms envelopes according to the
+conjugation
+
+σn+1 = Φ · σn · Φ
+
+T
+
+The other important concept in this simulation is space charge. A σ
+matrix is a statistical representation of a beam, which is a multi-particle
+entity. Therefore, each particle in the beam is aware (electromagnetically)
+of all other particles in the beam. It turns out that to the ﬁrst order the
+eﬀects of space charge can be captured in a Φ matrix. While it may not
+be mathematically trivial to calculate the matrix, having the calculation
+1Notice that beam-dynamics between nodes are left out of the demonstration case. In
+the actual simulation engine, the propagate() method accounts for space between the
+position of the probe and the start of the node by calculating the beam-dynamics through
+a drift space. However future implementations of XAL may include drift-spaces as an
+actual node type which would warrant writing a speciﬁc DriftSpaceMapper class.
+
+8
+
+LA-UR-02-3761
+
+in such a form makes the integration into our simulation engine simple.
+However it should not be overlooked that this quantity is very important to
+the correctness of simulation.
+
+4.2 Propagation
+
+The envelope simulation is more complex than a single-particle simulation
+in that we will propagate envelopes through elements using more than one
+propagation mechanism. Speciﬁcally, we may be able to compute a better
+approximation of behavior through quadrupoles than RF Cavities.
+
+This condition is due to the fact that the Φ matrix for a quadrupole
+
+adheres to the semi-group property.
+
+Φ(∆s1 + ∆s2) = Φ(∆s1) · Φ(∆s2)
+
+or
+
+Φ(n · ∆s) = Φ
+
+n
+
+(∆s)
+
+where ∆s is the length of the quadrupole being considered.
+
+To more accurately consider space charge, we take advantage of the semi-
+group property of the transfer matrices. In the propagate() method of the
+SemiGroupEnvelopeMapper (see Figure 3) we subsection the node (e.g., a
+l
+n where l is the length of the
+quadrupole) into n slices of length ∆s =
+quadrupole. Then we run the probe through these n slices, applying space
+charge kicks after every subsection (See Figure 4).
+
+Since RF Cavity transfer (Φ) matrices do not in general adhere to a semi-
+group property, we are forced to take a more simplistic approach toward
+transforming the envelope. We will slice the node in two, treating each half
+as a drift-space (to account for space charge) and hit the envelope in the
+middle of the node with the numerically approximated Φ matrix (see Figure
+5).
+
+5 Design of a Particle Ensemble Simulation
+
+As a ﬁnal exercise it will be useful to consider the design of a multi-particle
+simulation. The true complication of designing a multiple-particle (ensem-
+ble) simulation is the computation of space-charge eﬀects. Unfortunately, to
+model multiple particles, space-charge eﬀects cannot be accurately captured
+by a transfer matrix. On the other hand, the architecture outlined in this
+paper keeps the details of the space-charge calculations from interfering with
+code cleanliness.
+
+9
+
+LA-UR-02-3761
+
+ParticleMapper
+
++propagate(pNode:IElement,pProbe:IProbe): void
++computeTransferMatrix(): Matrix
+
+EnvelopeMapper
+
++propagate(pNode:IElement,pProbe:IProbe): void
++computeTransferMatrix(): Matrix
+
+RFCavityEnvelopeMapper
+
++computeTransferMatrix(): Matrix
+
+SemiGroupEnvelopeMapper
+
++propagate(pElem:IElement,pProbe:IProbe)
++computeTransferMatrix(): Matrix
+
+QuadrupoleEnvelopeMapper
++computeTransferMatrix(): Matrix
+
+Figure 3: UML Diagram of EnvelopeMapper Type Hierarchy
+
+Figure 4: Graphical Representation of Transformation of RMS Envelope
+through node with Semi-Group property
+
+Figure 5: Graphical Representation of Generic Transformation of RMS En-
+velope
+
+10
+
+IProbe
+
+Ensemble
+
+-coords: vector[6][n]
++getFields(): vector[6][n]
+
+LA-UR-02-3761
+
+distGen
+
++genDist(n:int): vector[6][n]
+
++getPotential(coords:vector[6][n]): double
+
+poissonSolver
+
+Figure 6: An Ensemble probe could vary its implementation details by hid-
+ing helper classes.
+
+The two core concepts of a multi-particle (ensemble) simulation are
+
+• Calculation of the electric self-ﬁelds of the ensemble
+
+• Using the calculated ﬁelds to update the particle coordinates.
+
+There are various approaches that can be taken for both tasks. All that we
+attempt to show here is that by correctly isolating these concepts, a clean
+software architecture can be maintained.
+
+Namely, an Ensemble probe should encapsulate the logic necessary to
+obtain the electric self ﬁelds of the ensemble. That being the case, various
+Ensemble probe implementations could be swapped at will to employ diﬀer-
+ent ﬁeld calculation techniques. For example, many electric ﬁeld calculation
+techniques involve solving Poisson’s equation to obtain the electric potential
+of the ensemble. By hiding this code from the simulation engine (it is con-
+tained within the Ensemble probe implementation), the implementor could
+exploit parallel processing facilities (See Figure 6).
+
+By moving the calculation of electric ﬁelds out of the beam-dynamics
+code, the beam-dynamics algorithm developer is free to choose space-charge
+consideration techniques with minimal impact to code clarity. One may de-
+cide to take the “thin lens kick” approach that has been used previously
+in this paper. One may alternatively decide to apply a “trajectory integra-
+tion” based approach. The key point here is that by separating codes into
+their logical components allows for a high degree of ﬂexibility in simulation
+technique.
+
+11
+
+LA-UR-02-3761
+
+Figure 7: Plot of Twiss parameter β in the SNS MEBT produced by
+Element-Algorithm-Probe Architecture (solid lines) vs. Trace3D (dashed
+lines)
+
+6 Conclusions and Future Directions
+
+We are enthusiastic to report that the results obtained in the RMS Envelope
+Simulation have been validated against Trace3D [5] Figure 71 shows agree-
+ment between simulation results of the SNS Medium Energy Beam Trans-
+port (MEBT) using both Trace3D and the XAL simulation engine. It is en-
+couraging that a problem domain with so many interdependencies(particle
+physics) can be simulated with a clean architecture.
+
+As we move toward the future, we are anticipating the ability to imple-
+ment model reference control techniques. That is, within the XAL model
+there is access to a live accelerator and a simulated accelerator. Having both
+at hand allows the comparison of live behavior with simulated behavior to
+develop control strategies.
+
+The key to eﬀectively implementing an environment conducive to model
+reference control is architectural discipline when designing both the I/O and
+simulation aspects of XAL. As long as the interface to the two are respec-
+tively clean, hybridization of the two will be a straightforward extension.
+
+1The slight inconsistencies arise from the fact that Trace3D only outputs at the end
+of nodes whereas our simulation engine produced a higher resolution of intermediate data
+points.
+
+12
+
+LA-UR-02-3761
+
+References
+
+[1] J. Galambos, C.M. Chu, T.A. Pelaia, A. Shishlo, C.K. Allen, N. Patten-
+
+gale. “SNS Application Programming Environment”, EPAC 2002
+
+[2] N. Malitsky and R. Talman. “Uniﬁed Accelerator Libraries”, AIP
+
+391(1996)
+
+Libraries”, ICAP 1998
+
+[3] N. Malitsky and R. Talman. “The Framework of Uniﬁed Accelerator
+
+[4] C. K. Allen and N. D. Pattengale. “Simulation of Bunched Beams with
+Ellipsoidal Symmetry and Linear Space Charge Eﬀects”, LANL Techni-
+cal Report 2002
+
+[5] K. Crandall, D. P. Rusthoi, “TRACE 3-D Documentation,” Los Alamos
+
+National Laboratory report LA-UR-97-886, May 1997.
+
+13
+
+

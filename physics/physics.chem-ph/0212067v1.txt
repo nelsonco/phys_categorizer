@@ -1,0 +1,847 @@
+2
+0
+0
+2
+ 
+c
+e
+D
+ 
+9
+1
+ 
+ 
+]
+h
+p
+-
+m
+e
+h
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+7
+6
+0
+2
+1
+2
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Multiresolution analysis in statistical mechanics. II. The wavelet transform as a basis
+for Monte Carlo simulations on lattices
+
+Ahmed E. Ismail, George Stephanopoulos, and Gregory C. Rutledge
+Department of Chemical Engineering, Massachusetts Institute of Technology,
+Cambridge, MA 02139
+(December 6, 2013)
+
+In this paper, we extend our analysis of lattice systems using the wavelet transform to systems
+for which exact enumeration is impractical. For such systems, we illustrate a wavelet-accelerated
+Monte Carlo (WAMC) algorithm, which hierarchically coarse-grains a lattice model by computing
+the probability distribution for successively larger block spins. We demonstrate that although the
+method perturbs the system by changing its Hamiltonian and by allowing block spins to take on
+values not permitted for individual spins, the results obtained agree with the analytical results
+in the preceding paper, and “converge” to exact results obtained in the absence of coarse-graining.
+Additionally, we show that the decorrelation time for the WAMC is no worse than that of Metropolis
+Monte Carlo (MMC), and that scaling laws can be constructed from data performed in several short
+simulations to estimate the results that would be obtained from the original simulation. Although
+the algorithm is not asymptotically faster than traditional MMC, because of its hierarchical design,
+the new algorithm executes several orders of magnitude faster than a full simulation of the original
+problem. Consequently, the new method allows for rapid analysis of a phase diagram, allowing
+computational time to be focused on regions near phase transitions.
+
+I. INTRODUCTION
+
+One of the fundamental challenges in the simulation of very large systems is balancing the competing aims of
+accuracy, both numerical and physical, and computational eﬃciency. As the number of degrees of freedom, the
+number of interactions, and the number of system parameters become large, the computational cost and storage
+requirements of any algorithm which models these systems rapidly become prohibitive. For a system with N degrees
+of freedom, the complexity of simulation algorithms is typically O
+, although this can be reduced to O (N ) for
+(cid:1)
+methods incorporating both cell and Verlet lists1 and O
+for methods including Ewald sums,2 or increased to
+(cid:1)
+or more for quantum methods.3 Consequently, very large systems are still expensive to simulate, even with
+O
+eﬃcient algorithms. One way to reduce the complexity of such systems is to employ a coarse-graining method, which
+systematically reduces the number of degrees of freedom in the system, and thereby the overall complexity of the
+simulation. Coarse-graining techniques have been developed for both on- and oﬀ-lattice calculations. Lattice simula-
+tions have generally relied on coarse-grainings based on renormalization group theory,4–6 while oﬀ-lattice simulations
+include coarse-graining techniques as varied as united-atom models, mapping to lattice models,7, 8 dissipative particle
+dynamics,9 and bead-and-spring models.10, 11
+
+N 3/2
+(cid:0)
+
+N 2
+(cid:0)
+
+N 3
+
+(cid:0)
+
+(cid:1)
+
+At the same time, any beneﬁts obtained from applying a suitable coarse-graining technique must be weighed against
+the principal diﬃculty of using such a method—inaccurate numerical results, such as a diﬀerent critical point. The
+use of uncontrolled approximations also presents a problem, since even if a simulation converges to give an answer, we
+often cannot use results from those simulations to provide any insight into the systems about which we are actually
+interested. In addition, in virtually all cases the transformation is irreversible: we cannot reconstruct our original
+system after we have “evolved” a coarse-grained system.
+
+The work presented in this paper represents the application of a new technique to enhance the performance of
+traditional lattice simulations using the wavelet transform method. The theoretical foundations of this technique
+are outlined in the preceding paper (henceforth denoted as I12). First developed as an analysis technique which has
+found wide acceptance in signal processing, the wavelet transform has not yet been extensively applied to the ﬁeld of
+molecular simulations. Exceptions to this include the variational work of Best and Sch¨afer,13, 14 applied to statistical
+ﬁeld theory, as well as the work of Huang in studying self-similarity in high-energy physics.15
+
+We choose to study the class of Ising lattices with pairwise and external ﬁeld interactions, so that the Hamiltonian
+
+can be written in the form
+
+where the indices i and k run over all spins in the system, and the interaction strengths hi and Jik can vary with
+position in the lattice. The nearest-neighbor Ising lattice corresponds to Jik = 0 unless σi and σk are neighboring
+
+H = −
+
+hiσi −
+
+Jikσiσk,
+
+X
+i
+
+X
+i
+
+X
+k
+
+(1)
+
+1
+
+spins on the lattice, in which case Jik = J. Our goal is to construct a phase diagram for such systems as eﬃciently
+as possible. The original problem would be studied using the Metropolis Monte Carlo (MMC) technique, along
+with possible improvements such as the Swendsen-Wang or Wolﬀ spin-cluster algorithms.16, 17 We introduce a new
+method for studying this problem, using the wavelet transform technique to simulate the system hierarchically, by
+systematically transforming (1) to provide expressions for potentials at coarser scales.
+
+Since the systems under consideration in this paper are lattices, we present the wavelet transform using the discrete
+framework, involving ﬁlter banks and matrices. In the discussion below, we present equations for one-dimensional
+systems only; however, the simulations are performed using higher-dimensional wavelets created using the lifting
+scheme of Sweldens.18 The lifting scheme can be applied recursively as needed to achieve representations of the data
+at multiple length scales. However, we do not move between diﬀerent physical models for the system, but only change
+the length scales which the diﬀerent variables describe. As a result, the wavelet transform can be described as a
+multiresolution technique;18–21 multiresolution techniques comprise a subset of the more general class of multiscale
+techniques, which can describe any simulation involving multiple modeling steps, possibly involving the use of multiple
+underlying physical models.22, 23 We refer the reader to paper I for further details on the implementation of the wavelet
+transform with respect to lattice systems.
+
+II. THE WAVELET-ACCELERATED MONTE CARLO (WAMC) ALGORITHM
+
+The principal diﬃculty of performing a wavelet transformation on a lattice system is in working with the discrete
+set of values that each spin is permitted to take, such as in a spin-q Ising model. Because the transformed variables
+are linear combinations of the original variables, the constraint that the spins of the individual sites on the original
+lattice must be drawn from the set {−q, −q + 1, . . . , q − 1, q} quickly becomes a more complicated constraint on the
+transformed variables ˜si and ˜δi. As the system size becomes large, the diﬃculty of rewriting the spin constraints
+proves so great that previous investigations of the use of wavelets in statistical ﬁeld theory ignored Ising models
+altogether.13 Consequently, we would like, if at all possible, to avoid computations involving original states after we
+have carried out the wavelet transformation. At this point, we take note of the application of wavelets to image
+compression, where the goal is to reduce the amount of information needed to reconstruct an image. We would like
+to apply this technique to lattice systems, and reduce the number of degrees of freedom which must be accounted for
+in our calculations.
+
+We consider our system to be a d-dimensional regular lattice L with side length l, so that the size of the lattice is
+N = |L| = ld, and we let a site σi on the lattice L be characterized by a “spin” chosen from a ﬁnite set J of values and
+by its physical location on the lattice. For the spin- 1
+(although
+for computational convenience this is usually treated as {+1, −1} , a convention which we follow below); similarly, for
+a lattice gas based on a spin-1 Ising model, J = {0, 1, 2} represents the allowed occupation numbers of each lattice
+site. We then assume that the only physical interactions that occur are either interactions with an external ﬁeld hi
+which can vary at each lattice site, or pairwise interactions with the bilinear form U (σi, σj) = Jijσiσj , where Jij is
+usually a function only of the spacing between sites i and j. Consequently, the Hamiltonian of the system can be
+written in the form (1),
+
+2 Ising model, for example, the set J is just
+
+2 , − 1
+2 (cid:9)
+
++ 1
+(cid:8)
+
+For the purposes of our simulations, however, we will ﬁnd it more convenient to treat the set of spins (σ1, . . . , σN )
+and the external ﬁeld (h1, . . . , hN ) as vectors u and h, and the pairwise interaction strengths Jij as a matrix J. Then
+the Hamiltonian (2) can be written in matrix form as
+
+−βH =
+
+hiσi +
+
+Jijσiσj.
+
+X
+i
+
+X
+i
+
+X
+j
+
+−βH = hT u + uT Ju.
+
+This formulation of the problem is similar in spirit to that of graph theory, where the pairwise potential Jij is used to
+generate an adjacency list which speciﬁes which edges interact.24 Using (3) as the basis for a Monte Carlo simulation
+requires the calculation of the change of energy ∆Enm from microstate um to microstate un:
+
+∆Enm = hT (un − um) + (un − um)T J (un − um) .
+
+If moves are restricted to changes of single spin ﬂips, then only a single entry of un − um is nonzero, and therefore
+the calculation (4) reduces to a dot product, instead of a matrix multiplication.
+
+As described in I, the action of the wavelet transform is to insert between each product in (3) or (4) the identity
+matrix in the form I = WT W, where W is the wavelet transform which maps data from one scale to the next
+
+(2)
+
+(3)
+
+(4)
+
+2
+
+coarser scale, containing half as many data points. The resulting expressions rewrite the Hamiltonian in terms of
+wavelet-transformed averages and diﬀerences, with downsampling needed to reduce the number of variables from 2N
+to N . As before, the wavelet transform can be iterated by applying it to successive sets of averages, leading after K
+iterations to Hamiltonians of the form:
+
+−β ˜H = (cid:16)
+
+˜h(K)
+
+T
+(cid:17)
+
+˜u(K) + (cid:16)
+
+˜u(K)
+
+(cid:17)
+
+T ˜J(K)˜u(K),
+
+(5)
+
+i
+
+where in (5) the ˜u(K) represent “block spins” whose values are determined by wavelet averaging over some well-deﬁned
+region of the original system. The Hamiltonians (3) and (5) have the same formal structure, so that Monte Carlo
+simulations of the two systems are essentially identical. The only modiﬁcations needed to simulate a coarse-grained
+Hamiltonian are the ability to select new microstates ˜u(K)
+which are generated through wavelet transformations of
+the original microstates ui, and the elimination of unwanted degrees of freedom from (5). It should be noted that in
+(5), the elements of ˜u(K) are not restricted to the same values as in the original system, but are free to take on any
+value which is consistent with the wavelet transform applied to the system.
+
+From above, we saw that for even Hamiltonians ˜H (˜x), we should have that hδi ˜H = 0 for any wavelet diﬀerence δ,
+where h·i ˜H denotes the ensemble average weighted by the Hamiltonian ˜H. As a “worst-case scenario” for our method,
+we shall assume not only that hδi ˜H = 0, but also that any terms in the Hamiltonian (5) containing ﬂuctuation terms
+can be neglected as well. This assumption allows us to reduce the size of ˜J(K) from N × N to 2−KdN × 2−KdN , where
+d is the lattice dimensionality. Consequently, instead of performing calculations involving all of the original variables x
+which describe the state of our system, we consider functions only of local averages of our original variables. However,
+we anticipate that this simpliﬁcation of the interactions present in the system will have a signiﬁcant impact on the
+thermodynamic behavior of the resulting system; we illustrate these eﬀects below.
+
+i
+
+To generate the new microstates ˜u(K)
+
+, we need an estimate for the probability distribution p (cid:16)˜u(K)
+
+i (cid:17) which describes
+the individual sites in the coarse-grained lattice. Determining the correct distribution for a given ˜u(K)
+i would require
+a detailed simulation of the original system. An alternative, ignoring the eﬀect of neighboring block spins, would
+be to perform an exact enumeration of the spins within a block, which is possible only for the smallest of block
+spins. Since we would like to apply this method to systems of arbitrary size, we want to avoid both of these options.
+Therefore, we simulate a sublattice with the same dimensions as ˜u(K)
+, ignoring physical interactions with the rest of
+the system by using either free or periodic boundary conditions. Using the standard Metropolis acceptance criterion,
+we compute distributions for the properties of the small lattice, such as the magnetization. Then, according to the
+matrix formulation described in Sections II and III of Paper I,12 since the wavelet transform deﬁnes a single block spin
+˜u(K)
+as a linear function of the individual spins at level K − 1 which it replaces, we can use the linearity properties
+i
+of probability distributions to convert the distribution of the properties directly into a distribution for the block spin
+.25 Finally, using the distribution for the block spin ˜u(K)
+˜u(K)
+as a starting point, we perform a Monte Carlo simulation
+i
+on the system of block spins deﬁned by the Hamiltonian (5).
+
+i
+
+i
+
+Although (3) and (5) are structurally the same, we cannot impose a one-to-one correspondence between the states
+in the conﬁguration space of (4) and the states in the conﬁguration space of (5). Consequently, the thermodynamic
+information obtained from the two will not necessarily be identical; as we have shown in paper I, there is under fairly
+broad conditions a loss of entropy associated with the application of coarse-graining to a system. We can ensure that
+the detailed balance condition for the simulation based on (5) is satisﬁed for the new simulation by requiring
+
+α (cid:16)
+α (cid:16)
+
+m → ˜u(K)
+˜u(K)
+n (cid:17)
+m → ˜u(K)
+˜u(K)
+n (cid:17)
+
+=
+
+p (cid:16)
+p (cid:16)
+
+˜u(K)
+
+n (cid:17)
+
+˜u(K)
+
+m (cid:17)
+
+−β(H(˜u(K)
+
+n )−H(˜u(K)
+
+m )),
+
+e
+
+where α (m → n) is the probability of accepting a move from microstate m to microstate n, and p (m) is the probability
+of selecting microstate m as determined from simulations on ﬁner-grained lattices at lower scales.
+
+III. THEORETICAL PERFORMANCE OF WAMC VERSUS TRADITIONAL MC
+
+The wavelet transform is a hierarchical method which can be applied iteratively to a system to obtain successively
+coarser descriptions of a system. To describe the operation of the wavelet transform on a lattice model, we need to
+introduce some notation based on the various length scales in the problem. In the original problem, the applicable
+length scales are the lattice spacing l, the correlation length ξ, and the total lattice size L. Applying the wavelet
+
+3
+
+L(k−1)
+(cid:0)
+
+d
+(cid:1)
+
+transform method once increases the lattice spacing by some factor a, so that the ratios of correlation length to lattice
+spacing and of system length to lattice spacing each decrease by a. If we apply the wavelet transform m times in
+succession, the corresponding factor becomes am.
+
+We perform the simulation in a series of K stages, where the length scales at each stage are functions of the length
+scales at the previous stages. The initial simulation is performed on a sublattice of the original problem, with lattice
+size L(1) < L, where the superscript denotes the ﬁrst stage of the simulation. The lattice spacing of the ﬁrst stage
+is the same as in the original problem, so we deﬁne l(1) = l. At each subsequent stage of the simulation, the lattice
+spacing of the kth stage is deﬁned by the recursive relation l(k) = L(k−1)l(k−1). Since l(1) is ﬁxed to be the lattice
+spacing of the original lattice, the adjustable parameter in this relation is the lattice size L(k) of each stage. If we
+assume that the lattice is the same length in all dimensions at every stage, a single variable in stage k is a block
+variable representing the
+
+variables simulated in stage k − 1.
+
+Assuming that the lattice is the same length in all directions both in the original problem and at every stage in
+d
+the wavelet-transformed problems, there are Nt = Ld lattice variables in the original problem, and N (k) =
+(cid:1)
+lattice variables in the kth stage of the wavelet-transformed problem. However, each variable in stage k is a block
+d
+L(k−1)
+variables in a block at stage k − 1, so the number of total
+variable representing the average behavior of the
+(cid:0)
+(cid:1)
+degrees of freedom represented at stage k is N (k)
+k
+t = Nt. The number of simulated degrees
+t =
+Q
+K
+i=1 N (i) for WAMC. Because
+of freedom is Ns = Nt for traditional Metropolis Monte Carlo (MMC), but Ns =
+the running time of Monte Carlo simulations is usually linear in the number of degrees of freedom being simulated,
+the advantage of coarse-graining the system using a wavelet transform becomes evident. For example, consider an
+“original problem” of simulating a cubic lattice with 256 Ising variables on a side. If we divide the original problem
+into two stages consisting of cubes of 16 Ising variables on a side, we reduce the original problem of analyzing 2563 =
+16 , 777, 216 variables to the simpler problem of analyzing 2
+= 8192 variables. Although it is more diﬃcult to
+produce a trial conﬁguration in a simulation of the wavelet-transformed problem than in a simulation of the original
+Ising lattice problem, this is more than oﬀset by the reduction in the number of degrees of freedom being simulated.
+
+i=1 N (i), where N (K)
+
+L(k)
+(cid:0)
+
+163
+(cid:0)
+
+P
+
+(cid:1)
+
+For the purposes of comparison, our “experimental” systems are two-dimensional Ising models of size 32 × 32, where
+we have run both MMC simulations on the full lattice, and WAMC simulations at a variety of resolutions; we shall
+denote these resolutions using the notation (x, y), where x indicates the length of the block size simulated in the ﬁrst
+to be used in the second stage, and y denotes the number of
+stage to estimate the probability distribution p
+blocks on a side of the lattice in the second stage of the simulation.
+
+˜u(K)
+(cid:0)
+
+(cid:1)
+
+IV. RESULTS
+
+A. Order parameter
+
+Usually, the property of greatest interest in a simulation of a lattice system is the order parameter η. For spin
+[For XY and
+systems, η is generally taken to be the magnitude of the average magnetization, so that η = hmi.
+Heisenberg models, and other models where spins are oriented, we generally consider only the magnitude of the
+average vector η = hmi = h|m|i.] Generally, this is a very simple property to compute, since the value of the order
+parameter is constantly updated during the course of the simulation, and is thus always available.
+
+For the 32 × 32 Ising model, the results of a MMC simulation, as well as (4, 8)- and (8, 4)-WAMC simulations are
+shown as Figure 1. The primary diﬀerence in the curves for the three cases is that as the coarse-graining process
+decreases the number of degrees of freedom in the ﬁnal stage of the simulation, the location of the Curie temperature,
+indicating onset of spontaneous magnetization, increases and the steepness of the curve below the Curie temperature
+decreases. This result is consistent with our ﬁndings for average absolute magnetization h|m|i from analytical models,
+discussed in paper I. In the present case, we note further that we achieve agreement between the diﬀerent models
+not only in the low-temperature region, but also in the high-temperature regime T ≫ Tc. The diﬀerences in the
+intermediate regime can be attributed largely to the diﬀerence in behavior that results from the use of the wavelet
+transform to move from the original Hamiltonian (3) to a coarse-grained Hamiltonian (5). Additionally, the increased
+noise in the WAMC results at intermediate and high temperatures arises because of the approximations used for the
+probability distributions p
+at the second stage of the simulation. The relative lack of noise in the MMC results
+stem in part from the fact that the Metropolis technique leads to non-ergodic sampling of phase space as temperature
+increases, as the simulation tends to cycle through a limited number of states.26
+
+u(K)
+(cid:0)
+
+(cid:1)
+
+4
+
+B. Internal Energy
+
+Plotting the internal energy hU i as a function of the temperature, we obtain curves that follow the same general
+pattern outlined in paper I. As illustrated in Figure 2, at low temperatures, the internal energy, as computed for
+the 32 × 32 model using standard MC as well as (4, 8)- and (8, 4)-WAMC simulations, is in exact agreement for all
+methods. This occurs because only a few microstates of the system, corresponding to states that have all spins aligned,
+are actually observed by the system, and the wavelet transform preserves the energy of these states exactly. All three
+eventually reach an average internal energy of zero, but exact agreement is only expected in the inﬁnite-temperature
+limit, when the diﬀerence in energy levels between microstates becomes unimportant. For intermediate temperatures,
+as before, the disagreement is a result of the change in form of the Hamiltonian that results from neglecting local
+correlations. Also, we note that for WAMC the “noise” in the internal energy increases both with increasing proximity
+to the “observed” critical point of the system as well as with increasing coarse graining. The additional coarse graining
+yields a Hamiltonian with reduced numbers of energy levels, since the energy of a block spin is deﬁned here to be a
+function only of its overall magnetization, and not of its internal magnetization ﬂuctuations; the reduced number of
+discrete energy levels yields noisier data.
+
+C. Fluctuation properties
+
+Fluctuation properties are useful for locating critical points since in the vicinity of a critical point, the magnitude
+of ﬂuctuation properties is known to diverge as t−α, where t ≡ |T − Tc| /Tc.27 Thus, a rapid increase in the value of a
+(cid:17) /kBT 2, with respect
+ﬂuctuation property such as the heat capacity at constant external ﬁeld, CH = (cid:16)(cid:10)
+to temperature can be used to estimate the critical temperature of a system. However, use of the wavelet transform
+leads to a decrease in the magnitude of the heat capacity, since the coarse-graining leads to smaller variances in the
+distribution of the energy hU i. Consequently, the maximum value of the heat capacity Cmax decreases as a function
+of the number of degrees maintained in the problem.
+
+− hEi2
+
+E2
+
+(cid:11)
+
+In Figure 3, the heat capacity is shown as a function of dimensionless temperature kBT /J for the same systems as
+for the order parameter and internal energy measured above. We see that the location of the maximum of the heat
+capacity does increase, as expected. Although the relative maximum of the heat capacity obtained from the (4, 8)-
+and (8, 4)-WAMC simulations appears to be identical, they diﬀer by about 3 percent. Moreover, the actual value of
+the maximum is not as important as its existence and its location as a function of kBT /J and of the resolution of the
+model.
+
+D. Scaling results
+
+One application of the wavelet-accelerated MC method is to provide an upper bound for locating phase transitions.
+Running multiple simulations, at diﬀerent levels of resolution, one can determine for each level of resolution the
+approximate phase transition temperature Tp (Ns), where Ns is the number of degrees of freedom (here, block spins)
+in the given system. From these data, one can extrapolate a scaling relationship of the form
+
+Tp − T ∗
+p (cid:1)
+(cid:0)
+where γ is the corresponding “scaling” exponent, and T ∗
+p is the phase transition temperature for the untransformed
+model. The estimate obtained for the scaling exponent γ depends upon the technique used to calculate the transition
+temperature for a given system—for example, estimating divergence of the heat capacity versus the onset of sponta-
+neous magnetization. Our simulations suggest that γ is typically between 0.20 and 0.25, with lower values obtained
+from divergence of heat capacity than from the onset of spontaneous magnetization.
+
+∼ N −γ
+s
+
+(6)
+
+,
+
+As explained in I, using a relationship like (6) to estimate the phase transition temperature will usually lead to an
+overestimate of the phase transition temperature. This is a consequence of the underestimation of entropy that occurs
+through the reduction of the size of conﬁguration space as a result of the wavelet transform. Estimates of kBTp/J,
+as determined by (6) for the two-dimensional Ising model considered here typically varied between about 2.7 and 2.9,
+which is an error of approximately 25 percent from the theoretical value of 2.27 provided by the Onsager solution, but
+only about 20 percent from the results determined by the traditional MC simulations, which gave kBTp/J ≈ 2.35.
+Although these errors are somewhat sizable, it is useful to note that the total computation time required to obtain the
+estimate using scaling laws is at least an order of magnitude smaller than the computation time required to perform
+a direct simulation on the original system. Thus, if computational time is at a premium, an eﬀective approach may
+
+5
+
+be to use the wavelet transform method to provide an upper bound for Tp, and then perform a direct simulation for
+the parameter space with temperatures below Tp.
+
+E. Decorrelation time
+
+Another important measure to study is the time required for decorrelated samples. It is well known that in the
+vicinity of the critical point, traditional Monte Carlo algorithms experience so-called “critical slowing-down.”28 The
+Monte Carlo aspect of the WAMC algorithm does not vary from traditional Metropolis Monte Carlo, so we expect that
+the performance of the two algorithms should be similar, when measured near their respective critical temperatures.
+To compare the two methods, we generated 224 = 16 777 216 new conﬁgurations for the 32 × 32 Ising model at the
+critical point using traditional Metropolis Monte Carlo, as well as for the (4, 8)-, (8, 4)-, and (16, 2)-WAMC models.
+To determine the correlation time, we used the blocking technique of Flyvbjerg and Petersen.29 The results are shown
+as Figures 4 and 5 for the MMC and (16, 2)-WAMC models, respectively. The salient feature in the graph is the
+onset of a plateau in the value of the variance of the energy σ2
+E; according to the method of Flyvbjerg and Petersen,
+this indicates that conﬁgurations separated by a distance of 2x steps are statistically independent, where x is the
+number of blocking transformations that have been performed. For the MMC model, we ﬁnd that x ≈ 13 or x ≈ 14
+provides a decent estimate; for the (16, 2)-WAMC model, x = 16 is a good estimate for the index. [For the (4, 8)- and
+(8, 4)-models (not shown), x = 15 is a reliable estimate.] In each case, this indicates that between 214 = 16 384 and
+216 = 65 536 steps are required between independent conﬁgurations. Thus, we conclude that there is no degradation
+of performance near the critical point of a WAMC simulation, relative to traditional MMC simulations.
+
+V. ANALYSIS
+
+A. Measured performance comparison
+
+In comparing the performance of the standard Monte Carlo algorithm to the wavelet-accelerated Monte Carlo
+algorithm, we performed 5 × 105 lattice passes on a 32 × 32-lattice on a 733 MHz Pentium II: for the standard
+Monte Carlo algorithm, this meant that, on average, 5 × 105 attempts were made to ﬂip each spin. For the WAMC
+algorithm, 5 × 105 attempts were made to ﬂip a spin on a given level. The results are summarized in Table 1. We
+see that the (4, 8)- and (8, 4)-simulations, which have the smallest total number of lattice sites (80), perform the
+fastest; however, even the (16, 2)-simulation, which has one-fourth as many variables (260) as the 32 × 32 standard
+Monte Carlo simulation (1024), ﬁnishes in less than 8 per cent of the time required for the latter simulation. As the
+system size increases, the computational eﬃciency achieved by breaking down the system into multiple stages, all of
+relatively equal size, becomes even greater: for a 128 × 128-lattice, the performance gain increases from a factor of
+approximately 25 to a factor of approximately 50, when we compare the (32, 4)- and (16, 8)-WAMC simulations to
+the standard MC model. However, for the (8, 16)-WAMC model, the complexity of assigning one of 65 possible values
+to each of 256 variables according to the correct probability distribution becomes comparable to that of the original
+problem, so that in fact standard MC runs in roughly a factor of 3 faster than the (8, 16)-model.
+
+Similar results are also observed for calculating the phase diagram of a 64 × 64-Ising lattice, which is shown in
+Figure 6 as a plot of average magnetization as a function of temperature and external ﬁeld strength using an (8, 8)-
+model, for temperatures between T = 0.5 and T = 5.0, and for ﬁeld strengths between h = −1 and h = 1. The
+phase diagram reproduces the essential features of the original two-dimensional ferromagnetic Ising lattice, such as
+the phase separation at h = 0, although the exact shape diﬀers from the results obtained via a standard Metropolis
+Monte Carlo simulations. However, the plot based on WAMC calculations is created approximately 40 times faster
+than would a comparable plot using standard MMC.
+
+B. Comparison with renormalization group methods
+
+Our observations also indicate that the accuracy of the wavelet-accelerated Monte Carlo simulations depends on
+the relative proximity to an “attractive ﬁxed point” of the physical model in parameter space. Borrowed from
+renormalization group theory, these attractive ﬁxed points represent the limiting behavior of the system under various
+conditions, such as the zero- and inﬁnite-temperature limits and the limits of zero and inﬁnite external ﬁeld. As we
+approach these limiting cases, the approximations made in obtaining our wavelet-transformed Hamiltonian become
+increasingly less signiﬁcant.
+
+6
+
+Combining these observations allows us to design an on-line ﬁne-tuning algorithm for the coarse graining of our
+system: the further away from the critical point of the parameter space, the smaller the number of degrees of freedom
+N (K) necessary to simulate the system must be. Thus, if we keep track of changes in ﬂuctuation properties such as
+the heat capacity or the magnetic susceptibility as we change the system parameters (h, T ), we can get an estimate of
+our relative distance to the critical point. If we are suﬃciently far away from the critical point, we can choose either
+to increase the number of stages K that we simulate, or we can look at more degrees of freedom at lower stages by
+increasing N (1), N (2), . . . , N (K−1). As we approach the critical point, we can either decrease the number of stages K
+or include more degrees of freedom at higher stages by reducing N (1), . . . , N (K−1).
+
+C. Sources of error
+
+In general, the source of our errors can be traced to the assumption that local ﬂuctuation terms could be reasonably
+ignored in our coarse-grained Hamiltonian (5). This naive but otherwise useful assumption yields correct thermo-
+dynamic behavior when the overall physics of the system is particularly simple:
+in the low- and high-temperature
+regimes, for instance, when the number of observed microstates is small or when the diﬀerences between observed
+microstates is inconsequential. For more complicated behaviors, as found at intermediate temperatures and above
+all in the vicinity of a critical point, the use of this assumption has a drastic eﬀect on both the phase space of the
+system, which in turn aﬀects all thermodynamic properties of the system, including the internal energy and entropy
+of the system, as well as ﬂuctuation properties of the system.
+
+More complicated methods for dealing with ﬂuctuation terms have signiﬁcant drawbacks associated with them.
+Treating the ﬂuctuation terms just like the block averages maintained in ˜u(K) means that the wavelet-transformed
+Hamiltonian is no simpler than the original Hamiltonian, which aﬀords few advantages in computational time. Like-
+wise, other approaches, such as parametrizing the probability distribution for the elements of ˜u(K) using a property
+like the energy E, introduce new functional dependencies which cannot be taken into account using the wavelet trans-
+form. Thus, we sacriﬁce one of the major advantages of the method—moving from one level to another is achieved
+exclusively through use of the wavelet transform. Thus, the most promising avenue for dealing with ﬂuctuation terms
+is to develop a probability distribution for the ﬂuctuation terms via the same approach used to determine probability
+distributions for the local averages. Then, using the probability distribution for the ﬂuctuation terms, we can treat
+the discarded terms of the Hamiltonian as a noise term which can be used to restore some of the entropy that was
+lost as a result of the coarse-graining [see paper I for more details]. However, we have presented our results here to
+show what can be achieved under “worst-case” conditions, without the use of inverse coarse-graining methods.
+
+Many coarse-graining techniques control errors by ﬁtting the parameters of a new Hamiltonian to ensure agree-
+ment with some known structural information about the system, such as the radial distribution function.30, 31 For
+lattice systems, this iterative approach is reﬂected in renormalization group theory, and notably the Wilson recursion
+method,32 which ﬁnds the ﬁxed points of the system. As formulated, WAMC creates a coarse-grained Hamiltonian
+by truncating the Hamiltonian obtained after application of the wavelet transform. As an improvement to this, it
+should be possible to use the wavelet transform to determine which terms will appear in the Hamiltonian, and then
+determine the appropriate parameters to ensure the best ﬁt for some desired property of the system using an iterative
+approach.33–35
+
+D. Constructing an adaptive algorithm for MC using the wavelet transform
+
+(cid:11)
+
+E2
+
+− hEi2
+
+As pointed out above, the wavelet transform method tends to produce overestimates for the critical point of the
+system; therefore, if we start with the high-temperature limit of our algorithm and slowly reduce the temperature in
+our simulation, we can observe the movement toward the critical point by watching various ﬂuctuation parameters,
+(cid:17) /kBT 2. Near the critical point, we expect to see a rapid increase in
+such as the heat capacity CH = (cid:16)(cid:10)
+the value of CH , consistent with the expected logarithmic divergence observed in the limit of ﬁnite-size systems.3, 27
+If we use the onset of this logarithmic divergence as an indicator, we can then “step down” and use a ﬁner lattice
+including more degrees of freedom. This system will naturally better reﬂect the physics of our system, particularly
+in the vicinity of the critical point. We expect that very near the critical point, we will have to simulate the system
+at the original scale, since this will be eﬀectively the only level which accurately represents the underlying behavior
+of the system. However, the region of parameter space where this is necessary is relatively small compared to the
+complete parameter space. This is especially true when we consider that as we proceed below the critical temperature
+of the system, the logarithmic divergence of CH will also vanish. As a result, as we move increasingly far away from
+the critical point, we begin to approach the other ﬁxed-point behaviors associated with the low-temperature limits
+
+7
+
+of the system. Since these are reasonably well-preserved using the wavelet transformation, we can safely return to
+increasingly coarse-grained descriptions of our system as the simulation proceeds past the critical point.
+
+As an example, we compute the spontaneous magnetization curve for a 64 × 64 Ising lattice in the temperature
+range 0.5 ≤ T ≤ 10.0, with ∆T = −0.05, and choosing as our reﬁnement criterion ∆CH /∆T ≤ −0.5, until we
+reach the ﬁnest scale, corresponding to the original problem. We begin by coarse-graining the system to an (8, 8)-
+model, where we ﬁnd that the criterion is triggered only at T = 5.1; we then continue with a (4, 16)-model, down to
+T = 4.0, at which point the reﬁnement criterion is exceeded. Reﬁning once more, we proceed with a (2, 32)-model
+until T = 3.4, at which point the threshold is again crossed. Since the next reﬁnement is the original problem, we
+proceed at this level of resolution until we have passed the critical point, so that ∆CH /∆T is positive. As a coarsening
+criterion, we select for simplicity the opposite of the reﬁnement criterion, ∆CH /∆T ≤ 0.5. Using this criterion, we
+ﬁnd that we coarsen the model to the (2, 32)-, (4, 16)- and (8, 8)-models at temperatures of T = 1.75, T = 1.65, and
+T = 1.55, respectively. The rapid coarsening of the model results from the higher estimates of the critical point in
+the coarsened models. Since we are well past the critical point, we expect changes in the heat capacity as a function
+of temperature to be relatively small, and thus it is possible to obtain accurate results from a relatively coarse model.
+Computationally, the time required to create this diagram was only 28 per cent that required to perform a standard
+Metropolis Monte Carlo simulation with the same number of steps. Moreover, in the regions that were not simulated
+using MMC, the computation time required was just 8 per cent of the time required for MMC. The resulting plot
+of magnetization versus temperature, shown as Figure 7, compares favorably to the analytical solution of Onsager,
+which is also shown.36
+
+VI. CONCLUSIONS
+
+The WAMC algorithm can dramatically reduce the time required to calculate the thermodynamic behavior of a
+lattice system; the trade-oﬀ for these savings in time is in the accuracy of the results obtained, a general feature of
+coarse-graining techniques. The error that results is a function of position in parameter space: the results obtained
+are generally accurate in the vicinity of ﬁxed attractors of the system, and decrease as one approaches critical points
+of the parameter space. Near critical points, deviations from results performed on the original lattice system are the
+result of coarse-graining the Hamiltonian by eliminating local ﬂuctuation terms. Consequently, this suggests that a
+hierarchical simulation which uses ﬂuctuation properties such as the heat capacity CH to gauge proximity to critical
+points in “real time” would yield dramatic savings in the computation time of the behavior of a lattice system over
+a wide region of phase space, as regions of space close to ﬁxed attractors would be simulated at a very coarse scale,
+with full-detailed simulations reserved only for regions of parameter space close to critical points.
+
+VII. ACKNOWLEDGMENTS
+
+Funding for this research was provided in part by a Computational Sciences Graduate Fellowship (AEI) sponsored
+
+by the Krell Institute and the Department of Energy.
+
+[1] L. Verlet, Phys. Rev. 159, 98 (1967).
+[2] P. P. Ewald, Ann. Phys. 64, 253 (1921).
+[3] D. Frenkel and B. Smit, Understanding Molecular Simulation: From Algorithms to Applications, Academic Press, San
+
+Diego, 1996.
+
+[4] S.-K. Ma, Phys. Rev. Lett. 37, 461 (1976).
+[5] R. H. Swendsen, Phys. Rev. Lett. 42, 859 (1979).
+[6] S. Curtarolo and G. Ceder, Phys. Rev. Lett. 88, 255504 (2002).
+[7] J. Cho and W. L. Mattice, Macromolecules 30, 637 (1997).
+[8] P. Doruker and W. L. Mattice, Macromolecules 30, 5520 (1997).
+[9] A. G. Schlijper, P. J. Hoogerbrugge, and C. W. Manke, J. Rheol. 39, 567 (1995).
+[10] W. Tsch¨op, K. Kremer, J. Batoulis, T. B¨urger, and O. Hahn, Acta Polymer. 49, 61 (1998).
+[11] W. Tsch¨op, K. Kremer, O. Hahn, J. Batoulis, and T. B¨urger, Acta Polymer. 49, 75 (1998).
+[12] A. E. Ismail, G. C. Rutledge, and G. Stephanopoulos, Submitted to J. Chem. Phys. (2002).
+
+8
+
+[13] C. Best, A. Sch¨afer, and W. Greiner, Nucl. Phys. B: Proc. Suppl. 34, 780 (1994).
+[14] C. Best and A. Sch¨afer, Variational Description of Statistical Field Theories Using Daubechies’ Wavelets,
+
+http://xxx.lanl.gov/abs/hep-lat/9402012, 1994.
+[15] D.-W. Huang, Phys. Rev. D 56, 3961 (1997).
+[16] R. H. Swendsen and J.-S. Wang, Phys. Rev. Lett. 58, 86 (1987).
+[17] U. Wolff, Phys. Rev. Lett. 62, 361 (1989).
+[18] W. Sweldens, SIAM J. Math. Anal. 29, 511 (1997).
+[19] S. G. Mallat, IEEE Trans. Pattern Analysis and Machine Intelligence 11, 674 (1989).
+[20] S. G. Mallat, Trans. Amer. Math. Soc. 315, 69 (1989).
+[21] I. Daubechies and W. Sweldens, J. Fourier Anal. Appl. 4, 247 (1998).
+[22] J. Q. Broughton, F. F. Abraham, N. Bernstein, and E. Kaxiras, Phys. Rev. B 60, 2391 (1999).
+[23] R. M. Nieminen, J. Phys.: Cond. Matt. 14, 2859 (2002).
+[24] T. H. Cormen, C. E. Leiserson, and R. L. Rivest, Introduction to Algorithms, McGraw Hill-MIT Press, Cambridge,
+
+MA, 1990.
+
+Cambridge, 2000.
+
+[25] P. Billingsley, Probability and Measure, Wiley Interscience, New York, 1995.
+[26] D. P. Landau and K. Binder, A Guide to Monte Carlo Simulations in Statistical Physics, Cambridge University Press,
+
+[27] R. K. Pathria, Statistical Mechanics, Butterworth-Heinemann, Woburn, MA, 1996.
+[28] J. J. Binney, N. J. Dowrick, A. J. Fisher, and M. E. J. Newman, The Theory of Critical Phenomena: An Introduction
+
+to the Renormalization Group, Oxford University Press, Oxford, 1993.
+[29] H. Flyvbjerg and H. G. Petersen, J. Chem. Phys. 91, 461 (1989).
+[30] J. Baschnagel, K. Binder, P. Doruker, A. A. Gusev, O. Hahn, K. Kremer, W. L. Mattice, F. M¨uller-Plathe,
+
+M. Murat, W. Paul, S. Santos, U. W. Suter, and V. Tries, Adv. Poly. Sci. 152, 41 (2000).
+
+[31] R. L. C. Akkermans and W. J. Briels, J. Chem. Phys. 114, 1020 (2001).
+[32] K. J. Wilson and J. Kogut, Phys. Rep. 12, 75 (1974).
+[33] A. P. Lyubartsev and A. Laaksonen, Phys. Rev. E 52, 3730 (1995).
+[34] A. P. Lyubartsev and A. Laaksonen, Phys. Rev. E 55, 5689 (1997).
+[35] G. C. Rutledge, Phys. Rev. E 63, 021111 (2001).
+[36] L. Onsager, Phys. Rev. 65, 117 (1944).
+
+FIG. 1. Absolute average magnetization as a function of the dimensionless temperature kBT /J for the 32 × 32 Ising model
+
+computed using standard MC (left curve), a (4, 8)-WAMC simulation (center), and a (8, 4)-WAMC simulation (right).
+
+FIG. 2. Internal energy as a function of the dimensionless temperature kBT /J for the 32 × 32 Ising model computed using
+
+standard MC (left curve), a (4, 8)-WAMC simulation (center), and a (8, 4)-WAMC simulation (right).
+
+FIG. 3. Heat capacity as a function of the dimensionless temperature kBT /J for the 32 × 32 Ising model computed using
+
+standard MC (left curve), a (4, 8)-WAMC simulation (center), and a (8, 4)-WAMC simulation (right).
+
+FIG. 4. Graph showing variance in the estimate of energy as calculated using the method of Flyvbjerg and Petersen29 for a
+
+32 × 32 Ising model measured at its critical temperature.
+
+FIG. 5. Graph showing variance in the estimate of energy as calculated using the method of Flyvbjerg and Petersen29 for a
+
+32 × 32 Ising model in a (16, 2)-WAMC measured at the critical temperature determined from the simulation.
+
+FIG. 6. Phase diagram plotting average magnetization versus temperature and external ﬁeld strength for a 64 × 64 ferro-
+magnetic Ising lattice, computed using an (8, 8)-model via WAMC. The general features correspond to those that would be
+produced with standard MMC, but require less than 3 per cent of the computational time.
+
+9
+
+FIG. 7. Phase diagram plotting average magnetization versus temperature for a 64 × 64 ferromagnetic Ising lattice, created
+using an adaptive WAMC algorithm, with reﬁnement and coarsening criterion established using the change in heat capacity
+with respect to temperature ∆CH/∆T . The squares represent the simulation results, while the line reproduces Onsager’s
+analytical result for the two-dimensional Ising model with zero external ﬁeld. The simulation used in a given temperature
+region is shown on the plot.
+
+10
+
+Table 1. Performance comparison for Metropolis Monte Carlo (MMC) versus Wavelet-Accelerated Monte Carlo
+
+Time for 5 × 105 passes (s)
+
+(WAMC) algorithms
+
+Simulation
+32 × 32 MMC 1824.22
+(4, 8)-WAMC 64.5781
+(8, 4)-WAMC 55.1094
+(16, 2)-WAMC 144.516
+
+11
+
+This figure "fig1.png" is available in "png"(cid:10) format from:
+
+http://arxiv.org/ps/physics/0212067v1
+
+This figure "fig2.png" is available in "png"(cid:10) format from:
+
+http://arxiv.org/ps/physics/0212067v1
+
+This figure "fig3.png" is available in "png"(cid:10) format from:
+
+http://arxiv.org/ps/physics/0212067v1
+
+This figure "fig4.png" is available in "png"(cid:10) format from:
+
+http://arxiv.org/ps/physics/0212067v1
+
+This figure "fig5.png" is available in "png"(cid:10) format from:
+
+http://arxiv.org/ps/physics/0212067v1
+
+This figure "fig6.png" is available in "png"(cid:10) format from:
+
+http://arxiv.org/ps/physics/0212067v1
+
+This figure "fig7.png" is available in "png"(cid:10) format from:
+
+http://arxiv.org/ps/physics/0212067v1
+
+

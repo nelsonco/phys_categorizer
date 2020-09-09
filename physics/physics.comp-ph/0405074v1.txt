@@ -1,0 +1,1590 @@
+Projecting to a Slow Manifold:
+Singularly Perturbed Systems and Legacy Codes.
+
+C. W. Gear1,2 ∗, T.J. Kaper3,
+I.G. Kevrekidis1,4, and A. Zagaris3
+1 Department of Chemical Engineering, Princeton University, Princeton, NJ 08544;
+2 NEC Laboratories USA, retired;
+3 Dept of Mathematics and Center for BioDynamics, Boston University, Boston, MA 02215;
+4 Program in Applied and Computational Mathematics, Princeton University, Princeton, NJ 08544.
+
+February 2, 2008
+
+Abstract
+
+The long-term dynamics of many dynamical systems evolve on an attracting, in-
+variant “slow manifold” that can be parameterized by a few observable variables. Yet
+a simulation using the full model of the problem requires initial values for all variables.
+Given a set of values for the observables parameterizing the slow manifold, one needs
+a procedure for ﬁnding the additional values such that the state is close to the slow
+manifold to some desired accuracy. We consider problems whose solution has a singu-
+lar perturbation expansion, although we do not know what it is nor have any way to
+compute it. We show in this paper that, under some conditions, computing the values
+of the remaining variables so that their (m + 1)st time derivatives are zero provides
+an estimate of the unknown variables that is an mth-order approximation to a point
+on the slow manifold in sense to be deﬁned. We then show how this criterion can be
+applied approximately when the system is deﬁned by a legacy code rather than directly
+through closed form equations.
+
+Keywords: Initialization, DAEs, Singular Perturbations, Legacy Codes, Inertial
+
+Manifolds
+
+4
+0
+0
+2
+ 
+y
+a
+M
+ 
+4
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+4
+7
+0
+5
+0
+4
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+∗Corresponding authorwgear@princeton.edu, tel (609) 737-7023, FAX (609) 258-0211
+
+1
+
+1 Introduction
+
+The derivation of reduced dynamic models for many chemical and physical pro-
+cesses hinges on the existence of a low-dimensional, attracting, invariant “slow mani-
+fold” characterizing the long-term process dynamics. This manifold is parameterized
+by a small number of system variables (or “observables”, functions of the system vari-
+ables): when the dynamics have approached this manifold, knowing these observables
+suﬃces to approximate the full system state. A reduced dynamic model for the evo-
+lution of the observables can then in principle be deduced; the resulting simpliﬁcation
+in complexity and in size can be vital in understanding and modeling the full system
+behavior. This reduction has been the subject of intense study from the theoretical,
+practical and computational points of view. Low-dimensional center-unstable mani-
+folds are crucial in the study of normal forms and bifurcations in dynamical systems
+(e.g. [13]); the theory of Inertial Manifolds and Approximate Inertial Manifolds [6, 31]
+has guided model reduction in dissipative Partial Diﬀerential Equations; the study
+of fast/slow dynamics in systems of Ordinary Diﬀerential Equations is the subject of
+geometric singular perturbation theory (e.g. [7]). On the modeling side, the Boden-
+stein “quasi-steady state” approximation has long been the basis for the reduction of
+complex chemical mechanisms, described by large sets of ODEs ( [2], see also the discus-
+sion by Turanyi [33]). More recently, an array of computational approaches have been
+proposed that bridge singular perturbation theory with large scale scientiﬁc computa-
+tion for such problems; they include the Computational Singular Perturbation (CSP)
+approach of Lam and Goussis [21–23], and the Intrinsic Low-Dimensional Manifold
+approach of Maas and Pope [24]. The mathematical underpinnings of these methods
+have also been studied ( [15, 34]). Lower-dimensional manifolds arise naturally also
+in the context of diﬀerential-algebraic equations, where the initialization problem has
+attracted considerable attention (e.g. [3]).
+
+Remarkably, the same concept of separation of time scales and low-dimensional
+long-term dynamics underpins the derivation of “eﬀectively simple” descriptions of
+complex systems. In this context, the detailed model is a collection of agents (molecules,
+cells, individuals) interacting with each other and their environment; the entire distri-
+bution of these agents that evolves through atomistic or stochastic dynamic rules. In
+many problems of practical interest it is possible to write macroscopic equations for
+the large-scale, coarse-grained dynamics of the evolving distribution in terms of only
+a few quantities, typically lower moments of the evolving distribution. In the case of
+isothermal Newtonian ﬂow, for example, we can write closed evolution equations for the
+density and the momentum ﬁelds, the zeroth and ﬁrst moments of the particle distribu-
+tion over velocities. This is again a singularly perturbed problem; only in this case the
+higher moments of the evolving distribution have become quickly slaved to the lower
+ones (in this case stresses, after a few collisions, have become functionals of velocity
+gradients). Newton’s law of viscosity therefore represents a similar type of “slow mani-
+fold” as in the ODE case discussed above - fast variables (stresses) become functionals
+of velocity gradients, and the slow manifold is embodied in the closure: Newton’s law
+of viscosity. The use of slow manifolds in non-equilibrium thermodynamics, and more
+generally in the study of complex systems, is also a subject of intense current research
+(see the work of Gorban, Karlin, Oettinger and coworkers [11, 12], as well as [18, 19])
+for some recent computational studies. In this context, one has an “inner simulator” at
+the microscopic or stochastic level for evolving the detailed distributions; a separation
+
+2
+
+of time scales does not arise at this level, but rather at the level of the evolution of the
+statistics or moments of these distributions. Typically the lower moments of the evolv-
+ing distributions parameterize the slow manifold, while the higher moments quickly
+evolve to functionals of the lower ones. Since we do not have explicit formulas for
+the equations at the coarse-grained, macroscopic level, the following interesting ques-
+tion arises: can we beneﬁt from singular perturbation, when no closed form evolution
+equations are available, and the only tool at our disposal is a “black box” dynamic
+simulator of the detailed problem ? This is the problem we will address in this paper.
+We will assume that we are given an evolutionary system which can be described
+
+by
+
+′
+
+′
+
+u
+
+v
+
+= p(u, v)
+
+= q(u, v)
+
+where prime designates diﬀerentiation w.r.t. t, the dimensions of u and v are Nu and Nv
+respectively, and values, u(0), are speciﬁed only for u. In the case of a legacy dynamic
+code, we may not even be given the formulas for these equations explicitly; instead,
+we may be given a time-stepper of the above system as a black-box subroutine: a code
+that, provided an initial condition for u and v, will return an accurate approximation of
+u and v after a time interval (a reporting horizon) ∆T . We wish to ﬁnd v(0) so that the
+solution is “close to a slow manifold.” This statement is deliberately vague because in
+practice we are proceeding on the belief that there exists a slow, attracting, invariant
+manifold that can be parameterized by u and that the variables v, in some sense,
+“contain” the fast variables so that their values on the slow manifold can be computed
+from the values of u at any time. (Note that we do not need to know which are the slow
+variables, only to be able to identify a set of variables suﬃcient to parameterize the slow
+manifold.) This implies that the manifold is the graph of a function v = v(u) over the
+observables u. As we proceed, we will make these statements more precise. However,
+we will not cast them into the form of theorems because, even though this is possible,
+the conditions for the application of the theorems would be essentially impossible to
+verify in all but trivial problems. As with many numerical methods, the primary test
+of applicability is in the actual application.
+
+We assume that the system can be expressed in terms of other variables, x and y,
+of the same dimension as u and v respectively, and that in terms of x and y the system
+can be written in the usual singular perturbation form:
+
+′
+x
+′
+
+ǫy
+
+= f (x, y)
+
+= g(x, y)
+
+where x and y are also of dimension Nu and Nv, respectively. We will assume that their
+initial values are speciﬁed as x(0) and y(0), independent of ǫ. The singular perturbation
+parameter, ǫ, is associated with the gap, or ratio, between the “active” (slow) eigenval-
+ues and the rightmost of the negative, inactive eigenvalues of the linearized problem,
+locally. We stress that we do not assume that we know how to express the equations
+in the form of eqs (3) and (4) nor do we have any knowledge of the transformation
+
+(1)
+
+(2)
+
+(3)
+
+(4)
+
+(5)
+
+(6)
+
+u = u(x, y), x(0, ǫ) = x(0)
+
+v = v(x, y), y(0, ǫ) = y(0)
+
+3
+
+other than that we assume that it is well-conditioned and does not have large deriva-
+tives. We will consider singular perturbation expansions in ǫ, even though the param-
+eter is not identiﬁed (and cannot be varied). The functions f and g could also involve
+the parameter ǫ, but that serves little in this presentation other than to complicate the
+algebra.
+
+The standard singular perturbation expansion for the solution of eqs (3) and (4)
+
+takes the form:
+
+x(t, ǫ) =
+
+ǫnXn(t) + ǫ
+
+ǫnξn(τ )
+
+∞
+
+X
+n=0
+∞
+
+X
+n=0
+
+∞
+
+X
+n=0
+
+∞
+
+X
+n=0
+
+y(t, ǫ) =
+
+ǫnYn(t) +
+
+ǫnηn(τ )
+
+(7)
+
+(8)
+
+This involves an outer solution (X(t), Y (t)), that is smooth in the sense that its time
+derivatives are modest, and an inner solution, (ξ(τ ), η(τ )), that captures the fast bound-
+ary layer where the solution typically changes like e−t/ǫ = e−τ . Both outer and inner
+solutions are expressed as power series in ǫ, the latter as a function of the stretched
+time τ . The inner solution is fast in the sense that each diﬀerentiation by t introduces
+a multiplier of 1/ǫ.
+
+We deﬁne the slow manifold as the manifold that contains all solutions of eqs (3)
+and (4) of the form eqs (7) and (8) with the inner solution identically zero. This is an
+invariant manifold. We say that a solution is an mth-order approximation to a slow
+manifold solution if it has the form in eqs (7) and (8) with the ﬁrst m + 1 terms of the
+inner solution expansion identically zero. A point (u, v) is an m-th order approximation
+to the slow manifold, or m-th order close to the slow manifold, if it lies on an m-th
+order approximate solution.
+
+We want to stress that we are not proposing a technique for ﬁnding the singular
+perturbation expansion. Rather, we are using the ideas as a scaﬀold for the theoretical
+justiﬁcation of the proposed computational method.
+It is possible that the method
+will provide answers even when the singular perturbation expansions do not converge
+(although in that case we have no justiﬁcation other than an intuitive one). The
+procedure we propose for ﬁnding the v values that are close to the slow manifold
+given the u values is to ﬁnd values of v that approximately solves the Nv dimensional
+non-linear equation
+
+dm+1v
+dtm+1 = 0
+which we call “the [(m+1)-st] derivative condition.” (Compare this with the “bounded
+derivative principle” [20] which requires the ﬁrst m time derivatives to be of order 1.
+That condition can be applied to problems with fast oscillating solutions. Ours can
+not, but it is simpler to apply to the types of problems we consider.)
+
+(9)
+
+Note that eq. (9) is a local condition - that is, it is applied at a single time - which we
+will take to be t = t0 = 0 - to determine a value of v corresponding to a given value of
+u. A solution of eqs (1) and (2) starting from these values of u and v will not satisfy eq.
+(9) for t > 0 - but we do expect the solution to be close to the slow manifold. Intuitively
+the condition in eq. (9) ﬁnds a point close to the slow manifold because diﬀerentiation
+“ampliﬁes” rapidly varying components more than slowly varying components, so eq.
+(9) seeks a region where the fast components are small. We will suggest ways in which
+
+4
+
+eq. (9) can be solved approximately in practical codes, even those based on a legacy
+code for the integration of eqs (1) and (2).
+
+While the approach will be presented and implemented for singularly perturbed sets
+of ODEs, the “legacy code” formulation is appropriate also in cases where the inner
+simulator is not a diﬀerential equation solver, but rather a microscopic / stochastic sim-
+ulator. In the equation free approach we have been developing for the computer-assisted
+study of certain classes of complex systems, the variables u correspond to macroscopic
+observables of a microscopic simulation (typically, moments of a stochastically or de-
+terministically evolving distribution).
+In this case v corresponds to statistics of the
+evolving distribution (e.g. higher moments) that become quickly slaved to (become
+functionals of) the observables u; thus the analogy of a slow manifold persists in mo-
+ments space for the evolving distribution.
+
+The paper is organized as follows: In the next Section we will outline the theoretical
+basis for the derivative condition. In Section 3 we discuss ways in which the derivative
+condition can be approximately applied as a diﬀerence condition and used with legacy
+codes. Section 4 presents some simple examples of its application. We conclude with
+a brief summary and outline of the scope of the method and some of the challenges we
+expect to arise in its wider application.
+
+2 Theoretical Basis
+
+In this section we will show that the application of the condition in eq. (9) will
+lead to a mth-order approximation to the slow manifold under suitable smoothness
+and smallness conditions. We will start by sketching the parts of singular perturbation
+expansion theory that we need by paraphrasing the presentation in O’Malley’s mono-
+graph [26], particularly pp 46-52. We will use the same notation to make it easier for
+the reader who wishes to get more detail from that book.
+
+In the following we will write Xn, Yn, ξn, and ηn to mean Xn(t), Yn(t), ξn(τ ),
+and ηn(τ ). We recall from [26] that the t and τ dependencies are treated separately,
+and that the terms in the outer expansion, {Xn, Yn}, are obtained term by term by
+substituting eqs (7) and (8) into eqs (3) and (4), and equating each outer term in ǫn
+to zero, starting with n = 0. For n = 0 we obtain the DAE:
+
+X
+
+′
+0 = f (X0, Y0), X0(0) = x(0)
+0 = g(X0, Y0)
+
+The existence of a smooth solution of this equation for any x(0) requires the assumption
+that gy is non-singular. (The existence of asymptotic expansions for the inner and outer
+components requires the stronger assumption that gy is a stable matrix.) Then, Y0 is
+speciﬁed uniquely in terms of X0 by eq. (11), say as
+
+The nth term in the power series yields the DAE
+
+Y0 = φ(X0).
+
+X
+
+′
+n = fx(X0, Y0)Xn + fy(X0, Y0)Yn + ˜fn
+0 = gx(X0, Y0)Xn + gy(X0, Y0)Yn + ˜gn
+
+5
+
+(10)
+
+(11)
+
+(12)
+
+(13)
+
+where the ˜fn and ˜gn are deﬁned in terms of earlier terms in the outer expansion,
+{Xj, Yj}, j = 0, · · · , n − 1. The initial condition, Xj(0), has to be speciﬁed. Since we
+have set X(0) = x(0), Xj(0) is obtained from eq. (7) by requiring that the ǫj term
+vanishes at t = 0, which gives
+
+Xj(0) = −ξj−1(0).
+
+(14)
+
+We are most interested in the way in which the inner terms are deﬁned, since we
+wish to annihilate the ﬁrst m + 1 of these to get an mth-order approximation. These
+are obtained by considering the change in the inner terms as τ varies for arbitrarily
+small ǫ, in other words, with t = 0 and the outer solutions ﬁxed at their initial values.
+Following [26] we consider terms in successive powers of ǫ and ﬁnd that the ǫ0 terms
+satisfy:
+
+˙ξ0 = f (x(0), Y0(0) + η0) − f (x(0), Y0(0))
+˙η0 = g(x(0), Y0(0) + η0) − g(x(0), Y0(0))
+
+where a dot represents diﬀerentiation w.r.t. τ = t/ǫ. If we have an initial value for
+η0(0) we can solve eq. (16) for η0. Eq. ˚eq-in01 gives ξ0 as an indeﬁnite integral so it
+is determined by specifying ξ0 at any point. This is normally done at τ = ∞, in other
+words, at the end of the boundary layer. However, in our development here we will
+be showing that ηj and ξj are identically zero for j ≤ m, so we will actually choose
+ξj(0) = 0 (so that we also have Xj+1(0) = 0 from eq. (14)). Subsequent inner terms
+satisfy
+
+˙ξn = fy(x(0), Y0(0) + η0)ηn + ˆfn
+˙ηn = gy(x(0), Y0(0) + η0)ηn + ˆgn
+
+(15)
+
+(16)
+
+(17)
+
+(18)
+
+where ˆfn and ˆgn are functions of the earlier terms, {ξj, ηj}, j = 0, · · · , n − 1.
+In
+particular, if all of these terms are zero, then ˆfn and ˆgn are zero. Eq. ˚eq-inn2 can
+be solved if an initial value is known for ηn(0). Once again, eq. (17) gives ξn as an
+indeﬁnite integral.
+
+In the following we are going to show, one by one, that ηj(0) = 0 for j = 0, 1, · · · , m,
+and that we can then choose ξj(0) = 0. Note that once we have shown that η0(0) = 0
+then eqs (15) and (16) indicate that η0(τ ) = 0 and that ξ0(τ ) is constant, which we can
+make zero by choosing ξ0(0) = 0. Then it follows that ˆf1 and ˆg1 are identically zero.
+Repeating this argument, we see that if ηj(0) = 0, ξj(0) = 0, j = 0, · · · , m then ξj(τ )
+and ηj(τ ) are identically zero for j ≤ m. This provides a solution that is an mth-order
+approximation.
+
+Now we return to the original problem phrased in terms of u and v. If we knew
+the transformation to x and y we would do better to work in that space, but our
+assumption is that, although a transformation exists, it is unknown and we have to
+work with u and v. We want to show that if the (m + 1)st derivative of v is zero, then
+the point is mth-order close to the slow manifold. All terms below are evaluated at
+t = 0 or τ = 0 - the time at which we are attempting to solve eq. (9). We will simplify
+the notation and write ηj for ηj(0) and similarly for other terms in the following. We
+have from eq. (6)
+
+dm+1v
+dtm+1 = vy
+
+dm+1y
+dtm+1 + other terms
+
+(19)
+
+6
+
+where the other terms involve either partial derivatives of v w.r.t. x and/or multiple
+derivatives of v w.r.t. y and products of derivatives of y.
+
+Substituting from eq. (8) into eq. (19) and extracting the lowest order term in ǫ
+
+(ǫ−m−1) we ﬁnd that at t = 0
+
+dm+1v
+dtm+1 = ǫ
+
+−m−1vy
+
+dm+1η0
+dτ m+1 + other terms + O(ǫ
+
+−m)
+
+(20)
+
+where now the other terms include products of a higher-order partial derivative of
+v w.r.t. y with more than one τ -derivative of η0 such that the sum of the levels of
+diﬀerentiation is m + 1, that is, terms like
+
+vyy
+
+dkη0
+dτ k
+
+dm+1−kη0
+dτ m+1−k
+
+and terms with higher partial derivatives and more derivatives of η0 in the product.
+Note that whenever η0 appears, it is always diﬀerentiated w.r.t. τ at least once. Also
+note that we do not get any terms involving ξ0 because of the additional ǫ appearing
+in front of the inner solution expansion for x in eq. (7).
+
+Now we use eq. (16) to ﬁnd the higher-order derivatives of η0 w.r.t. τ . We get for
+
+p > 1
+
+dpη0
+dτ p = gp−1
+
+y
+
+˙η0 + other terms
+
+where the other terms involve ˙ηj
+arrive at
+
+0 with j > 1. Substituting eq. (21) in eq. (20) we
+
+dm+1v
+dtm+1 = ǫ
+
+−m−1 
+
+vygm
+
+y ˙η0 +
+
+vzgz ˙ηj
+0
+
++ O(ǫ
+
+−m)
+
+m+1
+
+X
+j=2
+
+
+
+
+
+
+
+where the notation vzgz stands for sums of products of various partial derivatives of v
+and g. Equating the leading term of the right-hand side of eq. (22) to zero, we now
+have a polynomial equation for ˙η0 as
+
+(21)
+
+(22)
+
+(23)
+
+One solution of this is
+
+vygm
+
+y ˙η0 +
+
+vzgz ˙ηj
+
+0 = 0
+
+m+1
+
+X
+j=2
+
+˙η0 = 0
+
+and it is an isolated root as long as vygy is non-singular. Since we have assumed that
+gy is a stable matrix for the existence of a singularly perturbed solution (and hence a
+slow manifold) and that v in some sense spans the fast variables (meaning that vy is
+non singular), this is no problem. If all other partial derivatives involved in eq. (23)
+are “of order one” then other solutions are also of order one - i.e., well separated from
+the zero solution. We will delay discussion of how to avoid the “wrong” solutions for
+(If the problem is linear,
+the moment, and assume that we ﬁnd the zero solution.
+these other terms are null, so there are no other solutions, and it is only in the case of
+high non-linearity when the partial derivatives are large that these other solutions can
+become small and cause problems.)
+
+If ˙η0 = 0 then eq. (16) tells us that η0 = 0 because we have assumed that gy is a
+stable matrix (in the domain of interest). This immediately implies that ξ0 = 0 (or is
+a constant that can be absorbed into the outer solution, thus making ξ0 = 0).
+
+7
+
+As discussed following eq. (18), the vanishing of η0 and ξ0 means that the last
+terms of eqs (17) and (18) are zero for n = 1, making them look similar to eqs (15)
+and (16). Therefore the above argument can now be applied to show that η1 and ξ1
+are zero. This argument can be repeated for higher-order terms as long as the power
+of ǫ in eq. (22) remains negative, in other words, until we have shown that
+
+ηj = ξj = 0,
+
+j = 0, · · · , m
+
+Note that when we have made the (m + 1)st derivative zero, the lower order deriva-
+tives will not be zero, or even small. This is because a small movement away from the
+slow manifold can make large changes in the derivatives of the inner solution. However,
+the diﬀerence between successive v values as we make m successively larger is small -
+of order ǫm+1 as we go from the m-th to the m + 1-st derivative condition as the v
+values are converging to the slow manifold. Hence one way to solve for zeros of high-
+order derivatives would be to start by ﬁnding the zeros of the ﬁrst order derivative,
+then repeating for successively higher-order derivatives, each step requiring smaller
+and smaller changes to v, until we have found the zeros of the (m + 1)st derivatives
+using whatever computational process is appropriate. (The computational process is
+addressed in the next section.) This procedure helps address the issue of ﬁnding the
+smallest of multiple roots of eq. (23) since, for m = 0, there is only one root so that
+the iteration for m = 1 and larger m starts with a good approximation. If the zero
+root is well separated from the others, we will converge to it.
+
+3 Practical Implementation
+
+It is often not practical to work with higher-order derivatives of a diﬀerential equa-
+tion, either because they are algebraically complicated or because the equations are
+deﬁned by a “legacy code” - that is, as an implementation of a step-by-step integrator
+that eﬀectively cannot be change or analyzed. (The same would be true if part of the
+derivative calculations involved table look-up functions that could be diﬃcult to diﬀer-
+entiate.) Therefore, we are interested in methods that do not require direct access to
+the mathematical functions constituting the diﬀerential equation. The same rationale
+applies when the “inner simulator” simulates the system at a diﬀerent level (i.e. in the
+form of an evolving microscopic or stochastic distribution). In this case we only have a
+time-T map for the macroscopic observables, that results from running the microscopic
+simulator and monitoring the evolution of the observables (e.g. particle densities) in
+time [10, 32].
+
+The obvious alternative is to use a forward diﬀerence approximation to the deriva-
+
+∆m+1v(t) ≡ ∆mv(t + H) − ∆mv(t)
+
+(24)
+
+tive, noting that if
+
+with ∆0v(t) = v(t), then
+
+∆m+1v(t) = H m+1 dm+1v
+
+dtm+1 + O(H m+2)
+
+It turns out that there is a straightforward way to implement a functional iteration
+to ﬁnd a zero of the (m + 1)-st forward diﬀerence, even if we only have a “ black box”
+
+8
+
+code that integrates eqs (1) and (2). Suppose we have operators, φ and θ, that, given
+values of u(t) and v(t), yield approximations to u(t + H) and v(t + H), namely
+
+Letting tn = t0 + nH and applying eqs (25) and (26) m + 1 times starting from t = t0
+we can compute approximations
+
+u(t + H) ≈ φ(u(t), v(t))
+
+v(t + H) ≈ θ(u(t), v(t))
+
+uj+1 = φ(uj, vj) ≈ u(tj+1)
+
+vj+1 = θ(uj, vj) ≈ v(tj+1)
+
+(25)
+
+(26)
+
+(27)
+
+(28)
+
+for j = 0, · · · , m. The functional iteration to ﬁnd a v0 for a given u0 such that the
+(m + 1)-st diﬀerence is zero consists of the following steps:
+
+1. Start with a given u0 and a guess of v0.
+
+2. Set the iteration number p = 1.
+3. Set the current iterate v(1)
+4. Apply eqs (27) and (28) m+1 times starting from u0, v(p)
+0
+5. Compute δ = (−1)m∆m+1v(p)
+0
+
+0 = v0
+
+6. If δ is small, the iteration has converged.
+
+7. If δ is not small,
+
+to generate v(p)
+
+1 , v(p)
+
+2 , · · · , v(p)
+
+m+1.
+
+v(p+1)
+0
+
+= v(p)
+
+0 + δ
+
+(29)
+
+8. Increment p and return to step 4.
+
+If the black box integrator provides a good integration (that is, it does not introduce
+spurious oscillations due to near instability) and H is small enough, this process will
+converge on a zero of the diﬀerence.
+
+As an illustration we consider the case m = 0 and assume that the integrator is
+simply forward Euler with a step size such that its product with the magnitude of the
+largest eigenvalue is less than one. We see that the process for v consists of computing
+
+If this is insuﬃciently small, we replace v0 with v0 + δ = v1. This is just the stationary
+projection process used in [8] and is related to the “reverse time” projective integration
+method in [9]. In the case of m = 1 we compute δ as
+
+If this is insuﬃciently small, we add it to v0 to get a new v0 given by
+
+This is precisely the linear interpolant through v1 and v2 back to the starting point.
+It is illustrated in Figure 1.
+(This Figure may be a little confusing because it is
+drawn in the u − v plane to emphasize that u is being held constant from iteration
+
+δ = v1 − v0 ≈ H
+
+(t0).
+
+dv
+dt
+
+δ = −v2 + 2v1 − v0
+
+v0 = 2v1 − v2
+
+9
+
+to iteration. The backwards interpolant, however, is really taking place in the t − v
+plane.) The general iteration is equivalent to the obvious extension of that: an mth
+degree interpolant is passed through v1, v2, · · · , vm+1 to compute a new approximation
+to v0. This is conveniently done using diﬀerences as described above.
+
+Why does this iteration eq. (29) converge for small H under reasonable circum-
+stances? Intuitively, the forward integration exponentially damps the fast components
+more than they are ampliﬁed by the polynomial extrapolation backwards.
+In more
+mathematical terms, the iteration takes the form
+
+vnew
+0 = v0 + δ
+
+(30)
+
+If ∂δ/∂v0 is negative deﬁnite and small, this will converge. We have
+
+∂δ/∂v0 = −(−H)m+1 ∂( dm+1v
+dtm+1 )
+∂v
+
++ O(H m+2)
+
+The term
+
+is dominated by
+
+∂( dm+1v
+dtm+1 )
+∂v
+
+ǫm+1gm+1
+in powers of ǫ. Since we have assumed that gy is a negative deﬁnite matrix for the
+existence of a singular perturbation expansion, convergence follows for small enough
+H.
+
+y
+
+In the above discussion we have used the attractivity of the manifold and, in eﬀect,
+successive substitution in order to converge to a ﬁxed point of our mapping. One can
+accelerate this computation by using ﬁxed point algorithms, like Newton’s method;
+clearly, since no equations and Jacobians are available, the problem lends itself to
+matrix-free ﬁxed point implementations like the Recursive Projection Method by Shroﬀ
+and Keller [28] or Newton-Krylov implementations (see [16] and, for a GMRES-based
+implementation for timesteppers [17]).
+
+4 Examples
+
+We will consider three examples to illustrate the method. The Michaelis-Menten
+enzyme kinetics model is a classic example for singular perturbation (see [1] for a brief
+discussion on the history of the model and its analysis). Since it is a simple system
+we can make a direct comparison with an easily computable singular perturbation
+expansion. The second example is a realistic ﬁve-dimensional chemical reaction system
+with a one dimensional slow manifold. As in many real examples, we do not know the
+slow manifold, and can only show “plausibility” of our solution. The ﬁnal example
+is a contrived ﬁve-dimensional non-linear system with a known two-dimensional slow
+manifold so that we can compute the “errors” as the distance from the slow manifold.
+
+4.1 Michaelis-Menten equation
+
+This is given in a singular perturbation form in [26] as
+′
+x
+
+= −x + (x + κ − λ)y
+
+′
+
+ǫy
+
+= x − (x + κ)y
+
+10
+
+(31)
+
+(32)
+
+Table 1: Michaelis-Menten example with ǫ = 0.1, h = ǫ/100 and n = 1.
+m Computed y Asymptotic y
+0.500000000
+0
+0.503125000
+1
+0.503027344
+2
+-
+3
+-
+4
+
+0.500000000
+0.503049486
+0.503031986
+0.503031924
+0.503031924
+
+with x(0) = 1. For some simple tests we will take κ = 1, λ = 0.5, and ǫ = 0.1 and
+0.01. (These are larger ﬁgures than typical for reactions, but we wish to show that the
+method works even for problems with a relative small gap, and also to have problems
+where the higher-order initializations are visibly diﬀerent from the lowest order ones.)
+
+The ﬁrst few terms of the outer solution are
+
+y =
+
+x
+x + κ
+
++
+
+κλx
+(x + κ)4 ǫ +
+
+κλx(2κλ − 3xλ − xκ − κ2)
+(x + κ)7
+
+ǫ2 + O(ǫ3).
+
+(33)
+
+In the following tests, we implemented the operators φ and θ in eqs (25) and (26)
+using n steps of forward Euler with step size h. In all cases eq. (30) was iterated until
+δ was less than 10−14 (which is rather excessive, but we didn’t want any errors from
+premature termination to color the results). We ran with m = 0, · · · , 4 and compared
+them with the ﬁrst m + 1 terms of eq. (33) through m = 2. For ǫ = 0.1, the results are
+shown in Table 1 with h = ǫ/100 and n = 1, and in Table 2 with h = ǫ/10 and n = 4.
+The tables show the computed approximation to the slow manifold, y(0), for x(0) = 1.
+The tables also show the ﬁrst m terms of the asymptotic expansion for m ≤ 2. As can
+be seen, the discrepancies are larger when H = nh is larger.
+
+A larger “integration time horizon” H gives more rapid convergence. However, this
+means than the diﬀerence estimate is a less accurate approximation to the (m + 1)-
+st derivative. Our theory shows that making the (m + 1)-st derivative zero puts the
+solution on an m-th order approximation to the slow manifold. Any error in the
+derivative estimate creates an error of the same order in the solution, so we should
+choose the time horizon so that the errors in the derivative estimate are of the same
+order as those we are willing to tolerate in the approximation to the slow manifold.
+This suggests that an initial approximation could be calculated with a larger H (and
+small m) to get faster convergence, and then H could be reduced as m is increased to
+increase the accuracy.
+
+The next case, shown in Table 3, uses an ǫ smaller by a factor of 10. Because
+the higher-order terms in ǫ are now smaller, the agreement with the terms in the
+asymptotic expansion is better. (However, we are really interested in the agreement
+of the computed v0 with the v on the slow manifold, rather than with the ability to
+match the ﬁrst few terms in the asymptotic expansion.)
+
+The cases above “constrained” the derivative of the singularly perturbed “fast”
+variable, y. Usually we cannot isolate this variable. To see the eﬀect of having a
+diﬀerent variable set, we transform x and y into
+
+u = x + y
+
+11
+
+(34)
+
+v
+
+(1)
+
+v0
+
+(2)
+
+v0
+
+(3)
+
+v0
+
+(1)
+
+v1
+
+(2)
+
+v1
+
+Slow manifold
+
+u0
+
+(1)
+
+v2
+
+(2)
+
+v2
+
+u
+
+Figure 1: Iterative process for m = 1.
+
+Table 2: Michaelis-Menten example with ǫ = 0.1, h = ǫ/10 and n = 4.
+m Computed y Asymptotic y
+0.500000000
+0
+0.503125000
+1
+0.503027344
+2
+-
+3
+-
+4
+
+0.498886090
+0.503067929
+0.503035446
+0.503035098
+0.503035128
+
+Table 3: Michaelis-Menten example with ǫ = 0.01, h = ǫ/100 and n = 1.
+m Computed y Asymptotic y
+0.500000000
+0
+0.500312500
+1
+0.500311523
+2
+
+0.500000000
+0.500311725
+0.500311533
+
+12
+
+Table 4: Michaelis-Menten example with ǫ = 0.1, h = ǫ/10 and n = 4.
+
+m
+0
+1
+2
+
+m
+0
+1
+2
+
+x
+0.98825957
+0.99743598
+0.99756721
+
+y
+0.51174043
+0.50256402
+0.50243279
+
+ytrue
+0.50011008
+0.50239316
+0.50242566
+
+x
+0.99874363
+0.99974927
+0.99975069
+
+y
+0.50125637
+0.50025073
+0.50024931
+
+ytrue
+0.49999762
+0.50024891
+0.50024927
+
+Table 5: Michaelis-Menten example with ǫ = 0.01, h = ǫ/10 and n = 4.
+
+v = y − x,
+
+(35)
+
+and work with u and v assuming that we do not know this transformation. (We chose
+this transformation because in some sense it puts equal parts of the slow and fast
+variables, x and y, in u and v, illustrating the fact that we need only know variables
+that parameterize the slow manifold (u in this case), not ones that are in some sense
+dominated by the slow manifold.) We assumed that we were given a value of u,
+u(0) = 1.5, and computed the approximation to v(0) using our method. This was run
+with h = ǫ/10 and n = 4 for ǫ = 0.1 in Table 4 and for ǫ = 0.01 in Table 5. The
+tables show the corresponding x and y values derived from u = 1.5 and the computed
+v(0). The column labeled ytrue gives the ﬁrst three terms of the asymptotic expansion
+of y given the x shown in the ﬁrst column. Now we can see the signiﬁcant error that
+the m = 1 case gives rise to when we “come at the slow manifold from a diﬀerent
+angle.” However, the higher-order approximations yield a good approximation to the
+slow manifold.
+
+4.2 A Simpliﬁed Hydrogen-Oxygen Reaction System
+
+We will use an example from Lam and Goussis [23]. It contains seven radicals, O2,
+H, OH, O, H2, H2O, and HO2 which we will group in that order as the vector y. The
+diﬀerential equations are:
+
+= −k1f y1y2 + k1by3y4 + k4f y3y7 − µk5f y1y2
+
+= −k1f y1y2 + k1by3y4 + k2f y4y5 − k2by2y3 + k3f y3y5 − k3by2y6 − µk5f y1y2
+
+dy1
+dt
+dy2
+dt
+dy3
+dt
+
+dy4
+dt
+dy5
+dt
+
+= k1f y1y2 − k1by3y4 + k2f y4y5 + k2by2y3
+−k3f y3y5 + k3by2y6 − k4f y3y7 − 2k8f y2
+
+3 + 2k8by4y6
+
+= k1f y1y2 − k1by3y4 − k2f y4y5 + k2by2y3 + k8f y2
+
+3 − k8by4y6
+
+= −k2f y4y5 + k2by2y3 − k3f y3y5 + k3by2y6
+
+13
+
+Table 6: Reaction Rates for Hydrogen Oxygen System
+
+i
+1
+2
+3
+4
+5
+8
+
+kif
+1.0136 × 1012
+3.5699 × 1012
+4.7430 × 1012
+6.0000 × 1013
+6.2868 × 1015
+6.5325 × 1012
+
+kib
+1.1007 × 1013
+3.2105 × 1012
+1.8240 × 1011
+
+3.1906 × 1011
+
+Table 7: Eigenvalues
+−2.5 × 106
+−1.4 × 106
+−4.0 × 104
+−8.3 × 103
+−4.0 × 10−3
+
+dy6
+dt
+dy7
+dt
+
+= k3f y3y5 − k3by2y6 + k4f y3y7 + k8f y2
+
+3 − k8by4y6
+
+= −k4f y3y7 + µk5f y1y2
+
+The values of the coeﬃcients are taken from the cited paper and shown in Table 6.
+The parameter µ represents pressure and is 4.5 × 10−4. The diﬀerential system has two
+constants of integration representing mass balance for oxygen and hydrogen atoms, so
+it is really a ﬁve-dimensional system. The eigenvalues of a local linearization in the
+region of operation for this example are approximately as shown in Table 7. From
+these we see that after an interval of order one millisecond, the system is eﬀectively
+one dimensional.
+
+In the test below we chose y5 (O2) as the observable variable. The system was run
+from the starting conditions given in [23] until t = 6.41 × 10−4 (one of the reporting
+times in their paper). Then our process was applied, ﬁxing y5 to its current value,
+and choosing all other variables so that their (m + 1)-st forward diﬀerence is zero.
+To emulate a “legacy code” situation, we integrated the equations using a standard
+integrator (ode23s in MATLAB) over m + 1 intervals of length H. In this example,
+we used H = 1 × 10−5. The relative and absolute error tolerances for ode23s were set
+to 10−12 and 10−14, respectively. To maintain the mass balance relationship, radical
+concentrations of H and OH are computed directly from the mass balance relations.
+(These two were chosen because their concentrations remain reasonably non-zero. If a
+radical whose concentration gets close to zero is used, there is some danger of roundoﬀ
+errors causing the concentration to become negative. This will often make the system
+unstable - as well as physically unrealistic.)
+
+The procedure was run with m = 0, 1, · · · , 4. The starting values of the concentra-
+tions were as shown in Table 8. (These are given for the sake of completeness should
+anyone wish to compare with our results.) The constrained results for each m diﬀer
+
+14
+
+Table 8: Radical Concentrations Prior to Constraining to Slow Manifold
+
+y1
+y2
+y3
+y4
+y5
+y6
+y7
+
+4.2783465727 × 10−13
+3.9878034748 × 10−8
+1.3883748623 × 10−10
+1.1300067412 × 10−11
+4.4019256520 × 10−7
+3.9848995981 × 10−8
+5.3981503775 × 10−15
+
+Diﬀerence
+
+m
+0 −2.0767748211 × 10−17
+1 −2.0157837979 × 10−17
+2 −2.0157711737 × 10−17
+3 −2.0157697197 × 10−17
+4 −2.0157429383 × 10−17
+
+Table 9: Diﬀerence between starting y4 and constrained value
+
+from the starting value by no more than 10−14 and from each other by less, so are
+not particularly revealing to study directly. (Larger changes from the starting value
+could be obtained by starting from a diﬀerent point with the same mass balance val-
+ues, but would not give any further insight.) Since it is diﬃcult to compute the slow
+manifold (often a problem when real examples are used) we do not have a good way
+to characterize errors, but we can examine two features to see if the method appears
+to work.
+
+In Table 9 we show the diﬀerences between the starting value and the constrained
+value of y4 for each order of constraint. We see that these diﬀerences show signs of
+“converging” - but this is certainly not irrefutable evidence of convergence. As a second
+test, we considered the relationship of the local derivative of the solution at the result
+of the constraint iteration. If it were very far from the slow manifold, we would expect
+it to have relatively large components of the eigenvectors corresponding to the large
+eigenvalues. (In general, even on the slow manifold it will not have zero components
+in the large eigendirections except for linear problems.) To estimate the amount of
+large eigencomponents present we computed v = dy/dt = f (y) and the local Jacobian
+J = ∂f /∂y at the solution, y, of the constraint iteration. Then we computed the norm
+ratio
+
+Its upper bound is the magnitude of the largest eigenvalue, and a value signiﬁcantly
+less than this is an indicator that u is deﬁcient in the largest eigendirection. Hence,
+the norm ratio gives some indication of the amount of the largest eigencomponents
+present. It values are shown in Table 10.
+
+Since the largest eigenvalue is around 2.5 × 106, it is clear that the m = 0 case
+contains no more than around 20% of the large eigendirections, but this is drastically
+
+R =
+
+||Jv||
+||v||
+
+15
+
+Table 10: Norm Ratio ||Jv||/||v|| at Constrained Solution
+
+m
+0
+1
+2
+3
+4
+
+R
+4.44973316 × 105
+5.85785391 × 101
+6.18695075 × 101
+2.06227270 × 102
+1.50929245 × 102
+
+reduced for m = 1. From this particular starting point and choice of H, larger m gave
+no further improvement, but other choices of starting points or H yield norm ratios
+that reduce with each m increase, although by relatively small amounts.
+
+4.3 A Five-Dimensional System
+
+Because of the diﬃculty of determining whether the method is getting better ap-
+proximations as m increases, our ﬁnal example is an artiﬁcial non-linear ﬁve-dimensional
+problem with a two-dimensional attractive invariant manifold. We start with the
+loosely coupled diﬀerential equations:
+
+dx1
+dt
+dx2
+dt
+
+= −x2
+
+= x1
+
+dw
+dt
+
+= L(x2
+
+1 + x2
+
+2 − w)
+
+du1
+dt
+du2
+dt
+
+= β1 + u2
+1
+
+= β2 + u2
+2
+
+x1 = A cos(t + φ)
+x2 = A sin(t + φ)
+−Lt)
+w = A(1 + be
+ui = −βi/(1 + cie
+1(0) + x2
+
+−βit)
+
+Q =
+
+−3
+
+2
+2 −3
+2
+2
+2
+
+2
+2
+2 −3
+2
+2
+
+2
+2
+2
+2 −3
+2
+
+2
+2
+2
+2
+2 −3
+
+
+
+
+
+
+
+
+
+
+1
+5
+
+
+
+
+
+
+
+
+
+
+16
+
+with L = 1000, β1 = 800, β2 = 1200. The solutions of these are
+
+For any starting conditions, w → x2
+2(0), and, if ui(0) is chosen appropriately,
+ui → −βi and the system goes to a closed orbit where the eigenvalues of the system
+Jacobian at each point on the closed orbit are ±i , -800, -100, and -1200. Thus w =
+1 + x2
+x2
+2 is an attractive two dimensional invariant manifold. The above system is now
+subject to the unitary linear transformation given by y = Qv where v = [xT , w, uT ]T
+and Q is
+
+Table 11: Residuals in Constraint Solutions.
+
+h
+
+m
+
+8.0 × 10−4
+
+2.0 × 10−4
+
+5.0 × 10−5
+
+Residual
+w
+
+x1
+
+x2
+
+u2
+
+1 −4.84 × 10−4 −4.84 × 10−4
+2 −4.34 × 10−6 −4.34 × 10−6
+3 −1.21 × 10−6 −1.21 × 10−6 −6.08 × 10−7
+1 −4.84 × 10−4 −4.84 × 10−4
+2 −3.43 × 10−6 −3.43 × 10−6
+3 −3.01 × 10−7 −3.01 × 10−7 −1.55 × 10−7
+1 −4.84 × 10−4 −4.84 × 10−4
+2 −3.22 × 10−6 −3.22 × 10−6
+3 −7.55 × 10−8 −7.55 × 10−8 −3.09 × 10−8 −7.27 × 10−9
+
+u1
+3.92 × 10−3 −2.50 × 10−3 −1.67 × 10−3
+2.55 × 10−5 −1.91 × 10−5 −8.50 × 10−6
+1.16 × 10−9
+3.91 × 10−9
+3.92 × 10−3 −2.50 × 10−3 −1.67 × 10−3
+2.59 × 10−5 −1.91 × 10−5 −8.50 × 10−6
+1.14 × 10−9
+3.73 × 10−9
+3.91 × 10−3 −2.49 × 10−3 −1.66 × 10−3
+2.64 × 10−5 −1.95 × 10−5 −8.54 × 10−6
+4.20 × 10−10
+
+As in the ﬁrst example, this is chosen to “mix up” the slow and fast components. We
+applied the constraint method using y1 and y2 as the ﬁxed “observables.” They were
+set to the values -791.2 and -792.2 respectively. The subspace y1 = −791.2, y2 = −792.2
+intersects with the invariant manifold at four points (the deﬁning system is a pair of
+quadratic equations). The intersection in the neighborhood of the solution has the
+values
+
+x1 = −3.559434800714,
+
+x2 = −2.559434800714
+
+Integration of y was performed using forward Euler with step size h for m + 1 steps,
+and iterating until the (m + 1)-st forward diﬀerence was zero, with m = 1, 2, and
+3. The diﬀerences between the constraint calculations and the known solution are
+shown for several values of h in Table 11. (They are called “residuals” there, since
+they are not exactly “errors.”) We see that the residuals decrease by two to three
+orders of magnitude for each increase in m except for larger h. Larger h makes the
+iteration converge much more rapidly, but the increased error in the approximation
+of the diﬀerence to the derivative decreases the degree of approximation to the slow
+manifold. In a practical application, it might be wise to use a large h to get an initial
+approximation and then reﬁne with a smaller h, although it might still be wise to use
+some convergence acceleration technique.
+
+5 Discussion and Conclusion
+
+We presented a “computational wrapper” approach for the approximation of a
+low-dimensional slow manifold using a legacy simulator. The approach eﬀectively con-
+stitutes a protocol for the design and processing of brief computational experiments
+with the legacy simulator, which converge to an approximation of the slow manifold; in
+the spirit of CSP, one can think of it as “singular perturbation through computational
+It is interesting that, if one could initialize a laboratory experiment
+experiments”.
+at will, our “computer experiment” protocol could become a laboratory experiment
+protocol for the approximation of a slow manifold.
+
+17
+
+The approach can be enhanced in many ways; we already mentioned the possible
+use of matrix-free ﬁxed point algorithms for the acceleration of its convergence. Here
+we used the “simplest possible” estimation (through ﬁnite diﬀerence interpolation) of
+the trajectory from the results of the simulation. Better estimation techniques (e.g.
+maximum likelihood) can be linked with the data processing part of the approach; this
+will be particularly important when the results of the detailed integration are noisy,
+as will be the case in the observation of the evolution of statistics of complex evolving
+distributions.
+
+It is also important to notice that, upon convergence of the procedure, one can
+implement a matrix-free, timestepper based computational approximation of the lead-
+ing eigenvalues of the local linearization of the dynamics (e.g. through a timestepper
+based Arnoldi procedure, see [5,29]). As the evolution progresses, or as the parameters
+change, this test can be used to adaptively adjust the local dimension of the slow man-
+ifold - we can detect whether a slow mode is starting to become fast, or when a mode
+that used to be fast is now becoming slow. The eigenvectors of these modes constitute
+good additional observables for the parameterization of a “fatter” slow manifold. One of
+the important features of the approach is that one does not need to a priori know what
+the so-called “slow variables” are - any set of observables that can parameterize the
+slow manifold (i.e., over which the manifold is the graph of a function) can be used for
+our approach. If data analysis ( [14, 30]) suggests good observables that are nonlinear
+combinations of the “obvious” state variables, the approach can still be implemented;
+the knowledge of good “order parameters” can thus be naturally incorporated in this
+approach.
+
+Overall, this approach provides us with a good initial condition for the full problem,
+consistent with a set of observables - an initial condition that lies close to the slow
+manifold, sometimes referred to as a “mature” or “bred” initial condition. Such initial
+conditions are essential for the implementation of equation-free algorithms: algorithms
+that solve the reduced problem without ever deriving it in closed form [4, 25, 27]).
+Indeed, short bursts of appropriately initialized simulations can be used to perform long
+term prediction (projective and coarse projective integration) for the reduced problem,
+its stability and bifurcation analysis, as well as tasks like control and optimization.
+We expect this approach to become a vital component of the “lifting” operator in
+equation-free computation.
+
+Acknowledgments
+
+This work was partially supported by AFOSR (Dynamics and Control) and an
+NSF/ITR grant (C.W.G, I.G.K), and NSF Grant #0306523, Div. Math Sci., (T.J.K,
+A.Z).
+
+18
+
+References
+
+[1] R. Aris, Mathematical Modeling; A Chemical Engineer’s perspective, Academic
+
+Press, San Diego (1999)
+
+[2] M. Bodenstein, Eine Theorie der photochemischen Reaktionsgeschwindigkeiten,
+
+Z. Phys. Chem. 85 pp.329-397 (1913)
+
+[3] P. N. Brown, A. C. Hindmarsh and L. R. Petzold, Consistent initial condition
+calculation for diﬀerential-algebraic systems, SIAM J. Sci. Comput., 19 1495.
+(1998)
+
+[4] L. Chen, P. G. Debenedetti, C. W. Gear and I.G.Kevrekidis, ¿From molecular
+dynamics to coarse self-similar solutions: a simple example using equation-free
+computation”, J.Non-Newtonian Fluid Mech. in press (2004).
+
+[5] K. N. Christodoulou and L. E. Scriven, Finding leading modes of a viscous free
+surface ﬂow: an asymmetric generalized eigenproblem. Quart. Appl. Math. 9 17
+(1998)
+
+[6] P. Constantin, C. Foias, B. Nicolaenko and R. Temam, Integral Manifolds and
+Inertial Manifolds for Dissipative Partial Diﬀerential Equations, Springer Verlag,
+NY. (1988)
+
+[7] N. Fenichel, Geometric singular perturbation theory for ordinary diﬀerential equa-
+
+tions, J. Diﬀ. Equ. 31 pp.53-98 (1979)
+
+[8] C. W. Gear and I. G. Kevrekidis, Constraint-deﬁned manifolds: a legacy-code
+approach to low-dimensional computation, J. Sci. Comp. in press, (2004); also
+physics/0312094 at arXiv.org.
+
+[9] C. W. Gear and I. G. Kevrekidis, Computing in the Past with Forward Integration,
+Physics Letters A. 321 pp.335-343 (2004); also as nlin.CD/0302055 at arXiv.org
+
+[10] C. W. Gear,
+
+I.G.Kevrekidis and C. Theodoropoulos, “Coarse” Integra-
+tion/Bifurcation Analysis via Microscopic Simulators: micro-Galerkin methods,
+Comp. Chem. Engng. 26 pp.941-963 (2002)
+
+[11] A. N. Gorban and I. V. Karlin Geometry of irreversibility: the ﬁlm of nonequilib-
+rium states, Phys. Rep. in press, (2004); also cond-mat/0308331 at arXiv.org
+
+[12] A. N. Gorban, I. V. Karlin and A. Yu. Zinovyev, Constructive methods of invariant
+
+manifolds for kinetic problems, cond-mat/0311017 at arXiv.org
+
+[13] J. Guckenheimer and P. Holmes, Nonlinear Oscillations, Dynamical Systems and
+
+Bifurcations of Vector Fields, Spinger-Verlag, NY (1983)
+
+[14] I. T. Jolliﬀe, Principal Component Analysis, Springer-Verlag, New York, NY
+
+(1986)
+
+[15] H. G. Kaper and T. J. Kaper, Asymptotic analysis of two reduction methods for
+
+systems of chemical reactions, Physica D 65 pp.66-93 (2002)
+
+[16] C. T. Kelley, Iterative Methods for Linear and Nonlinear Equations, SIAM Pub-
+
+lications, Philadelphia (1995)
+
+[17] C. T. Kelley, I. G. Kevrekidis and L. Qiao, Newton-Krylov solvers for time-
+steppers, submitted to SIAM Dyn. Systems, (2004); also math.DS/0404374 at
+arXiv.org
+
+19
+
+[18] I. G. Kevrekidis, C. W. Gear, J. M. Hyman, P. G. Kevrekidis, O. Runborg and
+K. Theodoropoulos, Equation-free coarse-grained multiscale computation: en-
+abling microscopic simulators to perform system-level tasks, Comm. Math. Sci-
+ences 1(4) pp.715-762 (2003); original version can be obtained as physics/0209043
+at arXiv.org.
+
+[19] I. G. Kevrekidis, C. W. Gear, and G. Hummer, Equation-Free: The computer-
+aided analysis of complex multiscale systems, AIChE Journal, in press (2004).
+
+[20] H-O. Kreiss, Problems with Diﬀerent Time Scales, in Multiple Time Scales, ed. J.
+
+H. Brackbill and B. I. Cohen, pp 29-57, Academic Press (1985)
+
+[21] S. H. Lam, Using CSP to understand complex chemical kinetics, Combust. Sci.
+
+Technol. 89 pp.375-404 (1993)
+
+[22] S. H. Lam and D. A. Goussis, The CSP method for simplifying chemical kinetics,
+
+Int. J. Chem. Kin. 26 pp.461-486 (1994).
+
+[23] S. H. Lam and D. A. Goussis, Understanding Complex Chemical Kinetics with
+Computational Singular Perturbation,: 22nd Symposium on Combustion, The
+Combustion Institute, pp.931-941 (1988)
+
+[24] U. Maas and S. B. Pope, Simplifying chemical kinetics: intrinsic low-dimensional
+
+manifolds in composition space, Comb. Flame 88 pp.239-264 (1992)
+
+[25] A. G. Makeev, D. Maroudas, A. Z. Panagiotopoulos and I.G. Kevrekidis, Coarse
+bifurcation analysis of kinetic Monte Carlo simulations: a lattice gas model with
+lateral interactions, , J. Chem. Phys. 117(18) pp.8229-8240 (2002)
+
+[26] R. E. O’Malley, Singular Perturbation Methods for Ordinary Diﬀerential Equa-
+tions, Applied Mathematical Scinces Vol 89, Springer-Verlag, Berlin (1991)
+
+[27] R. Rico-Martinez, C. W. Gear and I. G. Kevrekidis, “Coarse Projective KMC
+Integration: Forward/Reverse Initial and Boundary Value Problems”, J. Comp.
+Phys., 196(2) pp.474-489 (2004)
+
+[28] G. M. Shroﬀ and H. B. Keller, Stabilization of unstable procedures: the recursive
+
+projection method, SIAM J. Numer. Anal., 30 pp. 1099–1120 (1993)
+
+[29] C. Siettos, M. D. Graham, and I. G. Kevrekidis, Coarse Brownian dynamics for ne-
+matic liquid crystals: bifurcation, projective integration and control via stochastic
+simulation, J. Chem. Phys., 118 pp.10149–10157 (2003)
+
+[30] A. J. Smola, O. L. Mangasarian, and B. Schoelkopf, Sparse Kernel Feature Anal-
+ysis, in 24th Annual Conference of Gesselschaft f¨ur Klassiﬁkation (University of
+Passau, Passau, Germany, 2000), data Mining Institute Technical Reort 99-04
+(1999)
+
+[31] R. Temam Inﬁnite Dimensional Dynamical Systems in Mechanics and Physics
+
+Springer Verlag, NY. (1988)
+
+[32] K. Theodoropoulos, Y.-H. Qian and I.G.Kevrekidis, “Coarse” stability and bifur-
+cation analysis using timesteppers: a reaction diﬀusion example, Proc. Natl. Acad.
+Sci. 97(18), pp.9840-9843 (2000).
+
+[33] T. Turanyi, A. S. Tomlin and M. J. Pilling, On the error of the quasi-steady state
+
+approximation, J. Phys. Chem. 97 163 (1993)
+
+20
+
+[34] A. Zagaris, H. G. Kaper and T. J. Kaper, Analysis of the Computational Singular
+Perturbation Reduction Method for Chemical Kinetics, J. Nonlin. Sci. 14 pp.59-
+91 (2004)
+
+21
+
+

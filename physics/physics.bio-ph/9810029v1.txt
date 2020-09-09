@@ -1,0 +1,4461 @@
+Eﬃcient Monte Carlo Methods for Cyclic Peptides
+
+Minghong G. Wu and Michael W. Deem
+Chemical Engineering Department
+University of California
+Los Angeles, CA 90095-1592
+
+February 17, 2014
+
+Abstract
+
+We present a new, biased Monte Carlo scheme for simulating complex, cyclic
+peptides. Backbone atoms are equilibrated with a biased rebridging scheme,
+and side-chain atoms are equilibrated with a look-ahead conﬁgurational bias
+Monte Carlo. Parallel tempering is shown to be an important ingredient in the
+construction of an eﬃcient approach.
+
+8
+9
+9
+1
+ 
+t
+c
+O
+ 
+5
+1
+ 
+ 
+]
+h
+p
+-
+o
+i
+b
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+9
+2
+0
+0
+1
+8
+9
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Submitted to Molecular Physics.
+
+1
+
+1 Introduction
+
+Peptides are of fundamental importance in biological systems. They regulate homeosta-
+sis, particularly thirst, feeding and pain [1], serve as important signaling molecules in the
+nervous system [2], and are used as a chemical defense mechanism by some organisms [3].
+Peptides have been used within the biotechnology industry to identify antagonists blocking
+various abnormal enzymatic reactions or ligand-receptor interactions [4]. Cyclic peptides
+or constrained peptides are often preferred for this application, since such molecules lose
+less conﬁgurational entropy upon binding [5]. A classic example is the blocking of platelet
+aggregation by RGD peptides. The GPIIb/IIIa-ﬁbronectin interaction is known to be re-
+sponsible for blood platelet aggregation [6]. Roughly eight cyclic peptides of the form
+
+CRGDxxxC, CxxxRGDC, and CxxxKGDC that are eﬀective platelet aggregation blockers
+were identiﬁed [7]. Several companies are now pursuing organic analogs of these RGD
+peptides in clinical trials. Although no successful drug has yet been designed by purely
+computational methods, the discovery of the RGD peptide and roughly thirty other phar-
+maceuticals has beneﬁted in some way from computer simulation [8].
+
+Simulation of complex biomolecules with standard Metropolis Monte Carlo or conven-
+tional molecular dynamics, however, often fails to sample conformations from the correct
+Boltzmann distribution. The diﬃculty lies in the intrinsic high energy barriers between the
+conformations adopted at room- or body-temperature, barriers that cannot be overcome
+with these methods. High temperature [9] or potential-scaled [10] molecular dynamics can
+cross these barriers, but these methods sample from a distribution that is not the one of
+interest.
+
+The conﬁgurational bias Monte Carlo method (CBMC), ﬁrst developed by Frenkel,
+Smit and de Pablo [11, 12], successfully samples complex energy landscapes by using local
+information when proposing moves. This method has been successfully applied to long
+chain molecules [13], phase behavior of long chain alkanes [14, 15], and conformations of
+hydrocarbons within zeolite channels [16]. This method has been applied to the simula-
+tion of linear and cyclic peptides [17]. This approach proved to be especially eﬃcient in
+sampling cyclic peptides with barrier-separated conformations, even when the location of
+the conformation and energy barriers were not known a priori. For cyclic peptides, this
+method changes conformations locally by perturbing segments of two to three amino acids.
+This type of move was inspired by the ‘concerted rotation’ method for alkane chains [18].
+Such moves have the potential to equilibrate large molecules with complex topologies.
+
+Despite the successes of the conﬁgurational bias and concerted rotation scheme, dif-
+ﬁculties still remain for complex cyclic peptides. Long or bulky side chains are not well
+In some cases, the backbone of cyclic peptides is not sam-
+equilibrated, for example.
+pled eﬃciently, due to the unpredictable presence of large barriers in the multidimensional
+torsional-angle free-energy landscape. We present an integrated methodology for simu-
+lation of cyclic peptides. Special concerns are given to optimizing and quantifying the
+eﬃciency of our method. We propose a peptide rebridging scheme, inspired by a method
+proposed for polymers [19, 20, 21], and suitable for backbone equilibration of peptides.
+Eight torsional degrees of freedom are altered with this backbone move. Implementation
+of the move is reduced in all cases to the solution of a one-dimensional numerical problem.
+Four approaches to biasing the rebridging moves are proposed and compared. For side
+
+2
+
+chain regrowth, we propose two new methods, ‘semi-look-ahead’ and ‘look-ahead’, inspired
+by Meirovitch’s lattice scanning method [22]. We ﬁnd that both methods equilibrate side
+chains rapidly. We compare their eﬃciency and discuss optimal parameter values.
+
+For the most complex cyclic peptides, biased Monte Carlo is still not optimally eﬃ-
+cient. To overcome the remaining barriers to eﬀective sampling, we add parallel tempering
+to our range of techniques. Parallel tempering is a rigorous Monte Carlo method, ﬁrst
+proposed for the study of glassy systems with large free energy barriers [23]. This method
+has been successfully applied to spin glasses [24, 25], self-avoiding random walks [26], lat-
+tice QCD [27], linear peptides [28], and crystal structure determination [29]. In parallel
+tempering, we consider a set of identical systems, each at a distinct temperature. Each
+system is equilibrated with both updating and swapping moves. The swapping moves cou-
+ple the systems in such a way that the lowest temperature system is able to escape from
+local energy minima without explicit knowledge of the barriers. This method achieves rig-
+orously correct canonical sampling, and it signiﬁcantly reduces the equilibration time. We
+show that the combination of biased Monte Carlo and parallel tempering achieves eﬀective
+sampling, quickly overcoming energy barriers and approaching the Boltzmann distribution.
+We deﬁne our all-atom, molecular model of peptides in Sec. 2.1. The peptide rebridging
+scheme is described in Sec. 2.2, where technical details are provided. This section can be
+skipped on a ﬁrst reading, as it is simply an extension of the method in ref. [17] to include
+pre-screening. How biasing can be done is discussed in Sec. 2.3.
+In Sec. 2.4 we apply
+the concept of parallel tempering to our system. The ‘semi-look-ahead’ and ‘look-ahead’
+methods for side chains are presented in Sec. 2.5 and Sec. 2.6, respectively. Results for
+the simulation of complex, cyclic peptides are given in Sec. 3, where the eﬃciency of our
+approach is demonstrated. We discuss the results in Sec. 4, and make our conclusions in
+Sec. 5.
+
+2 Simulation Methods
+
+2.1 Molecular Model
+
+We chose to use the AMBER force ﬁeld [30] to account for molecular interaction. Atoms
+were treated explicitly, in contrast to the united atom model often used in alkane chain
+and lattice-based simulations. The all-atom model introduces more and larger energy
+barriers than does the united atom model, but the all-atom model is a better description
+of the molecule. The price we must pay for the increased precision is use of a more
+sophisticated simulation algorithm. Other suitable potential models are ECEPP [31] and
+CHARMm [32]. Dielectric theory was used to estimate solvent eﬀects [33]. Fast coordinates
+such as bond lengths and bond angles were ﬁxed at their equilibrium value. Only the
+biologically-relevant, torsional degrees of freedom were sampled. This is a fairly good
+assumption at room temperature. With this assumption, a molecule is comprised of a set
+of so-called ‘rigid units’. Following the deﬁnition in ref. [17], a rigid unit consists of a set of
+atoms and bonds that form a rigid body. The relative distance between any pair of atoms
+within a rigid unit is constant. Adjacent rigid units are connected by a sigma bond.
+
+The rigid units are labeled from the NH2 terminal to the COOH terminal of amino
+acid. Each rigid unit has exactly one incoming bond that starts from the previous unit and
+
+3
+
+ends within it. All other bonds that leave the unit are deﬁned to be outgoing bonds. For
+example, a CαH unit has two outgoing bonds, the ﬁrst going to the residue and the second
+going to the next backbone unit. For unit i, we deﬁne θi to be the angle formed by the
+incoming bond and the outgoing bond to the next backbone unit. The atom that ends the
+incoming bond is deﬁned to be a head atom, and the atom that starts the outgoing bond
+is deﬁned to be a tail atom. We deﬁne rih and rit to be the positions of the head and tail
+atoms of unit i, respectively.
+
+Rigid units that appear in the backbone are divided into two topological types. Type
+A includes all rigid units with identical head and tail atoms. Type B includes the CONH
+amide group, which has θi = 0. Figure 1 illustrates the geometry of these two types and
+the deﬁnitions of θih and θit, which are the angles spanned by rit − rih and the incoming
+and outgoing bonds, respectively.
+
+2.2 Rebridging Scheme
+
+Although the chemical functionality of peptides lies mostly in the side chains, backbone
+equilibration is important since the backbone serves as a scaﬀold for the side chains. We,
+therefore, use two types of biased Monte Carlo moves, chosen at random: movement of a
+random segment of backbone with rigid rotation of the associated side chains and regrowth
+of a randomly picked side chain. Here we describe the backbone move, a peptide rebridging
+scheme.
+
+The peptide rebridging scheme is inspired by the concerted rotation [18] and rebridg-
+ing [19] moves for alkane chains and the extension of concerted rotation to peptides [17].
+Peptide rebridging causes a local conformational change within the molecule, leaving the
+rest of the molecule ﬁxed. Rebridging moves are not only suitable for cyclic peptides but
+also suitable for the internal parts of larger linear peptides and proteins. The main fea-
+tures that distinguish our rebridging scheme are the pre-screening process, more degrees
+of freedom per move, and more eﬃcient biasing. We proposed ﬁve variations of rebridging
+moves, diﬀering in the probabilities of choosing one of the many possible geometric solu-
+tions. They are Metropolis (MT), no Jacobian (NJ), with Jacobian (WJ), with Jacobian
+and old solutions (WJO), and with Jacobian and multiple rotations (WJM). Here we de-
+scribe WJ. Other variations will be described in Section 2.3. Peptide rebridging is carried
+out in several steps:
+
+1. Randomly select two torsional degrees of freedom that are separated by six other
+torsional degrees of freedom. We label the two torsional angles as φ0 and φ7. The
+eight rigid units, including both ends, are labeled from unit 0 to unit 7. Backbone
+positions are denoted ria, where i = 0, . . . , 6 and a = h (head) or t (tail). Figure 2
+depicts a segment that is selected to be rebridged.
+
+2. The angles φ0 and φ7 are rotated, causing the rigid units between 0 and 7 to change
+while leaving the rigid units before 0 and after 7 unchanged. The range of rotation
+is within ±∆φmax. These two rotations break the connectivity of the molecule. The
+rotations provide new trial positions of r1h and r5t. We denote the new values by φ′
+0
+and φ′
+7.
+
+4
+
+3. Find all geometrical solutions, φ′
+
+7, that re-insert the backbone units in a valid
+way between rigid units 1 to 6. How we solve this geometrical problem will be
+described below. If no solution is found, this move is rejected. Otherwise, calculate
+the Rosenbluth factor, W(n), which is deﬁned as
+
+0, . . . , φ′
+
+W(n) =
+
+J(n)
+i
+
+exp(−βU(n)
+
+i ) ,
+
+where k(n) is the number of geometrical solutions found. The Jacobian associated
+with the constraints for the ith solution is J(n)
+
+.
+
+i
+
+4. Pick a solution from these k(n) solutions with probability
+
+J(n)
+i
+
+exp(−βU(n)
+i )
+
+.
+
+pi =
+
+W(n)
+i
+
+5. Solve the geometrical problem corresponding to φ0 and φ7. These solutions include
+the old conﬁguration φ0, . . . , φ7 and are used to calculate the old Rosenbluth factor
+
+W(o) =
+
+J(o)
+i
+
+exp(−βU(o)
+
+i ) ,
+
+where k(o) is the number of solutions in the old geometry.
+
+6. The attempted move is accepted with the probability
+
+acc(o → n) = min
+
+1,
+
+W(n)
+W(o) !
+
+.
+
+ 
+
+(1)
+
+(2)
+
+(3)
+
+(4)
+
+The Jacobian in eqs. (1) and (3) accounts for the fact that when we solve for the angles
+
+φ1, . . . , φ6, we do not produce uniform distributions. The Jacobian is deﬁned by
+
+φ1, φ2, φ3, φ4, φ5, φ6
+r5t, ˆu6, γ6
+
+J
+
+ 
+
+!
+
+=
+
+ˆu6 · ˆe3
+det |B|
+
+Bij = [ˆuj × (r5t − rj h)]i, if j ≤ 3,
+
+[ˆuj × ˆu6]j−3, if j = 4, 5.
+
+(5)
+
+Here ˆui is the unit vector of the ith incoming bond, and ˆe3 is a unit vector along the labo-
+ratory z-axis. The Eulerian angle γ6 is the azimuthal angle of ˆu7 in a spherical coordinate
+system deﬁned with ˆu6 as the z-axis. The angle is measured with respect to the plane
+deﬁned by ˆu6 and ˆe3. It is worth mentioning that in refs. [17] and [18], the Jacobian lacked
+the ˆu6 · ˆe3 term. The Jacobian should be invariant under orthogonal transformations, but
+the Jacobians in refs. [17] and [18] are not. Despite this, proper sampling was attained,
+because the omitted terms cancel in the acceptance ratio. This cancellation does not occur
+in rebridging, since ˆu6 is changed by the rotation of φ7. The Jacobian appears as a conse-
+quence of the end-atom constraints in the canonical partition function of a constrained or
+
+k(n)
+
+Xi=1
+
+k(o)
+
+Xi=1
+
+5
+
+cyclic molecule. The Jacobian is derived in Appendix A, where a careful discussion of the
+cyclic constraint is given as well.
+
+The geometrical problem in rebridging is solved by seeking conserved quantities. It is
+conceptually helpful to imagine a break point in the segment to be regrown. The rigid
+units before the break point are built upon the positions of the preceding units, whereas
+the rigid units after the break point are built upon the positions of the following units.
+When rih and r(i−1)t are expressed in local coordinates of the (i-1)th unit, the positions
+are said to be deﬁned in ‘forward notation’. When we build up these positions from the
+opposite direction, the positions are said to be deﬁned in ‘backward notation’. How we
+choose the break point depends on the identity of the rigid units to be regrown. Rigid
+units before the break point are always deﬁned by forward notation and rigid units after
+the break point are always deﬁned by backward notation. With forward notation we have
+r1t = r1t(φ1), r2h = r2h(φ1), r2t = r2t(φ1, φ2), r3h = r3h(φ1, φ2), and so on. With backward
+notation, we have r5h = r5h(φ6), r4t = r4t(φ6), r4h = r4h(φ6, φ5), r3t = r3t(φ6, φ5), and so
+on.
+
+We use a variant of Flory’s local coordinate system [34]. The system was modiﬁed for
+units with θi = 0 to reduce the number of variables appearing in the constraint equations.
+The general formulas for r(i+1)h(φ1, . . . , φi) and rit(φ1, . . . , φi) are
+
+r(i+1)h(φ1, . . . , φi) = rit(φ1, . . . , φi) + lit,(i+1)hTlab
+
+i ΛiΦi
+
+rit(φ1, . . . , φi) = rih + lih,itTlab
+
+i ΛihΦi
+
+where
+
+0
+sin θi
+0
+
+0
+sin θih
+0
+
+0
+0
+sin θi !
+0
+0
+sin θih !
+
+Λi ≡
+
+Λih ≡
+
+Φi ≡
+
+cos θi
+0
+0
+cos θih
+0
+0
+1
+cos φi
+sin φi !
+
+ 
+
+ 
+
+ 
+
+(6)
+
+(7)
+
+Here lia,jb denotes the constant distance between ria and rjb. We call unit i the reference
+unit of unit i+1. We use the form of eq. (6) because it explicitly isolates the terms involving
+the variable φi.
+
+The labels a and b can be either h or t. This notation is dropped when the unit is an A
+unit. For example, l1,2h says unit 1 is an A unit and deﬁnes the distance between r1h and
+r2h. In this case we also drop the head or tail notation for vectors and write r1 = r1h = r1t.
+The transformation from local coordinates to the laboratory coordinates in forward
+
+notation is
+
+Tlab
+
+1 ≡ ( ˆu1 ˆv1 ˆw1 )
+i (φ1, . . . , φi−1) ≡ ( ˆui ˆvi ˆwi )
+
+Tlab
+
+= Tlab
+
+1 T1φT1θT2φ · · · T(i−1)φT(i−1)θ
+cos θi − sin θi 0
+sin θi
+0
+1 !
+0
+
+cos θi
+0
+
+ 
+
+Tiθ ≡
+
+6
+
+(8)
+
+(9)
+
+(10)
+
+0
+
+0
+
+1
+0 cos φi − sin φi
+0 sin φi
+1 0 0
+0 1 0
+0 0 1 !
+
+cos φi !
+
+, if θi 6= 0
+
+, if θi = 0 .
+
+ 
+
+ 
+
+Tiφ ≡ 
+
+
+
+Here ˆui, ˆvi, and ˆwi are the axes of the local coordinates of unit i in forward notation in
+the laboratory frame. The last matrix is modiﬁed from Flory’s coordinate system. It is
+deﬁned so that Tlab
+
+i−1 when θi = 0. This deﬁnition simpliﬁes our algorithm.
+
+i = Tlab
+
+For the rigid units beyond the break point, we use backward notation. In backward no-
+tation, unit i+1 is the reference unit of unit i. The general formulas for r(i−1)t(φ6, . . . , φi+1)
+and rih(φ6, . . . , φi+1) are
+
+r(i−1)t(φ6, . . . , φi+1) = rih(φ6, . . . , φi+1) + l(i−1)t,ihTlab
+
+i ΛiΦi+1
+
+rih(φ6, . . . , φi+1) = rit + lih,itTlab
+i ΛitΦi+1
+0
+0
+sin θit
+0
+sin θit !
+0
+
+cos θit
+0
+0
+
+Λit ≡
+
+ 
+
+.
+
+The transformation from local coordinates to the laboratory coordinates in backward no-
+tation is
+
+Tlab
+
+i ≡ ( ˆxi ˆyi ˆzi )
+
+= Tlab
+
+5 T6φT5θT5φ · · · T(i+2)φT(i+1)θ .
+
+Here ˆxi, ˆyi, and ˆzi are the axes of the local coordinates of unit i in backward notation in
+the laboratory frame.
+
+For all rebridging cases that we consider, it is possible to ﬁnd three constraint equations
+with three independent torsional angles and to determine the solutions by solving a one-
+dimensional equation numerically. The constraint equations vary depending on the types
+of the units 1 to 5. Table 1 lists the six distinct cases that can occur and the corresponding
+constraint equations. The dependencies of the backbone positions on the torsional angles
+are speciﬁed explicitly in the argument, and one can tell from the arguments if the positions
+are in forward or backward notation.
+
+In all cases, the ﬁrst two constraint equations have at most two independent variables
+each. In one special case (case 3), an equation with only one variable is found. In the ﬁrst
+three cases, the ﬁrst two equations of each set are used to derive two torsional angles as
+analytic functions of φ1. These two analytic expressions are in turn substituted into the
+third equation, which is solved numerically in the φ1 domain. In cases 1 and 2 the other
+two independent angles are φ2 and φ6. Case 3 is special because φ2 is a constant. The other
+torsional angle needed in the third constraint equation is φ6. In cases 4 and 5, the approach
+is similar, except that the equations are solved numerically in the φ6 domain. Actually,
+cases 4 and 5 are mirror images of case 1 and 2, with the rigid units labeled in the opposite
+direction. Strictly speaking, there are only four distinct cases: cases 1, 2, 3, and 6. In
+case 6, the second and fourth rigid units are arbitrary and can be either A or B. This is a
+special case in which r3 can be written as a function of a single, new torsional angle. This
+case includes, for example, ABABA, which corresponds to Cα-amide-Cα-amide-Cα. It is
+obvious that the geometrical constraints keep the distances |r1 − r3| and |r3 − r5| constant
+
+7
+
+in all possible solutions. We also know the trial distance |r1 − r5| after performing the two
+rotations. These distances are conserved in all solutions. Therefore, possible positions of
+r3 should fall on the intersection of two spheres centered at r1 and r5. Figure 3 shows the
+geometry of this segment and the conserved distances. If the triangle inequality
+
+holds, we can deﬁne a new set of local coordinates for unit 3:
+
+to obtain an expression for r3 as a function of a single, new angle φ′
+3:
+
+where
+
+l1,3 + l3,5 ≥ |r1 − r5|trial
+
+ˆu′
+3 = (r5 − r1)/l1,5
+3 = ˆu1 × ˆu′
+ˆw′
+3 × ˆu′
+3 = ˆw′
+ˆv′
+3
+
+3/|ˆu1 × ˆu′
+3|
+
+r3(φ′
+
+3) = r1 + l1,3Tlab
+3
+
+Λ′
+
+3Φ′
+
+3 ,
+
+′
+
+′
+
+Tlab
+3
+
+≡ ( ˆu′
+
+3 ˆv′
+cos θ′
+3
+0
+0
+cos−1 l1,3
+
+3 ˆw′
+3 )
+0
+sin θ′
+3
+0
+2 + l1,5
+
+
+
+
+
+0
+0
+sin θ′
+3
+
+2
+2 − l3,5
+
+
+
+2l1,3l1,5
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+
+1
+cos φ′
+3
+sin φ′
+3
+
+.
+
+
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+Λ′
+
+3 ≡
+
+θ′
+3 ≡
+
+Φ′
+
+3 =
+
+(11)
+
+(12)
+
+(13)
+
+(14)
+
+
+
+
+All of the constraint equations in table 1 can be grouped by their functional forms into
+four types. The fourth column of table 1 shows the type of each constraint equation. The
+general functional forms of these constraint equations are listed in table 2. The ﬁrst type
+is a quadratic function of a single variable. The other types are functions of two torsional
+angles. They are based on either conserved distances, as in ‘dist’, or conserved angles, as
+in ‘dot’ and ‘dot1’. The last column of table 2 lists the characteristic matrix, which is used
+in the pre-screening process and the evaluation of the third target function.
+
+We illustrate the peptide rebridging algorithm by taking case 6 in table 1 as an example.
+If eq. (11) is not satisﬁed, the trial move is immediately rejected because of a geometrical
+failure. Otherwise, we go on. The ﬁrst constraint equation allows us to express φ1 in terms
+of φ′
+
+3. To do this, we rewrite the constraint equation as
+
+0 = [r3(φ′
+
+3) − r2h]⊤[r3(φ′
+
+3) − r2h] − l2h,3
+
+2
+
+and use eqs. (6) and eq. (13) to obtain
+
+′
+
+0 = (l1,3Tlab
+Λ′
+3
+2 + l1,2h
+
+= l1,3
+
+3Φ′
+2 − l2h,3
+
+3 − l1,2hTlab
+
+1 Λ1Φ1)⊤(l1,3Tlab
+Λ′
+3
+⊤Tlab
+3
+
+2 − 2l1,3l1,2hΦ′
+3
+
+⊤Λ′
+3
+
+3Φ′
+′⊤
+
+3 − l1,2hTlab
+Tlab
+1 Λ1Φ1 .
+
+′
+
+1 Λ1Φ1) − l2h,3
+
+2
+
+(15)
+
+8
+
+We introduce the constant matrix
+
+C ≡
+
+1 0 0
+0 0 0
+0 0 0 !
+
+ 
+
+Φ′
+3
+
+⊤MΦ1 = 0 ,
+
+and multiply the ﬁrst three constant terms in eq. (15) by Φ′
+3
+
+⊤CΦ1, which is unity, to obtain
+
+where the constant characteristic matrix M is deﬁned as
+
+M = (l1,3
+
+2 + l1,2h
+
+2 − l2h,3
+
+2)C − 2l1,3l1,2hΛ′
+3
+
+⊤(Tlab
+3
+
+′
+
+)
+
+⊤
+
+Tlab
+
+1 Λ1 .
+
+In each case, the ﬁrst two constraint equations can be cast into the form of eq. (17).
+The right hand column of table 2 lists the constraint equations and the corresponding
+characteristic matrix M for each case. Equation (18), for example, is a special case of the
+‘dist’ type constraint equation in table 2, in which we have ri′ = rj′ = r1.
+To solve the constraint equations, we set ωi = cos(φi/2) and use
+
+to replace each cos φi and sin φi in eq. (17). We rewrite eq. (18) as
+
+The matrix M′ is related to M by
+
+M11 + M12 + M21 + M22
+
+2(M31 + M32)
+
+M11 + M12 − M21 − M22
+
+2(M13 + M23)
+4M33
+2(M13 − M23)
+
+M11 − M12 + M21 − M22
+
+2(M31 − M32)
+
+M11 − M12 − M21 + M22
+
+M′ =
+
+
+
+
+
+Equation (20) is quadratic in ω1, and we ﬁnd
+
+cos φi = (1 − ω2
+i )/(1 + ω2
+i )
+sin φi = 2ωi/(1 + ω2
+i )
+
+Ω′
+3
+
+⊤M′Ω1 = 0 ,
+
+Ωi ≡
+
+1
+ωi
+ω2
+
+ 
+
+i !
+
+.
+
+ω1 =
+
+1
+2c2 h
+= f1±(ω′
+
+3) ,
+
+−c1 ± (c2
+
+1 − 4c0c2)
+
+1
+2
+
+i
+
+c0 = M′
+c1 = M′
+c2 = M′
+
+11 + M′
+12 + M′
+13 + M′
+
+21ω′
+22ω′
+23ω′
+
+3 + M′
+3 + M′
+3 + M′
+
+31ω′
+3
+32ω′
+3
+33ω′
+3
+
+2
+
+2
+
+2 .
+
+9
+
+(16)
+
+(17)
+
+(18)
+
+(19)
+
+(20)
+
+(21)
+
+.
+
+
+
+
+
+(22)
+
+(23)
+
+(24)
+
+where
+
+where
+
+Since ω′
+valued ω1, pre-screening can be done by solving
+
+3 must produce a non-negative discriminant in eq. (23) in order to produce a real-
+
+c2
+1 − 4c0c2 = 0 .
+
+(25)
+
+Equation (25) is a quartic polynomial equation. We use an eigenvalue method to solve this
+equation and to determine the valid domains of φ′
+3 in the ﬁrst constraint equation [35].
+Note that φ1 = f1±(φ′
+
+3) has two branches.
+
+Following a derivation parallel to that in eqs. (15)–(25), we can write φ6 = f2±(φ′
+
+3). A
+similar pre-screening process is done to determine the valid domains of φ′
+3 in the second
+equation. This pre-screening process reduces the CPU cost and increases the eﬃciency of
+the algorithm considerably.
+
+3 instead of ω′
+
+Evaluation of the third target function is performed over the valid domains of φ′
+
+3, which
+are the intersections of the valid domains found by pre-screening. The independent variable
+is chosen to be φ′
+3, since the latter may be valid on an inﬁnite domain. To
+ﬁnd the acceptable new rigid unit positions, the third target function is solved. To evaluate
+the target function, a series of calculations is repeated for each φ′
+3. First, we calculate the
+corresponding φ1 and φ6. Second, we determine r3(φ′
+3), r2h(φ1), and r4t(φ6). Third, we
+calculate r2t and r4h, which are uniquely determined by the trial r3(φ′
+3), r2h(φ1), and r4t(φ6)
+(see ﬁgure 3). Finally, we substitute r2t and r4h into the target function. We evaluate the
+target function on a grid, using a grid width of 0.003 radians. A ﬁner grid is used when the
+function approaches zero. The function values so obtained are used to locate approximately
+the roots. Brent’s method is used to reﬁne the roots [35]. The roots for φ′
+3 are suﬃcient to
+determine all the backbone positions. Substituting each root into f1± and f2±, we obtain φ1
+and φ6, and thus r2h, r4t, and r3. Other backbone positions can be calculated easily. Side
+chains are rigidly rotated so as to connect to the backbone properly, and the geometrical
+problem is solved.
+
+For each valid φ′
+
+3, there are two branches of the solution for φ1 = f1±(φ′
+
+3) and also
+two branches of the solution for φ6 = f2±(φ′
+3). Therefore, the target function has four
+branches. Figure 4 shows a typical target function. In the case shown in ﬁgure 4, there are
+six solutions.
+
+In summary, the algorithm for solving the geometrical problem for case 6 works as
+
+follows:
+
+1. If the geometry does not satisfy eq. (11), the move is rejected.
+
+2. Calculate the characteristic matrices, M1 and M2, of the ﬁrst two constraint equations.
+2, using eq. (22). Find the intersection of valid
+
+Transform M1 to M′
+domains using eq. (25). If no common domain is found, the move is rejected.
+
+1 and M2 to M′
+
+3. Search for roots of the third equation on the valid φ′
+backbone positions associated with each solution for φ′
+all associated side chains.
+
+3 domains. Determine all the
+3. Determine the positions of
+
+Other cases in table 1 are solved similarly, except that the independent variable is either
+φ1 or φ6.
+
+10
+
+2.3 Biasing of the Rebridging Moves
+
+There are several ways to bias solutions in the rebridging scheme. The ﬁrst method is
+discussed in [17]. The Rosenbluth factors are deﬁned as
+
+W(n) =
+
+exp(−βU(n)
+i )
+
+W(o) =
+
+exp(−βU(o)
+i )
+
+k(n)
+
+Xi=1
+k(o)
+
+Xi=1
+
+The proposed move is accepted with the probability
+
+acc(o → n) = min
+
+1,
+
+J(n)W(n)
+J(o)W(o) !
+
+,
+
+ 
+
+where J is the Jacobian. This method is called no Jacobian (NJ).
+
+A second method of bias, called with Jacobian (WJ), includes the bias introduced by
+the Jacobian within the Rosenbluth factors, as in eqs. (1) and (3). The proposed move is
+accepted with the probability given by eq. (4). This approach is expected to achieve better
+sampling than NJ, since it explicitly includes the bias introduced by the Jacobian within
+the move.
+
+A third method of bias includes the old and new solutions within a single Rosenbluth
+
+factor. Solutions are picked with the probability
+
+pi =
+
+exp(−βUi)
+W
+
+W = W(o) + W(n) .
+
+, i = 1, . . . , (k(o) + k(n))
+
+Such a move is always accepted, although the new state may be identical with the old state.
+This method is called with Jacobian and old solutions (WJO).
+
+It is possible to perform multiple rotations on φ0 and φ7. This scheme must be based
+on WJ or NJ so as to satisfy detailed balance. We choose WJ and call this method with
+Jacobian and multiple rotations (WJM). For a rebridging move with kmax rotations, kmax−1
+rotations around the old state must be performed to obtain a correct old Rosenbluth factor.
+A new conﬁguration is selected from the solutions with the probability
+
+where W(n)
+k
+acceptance probability is
+
+is the Rosenbluth factor of the kth rotation, as calculated by eq. (1). The
+
+pi =
+
+J(n)
+i
+
+exp(−βU(n)
+i )
+k=1 W(n)
+kmax
+
+k
+
+,
+
+P
+
+acc(o → n) = min
+
+1,
+
+kmax
+k=1 W(n)(k)
+kmax
+k=1 W(o)(k) !
+
+.
+
+ 
+
+P
+
+P
+
+11
+
+(26)
+
+(27)
+
+(28)
+
+(29)
+
+(30)
+
+The last method is based on Metropolis rules, in which a solution is picked at random
+
+without any bias, as in ref. [18]. The picking probability and acceptance criteria are
+
+pi =
+
+1
+k(n)
+
+acc(o → n) = min
+
+J(n)k(n) exp(−βU(n))
+J(o)k(o) exp(−βU(o)) #
+
+1,
+"
+
+.
+
+(31)
+
+The method is called Metropolis (MT).
+
+2.4 Parallel Tempering
+
+The use of biasing mitigates, but does not eliminate, the various free energy barriers in
+cyclic peptides. Even a small cyclic peptide is, in a sense, a ‘glassy’ system due to these
+signiﬁcant and unpredictably-located free energy barriers. To deal with this issue, we use
+parallel tempering [23].
+
+In parallel tempering we consider an extended ensemble with n systems, labeled as
+i = 1, . . . , n. Each system is a copy of the original system, except that each is equilibrated
+at a distinct temperature, Ti, where i = 1, . . . , n and T1 < T2 < . . . < Tn. The canonical
+partition function of this extended canonical ensemble is given by
+
+n
+
+Q =
+
+Qi ,
+
+(32)
+
+Yi=1
+where Qi is the individual canonical partition function of the ith system. Two types of
+moves are performed in the ensemble. The ﬁrst is a regular Monte Carlo move within a
+randomly chosen system. The second is a swapping move. A swapping move proposes to
+exchange the conﬁgurations of the two systems i and j = i + 1, 1 ≤ i < N. This move is
+accepted with the probability
+
+acc[(i, j) → (j, i)] = min[1, exp(−βiUj − βjUi + βiUi + βjUj)]
+= min[1, exp(−∆β∆U)]
+
+(33)
+
+This technique forces each system to sample the Boltzmann distribution at the appropriate
+temperature. In our case, we are interested in the lowest temperature distribution only. The
+higher temperature systems are included solely to help the lowest temperature system to
+escape from local energy minima via the swapping moves. To achieve eﬃcient sampling, the
+highest temperature should be such that no signiﬁcant free energy barriers are observed. To
+ensure that the swapping moves are accepted, the energy histograms of adjacent systems
+should overlap. We will show that with parallel tempering we are able to sample the
+torsional angles of cyclic peptides with excellent statistics. That is, the extra computational
+cost of simulating the higher temperature systems is more than compensated for by the
+increased sampling eﬃciency of the lowest temperature system.
+
+2.5 Semi-Look-Ahead
+
+Since the conformations of the side chains determine the biological activity of peptides,
+eﬀective sampling of side chains is important. Our method is based on the side chain moves
+
+12
+
+in ref. [17]. A ﬁnite regrowth probability is assigned to each side chain of the molecule.
+A side chain move proceeds by regrowing the side chain unit by unit, beginning from the
+bond connecting the backbone to the side chain. At each step, n1 twigs are generated
+and used to calculate the new partial Rosenbluth factor. One of the twigs is selected with
+a probability proportional to the Boltzmann factor associated with that twig. The old
+conﬁguration and nα − 1 random twigs are generated and used to calculate the old partial
+Rosenbluth factor. This procedure is repeated until the end of chain is reached. The new
+chain is accepted with the probability
+
+acc(o → n) = min
+
+1,
+
+W(n)
+W(o) !
+
+,
+
+ 
+
+(34)
+
+where W(n) is the product of the new partial Rosenbluth factors, and W(o) is the product
+of the old partial Rosenbluth factors.
+
+We propose a new method called semi-look-ahead (SLA) for side chain regrowth. For
+each torsionally-ﬂexible bond, we deﬁne the group of atoms included in the partial Rosen-
+bluth factor to be the maximum set of atoms whose positions are uniquely determined
+by choosing the trial rotation of this bond. Figure 5 sketches this new deﬁnition of atom
+groups and contrasts it with the one in ref. [17]. Our deﬁnition includes atoms beyond the
+boundary of rigid units, including the head atoms of rigid units adjacent to the current
+one. We expect SLA to achieve better sampling eﬃciency and faster equilibration than the
+method without look-ahead [17], due to the improved use of biasing.
+
+The incremental energy at each step can be split into the internal and external com-
+ponents [36]. With this decomposition, torsional angles are generated with a probability
+derived from the internal energy, and the partial Rosenbluth factors include the external
+energy only. In our system, only torsional energies can be put into internal energy, and
+these energies account for only a small fraction of the total energy. We ﬁnd it most eﬃ-
+cient to set the internal energy to zero and to include all of the energy within the external
+component.
+
+2.6 Look Ahead
+
+For long chains or chains with bulky units, a more extensive form of look-ahead may help
+to avoid proposing high energy conﬁgurations [22]. The idea is illustrated in ﬁgure 6. If we
+regrow the molecule by exploring the energy landscape only one rigid unit ahead, we will
+choose one conﬁguration, as in ﬁgure 6a. If we can look ahead two rigid units at one time,
+we may ﬁnd the high energy region associated with that conﬁguration and choose a more
+likely one instead, as in ﬁgure 6b.
+
+We proposed two methods for look-ahead. The idea is to include a contribution from
+the energetic surroundings of the succeeding unit within the Rosenbluth factor. The ﬁrst
+method, look-ahead (LA), generates n1 trial rotations of the unit to be regrown and n2 trial
+rotations of the succeeding unit for each of the trial rotations of the ﬁrst unit. In the second
+method, we set n1 = n2 = n. We generate n conﬁgurations of the ﬁrst rigid unit, with n
+conﬁgurations of the second unit associated to each. When regrowing the second unit, we
+use the n conﬁgurations already proposed during the regrowth of the ﬁrst conﬁguration.
+
+13
+
+We, therefore, generate only the conﬁgurations for the third unit when regrowing the second
+unit. This method of look-ahead with recycled conﬁgurations is abbreviated as LARC.
+
+We now describe the procedure for carrying out these methods. Suppose we want to
+cut and regrow rigid units i = 1, . . . , N. The following procedure describe how to generate
+and accept these units:
+
+1. Generate a set of n1 trial torsional angles {φ1(α)}, α = 1, . . . , n1. Each angle is
+
+generated according to the internal potential of unit 1
+
+p(n)
+1 (α) = C1 exp{−βUint
+
+1 [φ1(α)]} .
+
+Denote the external energy of unit 1 at φ1(α) by Uext
+
+1 (α).
+
+2. For each trial φ1(α), generate a set of n2 torsional angles {φ2(α, γ)}. Each angle is
+
+generated according to the internal potential
+
+p(n)
+2 (α, γ) = C2 exp{−βUint
+
+2 [φ2(α, γ)]} .
+
+Denote the external energy of unit 2 at φ1(α) and φ2(α, γ) by Uext
+the number n1 can be diﬀerent from n2. For LARC n1 = n2.
+
+2 (α, γ). For LA,
+
+3. Deﬁne
+
+and
+
+w(n)
+
+2 (α) =
+
+n2
+γ=1 exp[−βUext
+
+2 (α, γ)]
+
+P
+
+n2
+
+w(n)
+
+1 =
+
+n1
+α=1
+
+n2
+γ=1 exp[−βUext
+
+2 (α, γ)]
+
+1 (α)] exp[−βUext
+n1n2
+1 (α)]w(n)
+
+2 (α)
+
+.
+
+P
+
+P
+
+n1
+α=1 exp[−βUext
+
+n1
+
+=
+
+P
+
+4. Pick a φ1(α) with the probability
+
+q(n)
+1 (α) =
+
+exp[−βUext
+
+2 (α)
+
+1 (α)]w(n)
+w(n)
+1
+
+.
+
+To simplify the notation, we switch the labels of the chosen αth angle with the ﬁrst
+torsional angle so that the chosen angle is ﬁrst.
+
+5. Repeat steps (1)-(4) for rigid unit 2 to unit N-1, except that for LARC, the n2 twigs
+of unit 2 corresponding to the chosen unit 1 are recycled to be the n1 (n1 = n2) trial
+conﬁgurations of unit 2, and so on.
+
+6. For the Nth unit, which is the last unit, there is no need to look ahead, so we repeat
+
+step (1) and generate n1 torsional angles {φN (α)}. Calculate
+
+w(n)
+
+N ≡
+
+exp[−βUext
+
+N (α)] ,
+
+(40)
+
+n1
+
+Xα=1
+
+14
+
+(35)
+
+(36)
+
+(37)
+
+(38)
+
+(39)
+
+and pick a φN (α) with the probability
+
+q(n)
+N (α) =
+
+exp[−βUext
+
+N (α)]
+
+.
+
+w(n)
+N
+
+(41)
+
+We also need to generate and calculate the old Rosenbluth weights:
+
+1. Generate n1 − 1 trial torsional angles with the probability given by eq. (35). These
+angles and the original angle comprise a set of torsional angles {φ1(α)}. Let the
+original angle be labeled as φ1(1).
+
+2. For each φ1(α) other than φ1(1), generate n2 torsional angles {φ2(α, γ)}. For the
+original angle φ1(1), generate n2 angles if the method is LA and n2 − 1 angles if the
+method is LARC. For LARC add the original φ2 to the set of angles generated and
+label the original angle as φ2(1, 1). All conﬁgurations other than the original one are
+generated according to the probability
+
+p(o)
+2 (α, γ) = C2 exp{−βUint
+
+2 [φ2(α, γ)]} .
+
+(42)
+
+Deﬁne w(o)
+
+2 (α) and w(o)
+
+1
+
+in an analogous way as w(n)
+
+2 (α) and w(n)
+1 .
+
+3. Repeat the preceding two steps for unit 2 to N-1.
+
+4. For the Nth unit, which is the last unit, generate a set of n1 − 1 angles {φN (α)} with
+
+the probability given by eq. (35) Add the original angle. Calculate w(o)
+N .
+
+The proposed move is accepted with the probability
+
+acc(o → n) = min
+
+1,
+
+W(n)
+W(o) !
+
+,
+
+ 
+
+where the Rosenbluth factors are deﬁned as
+
+W(n) =
+
+W(o) =
+
+Q
+
+i
+
+i
+
+N
+
+i=1 w(n)
+i=2 w(n)
+N
+(1)
+Q
+i=1 w(o)
+i
+i=2 w(o)
+N
+i (1)
+Q
+
+N
+
+.
+
+(43)
+
+(44)
+
+Q
+Note that the denominators of eq. (44) come from the bias introduced by eq. (39).
+Appendix B we prove that the LA method satisﬁes detailed balance.
+
+In
+
+3 Results
+
+3.1 Backbone
+
+We ﬁrst apply the rebridging scheme to the cyclic peptide CG6C. Simulation results for
+the ﬁve diﬀerent variations of the rebridging scheme were generated. All simulations were
+
+15
+
+performed on a Silicon Graphic Indigo2 195 MHz R10000 workstation. The system was
+equilibrated at 298 K. We used an optimized value of ∆φmax = 10◦ in all simulations except
+for WJM, in which the optimal value was ∆φmax = 30◦. A probability of 0.05 was assigned
+for equilibration of either of the two side chains, NH2 and COOH. These two side short
+side chains are well equilibrated by the method without look-ahead, which is used in our
+simulations. We deﬁne the acceptance probability Pacc to be the ratio of accepted backbone
+moves to trial backbone moves. The eﬃciency of the Monte Carlo scheme is measured by
+the average displacement of the molecule per CPU time. We deﬁne ∆φavg as the average
+of the absolute change of torsional angles per trial backbone move:
+
+∆φavg =
+
+Ntrial
+i=1
+
+7
+j=0 |∆φj(i)|
+Ntrial
+P
+
+.
+
+P
+
+(45)
+
+This value is a measure of the size of successful moves and the eﬃciency of the re-
+bridging scheme. There is an intrinsic energy barrier for the CβSSCβ dihedral angle at
+φCβSSCβ ≃ 180◦. The magnitude of this barrier is estimated to be 5.5-6.5 Kcal·mol−1 [17].
+A barrier-crossing event happens whenever this angle crosses φCβSSCβ = 180◦. We deﬁne
+the barrier-crossing frequency as the total number of barrier-crossing events divided by the
+total number of backbone moves. Table 3 lists simulation results obtained with the ﬁve
+diﬀerent rebridging methods.
+
+Figure 7 shows histograms of the angles φCβSSCβ observed in these simulations. The
+NJ method yields a left peak that is slightly higher than those from other methods. The
+MT method yields the lowest left peak. Although the histograms are similar, they did
+not converge to a unique distribution within our chosen simulation time. This is because
+barrier crossing was not frequent enough to produce accurate statistics.
+
+To increase the sampling eﬃciency, we performed a parallel tempering simulation with 4
+systems. The system temperatures were 298 K, 500 K, 1000 K, and 3000 K. The rebridging
+moves were performed using the WJ biasing method. The probabilities for proposing swap-
+ping moves, backbone moves, and side chain moves were 0.1, 0.45, and 0.45, respectively.
+When a swapping move was chosen, two randomly chosen adjacent systems were proposed
+to swap conﬁgurations. The probabilities for swapping the two pairs with lower tempera-
+tures were doubled to accelerate de-correlations. When a backbone move or a side chain
+move was proposed, the system was picked with a probability that updates the two lowest
+temperature systems twice as frequently. We do this because of the longer correlation times
+at lower temperatures. The simulation consisted of 160000 Monte Carlo cycles. Each cycle
+proposed four swapping or updating moves, chosen at random. The whole CPU time taken
+in this run was 48 hours. The initial 20000 cycles were discarded to avoid equilibration
+eﬀects.
+
+The swapping moves can occur with suﬃcient probability only if the energy histograms
+of adjacent systems overlap to some extent. Figure 8 shows that this condition is satisﬁed
+for our choice of temperatures. Table 4 lists the acceptance probabilities of swapping moves
+in this simulation.
+
+Figure 9 shows the distribution of the CβSSCβ angle observed in the simulation. The
+histogram converged to a unique distribution with very little simulation data. After 80000
+cycles, the observed distribution was almost indistinguishable from the one observed at
+160000 cycles. With parallel tempering, we obtain substantially better statistics in less
+
+16
+
+computation time. If fact, the computation time was two-thirds of that used in the single
+temperature simulations in ﬁgure 7. Note that the histogram at 3000 K is essentially ﬂat,
+and so at this temperature the molecule is free to cross the barrier at φCβSSCβ ≃ 180◦.
+Strong steric repulsion between hydrogen atoms connected to the adjacent Cβ atoms still
+prevents the molecule from adopting a conformation with φCβSSCβ ≃ 0◦, but this does not
+hinder equilibration.
+
+3.2 Side Chains
+
+We performed simulations on the cyclic CNWKRGDC molecule to test various side chain
+regrowth methods. This medically-relevant molecule has long and bulky side chains. Sim-
+ulations were done both on a ﬁxed backbone scaﬀold and on a backbone equilibrated with
+rebridging and parallel tempering. First, we ﬁxed the backbone and chose side chains at
+random to regrow, using the method without look-ahead and the SLA method. We tested
+the dependence of the equilibration on the number of trial rotations n1. The backbone
+was ﬁxed throughout this simulation. Figure 10 shows the energy as a function of CPU
+time during the equilibration period. Starting from a high energy conﬁguration, the SLA
+method with n1 = 100 or n1 = 10 reaches equilibrium rapidly. The non-look-ahead method,
+however, had diﬃculty in ﬁnding low energy regions. It took the system with n1 = 10 more
+than 50 minutes to reach low energy conﬁgurations. The system with n1 = 100, however,
+never reached equilibrium during the simulation. Although the associated acceptance prob-
+abilities are not small, the use of n = 100 results in essentially non-ergodic sampling. We
+point out that the non-look-ahead method equilibrates the system faster with n1 = 1 than
+with n1 = 10 or n1 = 100, although non-look-ahead is always slower than SLA.
+
+Figure 10 may prompt the following question: How do we determine the optimal value
+for n1? For short side chains, we expect that a small n1 will work well. For longer side
+chains, we expect that a larger value of n1 will help to explore the torsional space. The
+optimal value, therefore, will diﬀer for each side chain.
+
+We next performed parallel tempering simulations with ﬁve systems, using the SLA, LA,
+and LARC methods for side chain regrowth. The backbone moves were performed by the
+WJ biasing method. The system temperatures were 298 K, 450 K, 780 K, 1700 K, and 5000
+K. The simulation consisted of 100000 Monte Carlo cycles, except in the cases of n1 = 1
+and n1 = 30 for SLA and n1 × n2 = 20 × 10 for LA, for which the number of cycles were
+200000, 200000, and 60000, respectively. Each cycle proposed ﬁve swapping or updating
+moves, chosen at random. The probabilities for proposing swapping moves, backbone
+moves, and side chain moves were 0.1, 0.45, and 0.45, respectively. When a swapping move
+was proposed, two adjacent systems were chosen randomly, with the probability of picking
+system 1, 2, 3, and 4 equal to 3
+7, respectively. When an updating move, either
+for backbones or for side chains, was proposed, we chose system 1, 2, 3, 4, and 5 with the
+probabilities 3
+8, respectively. We focused on the sampling eﬃciencies for the
+tryptophan, lysine, and arginine residues. The lysine residue has a large number, 5, of rigid
+units. The tryptophan residue has an indole group. The arginine residue has a guanidine
+group. Both groups are bulky and tend to have low acceptance probabilities. For each
+side chain, we used the total torsional displacement per computation time, ∆φ/CPU, as
+an index to the eﬃciency. Both side chain moves and swapping moves contributed to ∆φ.
+
+7, and 1
+
+8, and 1
+
+7, 1
+
+7, 2
+
+8 , 1
+
+8, 1
+
+8, 2
+
+17
+
+We deﬁne the acceptance probability Pacc to be the ratio of successful moves to trial moves
+in a side chain. The results are summarized in table 5.
+
+Among the four simulations with SLA, the choice n1 = 10 yields the best eﬃciency for
+lysine, and n1 = 30 yields the best eﬃciency for tryptophan and arginine. Among the four
+simulations with LA, the best eﬃciency for tryptophan is produced when n1 × n2 = 10 × 5.
+Lysine and arginine are equilibrated most eﬃciently with n1 × n2 = 10 × 10. With LARC
+the eﬃciency for tryptophan is the best when n1 = 5. The eﬃciency for lysine is the
+best when n1 = 10. Interestingly, arginine is so diﬃcult to equilibrate, typically having
+such a low acceptance probability, that the eﬃciency was best with n1 = 15. In general,
+LARC is more eﬃcient than LA. Comparing the results from various methods, we ﬁnd that
+tryptophan is equilibrated most eﬃciently by SLA, and lysine and arginine are equilibrated
+most eﬃciently by LARC.
+
+4 Discussion
+
+Among the ﬁve rebridging methods listed in table 3, WJO gives the highest acceptance
+probability, where Pacc in WJO is deﬁned to be the probability of accepting a solution other
+than the old one. WJO also produces the highest ∆φavg. The distribution generated by
+WJO is the most smooth among the curves, which shows that it is eﬃcient in sampling local
+conformations. However, the CPU time per move for WJO is slightly higher than that for
+WJ or NJ, since there is no early rejection in WJO. We performed simulations with WJM
+using diﬀerent ∆φmax and found the optimal value to be ∆φmax = 30◦. Simulations with
+∆φmax < 30◦ were dominated by smaller moves that lead to infrequent barrier-crossing. The
+computation cost per WJM move is roughly proportional to the number of trial rotations.
+It is seen in table 3 that each WJM move takes more than twice the time of a WJ move.
+Therefore, WJM is less eﬃcient than the ﬁrst three schemes in table 3. As expected, MT
+yields a fairly low acceptance probability. Taking the CPU cost into consideration, the
+eﬃciency of WJ is close to that of WJO. The eﬃciency of NJ is less than WJ and WJO.
+The WJM method is less eﬃcient than the previous three schemes. The MT method is the
+least eﬃcient.
+
+Our rebridging scheme is capable of overcoming energy barriers and promoting the fre-
+quency of barrier crossing. The fourth column in table 3 lists the barrier-crossing frequency.
+The WJ method yields the highest barrier-crossing frequency, and WJO yields the lowest.
+This is due to the predominance of local moves in WJO. An accepted move in WJO can
+be a move that reconﬁgures six degrees of freedom only, which is less likely to lead to a
+barrier-crossing event.
+
+Barrier-crossing is a rare event in a simulation of the CG6C peptide. According to the
+potential of mean force determined by umbrella sampling, the potential at φCβSSCβ = 90◦ is
+less than that at φCβSSCβ = 270◦ by roughly 1 Kcal·mol−1 [17]. We, therefore, expect the left
+peak to be substantially higher than the right one. Our results with biased rebridging moves
+are consistent with the potential of mean force, but the statistics are not good enough.
+Because steric repulsions are severe in our system, the correlation time for other degrees of
+freedom is also long, and these degrees of freedom also slow down the barrier-crossing. We
+suspect that there is a set of low energy conformations, separated by low-energy barriers,
+
+18
+
+near φCβSSCβ = 270◦.
+
+We have found that parallel tempering is an eﬃcient and automatic means to over-
+come these barriers. The overlap of energy histograms guaranteed reasonable acceptance
+probabilities of the swapping moves. These swapping moves transfer conﬁgurations en-
+countered at high temperatures to systems with low temperatures, thereby helping the
+low-temperature systems to escape from local energy minima. Such escape from local
+minima is important for eﬃcient sampling, especially in glassy systems with high energy
+barriers. Cyclic peptides fall in this category, because of the torsional barriers and steric
+repulsions associated with the cyclic constraint. Our results provide additional evidence
+that parallel tempering is a powerful tool for studying glassy systems. Linear peptides,
+on the other hand, have a fairly simple free energy landscape, and so they do not beneﬁt
+substantially from the parallel tempering approach [28].
+
+For equilibration of side chains, we tested whether the inclusion of torsional interaction
+energy in the internal potential is eﬀective. We ﬁnd that the acceptance probability is lower
+and the simulation time is increased through the use of internal biasing. Presumably this
+is because Uint is only a small fraction of the total interaction energy, and so biasing the
+torsional angles according to this term does not lead to better sampling.
+
+CBMC without any look-ahead does not equilibrate long or bulky side chains as well as
+does CBMC with look-ahead. The key diﬀerence is that the without look-ahead, the head
+atoms of succeeding units are not included. Without look-ahead, a chosen rotation, though
+probably a low energy conﬁguration for the local atoms, may implicitly put adjacent head
+atoms in high energy positions and fail to ﬁnd the lowest energy region. Using fewer twigs
+in the non-look-ahead method resulted in better equilibration, as shown by the results for
+n1 = 1 in ﬁgure 10. This occurs because with n1 = 1 the regrowing units have a better
+chance to miss the incorrectly identiﬁed low energy regions.
+
+Increasing the number of twigs raises the acceptance probability in SLA, LA, and LARC,
+but at an increased CPU cost. The optimal n1 is attained when these competing eﬀects
+are balanced. We know that for rougher energy landscapes more trial rotations need to be
+generated. From the ﬁrst row of table 5, all three residues were poorly equilibrated by SLA
+with n1 = 1. The torsional displacement ∆φ in this case comes mainly from the swapping
+moves. Equilibration is improved by using a greater n1, which increases the acceptance
+probabilities signiﬁcantly. However, the acceptance probability for arginine with n1 = 100
+is lower than that with n1 = 30. This means that improving the local sampling does
+not always lead to better global sampling, and this in turns implies the necessity of more
+signiﬁcant look-ahead sampling. The arginine residue is both long, with four rigid units,
+and big, with a guanidine group at the end. Therefore, look-ahead is crucial to bypass high
+energy regions. Comparing the results for SLA with n1 = 10, LA with n1 × n2 = 10 × 10,
+and LARC with n1 = 10, we see both LA and LARC enhance the acceptance probabilities.
+The only exception is the shortest residue, tryptophan, for which LA yields a acceptance
+probability slightly lower than that from SLA. Clearly, LARC is superior to LA, because
+LARC costs less computation time while yielding higher acceptance probabilities. For the
+long residues, lysine and arginine, LARC yields the highest eﬃciencies among these three
+methods. The results suggest that, for long and bulky side chains, signiﬁcant look-ahead is
+necessary. It is not necessary to use the same regrowth method for all side chains. Indeed,
+the optimal approach is to use a diﬀerent regrowth method for side chains of diﬀerent
+
+19
+
+identity. For short side chains, SLA appears to be optimal. For longer side chains, LARC
+is the best method to use. We believe there may be some cases in which look-ahead is the
+only eﬃcient approach for equilibration. Likely cases where there is substantial crowding
+and steric overlap include docking of a drug or signaling molecule to a protein receptor
+site and binding of antigen by the amino acid side chains of the hypervariable region of
+antibodies.
+
+5 Conclusion
+
+Peptide function comes primarily from the chemical functionality of the side chains atoms,
+although the side chains themselves are positioned by the backbone atoms. For cyclic pep-
+tides, both backbone and side chain atoms are diﬃcult to equilibrate with standard simula-
+tion techniques. We have described a new and eﬃcient Monte Carlo simulation method for
+complex cyclic peptides. The combination of biased, look-ahead Monte Carlo and parallel
+tempering leads to rapid and accurate sampling of the relevant room- or body-temperature
+conformations. Speciﬁcally, the look-ahead biasing is helpful for equilibrating long or bulky
+side chains, and the parallel tempering is essential for crossing torsional-angle free-energy
+barriers at a rapid rate. A variety of details, such as prescreening, improved Jacobian
+biasing, semi-look-ahead, and look-ahead, are important components of the method.
+
+We believe that parallel tempering will prove to be a generally useful method for simu-
+lation of ‘glassy’ atomic systems with multiple, important conformations separated by large
+and unpredictable free energy barriers. Explicit atom models, which are more accurate but
+which also increase the ruggedness of the potential energy landscape, are naturally treated
+within this approach. We expect that application of our peptide simulation method to
+high-density or crowded situations, such as peptide-receptor or antibody-antigen binding
+events, will further demonstrate the eﬃciency and power of our approach.
+
+Acknowledgments
+
+We thank Marco Falcioni for many useful discussions. This research was supported by the
+National Science Foundation through grants CTS–9702403 and CHE-9705165.
+
+A The Jacobian in the Rebridging Scheme
+
+In the rebridging scheme, each solution should be weighted by a Jacobian to correct for the
+non-uniform distribution of the angles φ1, . . . , φ6 generated by the non-linear solution of
+the geometrical problem. We derive the Jacobian here from the classical partition function.
+We initially consider a simple cyclic molecule with only N backbone atoms and N back-
+bone torsional degrees of freedoms. This assumption is relaxed at the end to accommodate
+the complicated backbone and side chain geometry of a real peptide. The momentum part
+of the partition function can be integrated out if we assume that the bond length and angle
+constraints are enforced by springs with inﬁnite force constants. We, thus, focus on the
+
+20
+
+conﬁgurational part. The conﬁgurational partition function is
+
+Z ≡
+
+drN exp(−βU)
+
+Z
+
+Z
+
+=
+
+drNdrN+1drN+2drN+3δ3(rN +1 − r1)δ3(rN +2 − r2)δ3(rN +3 − r3) exp(−βU) ,
+
+where we have introduced three vector delta functions to account for the cyclic constraint.
+The choice of ﬁxed-end constraints is not unique. We will discuss an alternative form later
+in this section.
+
+We start the derivation by performing a transformation from rN to yN
+
+The Jacobian of this transformation is unity. We transform again from yN to local coor-
+dinates. We deﬁne li = |yi| and θi to be the angle formed by yi and yi+1. We transform
+from y2 to l2 and ˆu2, where
+
+y1 = r1
+yi = ri − ri−1, i = 2, . . . , N + 3 .
+
+ˆu2 ≡
+
+y2
+|y2|
+
+.
+
+(46)
+
+(47)
+
+(48)
+
+Then we transform from y3 to l3, θ2, and γ2, where γ2 is the azimuthal angle of ˆu3 in
+a spherical coordinate system deﬁned with ˆu2 as the z-axis. The angle is measured with
+respect to the plane deﬁned by ˆu2 and ˆe3, the ﬁxed laboratory z-axis. We further trans-
+form yi to a spherical coordinate system li, θi−1, and φi−1, i = 4, . . . , N + 3. With this
+transformation, we obtain
+
+Z =
+
+dy1l2
+
+2dl2dˆu2l2
+
+3dl3dθ2 sin θ2dγ2
+
+N +3
+
+N +2
+
+N +2
+
+dli
+
+dθi
+
+dφi
+
+Z
+
+Yi=4
+
+Yi=3
+
+Yi=3
+
+δ3(yN +2 − y2) δ3(yN +3 − y3)
+
+Z
+
+× δ3
+
+N +1
+
+ 
+
+Xi=2
+
+yi
+
+!
+
+× J
+
+y4, . . . , yN +3
+l4, . . . , lN +3, θ3, . . . , θN +2, φ3, . . . , φN +2 !
+
+ 
+
+exp(−βU) .
+
+(49)
+
+The Jacobian is simply J =
+
+2. The fast coordinates li and θi are ﬁxed
+due to the strong harmonic potentials. We denote the equilibrium values of li and θi by
+l0
+i and θ0
+i , respectively. With very large spring constants, the dependence of the integrand
+along these coordinates can eﬀectively be replaced with delta functions. Therefore
+
+N +2
+i=3 sin θili+1
+
+Q
+
+Z = C′′′
+
+dy1l2
+
+2dl2dˆu2l2
+3dl3dθ2 sin θ2dγ2 δ(l2 − l0
+N +2
+N +2
+
+Z
+N +3
+
+2)δ(l3 − l0
+
+3)δ(θ2 − θ0
+2)
+
+×
+
+dli
+
+dθi
+
+dφi J(l4, . . . , lN +3, θ3, . . . , θN +2) exp(−βU0)
+
+Z
+
+Yi=4
+
+Yi=3
+
+Yi=3
+
+21
+
+N +1
+
+× δ3
+
+yi
+
+δ3(yN +2 − y2)δ3(yN +3 − y3)
+
+N
+
+ 
+
+!
+
+Xi=2
+δ(li − l0
+i )
+
+×
+
+N −1
+
+Yi=4
+
+Yi=3
+cos−1 y2 · (−
+|y2||
+
+ 
+
+× δ
+
+δ(θi − θ0
+
+i )δ(|
+
+yi| − l0
+1)
+
+N
+
+Xi=2
+
+N
+i=2 yi)
+N
+i=2 yi|
+P
+
+− θ0
+1
+
+δ
+
+!
+
+ 
+
+cos−1 yN · (−
+|yN ||
+
+N
+i=2 yi)
+N
+i=2 yi|
+P
+
+− θ0
+N
+
+,
+
+!
+
+(50)
+
+P
+
+P
+
+where U0 is the potential energy measured at the ground conﬁguration of these hard coor-
+dinates. We now integrate over the hard coordinates li and θi. The Jacobian is simply a
+N +1
+constant and can be taken out of the integral. Since the constraint δ3(
+i=2 yi) holds, we
+N
+i=2 yi with yN +1. Similarly, we can replace y2 with yN +2. Replacing
+can replace every −
+the arguments in the last two delta functions with θN +1 and θN , respectively, we obtain
+
+P
+
+P
+
+Z = C′′
+
+dy1dˆu2dγ2
+
+dli
+
+dθi
+
+dφi exp(−βU0)
+
+N +3
+
+N +2
+
+N +2
+
+Z
+N +1
+
+Z
+
+Yi=N +1
+
+Yi=N
+
+Yi=3
+
+× δ3
+
+yi
+
+δ3(yN +2 − y2)δ3(yN +3 − y3)δ(|yN +1| − l0
+1)
+
+Xi=2
+
+ 
+!
+θN +1 − θ0
+1
+
+× δ
+
+(cid:16)
+
+δ
+
+θN − θ0
+N
+(cid:16)
+
+(cid:17)
+
+(cid:17)
+
+.
+
+We use the equalities
+
+δ3(yN +2 − y2) = δ(lN +2 − l2)δ2(ˆuN +2 − ˆu2)/lN +2
+δ3(yN +3 − y3) = δ(lN +3 − l3)δ2(ˆuN +3 − ˆu3)/lN +3
+
+2
+
+2
+
+to integrate over lN +1, lN +2, lN +3, θN , and θN +1 to obtain
+
+Z = C′
+
+dy1dˆu2dγ2
+
+dφi
+
+dθN +2 exp(−βU0)
+
+N +2
+
+Z
+
+Yi=3
+
+Z
+
+× δ3
+
+yi
+
+δ2(ˆuN +2 − ˆu2)δ2(ˆuN +3 − ˆu3) .
+
+Z
+
+N +1
+
+ 
+
+Xi=2
+
+!
+
+Note that
+
+where
+
+dθN +2δ2(ˆuN +3 − ˆu3) =
+
+dθN +2δ(γN +2 − γ2)δ(θN +2 − θ2)/ sin θ2
+
+Z
+
+Z
+
+= δ(γN +2 − γ2)/ sin θ2 .
+
+and γN +2 and γ2 are the azimuthal angles of ˆuN +3 and ˆu3 in a spherical coordinate system
+deﬁned with ˆuN +2 = ˆu2 as the z-axis. The angles are measured with respect to the plane
+
+θ2 =
+
+cos−1 y3 · yN +2
+|y3||yN +2| (cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+,
+
+22
+
+(51)
+
+(52)
+
+(53)
+
+(54)
+
+deﬁned by ˆu2 and ˆe3. Integrating over θN +2, we obtain
+
+Z = C
+
+dy1dˆu2dγ2
+
+dφi
+
+Z
+
+N +2
+
+Z
+
+Yi=3
+N +1
+
+ 
+
+Xi=2
+
+!
+
+× exp(−βU0)δ3
+
+yi
+
+δ2(ˆuN +2 − ˆu2)δ(γN +2 − γ2) .
+
+(55)
+
+This is the partition function of a classical, cyclic molecule. We see that it is an integral
+over torsional space with delta function constraints. These constraints cause an intrinsically
+non-uniform distribution of every torsional angle, even in the absence of any energy of
+interaction. It is convenient to transform the last six torsional coordinates to the variables
+rN +1, ˆuN +2, and φN +2 and to integrate over these six coordinates. Then
+
+Z = C
+
+dy1dˆu2dγ2
+
+dφi
+
+drN +1dˆuN +2dγN +2
+
+N −4
+
+Z
+
+Yi=3
+
+Z
+φN −3, . . . , φN +2
+rN +1, ˆuN +2, γN +2 !
+
+Z
+ks
+
+Z
+
+×
+
+Jk
+
+ 
+
+Xk=1 (
+
+= C
+
+dy1dˆu2dγ2
+
+N −4
+
+ks
+
+dφi
+
+Jk
+
+ 
+
+
+
+
+Xk=1
+
+Z
+
+Yi=3
+
+exp[−βU0(k)]
+
+δ3
+
+yi
+
+δ2(ˆuN +2 − ˆu2)δ(γN +2 − γ2)
+
+N +1
+
+!
+
+)
+
+ 
+
+Xi=2
+φN −3 . . . φN +2
+rN +1, ˆuN +2, γN +2 !(cid:12)
+r1,ˆu2,γ2
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+exp[−βU0(k)]
+
+. (56)
+
+
+
+
+The index k labels the solutions {φN −3, . . . , φN +2} that satisfy the ﬁxed-end constraints.
+The summation accounts for the fact that multiple solutions are possible. In the rebridging
+scheme, we always relabel φN −3, . . . , φN +2 as φ1, . . . , φ6 and r1, ˆu2, and γ2 as r5, ˆu6, and γ6.
+From eq. (56) it is clear that each solution must be given a weight, which is the Jacobian.
+The 6 × 6 Jacobian is actually the determinant of a 5 × 5 matrix, since the last torsional
+
+
+
+
+
+angle does not aﬀect r5 or ˆu6. Therefore,
+
+We also know that
+
+So we obtain
+
+∂r5
+∂φ6
+
+=
+
+∂ˆu6
+∂φ6
+
+= 0 .
+
+∂γ6
+∂φ6
+
+= 1 .
+
+φ1, φ2, φ3, φ4, φ5, φ6
+r5, ˆu6, γ6
+
+J
+
+ 
+
+!
+
+=
+
+ˆu6 · ˆe3
+det |B|
+
+Bij = [ˆuj × (r5 − rj)]i, if j ≤ 3
+
+= [ˆuj × ˆu6]j−3, if j = 4 or 5.
+
+(57)
+
+Since the Jacobian is independent of φ6, we might conjecture that it is also independent
+of φ1. The reason is that the Jacobian should not depend on the direction that we choose
+for the labeling of the rigid units. Hoﬀmann and Knapp derived a 4×4 Jacobian depending
+only on φ2, φ3, φ4, and φ5 for case 6 of table 1 [37]. We will show that, with suitable choice
+of end-constraint variables, a 4 × 4 matrix can be derived in all cases. The idea is to choose
+a set of end coordinates that are almost independent of φ1.
+
+23
+
+Integrating eq. (55) over φN +2, we obtain
+
+Z = C
+
+dy1dˆu2dγ2
+
+dφi exp(−βU0)δ3
+
+yi
+
+δ2(ˆuN +2 − ˆu2) .
+
+(58)
+
+N +1
+
+Z
+
+Yi=3
+
+N +1
+
+ 
+
+Xi=2
+
+!
+
+Let ∆r = rN +1 − rN −3 and introduce the following end coordinates
+
+R = |∆r|
+
+θb =
+
+cos−1
+
+∆r · ˆuN −3
+R
+
+ 
+
+θe =
+
+cos−1
+
+∆r · ˆuN +2
+R
+
+ 
+
+!(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+!(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+Z
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+Z
+
+φb = the torsional angle of ∆r in local coordinates of unit N − 3
+
+φe = the torsional angle deﬁned by ˆuN −3, ∆r, and ˆuN +2 .
+
+(59)
+
+Note that R, θb, θe, and φe are independent of φN −3 and that φb is linear in φN −3. Substi-
+tuting these coordinates into eq. (58), we obtain
+
+Z = C
+
+dy1dˆu2dγ2
+
+dφi exp(−βU0)
+
+N +1
+
+Z
+
+Yi=3
+
+1
+R2 sin θb sin θe
+b)δ(θe − θ0
+
+× δ(R − |r1 − rN −3|)δ(φb − φ0
+
+b)δ(θb − θ0
+
+e )δ(φe − φ0
+
+e) .
+
+(60)
+
+Here
+
+θ0
+b =
+
+θ0
+e =
+
+cos−1
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+cos−1
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(r1 − rN −3) · ˆuN −3
+|r1 − rN −3|
+
+ 
+
+(r1 − rN −3) · ˆu2
+
+ 
+
+|r1 − rN −3| !(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+!(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+φ0
+b = the torsional angle of r1 − rN −3 in local coordinates of unit N − 3
+
+φ0
+e = the torsional angle deﬁned by ˆuN −3, ∆r, and ˆu2 .
+
+(61)
+
+Transforming coordinates from φN −3, . . . , φN +1 to R, θb, φb, θe, and φe, we obtain
+
+1
+R2 sin θb sin θe
+e )δ(φe − φ0
+e)
+
+b)δ(θe − θ0
+
+exp[−βU0(k)]
+
+b,φ0
+
+b,θ0
+
+b,φ0
+e
+
+Z = C
+
+dy1dˆu2dγ2
+
+dφi
+
+dRdθbdφbdθedφe
+
+N −4
+
+Z
+
+Z
+
+ks
+
+Yi=3
+
+Z
+× δ(R − |r1 − rN −3|)δ(θb − θ0
+φN −3, . . . , φN +1
+R, θb, φb, θe, φe !(cid:12)
+|r1−rN−3|,θ0
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+b)δ(φb − φ0
+
+Xk=1
+
+
+
+
+N −4
+
+Jk
+
+×
+
+ 
+
+= C
+
+
+dy1dˆu2dγ2
+
+1
+R2 sin θb sin θe
+
+dφi
+
+Z
+ks
+
+Xk=1
+
+×
+
+Jk
+
+ 
+
+
+
+
+
+
+Z
+
+Yi=3
+φN −3, . . . , φN +2
+R, θb, φb, θe, φe !(cid:12)
+|r1−rN−3|,θ0
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+24
+
+
+
+
+
+
+
+
+
+
+
+exp[−βU0(k)]
+
+.
+
+(62)
+
+b,φ0
+
+b,θ0
+
+e ,φ0
+e
+
+The Jacobian can be rewritten as
+
+where
+
+J =
+
+1
+R2 sin θb sin θe| det(B′′)|
+
+,
+
+(63)
+
+B′′
+
+1j =
+
+B′′
+
+4j =
+
+∂R
+∂φN −4+j
+∂θe
+∂φN −4+j
+
+, B′′
+
+2j =
+
+, B′′
+
+5j =
+
+∂θb
+∂φN −4+j
+∂φe
+∂φN −4+j
+
+, B′′
+
+3j =
+
+∂φb
+∂φN −4+j
+
+,
+
+, j = 1, . . . , 5 .
+
+(64)
+
+The ﬁrst column of B′′ has only one non-zero element, which is B′′
+cofactor of B′
+
+21, the determinant can be replaced with that of a 4 × 4 matrix
+
+31 = 1. Taking the
+
+B′
+
+1j =
+
+B′
+
+4j =
+
+∂R
+∂φN −3+j
+∂φe
+∂φN −3+j
+
+, B′
+
+2j =
+
+∂θb
+∂φN −3+j
+
+, B′
+
+3j =
+
+∂θe
+∂φN −3+j
+
+,
+
+, j = 1, . . . , 4 .
+
+(65)
+
+It is easy to extend our approach to include side chains and constrained torsional angles.
+Following an approach parallel to eqs. (46)–(49), we obtain an integral with additional
+degrees of freedom contributed by side chains. These degrees of freedom are not constrained,
+and they can be integrated out ﬁrst. Therefore, we can simply replace U with an inﬂuence
+functional. The ﬁnal form of the Jacobian is unaﬀected. For peptides, rotation about the
+C-N bond in the amide group is governed by a large force constant. In our simulation, we
+constrain these torsional degrees of freedom as well. Each constrained bond adds a delta
+function to eq. (55). Let A be the set of φi that are constrained. Then
+
+Z = C
+
+dy1dˆu2dγ2
+
+dφi exp(−βU0)δ3
+
+yi
+
+δ2(ˆuN +2 − ˆu2)δ(γN +2 − γ2)
+
+N +2
+
+N +1
+
+ 
+
+Xi=2
+
+!
+
+×
+
+δ(φj − φ0
+
+Yi=3
+
+Z
+j ) .
+
+Z
+
+Yj∈A
+
+Let G(l, N + 2) denote the last l ﬂexible torsional angles from φ3 to φN +2. Integrating
+
+out the other degrees of freedom, we obtain
+
+Z = C
+
+dy1dˆu2dγ2
+
+Z
+
+ks
+
+Xk=1
+
+×
+
+
+
+Z
+
+Yi /∈[A∪G(6,N +2)]
+
+
+G(6, N + 2)
+rN +1, ˆuN +2, γN +2 !(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+Jk
+
+ 
+
+
+
+
+
+
+r1,ˆu2,γ2
+
+dφi
+
+exp[−βU0(k)]
+
+.
+
+
+
+
+
+
+If φN +2 is constrained, rN , rN +1, rN +2, and rN +3 deﬁne a rigid unit. The corresponding
+ﬁxed-end coordinates in our algorithm are chosen to be rN , ˆuN +1, and γN +1, instead of
+rN +1, ˆuN +2, and γN +2. This apparent diﬀerence causes no ambiguity, since both sets deﬁne
+the same rigid unit. The Jacobian between these two sets is unity.
+
+(66)
+
+(67)
+
+25
+
+Relabeling the torsional angles in G(6, N + 2) by φ1, . . . , φ6, we recover the Jacobian
+in eq. (5). The 4 × 4 Jacobian in this case can be derived analogously. The ﬁnal result,
+which is numerically equal to eq. (5), is
+
+J =
+
+1
+R2 sin θb sin θe| det(B′)|
+
+.
+
+The components of B′ are given below:
+
+· ∆r
+
+=
+
+=
+
+=
+
+1
+R
+
+∂∆r
+∂φj
+−1
+R sin θb "
+−1
+R sin θe "
+
+−
+
+1
+R
+−1
+R
+
+B′
+
+1j =
+
+B′
+
+2j =
+
+B′
+
+3j =
+
+B′
+
+4j =
+
+∂R
+∂φj
+∂θb
+∂φj
+∂θe
+∂φj
+∂φb
+∂φj
+
+B′
+
+1j∆r · ˆu1 +
+
+· ˆu1
+
+#
+
+∂∆r
+∂φj
+∂∆r
+∂φj
+
+B′
+
+1j∆r · ˆu6 +
+
+· ˆu6 + ∆r · (ˆuj × ˆu6)
+
+#
+
+=
+
+−1
+R2 sin φe sin θb sin θe (
+
+(ˆu1 × ∆r) · (∆r × ˆu6)
+R2 sin φe sin θb sin θe
+
+×
+
+2
+
+ 
+
+∂∆r
+∂φj
+
++
+
+(ˆu1 ×
+"
+
+∂∆r
+∂φj
+
+· ∆r sin θb sin θe + R2 cos θb sin θeB′
+
+2j + R2 sin θb cos θeB′
+
+3j
+
+!
+
+) · (∆r × ˆu6) + (ˆu1 × ∆r) ·
+
+× ˆu6 + ∆r × (ˆuj × ˆu6)
+
+,
+
+∂∆r
+∂φj
+
+ 
+
+!#)
+
+(68)
+
+where
+
+∂∆r
+∂φj
+
+= ˆuj × (r5t − rjh) .
+
+The quantities needed to calculate B′ are ˆui, ∆r, θb, θe, and sin φe.
+
+B Detailed Balance for LA
+
+In this appendix we prove that the LA method satisﬁes detailed balance. The proof for
+In our algorithm, the old
+LARC can be done analogously and is not presented here.
+Rosenbluth factor W(o) is not evaluated until all units have been given new positions.
+In fact, W(o) can be calculated at any time.
+In the proof, we calculate the partial old
+Rosenbluth factor w(o)
+of unit i once a new proposed move for unit i is made. We ﬁrst
+derive the probability for proposing a forward move of the ﬁrst unit. By analogy, we derive
+the probability for proposing a reverse move of the ﬁrst unit. Since we generate both the
+old Rosenbluth factor and the new Rosenbluth factor in a random way, their probabilities
+should be included. This is the so-called super detailed balance condition [11]. We will
+show that LA satisﬁes super detailed balance.
+
+i
+
+26
+
+Let α1
+
+o → n; {φ(n)
+
+1 (α)}, {φ(n)
+
+2 (α, γ)}, {φ(o)
+
+1 (α′)}, {φ(o)
+
+(cid:16)
+
+proposing a move from φ(o)
+{φ(o)
+
+2 (α′, γ′)}. Consider the following three events:
+
+1 (1) to φ(n)
+
+1 (1), given {φ(n)
+
+2 (α′, γ′)}
+1 (α)}, {φ(n)
+
+be the probability of
+1 (α′)}, and
+
+2 (α, γ)}, {φ(o)
+
+(cid:17)
+
+1. Generating n1n2 new twigs, which has the probability
+
+p(n)
+1 (α)
+
+p(n)
+2 (α, γ) .
+
+n1
+
+Yα=1
+
+n2
+
+Yγ=1
+
+2. Picking a new twig, which has the probability q(n)
+
+1 (1).
+
+3. Generating n1n2 old twigs, which has the probability is
+
+n2
+
+Yγ′=1
+
+p(o)
+2 (1, γ′)
+
+p(o)
+1 (α′)
+
+p(o)
+2 (α′, γ′)
+
+.
+
+
+
+n1
+
+
+
+Yα′=2
+
+n2
+
+Yγ′=1
+
+
+The probability of the whole event, α1, is the product of these three probabilities. Multi-
+plying the three terms together, we obtain
+
+
+
+α1
+
+o → n; {φ(n)
+
+2 (α, j)}, {φ(o)
+
+1 (α′)}, {φ(o)
+
+2 (α′, γ′)}
+
+=
+
+(cid:16)
+
+n1
+
+Yα=1
+
+
+
+
+
+1 (α)}, {φ(n)
+n2
+
+Yγ=1
+
+
+
+
+
+p(n)
+1 (α)
+
+p(n)
+2 (α, γ)
+
+× q(n)
+
+1 (1) ×
+
+p(o)
+2 (1, γ′)
+
+p(o)
+2 (α′, γ′)
+
+n2
+
+Yγ′=1
+
+(cid:17)
+p(o)
+1 (α′)
+
+n2
+
+Yγ′=1
+
+n1
+
+Yα′=2
+
+
+
+
+
+.
+
+
+
+
+(69)
+
+Similarly, the probability of proposing the reverse move is
+
+2 (α′, γ′)}, {φ(n)
+
+1 (α)}, {φ(n)
+
+2 (α, γ)}
+
+=
+
+α1
+
+n1
+
+n → o; {φ(o)
+(cid:16)
+
+1 (α′)}, {φ(o)
+n2
+
+Yα′=1
+
+
+
+
+
+Yγ′=1
+
+
+
+
+
+p(o)
+1 (α′)
+
+p(o)
+2 (α′, γ′)
+
+× q(o)
+
+1 (1) ×
+
+p(n)
+2 (1, γ)
+
+n2
+
+Yγ=1
+
+(cid:17)
+p(n)
+1 (α)
+
+n2
+
+Yγ=1
+
+n1
+
+Yα=2
+
+
+
+
+
+p(n)
+2 (α, γ)
+
+.
+
+
+
+
+(70)
+
+We deﬁne U′ext
+1
+
+as the external energy for unit 1 in the old conﬁguration and Uext
+
+as
+the external energy for unit 1 in the new conﬁguration. Taking the ratio of eq. (69) and
+eq. (70), most of the probabilities for generating the twigs cancel. Replacing q(n)
+1 (1) and
+q(o)
+1 (1) with eq. (39), we obtain
+
+1
+
+α1(o → n; {φ(n)
+α1(n → o; {φ(o)
+
+1 (α)}, {φ(n)
+1 (α′)}, {φ(o)
+
+=
+
+2 (α, γ)}, {φ(o)
+2 (α′, γ′)}, {φ(n)
+p(n)
+1 (1)
+p(o)
+1 (1)
+
+1 (α′)}, {φ(o)
+2 (α′, γ′)})
+1 (α)}, {φ(n)
+2 (α, γ)})
+w(n)
+w(o)
+2 (1)
+1 (1)]
+1
+w(n)
+w(o)
+1 (1)]
+2 (1)
+1
+w(o)
+2 (1)
+1
+w(n)
+2 (1)
+1
+
+exp[−βUext
+exp[−βU′ext
+exp(−βU(n)
+1 )
+exp(−βU(o)
+1 )
+
+w(n)
+w(o)
+
+=
+
+,
+
+27
+
+(71)
+
+where we have used eq. (35) to obtain the last line. Similarly, we can obtain the ratio of
+probabilities for subsequent units. The ratio of the transition probabilities is the product
+of these ratios and the ratios of the acceptance probabilities. Multiplying eq. (71) for each
+unit and using eqs. (43) and (44), we ﬁnd that super detailed balance is satisﬁed:
+
+α(o → n)acc(o → n)
+α(n → o)acc(n → o)
+
+=
+
+=
+
+N
+
+N
+
+i=1 exp(−βU(n)
+i )
+i′=1 exp(−βU(o)
+i′ )
+Q
+exp(−βU(n))
+Q
+exp(−βU(o))
+
+.
+
+×
+
+N
+
+i=2 w(n)
+i′=2 w(o)
+Q
+
+N
+
+(1)
+i
+N
+i′ (1) Q
+Q
+
+Q
+
+i
+
+N
+
+i=1 w(o)
+i′=1 w(n)
+i′
+
+W(n)
+W(o)
+
+(72)
+
+References
+
+[1] Kandel, E., and Abel, T., 1995, Science, 268, 825.
+
+[2] Nelson, L. S., Rosoff, M. L., and Li, C., 1998, Science, 281, 1686.
+
+[3] Olivera, B. M., Rivier, J., Clark, C., Ramilo, C. A., Corpuz, G. P., Abo-
+gadie, F. C., Mena, E. E., Woodward, S. R., Hillyard, D. R., and Cruz,
+L. J., 1990, Science, 249, 257.
+
+[4] Clackson, T., and Wells, J. A., 1994, Trends Biotech., 12, 173.
+
+[5] Alberg, D. G., and Schreiber, S. L., 1993, Science, 262, 248.
+
+[6] Ruoslahti, E., 1992, J. Cancer, 66, 239.
+
+[7] O’Neil, K. T., Hoess, R. H., Jackson, S. A., Ramachandran, N., Mousa,
+S. A., and DeGrado, W. F., 1992, Proteins: Structure, Function, and Genetics,
+14, 509.
+
+[8] Boyd, D. B., 1998, in Rational Drug Design, edited by Reedy, M. R., and Parrill,
+
+A. L. (Washington, DC: American Chemical Society).
+
+[9] Bruccoleri, R. E., and Karplus, M., 1990, Biopolymers, 29, 1847.
+
+[10] Tshjishita, H., Moriguchi, I., and Hirono, S., 1994, Biophysical J., 66, 1815.
+
+[11] Frenkel, D., and Smit, B., 1996, Understanding Molecular Simulation (San Diego:
+
+Academic Press Inc.).
+
+[12] de Pablo, J. J., Laso, M., and Suter, U. W., 1992, J. Chem. Phys., 96, 6157.
+
+[13] Smit, B., 1996, Physica Scripta, T66, 80.
+
+[14] Smit, B., 1996, Fluid Phase Equilibria, 116, 249.
+
+[15] de Pablo, J. J., 1995, Fluid Phase Equilibria, 104, 195.
+
+[16] Bates, S. P., van Well, W. J. M., and van Santen, R. A., 1996, J. Phys.
+
+Chem., 100, 17573.
+
+28
+
+[17] Deem, M. W., and Bader, J. S., 1996, Mol. Phys., 87, 1245.
+
+[18] Dodd, L. R., Boone, T. D., and Theodorou, D. N., 1993, Mol. Phys., 78, 961.
+
+[19] Boone, T. D., 1995, Prediction of Glass-melt Behavior and Penetrant Sorption Ther-
+modynamics in Vinyl Polymers via Molecular Simulations, Ph.D. thesis, UC Berkeley.
+
+[20] Pant, P., and Theodorou, D. N., 1995, Macromolecules, 18, 7224.
+
+[21] Mavrantzas, V., Boone, T., Zervopoulou, E., and Theodorou, D. N., 1998,
+
+Macromolecules, to appear.
+
+[22] Meirovitch, H., 1985, Phys. Rev. A, 68, 3699.
+
+[23] Geyer, C. J., 1991, in Computing Science and Statistics, pp. 156–163, American
+
+Statistical Association.
+
+[24] Hukushima, K., and Nemoto, K., June 1996, J. Phys. Soc. Japan, 65, 1604.
+
+[25] Marinari, E., Parisi, G., and Ruiz-Lorenzo, J., 1998, in Spin Glasses and Ran-
+dom Fields, edited by Young, A., volume 12 of Directions in condensed matter physics
+(Singapore: World Scientiﬁc).
+
+[26] Tesi, M. C., Janse van Rensburg, E. J., Orlandini, E., and Whittington,
+
+S. G., January 1996, J. Stat. Phys., 82, 155.
+
+[27] Boyd, G., January 1998, Nucl. Phys. B (Suppl.), 60A, 341.
+
+[28] Hansmann, U. H. E., 1997, Chem. Phys. Lett., 28, 140.
+
+[29] Falcioni, M., and Deem, M. W., 1998, J. Chem. Phys., to appear.
+
+[30] Weiner, S. J., Kollman, P. A., Nguyen, D. T., and Case, D. A., 1986, J.
+
+Comput. Chem., 7, 230.
+
+[31] Kang, Y. K., No, K. T., and Scheraga, H. A., 1996, J. Phys. Chem., 100, 15588.
+
+[32] Mackerell, Jr., A. D., Bashford, D., Bellott, M., Dunbrack, Jr., R. L.,
+Evanseck, J. D., Field, M. J., Fischer, S., Gao, J., Guo, H., Ha, S., Joseph-
+McCarthy, D., Kuchnir, L., Kuczera, K., Lau, F. T. K., Mattos, C., Mich-
+nick, S., Ngo, T., Nguyen, D. T., Prodhom, B., Reiher, III, W. E., Roux,
+B., Schlenkrich, M., Smith, J. C., Stote, R., Straub, J., Watanabe, M.,
+Wi´orkiewicz-Kuczera, J., Yin, D., and Karplus, M., 1998, J. Phys. Chem. B,
+102, 3586.
+
+[33] Stein, R. L., 1993, Adv. Protein Chem., 44, 1.
+
+[34] Flory, P. J., 1969, Statistical Mechanics of Chain Molecules (New York: Wiley).
+
+[35] Press, W. H., Teukolsky, S. A., Vetterling, W. T., and Flannery, B. P.,
+
+1992, Numerical Recipes in C (New York: Cambridge), 2nd edition.
+
+29
+
+[36] Smit, B., and Siepmann, J. I., 1994, J. Am. Chem. Soc., 98, 8442.
+
+[37] Hoffmann, D., and Knapp, E. W., 1996, Euro. Biophys. J., 24, 387.
+
+Table 1: Constraint equations and target functions. In case 6, X can stand for either A or
+B, and φ′
+
+3 is deﬁned by eqs. (12) and (13).
+
+2
+
+2
+
+2
+
+1
+
+3
+
+= 0
+
+= 0
+
+− l3h,4
+
+BABAB
+
+AABAB
+
+AAAAB
+
+Case Units(1-5) Geometrical Constraints
+2
+|r4(φ6) − r2(φ1)|2 − l2,4
+ˆu3(φ1, φ2) · ˆu6 − cos θ4 = 0
+2
+|r4 [φ6(φ1)] − r3h [φ2(φ1)]|
+2
+|r4(φ6) − r2(φ1)|2 − l2,4
+[r5t − r3(φ1, φ2)] · ˆu6 − l3,4 cos θ4 − l4,5h − l5h,5t cos θ5t = 0
+2
+|r4 [φ6(φ1)] − r3 [φ2(φ1)]|
+− l3,4
+2
+|r4(φ6) − r2(φ1)|2 − l2,4
+= 0
+ˆu3(φ2) · ˆu6 − cos θ4 = 0
+2
+|r4 [φ6(φ1)] − r3h(φ1, φ2)|
+2
+|r4(φ6) − r2(φ1)|2 − l2,4
+ˆu4(φ6, φ5) · ˆu1 − cos θ2 = 0
+|r2 [φ1(φ6)] − r3t [φ5(φ6)] |2 − l2,3t
+|r4(φ6) − r2(φ1)|2 − l2,4
+[r1h − r3(φ6, φ5)] · ˆu1 + l2,3 cos θ2 + l1h,1t cos θ1h + l1t,2h = 0
+2
+|r2 [φ1(φ6)] − r3 [φ5(φ6)]|
+− l2,3
+2
+|r3(φ′
+3) − r2h(φ1)|2 − l2h,3
+= 0
+2
+|r3(φ′
+3) − r4t(φ6)|2 − l3,4t
+= 0
+3), φ′
+3] − r4h [φ6(φ′
+|r2t [φ1(φ′
+
+AXAXA
+
+BAAAA
+
+BABAA
+
+− l3h,4
+
+3), φ′
+
+− l2t,4h
+
+2
+3]|
+
+= 0
+
+= 0
+
+= 0
+
+= 0
+
+= 0
+
+= 0
+
+= 0
+
+4
+
+6
+
+5
+
+2
+
+2
+
+2
+
+2
+
+2
+
+Classiﬁcation
+dist
+dot1
+target
+dist
+dot
+target
+dist
+quad
+target
+dist
+dot1
+target
+dist
+dot
+target
+dist
+dist
+target
+
+Comments
+
+φ6=f (φ1)
+φ2=f (φ1)
+0 =f (φ1)
+φ6=f (φ1)
+φ2=f (φ1)
+0 =f (φ1)
+φ6=f (φ1)
+determine φ2
+0 =f (φ1)
+φ1=f (φ6)
+φ5=f (φ6)
+0 =f (φ6)
+φ1=f (φ6)
+φ5=f (φ6)
+0 =f (φ6)
+φ1=f (φ′
+3)
+φ6=f (φ′
+3)
+0 =f (φ′
+3)
+
+Table 2: The mathematical form of the constraint functions. Here i, j, and k are labels to
+units, and d is a constant that varies from case to case. The reference units of i and j are
+i′ and j′, respectively. The reference unit of j′ is j′′. The labels a and b are either h or t,
+depending on whether the notation is forward or backward. We deﬁne a∗ = h when a = t,
+and a∗ = t when a = h. The torsional variables that appear in the constraint equations are
+φI and φII. The constant characteristic matrix is M. The last row deﬁnes notation used in
+this table. Notation not deﬁned here is deﬁned in Sec. 2.2.
+
+Type General function form
+quad ˆui(φI) · ˆuj − d = 0
+dist
+
+|ria(φI) − rjb(φII)|2 − d = 0
+
+M (used in ΦIMΦII = 0 )
+not applicable
+(|ri′a − rj′b|2 + li′a,ia
+Tlab
+Tlab
+−2Li ′a
+i′
+⊤
+−2[Γ(ri′a − rj′b)]
+
++ lj′b,jb
+⊤
+j′ Lj ′b + 2Li ′a
+j′ Lj ′b
+
+Tlab
+
+⊤
+
+⊤
+
+2
+
+2
+
+−Gj′′ (ˆuk)Tj′′θLj ′b
+−dC + Gj′′ (ˆuk)Tj′′θΛj′
+
+− d)C
+⊤
+Tlab
+i′
+
+Γ(ri′a − rj′b)
+
+dot
+
+[ria − rjb(φI, φII)] · ˆuk − d = 0 [(ria − rj′′b) · ˆuk − d] C − Lj ′′b
+
+⊤
+
+⊤
+
+Tlab
+j′′
+
+Γ(ˆuk)
+
+dot1 ˆuj(φI, φII) · ˆuk − d = 0
+
+C
+
+≡
+
+, Γ(x) ≡
+
+1 0 0
+0 0 0
+0 0 0 (cid:19)
+Tlab
+i
+h
+
+
+
+0
+
+⊤x
+
+x
+i
+
+
+
+
+
+[Γ(x)]
+
+⊤
+
+0
+Tlab
+i
+
+xx 0 0
+xy 0 0
+xz 0 0 (cid:19)
+
+(cid:18)
+0
+⊤x
+Tlab
+i
+h
+Tlab
+i
+
+⊤x
+
+h
+
+y
+i
+
+z
+
+i
+
+0
+⊤x
+Tlab
+i
+h
+Tlab
+−
+i
+h
+
+z
+⊤x
+i
+
+y
+
+i
+
+
+
+
+
+
+
+
+, if θi 6= 0
+
+, if θi = 0
+
+Gi(x) ≡
+
+(cid:18)
+
+
+
+
+
+
+Li ′a
+li′a,ia
+
+2
+
+≡ li′h,i′tΛi′a + li′a∗,iaΛi′
+≡ li′h,it
+
++ li′a∗,ia
+
+2
+
+2
+
++ 2li′h,i′tli′a∗,ia cos θi′
+
+Table 3: Comparison of simulation results with diﬀerent rebridging methods at 298 K. For
+all simulations ∆φmax = 10◦, except for WJM, in which ∆φmax = 30◦.
+
+Method ∆φavg (deg)
+
+Number of steps CPU time (hrs)
+
+NJ
+WJ
+WJO
+WJM
+MT
+
+6.662
+7.291
+10.006
+8.525
+2.699
+
+Pacc
+0.162
+0.172
+0.177
+0.111
+0.051
+
+Pcross
+0.000303
+0.000414
+0.000167
+0.000468
+0.000222
+
+4 × 105
+4 × 105
+4 × 105
+2 × 105
+4 × 105
+
+32
+32
+34
+40
+30
+
+Table 4: Acceptance probability observed for swapping moves in the parallel tempering
+simulation.
+
+Swap
+
+Pacc
+298 K ↔ 500 K 0.147
+500 K ↔ 1000 K 0.113
+1000 K ↔ 3000 K 0.136
+
+Table 5:
+
+Simulation data for
+
+tryptophan,
+
+lysine, and arginine residues of
+
+the
+
+CNWKRGDC peptide.
+
+Method n1(×n2) Residue ∆φ/CPU (deg·min−1)
+
+CPU (min)
+2940
+
+SLA
+
+SLA
+
+SLA
+
+1
+
+10
+
+30
+
+SLA
+
+100
+
+LA
+
+5×5
+
+LA
+
+10×5
+
+LA
+
+10×10
+
+LA
+
+20×10
+
+LARC
+
+5
+
+LARC
+
+10
+
+LARC
+
+15
+
+Trp
+Lys
+Arg
+Trp
+Lys
+Arg
+Trp
+Lys
+Arg
+Trp
+Lys
+Arg
+Trp
+Lys
+Arg
+Trp
+Lys
+Arg
+Trp
+Lys
+Arg
+Trp
+Lys
+Arg
+Trp
+Lys
+Arg
+Trp
+Lys
+Arg
+Trp
+Lys
+Arg
+
+142
+82
+90
+158
+575
+152
+315
+526
+290
+153
+445
+130
+131
+271
+157
+147
+375
+205
+120
+397
+225
+28
+355
+55
+213
+673
+327
+211
+749
+248
+151
+548
+346
+
+Pacc
+0.0317
+0.00229
+0.00150
+0.0846
+0.187
+0.0325
+0.313
+0.214
+0.131
+0.373
+0.304
+0.0821
+0.0660
+0.0947
+0.0529
+0.0686
+0.169
+0.0792
+0.0841
+0.220
+0.118
+0.120
+0.348
+0.0811
+0.116
+0.221
+0.100
+0.206
+0.421
+0.146
+0.334
+0.497
+0.357
+
+1620
+
+3910
+
+3220
+
+2040
+
+2260
+
+2800
+
+2500
+
+1690
+
+2560
+
+4250
+
+Figure Captions
+
+Figure 1: Sketches for units of class A and B. The angle θ is zero for class B. Only backbone
+atoms are depicted here. Bold lines indicates bonds that do not rotate.
+
+Figure 2: A segment selected to be rebridged. Change of driver angles φ0 and φ7 breaks the
+connectivity. The dotted area represents the region in which the positions of the backbone
+atoms must be restored.
+
+Figure 3: The rebridging method applied to a ABABA segment. It can be seen that |r1−r3|
+and |r3 − r5| are constants. The dotted area represents the region in which the positions
+of backbone atoms are to be restored.
+
+Figure 4: A typical target function. Only the φ′
+is shown here. The number of branches is four.
+
+3 domain where the target function exists
+
+Figure 5: Shown as solid is the deﬁnition of atom groups used for side chain regrowing: a)
+in non-look-ahead and b) in semi-look-ahead. The left two bonds are connected to other
+backbone atoms.
+
+Figure 6: Schematic pictures for generating trial moves. The solid circle 0 denotes an
+existing unit. Dotted circles represent trial conﬁgurations of the next unit. a) CBMC
+without look-ahead generates and regrows one unit at one time. Conﬁguration 2 has the
+lowest energy and is most likely to be picked. b) In look-ahead, we generate two units
+and regrow one unit. The conﬁgurations generated from 2 turn out to be disfavored, and
+conﬁguration 4 is chosen instead.
+
+Figure 7: The probability distribution for the CβSSCβ disulﬁde torsional angle observed in
+NJ, WJ, WJO, WJM, and MT.
+
+Figure 8: The energy histograms for all the systems in the parallel tempering simulation.
+
+Figure 9: The histograms for the CβSSCβ disulﬁde torsional angle observed in the parallel
+tempering simulation. The total number of Monte Carlo cycles is N. The distribution at
+3000 K is shown for comparison.
+
+Figure 10: Equilibration periods for the side chains of CNWKRGDC. The numbers at the
+upper right are values of n1.
+
+rh r
+,
+
+t
+
+θ
+
+class A
+
+class B
+
+rh
+
+θ
+
+h
+
+θ
+
+t
+
+t
+
+r
+θ
+
+t
+
+θ
+
+=
+
+h
+
+Figure 1: Wu and Deem, ‘Eﬃcient Monte Carlo. . . ’
+
+r0
+
+φ
+
+1
+
+r1t
+
+φ
+
+0
+
+r1h
+
+r2
+
+r3h
+
+r3t
+
+r4
+
+r
+
+5
+
+φ
+
+6
+
+r6
+
+φ
+
+7
+
+Figure 2: Wu and Deem, ‘Eﬃcient Monte Carlo. . . ’
+
+r
+
+1
+
+φ
+
+1
+
+0tr
+
+r
+
+0h
+
+φ
+
+0
+
+-3r
+
+1r
+
+3r
+
+-3r
+
+5r
+
+2hr
+
+r
+
+4t
+
+r
+
+6t
+
+φ
+
+7
+
+r
+
+5
+
+φ
+
+6
+
+Figure 3: Wu and Deem, ‘Eﬃcient Monte Carlo. . . ’
+
+1
+
+0
+
+−1
+
+−2
+
+−3
+
+f
+
+−4
+
+−1
+
+0
+
+1
+φ
+
+2
+’ (radians)
+
+3
+
+3
+
+Figure 4: Wu and Deem, ‘Eﬃcient Monte Carlo. . . ’
+
+b
+
+b
+
+b
+
+b
+
+(a)
+
+(b)
+
+Figure 5: Wu and Deem, ‘Eﬃcient Monte Carlo. . . ’
+
+2
+
+3
+
+1
+
+high energy
+configurations
+
+0
+
+(a)
+
+2
+
+3
+
+1
+
+0
+
+(b)
+
+4
+
+4
+
+Figure 6: Wu and Deem, ‘Eﬃcient Monte Carlo. . . ’
+
+NJ
+WJ
+WJO
+WJM
+MT
+
+0.04
+
+0.02
+
+y
+t
+i
+l
+i
+b
+a
+b
+o
+r
+P
+
+0
+
+0
+
+120
+
+240
+
+360
+
+φ
+
+C  SS  C
+
+β
+
+β
+
+(degrees)
+
+Figure 7: Wu and Deem, ‘Eﬃcient Monte Carlo. . . ’
+
+298 K
+500 K
+1000 K
+3000 K
+
+50
+
+40
+
+30
+
+20
+
+10
+
+y
+c
+n
+e
+u
+q
+e
+r
+F
+
+0
+9350
+
+9360
+
+9370
+
+9380
+
+9390
+
+9400
+
+Energy (Kcal/mol)
+
+Figure 8: Wu and Deem, ‘Eﬃcient Monte Carlo. . . ’
+
+N=160000, T=298 K
+N=80000, T=298 K
+N=160000, T=3000 K
+
+0.04
+
+0.02
+
+y
+t
+i
+l
+i
+b
+a
+b
+o
+r
+P
+
+0
+
+0
+
+120
+
+240
+
+360
+
+φ
+
+C  SS  C
+
+β
+
+β
+
+(degrees)
+
+Figure 9: Wu and Deem, ‘Eﬃcient Monte Carlo. . . ’
+
+10400
+
+10000
+
+)
+l
+o
+m
+
+/
+l
+a
+c
+K
+
+(
+ 
+E
+
+SLA, 100
+SLA, 10
+Without LA, 100
+Without LA, 10
+Without LA, 1
+
+9600
+
+0
+
+20
+
+40
+CPU time (min)
+
+60
+
+80
+
+Figure 10: Wu and Deem, ‘Eﬃcient Monte Carlo. . . ’
+
+

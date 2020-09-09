@@ -1,0 +1,1271 @@
+6
+0
+0
+2
+ 
+g
+u
+A
+ 
+5
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+0
+6
+1
+8
+0
+6
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Enhancing structure relaxations for ﬁrst-principles codes:
+an approximate Hessian approach
+
+James M Rondinelli, Bin Deng, and Laurence D Marks∗
+Department of Materials Science and Engineering, Northwestern University,
+2220 N Campus Drive, Evanston, Illinois, 60208-3108, USA
+(Dated: February 21, 2014)
+
+We present a method for improving the speed of geometry relaxation by using a harmonic ap-
+proximation for the interaction potential between nearest neighbor atoms to construct an initial
+Hessian estimate. The model is quite robust, and yields approximately a 30% or better reduction in
+the number of calculations compared to an optimized diagonal initialization. Convergence with this
+initializer approaches the speed of a converged BFGS Hessian, therefore it is close to the best that
+can be achieved. Hessian preconditioning is discussed, and it is found that a compromise between an
+average condition number and a narrow distribution in eigenvalues produces the best optimization.
+
+PACS numbers: 02.60.Pn, 31.15.-p, 31.15.Ar, 71.15.-m
+
+I.
+
+INTRODUCTION
+
+II. OPTIMIZATION METHODS
+
+In many cases the slowest step in a density functional
+calculation (DFT) or other ab initio calculations is ﬁnd-
+ing the optimal atomic positions which minimize the total
+energy. With older minimization approaches, such as the
+conjugate gradient method, the number of evaluations
+scales proportionally with the system size. More powerful
+are Quasi-Newton methods, in particular the Broyden-
+Fletcher-Goldfarb-Shanno (BFGS) method, which can
+show quadratic convergence provided that breakdowns
+of the curvature condition (discussed later) are protected
+against. The classic BFGS method uses a simple diago-
+nal matrix as the initial estimate, perhaps with the initial
+diagonal term using the Shanno-Phua scaling1; see also
+the discussion by Nocedal and Wright2. In principle one
+could achieve far better convergence by some appropri-
+ate choice of the initial Hessian estimate, as suggested by
+some recent analysis3,4,5,6.
+
+In this paper, we detail an approach for improving on
+the estimate of the starting Hessian, using a harmonic po-
+tential describing the interactions between nearest neigh-
+bor atoms. We ﬁnd that it is important to combine this
+with a diagonal component plus an appropriate scaling
+term. Slightly unexpectedly, what turns out to be im-
+portant is a balance between making the initial Hessian
+estimate replicate that of the true problem and keeping
+the condition number of the estimate small.
+
+The structure of this note is as follows. First, we brieﬂy
+review conventional optimization methods (Section II),
+with some comments about how they might be improved
+for density functional theory (DFT) calculations. Sec-
+ond, we outline the algorithm for generating the Hessian
+estimate and assimilating it into the WIEN2k geometry
+relaxation routine (Section III). The robustness of the
+program is tested by performing geometry relaxations
+for various classes of materials (Section IV). Finally, we
+conclude with a discussion on the importance of Hessian
+preconditioning, and we propose a general scheme for re-
+solving these problems.
+
+At the heart of Quasi-Newton methods is an expansion
+
+of the energy in the form
+
+E† = E + gT s +
+
+sT Hs
+
+(1)
+
+1
+2
+
+where E† is the predicted energy, E and g are the energy
+and gradient for a step s from the current state, and H is
+the Hessian matrix. The optimum step can be obtained
+directly in principle as
+
+s = −H−1g
+
+(2)
+
+assuming that the Hessian is known. The concept of a
+quasi-Newton method is to calculate an approximation
+to the Hessian (or its inverse depending upon the exact
+method used) from previous gradient information. The
+most successful approaches use what are called secant
+methods7, in particular the Broyden-Flecher-Goldfarb-
+Shanno (BFGS) method8,9,10,11. The ﬁrst estimate for
+the Hessian is usually a unitary matrix, although this is
+not required if physical knowledge of the system is avail-
+able. For instance, in an earlier version of the WIEN2k
+code an estimate of the bonding force constants and atom
+multiplicities was used for the initial diagonal elements—
+this worked much better than a simple constant. As we
+will see, one can do better than this.
+
+The mathematics behind the secant method is that a
+
+typical iteration is given by the form
+
+xk+1 = xk + αkdk
+
+(3)
+
+where dk = −B−1
+k ∇f (xk) and Bk is the approximation
+for the true Hessian that is updated and the step size αk
+is chosen by a line search or a trust-region method (as
+here)12,13,14.
+
+For any two consecutive iterations, xk and xk+1,
+with their gradients, ∇f (xk) and ∇f (xk+1) information
+about the curvature of the surface (the Hessian) is known
+since
+
+[∇f (xk+1) − ∇f (xk)] ≈ Bk+1 [xk+1 − xk]
+
+(4)
+
+writing sk = xk+1 − xk and qk = ∇f (xk+1) − ∇f (xk),
+this can be rewritten as
+
+qk = Bk+1sk.
+
+(5)
+
+The expression given in Eq. 5 is known as the secant
+equation. An important constraint is that Bk+1 needs
+to be positive deﬁnite for the step to be downhill. Mul-
+tiplying Eq. 5 on the left by sk yields what is called the
+curvature condition sk · qk > 0. This is equivalent to the
+geometric interpretation that over the step length the ob-
+ject function has positive curvature (i.e., the step is taken
+in a lower energy direction). When this condition is sat-
+isﬁed, Eq. 5 will always have a solution and the BFGS
+update
+
+Bk+1 = Bk + ∆Bk, ∆Bk =
+
+qkqT
+k
+qT
+k sk
+
+−
+
+k Bk
+
+BksksT
+sT
+k Bksk
+
+(6)
+
+will maintain a positive deﬁnite approximation to the
+Hessian. Note that Bk+1 is not the same as the Hessian,
+and as will become clearer later this can be important.
+
+It is worth mentioning that the curvature condition
+does not always hold, so it must be explicitly enforced
+otherwise the BFGS method can fail completely; this
+is one of the weaknesses of these updating methods.
+This often occurs when the character of the Hessian
+changes substantially during the course of the minimiza-
+tion, which is more likely to occur if one starts far from
+the minimum. Fortunately, the BFGS update is rather
+in that the Hessian estimate will tend
+well behaved,
+to correct itself in a few steps, as compared to other
+approaches2. Three conventional techniques exist for
+handling the case when the curvature condition fails:
+
+1. The calculations are restarted from the current po-
+
+sition with a diagonal initial estimate.
+
+2. A skipping strategy is employed on the BFGS up-
+
+date (Bk+1 = Bk).
+
+3. The use of a revised (damped) BFGS update2
+
+which modiﬁes the deﬁnition of qk.
+
+For the ﬁrst case, any important curvature information
+is lost and previous steps are essentially wasted. The
+second technique allows one to incorporate the curvature
+information at previous iterations. However, it requires
+careful control, and too many updates may be skipped
+resulting in further loss of curvature information. (The
+limited memory method2,15 can do this better because it
+skips steps far from the current location.) The particular
+code we employed used the third method where the scalar
+tk is deﬁned by tk = (0.2) sT
+k Bksk > 0 and uk = θkqk +
+(1 − θk) Bksk for
+
+1,
+
+θk =
+
+0.8
+
+(
+
+sT
+k Bksk
+k Bksk−sT
+sT
+
+k qk
+
+,
+
+if
+
+if
+
+sT
+k qk > tk
+sT
+k qk < tk
+
+.
+
+The BFGS update is then given just as in Eq. 6, with
+qk replaced by uk. This formulation enforces the curva-
+ture condition, and allows for an interpolation between
+
+2
+
+the unmodiﬁed Hessian update (θk = 1) and the Hes-
+sian at the current iterate. As a consequence, every step
+contributes to deﬁning the curvature, and no steps are
+wasted.
+
+Much of the previous discussion has been concerned
+with the BFGS update, but selection of the step size αk
+In the code we have
+(and direction) merits attention.
+(dmng.f from NETLIB with some minor changes) the
+entire BFGS update is wrapped within a trust-region al-
+gorithm which is used to calculate the best step to take
+based on a quadratic model of the objection function (the
+PES). While line search methods can be used, for a DFT
+problem where the gradient comes essentially for free,
+the most eﬃcient approach is a trust-region algorithm16.
+In particular, this approach uses the current estimate
+of the Hessian and imposes an additional constraint on
+the step length, ksk+1k 6 R where R is the trust re-
+gion radius. Within this radius the quadratic model is
+said to adequately sample the object function. The step
+size is then chosen such that it suﬃciently minimizes the
+model function in that region. The trust region radius
+is adjusted iteration to iteration according to how well
+the step reduced the function with respect to the pre-
+dicted reduction value determined from the step size (a
+so called eﬀectiveness measure)2. Therefore, if a poor
+step is taken, the radius is decreased, until the current
+Hessian approximation is good enough, and then it is
+subsequently expanded. Compared to line search meth-
+ods, this approach may not give the best improvement
+per direction, but often will be faster in terms of the net
+improvement per function evaluation.
+
+The routine in our minimization has the added fea-
+ture of using an adaptive trust region method, in that it
+switches between diﬀerent models in order to determine
+the optimal step size17,18. The algorithm ﬁrst calculates
+what it believes is an appropriate step size (such that
+the length of the step is less than the radius of the trust
+region). It is unusual to calculate the exact trust region
+step, so approximate trial steps are found which approx-
+imate the solution in this region. For each iteration the
+algorithm computes the step size as the linear combina-
+tion of the steepest descent direction and a quasi-Newton
+search direction. Diﬀerent step types are then chosen, the
+main ones being:
+
+1. A restricted Cauchy step if the trust radius is
+
+smaller than or equal to the Cauchy step.
+
+2. A limited length Newton step if the trust radius is
+
+larger than the Newton step.
+
+3. A double-dogleg step if the trust radius is between
+
+the Cauchy and Newton steps.
+
+This approach is used since it provides a stronger bias
+toward the Newton step direction, as an attempt to ac-
+celerate the optimization. The purpose of the Cauchy
+step is just to minimize the local model over a space
+that is known to be well deﬁned in the steepest descent
+
+direction. Since steepest descent directions do not al-
+ways provide the best minimization, alternative candi-
+date steps (and directions) are evaluated. Conventional
+BFGS methods as outlined above work very well, and the
+code we have used (with some minor additions) is one of
+the most respected and robust versions freely available.
+For some special problems other codes might work better,
+but this is probably close to an universal algorithm. It
+uses reverse communication, which makes it rather easy
+to implement into programs. However, there is still room
+to possibly improve the update method for DFT prob-
+lems because as we have mentioned, the gradient comes
+almost for free:
+
+• Conventional trust region methods discard a bad
+step; it might be better to incorporate this infor-
+mation into the BFGS update then recalculate a
+revised step.
+
+• Most BFGS codes attempt to keep the local mem-
+ory requirements and CPU time low. However,
+for a DFT problem these are generally negligi-
+ble compared to what the main iterations require.
+Hence one might improve the codes by doing more
+detailed and accurate analysis of plausible steps;
+for instance, going beyond a simple double-dogleg
+method.
+
+• As mentioned above the weakness of the BFGS
+method when the curvature condition fails might be
+something where further research would be useful.
+For instance, one could easily keep a step history
+and switch to a limited-memory method or an up-
+date based upon less than the full number of steps.
+One idea would be to search over all the history of
+previous steps to ﬁnd an “optimum” Hessian esti-
+mate that will do better than the three conventional
+methods described above.
+
+III.
+
+IMPLEMENTATION
+
+The general approach for constructing the initial Hes-
+sian approximation is now outlined. First, the symmetry
+independent atom set is expanded by the appropriate
+operators to construct the full set of atoms in the struc-
+ture. A search for the free variable parameters to be
+optimized is subsequently performed, identifying special
+sites whose positions are not allowed to vary for the par-
+ticular symmetry of the structure. A nearest neighbor
+search algorithm is then carried out over the expanded
+atom net, to a user speciﬁed cutoﬀ distance, in order to
+determine the length over which the interatomic poten-
+tial acts. The cutoﬀ terms and bonding strength used
+are discussed later. The elements in a trial Hessian are
+then generated by numerical diﬀerentiation of a simple
+pairwise energy with a step size of 10−6 ˚A, which tests
+show to be adequate. The ﬁnal step is to construct an
+
+3
+
+TABLE I: Free model parameters in the Hessian algorithm
+that may be used to customized the estimate.
+
+Parameter Values Description
+0.05
+
+Cutoﬀ term limiting the number of atom pairs
+
+1.50-2.50 Strength of exponential decay bonding term
+
+8-12 Maximum nearest neighbor distance
+
+0.20-0.40 Multiplicative rescaling term
+1.00-4.00 Additive diagonal rescaling term
+
+χ
+ν
+RM
+γ
+η
+
+initial estimate to be used in the form
+
+Binitial = γBtrial + ηI
+
+where γ and η are constants, and I is the identity matrix.
+We have experimented with two models for the pair-
+wise energy, a spring model and a simple harmonic ap-
+proximation. The harmonic model consistently outper-
+formed the spring model, for reasons which we believe
+are associated with the conditioning which we will dis-
+cuss later. The harmonic model can be written as
+
+∆E ≈ 1
+
+2 Γi,j∆r2
+
+i,j
+
+where ∆ri,j is the change in the distance between the
+two atoms i and j, and Γi,j is an appropriate spring
+constant linking them. Here an exponential term is
+used to model the pairwise bond strength, Γi,j =
+exp [−ν (ri,j − dm) /dm], where ν is a user-speciﬁed expo-
+nential decay term (discussed later) and dm is the short-
+est nearest neighbor distance. For practical purposes the
+absolute value of the spring constants are not important,
+but only the relative ratios of them.
+
+After building the full Hessian for the structure, it is
+symmetry reduced to contain only the symmetry inde-
+pendent atoms and transformed to conventional crystal-
+lographic fractional units. Finally, a Cholesky factoriza-
+tion using a LINPACK routine (dchdc) is performed and
+the Hessian approximation is introduced in the ﬁrst step
+of a slightly modiﬁed version of the dmng.f minimization
+routine from NETLIB. This minimizer was incorporated
+into the code by one of us (LDM) some time ago, and is
+now widely used.
+
+All that is required by the user is a ﬁle from which
+the crystal structure is read, and a parameter ﬁle which
+contains constants used in the model during the Hessian
+construction. The parameter ﬁle was found to be quite
+useful, as it allows for the user to tailor the Hessian for
+diﬀerent types of systems (e.g. soft or hard). The param-
+eters that were found most useful and which have been
+included in the model can be found in Table I. Values
+that have been shown to be quite reasonable for most
+calculations are also listed.
+
+A description of each parameter follows: RM deﬁnes
+the maximum distance (in atomic units) to which the
+nearest neighbor search algorithm includes atoms for
+building the energy terms; ν is used in the exponen-
+tial decay function (Γ), which describes the strength of
+the pairwise interaction between atoms. An additional
+cutoﬀ term (χ) is used to restrict which atom pairs are
+
+TABLE II: Material systems investigated with relevant crys-
+tallographic information.
+
+System
+SiO2
+LaCuOS
+MgVO3
+SiO2
+Bi4Ti3O12 body centered tetragonal 139 (I4/mmm)a
+
+Lattice
+primitive tetragonal
+primitive tetragonal
+centered orthorhombic
+rhombohedral
+
+Space Group
+(symmetry)
+136 (P42/mnm)
+129 (P4/nmm)
+65 (Cmmm)
+
+154 (P3221 )
+
+Atoms D.O.F.
+
+6
+8
+10
+9
+38
+
+1
+2
+3
+4
+28
+
+aSymmetry about odd digits (B2cb), where the digits are the num-
+ber of TiO6 octahedra in the perovskite-like fragments of the struc-
+ture.
+
+included in the gradient calculation. Once the exponen-
+tial weighting factor becomes smaller than this χ-value,
+those bonds (or atoms pairs) are no longer considered in
+the force calculation. The aﬀect of varying these param-
+eters is discussed later. Finally, the two scaling terms γ
+and η.
+
+IV. RESULTS
+
+The initializer described above has been used for sev-
+eral months for a range of problems, and appears to be-
+have well for cases where the initial point is both close to
+or far from the minimum. To evaluate the performance
+in detail, we have relaxed in a more systematic fashion
+a series of diﬀerent structures with varying degrees of
+freedom (relaxation in one or more Cartesian coordinate
+directions). A summary of these structures is given in
+Table II. For these examples, multiple convergence cri-
+teria were required and they are as follows: (1) the force
+vector on each atom was less than 1 mRy/a.u.; (2) the
+energy tolerance was 0.1 mRy; and (3) the charge conver-
+gence within the Muﬃn tins was 5.0 × 10−5e. All of the
+optimized energies (E0) for the structures are available
+in Table III.
+
+For each structure, the number of geometry steps re-
+quired to satisfy the convergence criterion was reduced
+by using the proposed Hessian estimate. Table 3 lists
+the number of calculations required to achieve an equi-
+librium structure using both a simple diagonal initial-
+izer and our Hessian formulation; in all cases steps which
+were rejected by the Trust-Region algorithm are included
+in the count. (It is worth mentioning that the diagonal
+initializer was previously optimized to be close to the
+best, general form available, a factor of at least 30% or
+more better than a simple unitary scaling.) In general
+the number of cycles to converge was reduced by 30%
+compared to the reference diagonal Hessian.
+
+A. Hessian estimate eﬃciency
+
+In order to evaluate the accuracy of the initial Hes-
+sian and its eﬀects on convergence, structure relaxations
+were also performed using a converged BFGS Hessian
+
+4
+
+from a previous calculation. We cannot prove that this
+is the best possible Hessian, but from previous experi-
+ence it appears to be very close to optimum. Table III
+shows the results . It is important to recognize that the
+number of SCF cycles required with our initial estimates
+approached that of the converged Hessian. Our exper-
+iments therefore suggest we our approaching the limit
+at which an equilibrium structure can be found using
+current optimization methods. As expected, the better
+the initial Hessian estimate of the true curvature of the
+PES, the faster the optimization. Consequently, we can
+conclude that our pairwise potential acting over several
+nearest neighbors adequately provides an estimate of the
+curvature of the PES. We also oﬀer a more rigorous com-
+parison in the next section by examining the eigenvalues
+of each Hessian matrix.
+
+We also studied the eﬀect of the Hessian estimate on
+the initial step size in the BFGS update. These results
+are given in Table III. It is clear that there is a decrease in
+the number of force calculations required with increasing
+maximum step size. The increased reduction in geometry
+optimization steps is attributed to a more accurate Hes-
+sian (e.g. closely approximating the eigenvalues). For a
+smaller step length the time to convergence increases, and
+the user can be fairly well guaranteed that the minimiza-
+tion will proceed stably. A more aggressive approach is to
+increase the step size, which can be done with conﬁdence
+if the initial Hessian resembles the curvature of the PES.
+The step sizes given in Table III also suggest that our
+estimate is better than the standard initialization, since
+the initial step is much larger.
+It might appear then,
+that by taking a larger step size, it is possible to reduce
+the number of iterations; however, this may result in the
+BFGS update moving in directions of higher energy at
+ﬁrst, before ﬁnal convergence is achieved. Increasing the
+step size too aggressively may therefore result in more
+steps than desired.
+
+B. Hessian conditioning
+
+It is known that the rate of minimization for steepest
+decent and conjugate methods is related to the condition
+number of the Hessian matrix. The condition number
+is deﬁned as the ratio of ωmax/ωmin, where ωmax and
+ωmin are the largest and smallest eigenvalues, respec-
+tively. Typically, the minimizations steps required scales
+with the condition number2. Essentially, the condition
+number of a matrix measures how sensitive its inverse is
+in changes to the original matrix: for a large condition
+number the inverse of the matrix is very sensitive or un-
+stable; a matrix with a low condition number (bounded
+by unity) is said to be well-conditioned, while a matrix
+with a high condition number is said to be ill-conditioned.
+From our experience, it turned out to be important to
+consider the conditioning of the initial Hessian.
+
+The results in Table III are from appropriately con-
+ditioned Binitial matrices, whose properties (condition
+
+5
+
+TABLE III: Summary of optimization results. Iterations (SCF cycles) are given for the default minimization method (nDF),
+the Hessian initializer (nINIT) and a converged BFGS Hessian (nCV). Similarly, the ﬁrst optimization step sizes are given for
+each approach. A * indicates a Cauchy step, and a # dogleg step, while those without any denotation are of the standard
+Newton type. The absolute values for the starting geometry energy (Es) and the total converged energy (E0) are provided.
+
+System
+SiO2
+LaCuOS
+MgVO3
+SiO2
+Bi4Ti3O12
+
+nDF
+3
+5
+10
+10
+31
+
+Iterations
+nINIT
+2
+5
+5
+6
+21
+
+nCV
+1
+2
+5
+6
+14
+
+∆DF
+0.098
+0.105
+0.153
+0.152
+0.024
+
+Step Size
+∆INIT
+0.035
+0.233
+∗
+0.555
+0.268
+0.055
+
+∆CV
+0.170
+0.706
+∗
+0.894
+0.649#
+0.184
+
+Es (Ry)
+62.719
+9.415
+2.147
+27.047
+58.397
+
+E0 (Ry)
+62.757
+9.480
+2.493
+27.100
+58.542
+
+TABLE IV: Optimal scaling values for each structure and
+the largest and smallest eigenvalues along with the condition
+number for each model Hessian matrix. The remaining pa-
+rameters were ﬁxed at RM = 10.0, ν = 2.00, and χ = 0.05 for
+structure.
+
+System
+SiO2
+LaCuOS
+MgVO3
+SiO2
+Bi4Ti3O12
+
+γ
+2.75
+0.15
+0.50
+0.25
+0.12
+
+η
+1.05
+1.05
+1.05
+1.05
+1.05
+
+ωmin, ωmax
+1.0500, 12.050
+1.3179, 1.3821
+1.7298, 2.5868
+1.2998, 1.8722
+1.0500, 1.4129
+
+κ
+11.476
+1.0487
+1.4954
+1.4404
+1.3457
+
+numbers and eigenvalues) are given in Table IV. The cal-
+culation of condition numbers, eigenvalues and their cor-
+responding eigenvectors were performed with standard
+LAPACK routines for real symmetric matrices19.
+
+To explore the scaling eﬀect, we present more detailed
+results for the rhombohedral SiO2 and Bi4Ti3O12 struc-
+tures. Figs. 1 and 2 show the convergence in energy for
+various scaling parameters. While the condition number
+of the Hessian is a good estimate at how successful the
+optimization will be, we have found that a better metric
+is to examine the eigenvalues of the Hessian matrix. The
+eigenvalue distributions are shown in the left panels of
+Figs. 1 and 2 for SiO2 and Bi4Ti3O12. We argue that
+an average condition number is best, and a tight cluster
+of the eigenvalues (small standard deviation) is desired.
+From these ﬁgures, it is clear that with a wider distribu-
+tion of the Hessian eigenvalues, the structure relaxation
+performance declines. Additionally, the minimization oc-
+curs more stably when the eigenvalue distribution is nar-
+row.
+
+Our study suggests that we want to minimize the ra-
+tio between the largest and smallest eigenvalues (as ex-
+pected) to optimize the condition number. However, we
+do not want the matrix overly conditioned. In fact, the
+most robust geometry relaxation occurs when the eigen-
+values deviate slightly from those of the true curvature.
+Rather than achieving a fully converged Hessian (i.e. the
+eigenvalues correctly replicate the true PES) at a point
+in space far from the optimal geometry, it is better to
+have the eigenvalues gradually converge toward the true
+values as the system moves from the initial geometry to
+the equilibrium conﬁguration as suggested by Olsen20 et
+
+al. In fact, the BFGS method can achieve convergence
+without actually replicating the true Hessian of PES.
+
+V. DISCUSSION
+
+Throughout this investigation we have attempted to
+reach the optimal rate of geometry relaxation for a given
+structure. We have reached several conclusions on the op-
+timal values of the scaling parameters, and an approach
+to ﬁnding them. We note that in optimization problems,
+scaling tends to be the responsibility of the investigator
+owing to the variety of applications; however, at times it
+is not always clear what is the best or most robust means
+of doing so.
+
+This study has allowed us to build a set of parameters
+that can aid in the relaxation of large condensed struc-
+tures. These parameters listed in Table I are in order of
+increasing importance and their eﬀects on convergence
+are now discussed. The most straightforward parameters
+to set are χ, ν and RM. From our experience, variation in
+these parameters only aﬀected optimization performance
+by on average a few geometry steps (and no change in
+the number of SCF cycles) over the listed range. The
+most signiﬁcant eﬀect of these parameters was found to
+be on the initial step size in the BFGS update. Most
+notably, increasing ν resulted in larger steps sizes by a
+few percent.
+
+In order to further optimize the eﬃciency of the min-
+imization algorithm, scaling of the Hessian through the
+γ and η parameters was investigated. The best Binitial
+matrix seems to be a balance between appropriately scal-
+ing the diagonal elements with respect to the oﬀ-diagonal
+elements and eigenvalue clustering. As we have shown,
+intelligent choices for the scale parameters can enhance
+performance. We note that in our model as the ratio
+of γ/η increases the condition number of the Hessian in-
+creases exponentially.
+
+We have also found that our conditioning method has
+led to an increase in the number of Newton-type steps
+in the minimization algorithm. This fact suggests that
+the algorithm may be behaving more like metric based
+minimization techniques, i.e. Newton methods where ad-
+jacent steps are forced to be conjugant to each other
+
+(a)
+
+(b)
+
+(c)
+
+(d)
+
+(e)
+
+(a)
+
+(b)
+
+(c)
+
+.
+
+7
+5
+2
+0
+=
+σ
+
+ 
+
+ 
+
+.
+
+2
+3
+5
+0
+=
+σ
+
+ 
+
+ 
+
+.
+
+0
+6
+9
+2
+=
+σ
+
+ 
+
+ 
+
+.
+
+2
+6
+5
+0
+=
+σ
+
+ 
+
+ 
+
+.
+
+5
+2
+1
+1
+=
+σ
+
+ 
+
+ 
+
+7
+8
+1
+.
+0
+ 
+=
+σ
+
+ 
+
+0
+9
+0
+.
+0
+ 
+=
+σ
+
+ 
+
+2
+1
+3
+.
+1
+ 
+=
+σ
+
+ 
+
+0
+
+6
+
+(a)  γ = 0.25 , η = 1.05
+(b) γ = 0.50 , η = 1.05
+(c)  γ = 2.75 , η = 1.05
+(d) Converged Hessian from (e)
+(e) Standard MINI optimization
+
+(a)  γ = 0.25 , η = 1.05
+(b) γ = 0.12 , η = 1.05
+(c) Standard MINI optimization
+
+-2
+
+0
+
+ι
+
+]
+
+
+Ε
+−
+
+ 
+
+ 
+
+Ε
+
+[
+
+g
+o
+
+l
+
+-3
+
+0
+1
+
+-4
+
+-1
+
+-1.5
+
+0
+
+]
+
+
+Ε
+−
+
+ 
+
+ 
+
+Ε
+
+[
+
+g
+o
+
+l
+
+ι
+
+0
+1
+
+-2
+
+-2.5
+
+-3
+
+-3.5
+
+2
+
+4
+
+8
+
+10
+
+12
+
+6
+
+Eigenvalue (ω)
+
+1
+
+2
+
+3
+
+4
+
+Eigenvalue (ω)
+
+5
+
+6
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10
+
+12
+
+14
+
+Iteration
+
+FIG. 1: Left panels: Eigenvalue distribution of the Hessian matrix for the rhombohedral SiO2 structure with diﬀerent Hessian
+scaling values (a) γ = 0.25, η = 1.05; (b) γ = 0.50, η = 1.05; (c) γ = 2.75, η = 1.05; (d) Converged BFGS Hessian; and (e) the
+standard MINI optimization. The standard deviation (σ) for the eigenvalues is given for each case. Right panel: Convergence
+of the total energy as a function of the iteration (SCF cycle) number for each calculation. E0 is the converged value of the
+total energy for each run.
+
+1
+
+1.2
+
+1.4
+
+1.6
+
+1.8
+
+2
+
+Eigenvalue (ω)
+
+1
+
+2
+
+4
+
+5
+
+6
+
+5
+
+10
+
+25
+
+30
+
+35
+
+15
+
+20
+Iteration
+
+3
+Eigenvalue (ω)
+
+FIG. 2: Left panels: Eigenvalue distribution of the Hessian matrix for the Bi4Ti3O12 structure with diﬀerent Hessian scaling
+values (a) γ = 0.25, η = 1.05; (b) γ = 0.50, η = 1.05; and (c) the standard MINI optimization. The standard deviation (σ)
+for the eigenvalues is given for each case. Right panel: Convergence of the total energy as a function of the iteration number
+(SCF cycle) for each calculation. E0 is the converged value of the total energy for each run.
+
+(sk+1Bksk = 0). Furthermore, the eigenvalue cluster
+phenomenon seen in our experiments is consistent with
+this type of optimization.
+
+in the eigenvalues of Binitial. The eﬀect of this clustering
+seems to be a consequence of the optimization method
+(the BFGS update) and is still being investigated.
+
+While generalized minimization algorithms are neces-
+sary foundations for structure calculations, tailoring of
+the geometry relaxation routines provides a robust means
+for enhancing performance. Of course, the optimal ap-
+proach will be diﬀerent for diﬀerent structures. For prac-
+tical purposes, it is important that these geometry relax-
+ations be run with very little parameter adjustments by
+the user. Therefore from the previous considerations,
+only variations in the parameters which aﬀect the condi-
+tioning of the matrix and the clustering of the eigenvalues
+should be considered, i.e. reduce the standard deviation
+
+We have developed a customizable model (any interac-
+tion potential can be substituted) which adequately ap-
+proximates the curvature of the potential energy surface
+of a crystal structure. The model has been parameter-
+ized to allow for modiﬁcation for diﬀerent system types.
+We have shown that our method results an approximate
+30% decrease in the number of SCF cycles required to
+achieve an equilibrium structure relative to the standard
+routines. In fact, our estimate is shown to closely repli-
+cate the behavior of a converged BFGS Hessian. The ef-
+fects of preconditioning have also been investigated, and
+
+a general approach for enhancing the rate of convergence
+through scaling factors has been suggested.
+
+Acknowledgments
+
+We wish to acknowledge D. Russell Luke for helpful
+discussions on optimization methods and scaling tech-
+
+7
+
+niques. Peter Blaha also provided the Bi4Ti3O12 struc-
+ture and assisted in the beta-testing of the pairhess pro-
+gram. This work was funded by the NSF under GRANT
+# DMR-0455371
+
+∗ Electronic address: L-marks@northwestern.edu
+1 S. D. F. and P. Kang-Hoh., Mathematical Programming
+
+14, 149 (1978).
+
+2 J. Nocedal and S. J. Wright, Numerical Optimization
+
+(Springer-Verlag, New York, 1999).
+
+3 S. Goedecker, F. Lan¸con, and T. Deutsch, Phys. Rev. B
+
+64, 161102 (2001).
+
+4 M. V. Fernandez-Serra, E. Artacho, and J. M. Soler, Phys-
+ical Review B (Condensed Matter and Materials Physics)
+67, 100101 (pages 4) (2003).
+
+5 A. A. Mostoﬁ, P. D. Haynes, C.-K. Skylaris, and M. C.
+Payne, The Journal of Chemical Physics 119, 8842 (2003).
+6 K. Nemeth and M. Challacombe, The Journal of Chemical
+
+Physics 121, 2877 (2004).
+
+7 H. B. Schlegel,
+
+in Modern Electronic Structure Theory,
+edited by D. R. Yarkony (World Scientiﬁc Publishing, Sin-
+gapore, 1995), pp. 459–500.
+
+8 C. G. Broyden, SIAM Journal on Applied Mathematics 6,
+
+9 R. Fletcher, The Computer Journal 13, 317 (1970).
+10 D. Goldfarb, SIAM J. Appl. Math. 24, 23 (1970), ISSN
+
+11 D. F. Shanno, Mathematics of Computation 24, 647
+
+222 (1970).
+
+0025-5718.
+
+(1970).
+
+12 A. R. Conn, N. I. Gould, and P. L. Toint, in MPS/SIAM
+Series on Optimization, edited by D. R. Yarkony (SIAM,
+New York, 2000).
+
+13 R. Fletcher, Practical Methods of Optimization. Volume
+1: Unconstrained Optimization (J. Wiley and Sons, New
+York, 1987).
+
+14 C. T. Kelley, Iterative Methods for Optimization (SIAM,
+
+15 D. C. Liu and J. Nocedal, Mathematical Programming 45,
+
+New York, 1999).
+
+503 (1989).
+
+16 J. E. Dennis, D. M. Gay, and R. E. Welsch, ACM Trans.
+
+Math. Softw. 7, 369 (1981), ISSN 0098-3500.
+
+17 J. E. Dennis and H. H. W. Mei, Journal of Optimization
+
+Theory and Applications 28, 453 (1979).
+
+18 J. E. Dennis, D. M. Gay, and R. E. Welsch, ACM Trans.
+
+Math. Software 7, 348 (1981).
+
+19 E. Anderson, Z. Bai, C. Bischof, S. Blackford, J. Dem-
+mel, J. Dongarra, J. D. Croz, A. Greenbaum, S. Hammar-
+ling, A. McKenney, et al., LAPACK Users’ Guide (SIAM,
+Philadelphia, 1999), 3rd ed.
+
+20 R. A. Olsen, G. J. Kroes, G. Henkelman, A. Arnaldsson,
+and H. Jonsson, The Journal of Chemical Physics 121,
+9776 (2004).
+
+

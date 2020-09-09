@@ -1,0 +1,1004 @@
+Edinburgh 2002/17
+
+SINGINT: Automatic numerical integration of
+singular integrands
+
+Nikolas Kauer
+
+School of Physics, University of Edinburgh, Edinburgh EH9 3JZ, UK
+
+Abstract
+
+We explore the combination of deterministic and Monte Carlo methods to facili-
+tate eﬃcient automatic numerical computation of multidimensional integrals with
+singular integrands. Two adaptive algorithms are presented that employ recursion
+and are runtime and memory optimised, respectively. SINGINT, a C implementa-
+tion of the algorithms, is introduced and its utilisation in the calculation of particle
+scattering amplitudes is exempliﬁed.
+
+Key words: Adaptive numerical integration, multidimensional quadrature,
+singular integrands, integration rules, Monte Carlo integration, recursion.
+
+2
+0
+0
+2
+ 
+t
+c
+O
+ 
+0
+3
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+7
+2
+1
+0
+1
+2
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Email address: nkauer@ph.ed.ac.uk (Nikolas Kauer).
+
+Preprint submitted to Elsevier Science
+
+23 July 2013
+
+Program summary
+
+Title of program: SINGINT
+Program obtainable from: http://www.ph.ed.ac.uk/~nkauer/singint/
+Program requirements: SINGINT can be built with any compatible C and
+Fortran compilers. It requires GNU Scientiﬁc Library 1 1.2. The program has
+been tested with GNU Compiler Collection 2 3.1 on Red Hat Linux 7.1.
+Programming language: C, F77
+No. of bytes in distributed program: 26224
+Distribution format: gzip-compressed tar ﬁle
+
+Nature of physical problem:
+Eﬃcient, robust and automatic numerical computation of multidimensional
+integrals with singular integrands, for example occurring in the calculation of
+particle scattering amplitudes in perturbative ﬁeld theory.
+
+Method of solution:
+Runtime- or memory-optimised algorithms that combine integration rule and
+Monte Carlo techniques and employ recursion.
+
+Restrictions on the complexity of the problem:
+singint rec, the implementation of the recursive algorithm, is suitable for
+integrands of up to 12 dimensions. singint cut, the implementation of the
+global algorithm, is currently restricted to two dimensions. An extension of
+the algorithm to more than two dimensions is straightforward and will be
+implemented in a future version.
+
+1 http://sources.redhat.com/gsl/
+2 http://gcc.gnu.org
+
+2
+
+1 Introduction
+
+While the practitioner can rely on highly eﬃcient and robust automatic rou-
+tines for the numerical integration of 1-dimensional integrals [1], for multidi-
+mensional integrals the situation is more complicated and no mature universal
+tool has emerged yet.
+
+To guide our discussion we start by recalling the key features of a superior
+numerical integration routine: It should be eﬃcient, robust and automatic.
+Eﬃcient means that results of the desired precision are obtained using as
+little resources as possible in terms of processor time and memory. Robust
+means that the routine yields accurate results for a variety of integrands of
+interest, for example, not only smooth ones, but also discontinuous or singular
+integrands. Automatic implies that the routine requires minimal information
+about the integrand, or, more precisely, that a “black box” that returns the
+value of the integrand for any point in the integration volume is all that is
+required. To devise one routine that excels in all three categories is extremely
+challenging, but a number of complementary approaches have been developed
+to satisfy more limited expectations.
+
+Two basic approaches to numerical integration are deterministic integration
+with integration rules and Monte Carlo integration [2]. Both methods have
+strengths and weaknesses. Integration rules, on the one hand, yield precise
+results with relatively few integrand evaluations, but they are not too robust
+and work best for very smooth functions. Monte Carlo methods, on the other
+hand, impose few requirements on the integrand, but are known to converge
+slowly. To bridge the gap, adaptive procedures have been developed, that
+select and evaluate suitable subregions separately, thus making deterministic
+integration more robust and Monte Carlo integration more eﬃcient.
+
+As mentioned above, the use of Monte Carlo techniques is suggestive when
+multidimensional, square-integrable functions with singularities need to be in-
+tegrated. But, when fast integration or high precision are mandatory pure
+Monte Carlo methods are not well suited. To enable rapid convergence, in-
+tegration rule based approaches for singular integrands have been explored
+in the literature [3]. As a result, highly eﬃcient integrators exist that exploit
+extrapolation methods and can be used if the location of all singularities is
+known in analytic form. However, such procedures are not automatic and not
+applicable if the location of singularities is unknown or diﬃcult to determine.
+
+In this article we therefore present two automatic procedures for the integra-
+tion of low-dimensional singular integrands that aim to retain the performance
+advantage of deterministic integration methods. This is achieved by the com-
+bined use of integration rules and Monte Carlo sampling. To the best of our
+
+3
+
+knowledge, this combination has not previously been proposed in the litera-
+ture.
+
+A second objective of this article is to explore the applicability of recursion
+to adaptive integration. Numerical algorithms have traditionally been imple-
+mented in Fortran 77, which does not allow recursion. 3 One might therefore
+conjecture that recursive techniques have not been explored by practitioners to
+the desirable extent. To avoid being limited by such technicalities, SINGINT
+is implemented in C, which allows to conveniently program with recursion. 4
+
+The article is organised as follows: In Sections 2 and 3, we present two ef-
+ﬁcient algorithms for the automatic numerical integration of singular inte-
+grands, which combine integration rule and Monte Carlo techniques. The ﬁrst
+algorithm is runtime optimised, while the second is fully recursive and has
+small memory requirements. In Section 4, we introduce the interface of our
+implementation and discuss important aspects of SINGINT’s use based on a
+short example. In Section 5, we give numerical examples and discuss a practical
+application in theoretical particle physics. The article closes with conclusions.
+
+2 Global Algorithm
+
+2.1 Method
+
+The global algorithm we suggest decomposes the singular integrand f (x) into
+a bounded function bc(x) and a singular rest sc(x) by introducing a cut pa-
+rameter c > 0:
+
++c
+
+if f (x) > c
+
+bc(x) :=
+
+f (x) if
+
+c
+−
+
+≤
+
+f (x)
+
+c
+
+≤
+
+c
+−
+
+if f (x) <
+
+c
+−
+
+
+
+
+
+
+sc(x) := f (x)
+
+bc(x)
+
+−
+
+(1)
+
+(2)
+
+The bounded component bc(x) can then be integrated relying on automatic
+deterministic methods for maximum eﬃciency. To integrate the singular com-
+
+3 Recursive behaviour can and has nevertheless been implemented in Fortran 77
+through simulated recursion, which requires unintuitive code. We also note that this
+deﬁciency has been remedied in the Fortran 90 standard.
+4 Our choice was also inﬂuenced by the fact that the Fortran compiler of the widely-
+used GNU compiler collection does not support recursion.
+
+4
+
+ponent sc(x) we revert to Monte Carlo integration, an approach that is well
+suited for irregular or singular integrands and requires no analytic knowledge
+about the structure of the integrand, thus being automatic, too. These ad-
+vantages are, however, oﬀset by signiﬁcantly slower convergence relative to
+deterministic methods. With regard to our integrand decomposition, this in-
+terplay suggests the existence of an optimal range for the cut parameter c.
+Below that range, unnecessarily large, non-singular regions are Monte Carlo
+integrated, causing slow overall convergence. Above that range, the determin-
+istic routine has to integrate exceedingly steep peaks in the singular regions,
+necessitating a high number of function evaluations, which again leads to slow
+overall convergence. For cut parameters in the optimal range, however, the
+two eﬀects balance and eﬃciency is maximal. After both components have
+been computed, the ﬁnal result is obtained by adding up the integrals over
+bc(x) and sc(x). It is obviously independent of the cut parameter c.
+
+2.2 Optimisation
+
+We employ an optimised approach to the Monte Carlo integration of sc(x)
+that requires a 2-dimensional grid covering the integration region. During the
+integration of bc(x), some evaluations of f (x) may return values above or below
+the cuts, i.e. sc(x)
+= 0. In this case the grid cell that contains x is saved.
+In a second step the integral over sc(x) is calculated by using all cells with
+sc(x)
+= 0 that were detected in the previous step as seed cells. Note that the
+number of seed cells found will typically be much smaller than the total number
+of cells as long as the cut parameter c is chosen suﬃciently large. sc(x) is
+integrated by using crude Monte Carlo integration to evaluate all contributing
+cells using a recursive algorithm that starts with seed cells. For Monte Carlo
+integration in low dimensions (less than ca. 15 dimensions according to the
+analysis in Ref. [4]) convergence can be improved signiﬁcantly by using quasi-
+random numbers rather than pseudo-random numbers. We therefore base the
+sampling in our implementation on the low-discrepancy sequence of Ref. [5]. If
+the result of a particular cell is ﬁnite, all neighbouring cells are also scheduled
+for evaluation. This procedure is applied recursively until the region where
+sc(x) is nonvanishing is covered. The recursive algorithm we employ is given
+below as Algorithm 1 (using orientations to identify neighbouring cells). Note
+that other seed cells encountered during execution are removed from the list
+of remaining seed cells. The recursion stops when a cell evaluates to zero and
+is therefore at the boundary of the integration region for sc(x). We refer to
+such cells as “border” cells.
+
+The recursion spreads in a “starlight-like” fashion and is therefore only suited
+to cover convex areas. This limitation can be overcome with the following
+extension: Apply the algorithm to one seed cell. Then make every encountered
+
+5
+
+6
+6
+Algorithm 1. recursive coverage of convex grid area
+
+if valid cell then
+process cell
+if cell is start cell then
+
+process cells N, NW, W, SW, S, SE, E, NE
+
+else
+
+if cell type is N then
+
+process cell N
+
+else if cell type is NW then
+process cells N, NW, W
+else if cell type is W then
+
+process cell W
+
+else if cell type is SW then
+process cells W, SW, S
+else if cell type is S then
+
+process cell S
+
+else if cell type is SE then
+process cells S, SE, E
+else if cell type is E then
+
+process cell E
+
+else if cell type is NE then
+process cell E, NE, N
+
+end if
+
+end if
+
+end if
+
+border cell a start cell and apply the algorithm again. (The border cells of the
+secondary runs are not made start cells.) This extension makes the procedure
+more robust, but made little or no diﬀerence in our test runs. To rule out
+repeated evaluations of the same cell, the status of each cell is tagged with
+one of the following labels: unknown, ﬁnite, zero. Initially all cells are tagged
+“unknown”. Cells tagged “ﬁnite” have already been evaluated and taken into
+account, while cells tagged “zero” have already been identiﬁed as border cells.
+Note that tagging each cell introduces a global element in the recursion, which
+is permissible since the algorithm used to evaluate bc(x) is also global in nature
+(see below). Once the enhanced algorithm has been run for all seed cells the
+integration of sc(x) is complete.
+
+To optimise the integration of bc(x) we utilize DCUHRE, a very eﬃcient and
+robust integrator for multidimensional integrals with bounded integrands de-
+veloped by Berntsen et al. [6]. Its adaptive algorithm applies integration rules
+to determine the integral and error over non-uniform subvolumes until the
+desired total error is achieved. The algorithm is global, i.e. results for all sub-
+volumes are retained, to be able to select at any stage the subvolume with the
+largest error contribution for further reﬁnement. This approach is optimal in
+
+6
+
+terms of runtime but expensive in terms of memory. We return to this issue
+in Section 3.
+
+3 Recursive Algorithm
+
+Due to its global nature the approach described in Section 2 requires a po-
+tentially large amount of memory, and the question arises if a viable “local”
+alternative with small memory footprint can be found. To that end, we propose
+a second, fully recursive approach. Assume the integral I0 over a hypercube
+with volume V0 is to be determined with precision ∆I0. Starting with volume
+V0 the following procedure is applied recursively:
+
+(1) A value I and error estimate ∆I for the integral in the cell of volume V
+
+a) an integration rule (ca. 200 integrand evaluations are necessary for a
+
+b) basic Monte Carlo integration with the same number of function eval-
+
+is obtained by applying
+
+degree 13 integration rule [6])
+
+uations as in a)
+
+If both results are compatible within errors, the one with the lower error
+estimate is selected, otherwise the result with the larger error is selected.
+
+(2) The tolerable error 5 in the cell is ∆Imax := ∆I0
+(3) If ∆I
+
+∆Imax, no further action is necessary. If ∆I > ∆Imax, the cell
+is divided into n subcells of equal volume, and the integrals Ii in the
+subcells are determined as in (1).
+(4) If ∆Idiv < ∆I/√n with ∆Idiv := [
+
+i=1(∆Ii)2]1/2, the procedure is applied
+
+V /V0.
+
+≤
+
+q
+
+n
+
+recursively to the subcells.
+
+P
+
+(5) If ∆Idiv ≥
+
+Monte Carlo sampled until ∆I
+
+∆Imax.
+
+≤
+
+∆I/√n, further subdivision is not advantageous, and I is
+
+This procedure clearly shows that in general the algorithm that controls the
+subdivision of the integration volume is conceptually distinct from the al-
+gorithm used to integrate individual subcells. To let several complementary
+integration methods compete in the latter adds ﬂexibility and should typically
+increase eﬃciency. Our experience in the context of the practical application
+described in Section 5.2 conﬁrms this hypothesis.
+
+5 This condition guarantees that the overall error is at most ∆I0.
+
+7
+
+4 Using SINGINT
+
+To get an overview of SINGINT’s interface, the header ﬁle singint.h is a
+good starting point:
+
+typedef void Integrand(const int* ndim, const double x[],
+
+const int* numfun, double funvls[]);
+
+typedef void Integrator(const int ndim, const double a[], const double b[],
+Integrand* integrand, const double desired_abserr,
+const double desired_relerr, const int maxpts,
+double* result, double* abserr);
+
+Integrator singint_mc;
+
+Integrator singint_ir;
+
+Integrator singint_rec;
+
+Integrator singint_cut;
+extern double singint_cut_parameter;
+void singint_cut_callback(const int* ndim, const double x[],
+
+const int* numfun, double funvls[]);
+
+All integrand routines have to implement the function signature Integrand,
+which essentially takes a point in the integration volume speciﬁed by array x
+with *ndim elements as input and returns the integrand value at this point
+in array element funvls[0]. In order to avoid an additional, performance re-
+ducing integrand wrapper when applying integration rules, pointers are used
+to satisfy Fortran calling conventions and the dummy argument *numfun (re-
+stricted to 1) is introduced to create compatibility with DCUHRE.
+
+The integrand routine is one of the arguments of the Integrator signature,
+which all integrator functions implement. A list of all arguments with type
+and short description follows:
+
+ndim: const int number of dimensions of integral
+a[]: const double lower limits of hypercubical integration volume
+b[]: const double upper limits of hypercubical integration volume
+integrand: Integrand* (pointer to) integrand function
+desired abserr: const double desired absolute error of integration result
+desired relerr: const double desired relative error of integration result
+maxpts: const int maximum number of integrand evaluations (
+
+minimum
+
+≥
+
+given by IR MINPOINTSPERCELL)
+result: double* integral estimate
+abserr: double* estimated absolute error of result
+
+8
+
+The global algorithm (with cut parameter) and the recursive algorithm deﬁned
+above are implemented through the functions singint cut and singint rec,
+respectively. For convenience, the underlying techniques, i.e. Monte Carlo and
+integration rule-based integration, are implemented in integrators singint mc
+and singint ir, respectively. Note that singint ir is currently a wrapper
+function for DCUHRE and hence per se not suited for singular integrands
+(see Section 2). A concise but complete example that illustrates how to use
+SINGINT follows:
+
+#include <math.h>
+#include <stdio.h>
+#include "singint.h"
+
+int called_by_singint_cut = 0;
+
+void integrand(const int* ndim, const double x[],
+
+const int* numfun, double funvls[])
+
+funvls[0] = singular_function(ndim, x);
+if (called_by_singint_cut)
+
+singint_cut_callback(ndim, x, numfun, funvls);
+
+{
+
+}
+
+int main(int argc, char* argv[])
+{
+
+const double a[2] = { 0., 0. };
+const double b[2] = { 1., 1. };
+double result, abserr;
+
+singint_cut_parameter = 100.;
+called_by_singint_cut = 1;
+singint_cut(2, a, b, &integrand, 0.01, 0., 10000000, &result, &abserr);
+called_by_singint_cut = 0;
+printf("singint_cut result: %.10g +- %.2g\n", result, abserr);
+
+singint_rec(2, a, b, &integrand, 0.01, 0., 10000000, &result, &abserr);
+printf("singint_rec result: %.10g +- %.2g\n", result, abserr);
+
+return 0;
+
+}
+
+As shown, when using singint cut it is ﬁrst necessary to set the external
+global variable singint cut parameter to a suitable positive value. More-
+over, additional post-processing is necessary after integrand evaluations, which
+is facilitated by calling singint cut callback in the integrand routine. A
+transparent code organization to that eﬀect (involving the Boolean variable
+called by singint cut) is also shown in the preceding example.
+
+9
+
+The argument maxpts has slightly diﬀerent meanings for singint cut and
+singint rec. For the former integrator it speciﬁes the maximal number of
+integrand evaluations used when integrating the bounded component, while for
+the latter integrator it speciﬁes the maximal number of integrand evaluations
+in the Monte Carlo integration of any terminal subcell, i.e. a subcell where
+further subdivision would not accelerate the integration. 6
+
+As pointed out above, singint rec due to its recursive nature has comparably
+small memory requirements. singint cut, however, implements a globally
+optimising strategy, and increased precision hence requires the allocation of a
+larger workspace. The size of the workspace for the integration of the bounded
+and singular integrand components is
+
+DCUHRE WKSPC SIZE
+
+4 bytes
+
++ MAXNRSEEDCELLS
+
+4 bytes + NRBINS2
+
+1 byte
+
+.
+
+|
+
+}
+
+|
+
+·
+
+bc(x) dx
+{z
+
+R
+
+·
+
+sc(x) dx
+{z
+
+R
+
+·
+
+}
+
+For a given integrand, the optimal value of the ratio MAXNRSEEDCELLS/NRBINS2
+is approximately equal to the fraction of the integration volume where sc(x)
+is nonvanishing. The shape of this area also suggests an adequate resolution
+and thus a suitable value for NRBINS. More speciﬁcally, the default setting
+of NRBINS = 100 and MAXNRSEEDCELLS = 10000 requires about 50kB. For
+high precision calculations in connection with the application described in
+Section 5.2 we used NRBINS = 5000 and MAXNRSEEDCELLS = 500000, which
+required about 25MB. Without prior knowledge of the singularity structure
+of the integrand, one would have set MAXNRSEEDCELLS to 50002, increasing the
+required memory by about 100MB.
+
+R
+
+bc(x) dx, up to 107 integrand evaluations require
+
+With respect to
+DCUHRE WKSPC SIZE = 615402, i.e. about 2.3MB, while DCUHRE WKSPC SIZE =
+109 integrand evaluations
+92307714 allocates 352MB and allows for up to 1.5
+with a degree 13 rule. 7 The function singint ir checks can be used to obtain
+the necessary workspace size for other maxpts settings.
+
+·
+
+To conclude this section, we mention a diﬃculty for non-global recursive al-
+gorithms in general and the singint rec implementation in particular. Due
+to the depth-ﬁrst evaluation of integral contributions, no reliable estimate for
+the total integral exists until the algorithm terminates. It is hence impossible
+to translate a speciﬁed relative error to a desired absolute error while integrat-
+ing. Since relative errors are not additive, it is also not possible to adapt the
+
+6 Note that imposing such an upper limit in singint rec eﬀects a runtime guar-
+antee, but also invalidates the general statement in footnote 5.
+7 Note that in this case maxpts is chosen to be very close to the maximum value of
+a signed 4-byte integer, i.e. 231
+1. Changing data types in DCUHRE would allow
+to go beyond this implicit upper limit.
+
+−
+
+10
+
+strategy employed to limit the absolute error. singint rec therefore accepts
+only absolute error requests and requires that desired relerr be set to zero.
+
+5 Numerical examples and practical application
+
+5.1 Numerical examples
+
+Three 2-dimensional integrands fi(x, y) in the unit hypercube U2 := [0, 1]
+×
+[0, 1] with corner and line singularities are used to construct example inte-
+grands gi(x, y) in C2 := [
+1, 1] with singularities at quasi-unknown
+locations inside the integration region. 8
+
+[
+−
+
+1, 1]
+
+×
+
+−
+
+To be speciﬁc, the integrands fi(x, y) are given by
+
+f1(x, y) =
+
+√x2 + y2 5√x 3√y ((x
+
+0.5)2 + 0.01) ≈
+
+32.640 , (3)
+
+1
+0.5)2 + (y
+
+−
+
+−
+
+f2(x, y) =
+
+ln(x + y) ln(x) ln(y)e2x+y
+9√x + y 5√x 7√y
+
+4.5849 ,
+
+≈ −
+
+f3(x, y) =
+
+(ln(x))2ex+y cos(20x)
+9√x( 3√y)2
+
+≈
+
+4.1960 .
+
+The integrands gi(x, y) are then deﬁned by
+
+gi(x, y) =
+
+fi(x, y)
+
+if (x, y)
+
+U2
+
+
+
+
+
+
+fi(
+
+−
+fi(x,
+
+fi(
+
+−
+x,
+
+−
+
+−
+
+x, y)
+
+if (x, y)
+
+y)
+
+if (x, y)
+
+y) if (x, y)
+
+∈
+
+∈
+
+∈
+
+∈
+
+1, 0]
+
+[
+−
+[0, 1]
+
+×
+1, 0]
+
+[
+−
+
+[0, 1]
+
+1, 0]
+
+×
+[
+−
+[
+−
+
+×
+
+1, 0]
+
+with i = 1, 2, 3 .
+
+Evidently,
+
+(4)
+
+(5)
+
+(6)
+
+gi(x, y) dxdy = 4
+
+fi(x, y) dxdy ,
+
+i = 1, 2, 3 .
+
+(7)
+
+Z
+C2
+
+Z
+U2
+
+8 These integrands gi(x, y) can thus not be integrated with the non-automatic,
+deterministic algorithms of Ref. [3].
+
+11
+
+The SINGINT test program output displayed in App. A shows that the global
+algorithm implemented in singint cut, as well as the recursive algorithm
+implemented in singint rec can be used to eﬃciently integrate the example
+integrands gi(x, y). It also conﬁrms that results obtained with singint cut
+are indeed independent of the cut parameter. The test program further demon-
+strates that the integrands fi(x, y) as well as a number of trivial, bounded test
+integrands are also computed accurately. 9
+
+5.2 Practical application
+
+SINGINT was developed to facilitate a novel numerical approach to the calcu-
+lation of multileg 1-loop amplitudes in theoretical particle physics [7]. These
+amplitudes are important ingredients for the computation of higher-order cor-
+rections to multi-particle cross sections. The procedure involves the evaluation
+of 1- and 2-dimensional integrals that contain integrable singularities of loga-
+rithmic and square-root type. The number and location of these singularities
+is fairly complex and depends strongly on the underlying physical conﬁgura-
+tion as discussed in detail in Ref. [7]. A representative example is displayed in
+Fig. 1.
+
+Fig. 1. Two functions f1(x) and f2(x) that illustrate the structure of the 1- and
+2-dimensional integrands that are evaluated in the computation of multi-particle
+scattering amplitudes [7]. The peaks correspond to integrable square-root and log-
+arithmic singularities. The structure of the 2-dimensional integrals is obtained by
+“layering” (with nontrivial oﬀset) 1-dimensional cross sections of the type shown.
+
+The ultimate objective is to be able to reliably compute these amplitudes for
+a multitude of physical conﬁgurations in time frames of 5 to 50 seconds with
+1% relative error or better. Initial tests with pure Monte Carlo methods [8]
+
+9 These integrands can be integrated more eﬃciently by other means [3,6].
+
+12
+
+turned out to be 1 to 4 orders of magnitude too slow depending on the phys-
+ical conﬁguration. However, with the “mixed” algorithms described above we
+were able to achieve the desired runtimes. Generally, singint cut performed
+better than singint rec for the particular type of integrand considered here.
+We experimented with cut parameter values from 500 to 50000 and found the
+optimal window to range from about 5000 to 10000. When applying the re-
+cursive evaluation of subcells implemented in singint rec we observed that
+neither the integration rule technique nor the Monte Carlo method dominated,
+which conﬁrms the advantage of a mixed strategy in the case at hand. To fur-
+ther test the correctness of our implementation, we compared results obtained
+for special cases with corresponding results found in the literature. SINGINT
+also passed these application-related tests.
+
+6 Conclusions
+
+We introduced two eﬃcient automatic procedures that facilitate the adaptive
+numerical integration of low-dimensional singular integrands. We showed how
+the combined use of integration rules and Monte Carlo sampling and the power
+of recursion enable new runtime and memory optimisations. An application
+in theoretical particle physics was discussed that demonstrates the practical
+value of our approach. To allow others to apply the algorithms, we described
+a C implementation with test examples and explained its use.
+
+With the described physics application in mind, we formulated and imple-
+mented the global algorithm of Section 2 speciﬁcally for 2-dimensional inte-
+grals. However, its generalisation to more than two dimensions is straightfor-
+ward. There are in fact applications in perturbative ﬁeld theory, where higher-
+dimensional integrands similar to those of Section 5.2 need to be calculated
+numerically. We plan to investigate such cases in the future.
+
+We would like to thank T. Binoth, A. Genz, B. Lautrup and J. Lyness for
+useful discussions.
+
+Acknowledgements
+
+References
+
+[1] R. Piessens et al., QUADPACK, Springer Verlag, 1983.
+
+13
+
+[2] W.H. Press et al., Numerical Recipes, 2nd ed., Cambridge University Press,
+
+1992.
+
+[3] T.O. Espelid and A. Genz, Numerical Algorithms 8 (1994) 201 and references
+therein; K. Singstad and T.O. Espelid, J. Comp. Appl. Math. 112 (1999) 291;
+J.N. Lyness, Math. Comp. 30 (1976) 1.
+
+[4] F. James, J. Hoogland and R. Kleiss, Comp. Phys. Comm. 99 (1997) 180.
+
+[5] P. Bratley, B.L. Fox and H. Niederreiter, ACM Trans. Model. Comp. Sim. 2
+
+(1992) 195.
+
+[6] J. Berntsen, T.O. Espelid and A. Genz, ACM Trans. Math. Softw. 17 (1991)
+437; J. Berntsen, T.O. Espelid and A. Genz, ACM Trans. Math. Softw. 17
+(1991) 452.
+
+[7] T. Binoth, G. Heinrich and N. Kauer, preprint Edinburgh 2002/16 (2002)
+
+[8] G.P. Lepage, J. Comput. Phys. 27 (1978) 192; G.P. Lepage, preprint CLNS-
+
+[arXiv:hep-ph/0210023].
+
+80/447 (1980).
+
+A Output of test program
+
+(0)
+
+(0)
+
+(6.8e-15)
+
+(1.4e-14)
+
+(1.4e-14)
+
+singint_ir, simple1, unit h.c.:
+1 +- 1.4e-14
+singint_mc, simple1, unit h.c.:
+1 +- 0
+singint_rec, simple1, unit h.c.:
+1 +- 0
+singint_cut, simple1, unit h.c., cut = 1.5:
+1 +- 1.4e-14
+singint_cut, simple1, unit h.c., cut = 0.5:
+1 +- 6.8e-15
+singint_ir, simple1, non-unit h.c.:
+19.2 +- 2.6e-13
+singint_mc, simple1, non-unit h.c.:
+19.2 +- 0
+singint_rec, simple1, non-unit h.c.:
+19.2 +- 0
+singint_cut, simple1, non-unit h.c., cut = 1.5:
+19.2 +- 2.6e-13
+singint_cut, simple1, non-unit h.c., cut = 0.5:
+19.2 +- 1.3e-13
+singint_ir, simple2, non-unit h.c.:
+26.88 +- 5.9e-14
+singint_mc, simple2, non-unit h.c.:
+
+(2.2e-15)
+
+(1.4e-14)
+
+(1.4e-14)
+
+(6.8e-15)
+
+(0)
+
+(0)
+
+14
+
+(0.01)
+
+(0.011)
+
+(0.011)
+
+(0.0074)
+
+(0.0069)
+
+26.88006626 +- 0.2
+singint_rec, simple2, non-unit h.c.:
+26.88 +- 5.9e-14
+(2.2e-15)
+singint_cut, simple2, non-unit h.c., cut = 7.0:
+(2.2e-15)
+26.88 +- 5.9e-14
+singint_cut, simple2, non-unit h.c., cut = 1.0:
+26.88387169 +- 0.19
+singint_cut, singcomp1, [-1, 1]^2, cut = 50000:
+129.2232525 +- 1.4
+singint_cut, singcomp1, [-1, 1]^2, cut = 10000:
+129.7198049 +- 1.4
+singint_cut, singcomp1, [-1, 1]^2, cut = 2000:
+130.1922621 +- 1.3
+singint_cut, singcomp2, [-1, 1]^2, cut = 50:
+-18.32923723 +- 0.19
+singint_cut, singcomp2, [-1, 1]^2, cut = 10:
+-18.33036408 +- 0.18
+singint_cut, singcomp2, [-1, 1]^2, cut = 2:
+-18.3208958 +- 0.16
+singint_cut, singcomp3, [-1, 1]^2, cut = 50000:
+16.5502603 +- 0.17
+(0.01)
+singint_cut, singcomp3, [-1, 1]^2, cut = 10000:
+16.72847529 +- 0.17
+singint_cut, singcomp3, [-1, 1]^2, cut = 2000:
+16.79531051 +- 0.17
+singint_rec, singcomp1, [-1, 1]^2:
+129.9953115 +- 1.3
+singint_rec, singcomp2, [-1, 1]^2:
+-18.33534209 +- 0.18
+singint_rec, singcomp3, [-1, 1]^2:
+16.7794245 +- 0.17
+
+(0.0098)
+
+(0.0099)
+
+(0.0088)
+
+(0.01)
+
+(0.01)
+
+(0.01)
+
+(0.01)
+
+(0.01)
+
+15
+
+

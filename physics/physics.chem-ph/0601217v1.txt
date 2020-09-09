@@ -1,0 +1,4161 @@
+6
+0
+0
+2
+ 
+n
+a
+J
+ 
+0
+3
+ 
+ 
+]
+h
+p
+-
+m
+e
+h
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+7
+1
+2
+1
+0
+6
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+A “partitioned leaping” approach for multiscale modeling of chemical reaction
+dynamics
+
+Leonard A. Harris∗ and Paulette Clancy†
+School of Chemical and Biomolecular Engineering, Cornell University, Ithaca, NY 14853, USA
+(Dated: February 21, 2014)
+
+We present a novel multiscale simulation approach for modeling stochasticity in chemical reaction
+networks. The approach seamlessly integrates exact-stochastic and “leaping” methodologies into
+a single partitioned leaping algorithmic framework. Distinguishing characteristics of the method
+include automatic, dynamic and theoretically justiﬁable time step determination and timescale
+separation procedures that utilize concepts underlying the τ -leap approach [D. T. Gillespie, J.
+Chem. Phys. 115, 1716 (2001); D. T. Gillespie and L. R. Petzold, J. Chem. Phys. 119, 8229
+(2003)] and require the deﬁnition of only three model-independent parameters. Both procedures
+are based on an individual (but not independent) consideration of reactions, a subtle yet signiﬁcant
+ideological concept used in the development of previous exact-stochastic simulation methods [D. T.
+Gillespie, J. Comput. Phys. 22, 403 (1976); M. A. Gibson and J. Bruck, J. Phys. Chem. A 104, 1876
+(2000)]. The result is a method that correctly accounts for stochastic noise at signiﬁcantly reduced
+computational cost and is particularly well-suited for simulating systems containing widely disparate
+species populations. We present the theoretical foundations of partitioned leaping, provide numerous
+algorithmic strategies necessary for its practical implementation and demonstrate the utility of the
+method via illustrative examples.
+
+I.
+
+INTRODUCTION
+
+Stochastic simulations of chemical reaction networks
+have become increasingly popular recently, largely due
+to the observation that stochastic noise plays a criti-
+cal role in biological function.1,2,3,4,5,6,7,8 The issue is
+relevant in other scientiﬁc ﬁelds as well, however, such
+as microelectronics processing, where statistical varia-
+tions in dopant proﬁles can profoundly aﬀect the perfor-
+mance of nanoscale semiconductor devices.9,10,11 Gille-
+spie’s stochastic simulation algorithm (SSA),12 in partic-
+ular, has found widespread use in computational biology.
+The method is a kinetic Monte Carlo approach that pro-
+duces time-evolution trajectories correctly accounting for
+the inherent stochasticity associated with molecular in-
+teractions. Detailed accuracy is achieved by explicitly
+simulating every reaction occurrence within a system.
+The method is computationally expensive as a result,
+however, and practical application is limited to only very
+small systems.
+
+Motivated by this, considerable eﬀort has been under-
+taken recently to develop accelerated simulation tech-
+niques capable of correctly accounting for stochastic
+noise but at signiﬁcantly reduced computational cost.
+Broadly speaking, these endeavors can be divided into
+three categories: (i) algorithmic advances to increase the
+eﬃciency of exact-stochastic methods,13,14,15 (ii) “leap-
+ing” techniques in which eﬃciency is enhanced by ig-
+noring the exact moments at which reaction events oc-
+cur,16,17,18,19,20,21,22,23 and (iii) “partitioned” methods in
+which sets of reactions are divided into various classiﬁ-
+cations, such as “fast” and “slow,” and treated either by
+applying appropriate numerical techniques to each sub-
+set24,25,26,27,28,29 or by reducing the model to incorporate
+the eﬀects of the fast reactions into the dynamics of the
+slow.30,31,32,33
+
+Each approach has its strengths and shortcomings.
+The improved exact-stochastic techniques of Gibson and
+Bruck13 and Cao et al.14 are more eﬃcient but still simu-
+late every reaction occurrence within a system. As such,
+they remain too ineﬃcient to simulate large, complex re-
+action networks such as those commonly encountered in
+cellular biology.6 The “probability-weighted” technique
+of Resat et al.15 achieves increased eﬃciency by skewing
+the probability function governing the reaction dynamics
+in favor of reactions with small rates and allowing fast
+reactions to occur in “bundles.” The method fails to ac-
+curately describe stochastic ﬂuctuations, however, often
+overestimating the amplitude of the noise.
+
+Leaping techniques were pioneered by Gillespie16,34
+and have recently been modiﬁed in various ways by Pet-
+zold and co-workers,17,18,19,20,21 Tian and Burrage22 and
+Chatterjee et al.23 The basic idea behind these meth-
+ods is to determine a time interval over which the reac-
+tion rates (also known as propensities 34) for all reactions
+in a system are expected to remain essentially constant
+and then approximate the number of times each reaction
+“ﬁres” within the interval by sampling from an approxi-
+mate probability function. The original “τ -leap” method
+of Gillespie,16 as well as the modiﬁed versions of Pet-
+zold and co-workers,17,18,19,20,21 use a Poisson distribu-
+tion to determine the number of ﬁrings, while Tian and
+Burrage22 and Chatterjee et al.23 use a binomial distri-
+In all of these techniques the time step deter-
+bution.
+mination procedure is the least well-deﬁned component
+and remains the main obstacle to practical implemen-
+tation.16,17 Moreover, a major concern regarding these
+methods is the fact that each reaction in the system
+In systems
+is treated at the same level of description.
+comprised of reactions occurring over widely disparate
+timescales a method capable of treating diﬀerent reac-
+tions at diﬀerent levels of description simultaneously is
+
+preferable.6
+
+Partitioning methods attempt to do just this. Sets
+of reactions are partitioned into various subsets, such as
+“fast” and “slow,” with the idea being that eﬃciency can
+be increased by applying approximations to the fast re-
+actions without sacriﬁcing much in terms of accuracy.
+One set of techniques, which we will term methodology
+coupling methods,24,25,26,27,28,29 use various approximate
+descriptions, such as deterministic reaction rate equa-
+tions or stochastic diﬀerential equations, to describe the
+fast reactions and employ the SSA (or modiﬁed versions
+thereof) for the slow. Another set of techniques, which we
+will refer to as model reduction schemes,30,31,32,33 elim-
+inate explicit consideration of the fast reactions by in-
+corporating their eﬀects into the rate expressions for the
+slow. The slow reactions can then be simulated via the
+SSA with the modiﬁed rate parameters taken into ac-
+count.
+
+In both types of methods the primary shortcoming per-
+In gen-
+tains to how the partitioning is accomplished.
+eral, various ad hoc criteria are used, often based on
+the magnitudes of the reaction rates and species pop-
+ulations, but no theoretically justiﬁable method has yet
+been proposed.19 Moreover, coupling methods, being hy-
+brid approaches in which disparate numerical techniques
+are conjoined into a single algorithmic framework, suf-
+fer from technical diﬃculties which complicate their im-
+plementation. These include merging methods that de-
+scribe species populations in terms of discrete quantities
+with those that utilize continuum descriptions, and syn-
+chronizing the random time steps associated with exact-
+stochastic techniques with the ﬁxed time steps of contin-
+uum methods. Reduction schemes also have implemen-
+tation diﬃculties. Most notably, complex algebraic ex-
+pressions must often be derived and solved analytically
+or via numerical means, procedures often requiring ex-
+tensive modeler intervention.6
+
+In this article, we present a novel simulation method
+for modeling chemical reaction dynamics that overcomes
+the majority of the diﬃculties outlined above. The ap-
+proach incorporates ideas from both Gibson and Bruck’s
+exact-stochastic Next Reaction method (NRM)13 and
+Gillespie’s τ -leap strategy,16,17,34 and can be viewed as
+a multiscale partitioned leaping approach.
+In particu-
+lar, we use the fundamental theory underlying the τ -leap
+method to formulate a theoretically justiﬁable partition-
+ing scheme. The partitioning is based on the number of
+reaction ﬁrings expected within a calculated time inter-
+val; thus, partitioning and time step determination are
+inextricably linked. The time step determination proce-
+dure uses an “individual-based” approach analogous to
+that employed in the NRM (and the associated First
+Reaction method of Gillespie12), and thus diﬀers from
+procedures suggested previously.16,17,23 Species popula-
+tions are subsequently updated for coarsely classiﬁed re-
+actions using the leaping formulas introduced by Gille-
+spie,16 while rare events are treated in an exact-stochastic
+manner. Overall, our approach eﬃciently simulates sys-
+
+2
+
+tems containing widely disparate species populations us-
+ing rigorously derived classiﬁcation criteria and requiring
+minimal user intervention.
+
+We begin in Sec. II by reviewing the theoretical founda-
+tions of exact-stochastic simulation and τ -leaping. This
+provides a basis for discussing the theoretical underpin-
+nings of our approach in Sec. III, as well as techni-
+cal issues associated with practical implementation. In
+Sec. III C we present the algorithm in its ﬁnal form, fol-
+lowed in Sec. IV by three illustrative examples demon-
+strating the utility of the method. These include one
+inspired by biology and a clustering example relevant to
+materials and atmospheric sciences. Finally, in Sec. V we
+summarize the attributes of our method, discuss possible
+modiﬁcations to the approach, and draw conclusions re-
+garding its place among the many alternative techniques
+that have been proposed.
+
+II. BACKGROUND
+
+}
+
+{
+
+S1, . . . , SN
+
+{
+R1, . . . , RM
+
+As is customary, we consider a well-mixed system of
+interacting via M re-
+N molecular species
+in a volume Ω at constant
+action channels
+}
+temperature. The state of the system is described by
+the vector X(t), where Xi(t) represents the population
+of species Si at time t. Each reaction channel Rµ has
+associated with it a propensity function aµ and a state-
+change (or stoichiometric) vector zµ = (zµ1, . . . , zµN ).35
+The propensity aµ is deﬁned such that aµdt gives the
+probability that reaction channel Rµ will ﬁre once dur-
+ing the inﬁnitesimal time interval dt.
+In other words,
+aµ is the stochastic analog to the deterministic reaction
+rate. As such, aµ can be written as the product of a
+stochastic rate constant cµ (which is related to the de-
+terministic rate constant kµ via a simple scaling by the
+system volume Ω12) and a combinatorial factor hµ, which
+represents the number of distinct ways in which a realiza-
+tion of Rµ can occur. In general, hµ is a simple function
+of the reactant species populations for Rµ.12
+
+A. Exact stochastic simulation
+
+Given the deﬁnitions above, Gillespie has developed
+a simulation methodology for modeling chemical reac-
+tion dynamics that “exactly” accounts for the stochastic
+nature of the process.12 The stochastic simulation algo-
+rithm, or SSA, is exact in the sense that it produces pos-
+sible time-evolution trajectories that are consistent with
+the underlying chemical Master Equation governing the
+physical process.36
+
+The SSA is based on the next-reaction probability den-
+sity function P (τ, µ), deﬁned such that P (τ, µ)dτ repre-
+sents the probability, at time t, that the next reaction to
+ﬁre in the system will be of type Rµ and will take place
+during the inﬁnitesimal time interval [t + τ, t + τ + dτ ]. In
+the simple case of time-independent rate constants, such
+
+(2)
+
+(3)
+
+as we are concerned with here, it can be shown that12
+
+P (τ, µ) = aµ exp (
+
+a0τ ) ,
+
+(1)
+
+−
+
+where a0
+
+≡
+
+M
+ν=1 aν.
+
+P
+
+The basic idea behind the SSA is to generate random
+samples of τ (reaction times) and µ (reaction types) from
+the probability function in (1) in order to obtain sample
+realizations of the temporal evolution of a system. Nu-
+merous realizations can then be generated in order to
+obtain estimates of important dynamical properties such
+as population averages and variances, the latter of which
+are inaccessible via deterministic methods.
+
+In the original article,12 Gillespie introduced two meth-
+ods for sampling P (τ, µ), dubbed the Direct method
+(DM) and the First Reaction method (FRM). The DM
+is “direct” in the sense that P (τ, µ) is conditioned into
+two functions, one governing reaction times and the other
+reaction types. Each function is then sampled indepen-
+dently to give values of τ and µ. τ is obtained from
+
+−
+while µ is the integer satisfying the relationship
+
+τ =
+
+ln(r1)/a0,
+
+µ−1
+
+Xν=1
+
+aν < a0r2
+
+aν ,
+
+µ
+
+≤
+
+Xν=1
+
+where r1 and r2 are unit-uniform random numbers be-
+tween 0 and 1. The DM thus requires two random num-
+ber generations at each simulation step.
+
+The FRM is an equivalent method for sampling (1),
+however the approach is quite diﬀerent. The FRM con-
+siders each reaction in the system on an individual ba-
+sis, asking the question, “When would reaction Rµ next
+ﬁre if no other reactions could ﬁre ﬁrst?” The answer is
+governed by a probability function similar to that in (1)
+but with a0 replaced by aµ. The formula for sampling
+this function gives the so-called tentative next-reaction
+time,12
+
+τ ES
+µ =
+
+−
+
+ln(rµ)/aµ,
+
+(4)
+
+where rµ is a unit-uniform random number and the su-
+perscript “ES” signiﬁes “exact stochastic.”37 The FRM
+operates by generating one value of τ ES
+µ for each reaction
+in the system, identifying the smallest of the set, advanc-
+ing the clock by this amount, enacting the corresponding
+reaction, and repeating until a speciﬁed stopping crite-
+rion is met. From an intuitive standpoint we can explain
+why this works by noting that the reaction correspond-
+τ ES
+is the only one for which
+ing to the smallest of
+ν }
+the assumption that no other reactions ﬁre ﬁrst actually
+holds.
+
+{
+
+The FRM is clearly less eﬃcient than the DM since M
+random number generations are required at each simula-
+tion step as opposed to two in the DM. For this reason,
+the FRM initially received little attention as a practical
+simulation tool. This changed, however, with the de-
+velopment of the Next Reaction method, or NRM.13 The
+
+3
+
+−
+
+NRM is essentially a modiﬁed version of the FRM where,
+1 “leftover” values of τ ES
+instead of discarding the M
+at the end of each simulation step, a rigorous transfor-
+mation formula is employed that allows one to “recycle”
+the random samples in the subsequent step. The formula
+for doing so is known as the Next Reaction transforma-
+tion formula, and in the case of time-independent rate
+constants takes the form13
+
+µ
+
+τ ES
+µ = (a′
+
+µ/aµ)(τ ′ ES
+
+τ ′),
+
+µ −
+
+(5)
+
+where the unprimed and primed quantities signify new
+and old values, respectively.38
+
+The NRM operates similarly to the FRM, with the only
+diﬀerence being that once a reaction has ﬁred a new value
+of τ ES
+for that reaction only is generated using Eq. (4).
+µ
+For all other reactions, Eq. (5) is employed. In this way,
+only one random number generation is required at each
+simulation step (save the ﬁrst step) along with M
+1 eval-
+uations of Eq. (5). Gibson and Bruck13 further reduced
+computational cost by employing eﬃcient data storage
+structures and by operating in absolute time, as opposed
+to the relative time between reactions, in order to reduce
+the number of evaluations of Eq. (5) required.
+
+−
+
+It should be noted that a recent timing analysis14 has
+shown that, while the NRM is certainly more eﬃcient
+than the FRM, an optimized version of the DM actually
+performs best in most situations. For our purposes, how-
+ever, this fact is not important. The ideas underlying the
+FRM are what we will use in the development of our new
+simulation approach, and the increased eﬃciency oﬀered
+by the NRM will be utilized in its implementation.
+
+B.
+
+τ -leaping
+
+Despite the improved eﬃciency oﬀered by the NRM13
+and the optimized version of the DM,14 the SSA remains
+limited as to the system size amenable to treatment due
+to its “one reaction at a time” nature. As a result, Gille-
+spie has recently attempted to move beyond the “exact”
+approach by introducing approximations regarding the
+number of times a reaction can be expected to ﬁre within
+a given time interval. His approach, known as τ -leaping,
+begins by deﬁning a quantity Kµ(τ ) as the number of
+times reaction channel Rµ ﬁres during the time interval
+[t, t+τ ].16,34 In general, Kµ(τ ) is a complex random vari-
+able dependant upon the propensity aµ and the manner
+in which it changes during [t, t + τ ]. Obtaining a rigorous
+expression for the probability function governing Kµ(τ ) is
+thus tantamount to solving the usually intractable chem-
+ical Master Equation.
+
+Gillespie recognized, however, that if a time period
+exists over which the propensity aµ remains essentially
+constant then one can approximate Kµ(τ ) as a Poisson
+random variable,16,34
+
+Kµ(τ )
+
+µ(aµ, τ ),
+
+≈ P
+
+(6)
+
+amounting to a “discrete-stochastic” representation of
+the reaction dynamics (as opposed to exact-stochastic).
+It is important to note that there always exists a value
+of τ over which this assumption holds; in the extreme
+case it would be the time interval between successive re-
+actions.
+In many cases, however, the interval is likely
+to span numerous reaction events, especially when the
+reactant populations are “large.”16
+Gillespie then noted that
+the mean value of
+if
+µ(aµ, τ ), i.e., aµτ , is “large,” then one can approximate
+P
+the Poisson random variable as a normal random vari-
+able,16,34
+
+Kµ(τ )
+
+µ(aµτ, aµτ )
+
+≈ N
+= aµτ + √aµτ
+
+(0, 1),
+
+× N
+
+(7)
+
+where the second equality follows from the linear combi-
+nation theorem for normal random variables.16,34 Equa-
+tion (7) is essentially a chemical Langevin equation and
+amounts to a “continuous-stochastic” representation of
+the reaction dynamics.
+
+Finally, Gillespie showed that if the ratio of the “deter-
+ministic” term in (7), aµτ , to the “noise” term, √aµτ , is
+“large,” then the noise term can be neglected, leaving16,34
+
+Kµ(τ )
+
+aµτ,
+
+≈
+
+(8)
+
+or a “continuous-deterministic” representation.
+
+The expressions in Eqs. (6)–(8) thus represent a the-
+oretical “bridge” connecting the discrete-stochastic rep-
+resentation of reaction dynamics and the more familiar
+continuous-deterministic description. As such, they pro-
+vide a ﬁrm theoretical basis for the mathematical rep-
+resentation of reaction dynamics at diﬀerent scales and
+represent a signiﬁcant contribution to the ﬁeld. These
+expressions, and the criteria identiﬁed for transitioning
+between them, lie at the heart of both the τ -leap method
+and our new simulation approach.
+
+Implementing these ideas algorithmically clearly re-
+quires a method for determining/approximating the time
+interval over which the Poisson approximation (6) can be
+expected to hold. This is not a trivial task, and numer-
+ous approaches have already been proposed.16,17,23 The
+Gillespie approach16,17 begins by imposing a constraint
+on the magnitude of the change of an individual reaction
+propensity,
+
+aµ(t + τ Leap
+
+µ
+
+)
+
+−
+
+aµ(t)
+
+/ξ = ǫ, (0 < ǫ
+
+1),
+
+(9)
+
+≪
+
+and
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+where ξ is an appropriate scaling factor (in Refs. [16] and
+a0; more on this in Sec. III). In applying this
+[17] ξ
+constraint, one seeks to identify the time interval τ Leap
+over which the propensity aµ for reaction channel Rµ will
+remain essentially constant within a factor of ǫ.
+
+≡
+
+µ
+
+Again assuming time-independent rate constants, one
+can then write the “future” propensity as aµ(t +
+τ Leap
+) represents
+µ
+µ
+the change in the populations during τ Leap
+. A ﬁrst-order
+
+) = aµ(X(t)+ λ(τ Leap
+
+)), where λ(τ Leap
+
+µ
+
+µ
+
+4
+
+Taylor expansion applied to the numerator in (9) then
+gives
+
+∆aµ(τ Leap
+
+µ
+
+)
+
+λj(τ Leap
+µ
+
+).
+
+(10)
+
+N
+
+≈
+
+Xj=1
+
+∂aµ(t)
+∂Xj
+
+The population change of species j can then be written
+as
+
+λj(τ Leap
+µ
+
+) =
+
+zνjKν(τ Leap
+
+µ
+
+)
+
+ν(aν , τ Leap
+
+µ
+
+),
+
+M
+
+Xν=1
+
+M
+
+zνj
+
+P
+
+≈
+
+Xν=1
+
+(11)
+where the second expression follows from (6). It is im-
+portant to recognize that the approximation made in (11)
+stipulates that the dynamics of all reactions in the sys-
+tem obey Poisson statistics. τ Leap
+thus represents the
+time period over which the propensity for reaction Rµ
+is expected to remain essentially constant assuming that
+the propensities for all other reactions also remain essen-
+tially constant . This is an important point, and we will
+return to it shortly.
+
+µ
+
+µ
+
+µ
+
+{
+
+{P
+
+aντ Leap
+µ
+
+ν(aν, τ Leap
+
+At this point, Eqs. (10) and (11) are combined to give
+an expression for ∆aµ(τ Leap
+) in terms of the statistically
+.
+)
+independent Poisson random variables
+}
+In [16],
+the expression was completed by replacing
+the Poisson random variables with their mean val-
+. An improved approach was oﬀered in
+ues
+}
+in an attempt to better account for
+[17], however,
+ﬂuctuations in the propensity values.
+In that ap-
+proach, ∆aµ(τ Leap
+) is approximated as
+i ±
+. Using general statistical results, ex-
+sdev
+µ
+can
+pressions for
+i
+then be obtained. Each term is set equal to ǫξ [i.e., each
+(cid:12)
+(cid:12)
+term is independently constrained in (9)], and algebraic
+manipulation gives
+
+)
+}
+∆aµ(τ Leap
+h
+
+∆aµ(τ Leap
+h
+
+µ
+∆aµ(τ Leap
+
+∆aµ(τ Leap
+
+and sdev
+
+(cid:12)
+(cid:12)
+
+{
+
+{
+
+}
+
+)
+
+)
+
+)
+
+µ
+
+µ
+
+µ
+
+τ Leap
+µ
+
+= Min
+
+ǫξ
+mµ(t)
+|
+|
+
+,
+
+(cid:26)
+
+ǫ2ξ2
+σ2
+µ(t) (cid:27)
+
+,
+
+where
+
+(12)
+
+(13)
+
+(14)
+
+(15)
+
+M
+
+Xν=1
+M
+
+mµ(t)
+
+≡
+
+fµν(t)aν (t),
+
+σ2
+µ(t)
+
+f 2
+µν(t)aν (t),
+
+≡
+
+Xν=1
+
+fµν(t)
+
+N
+
+≡
+
+Xj=1
+
+zνj
+
+∂aµ(t)
+∂Xj
+
+.
+
+With the expression for τ Leap
+
+now in hand, the ap-
+proach taken is to calculate a value of τ Leap
+for each re-
+action in the system and set the time step τ equal to the
+smallest of these. This procedure works by again noting
+that τ Leap
+is the time interval over which aµ is expected
+
+µ
+
+µ
+
+µ
+
+to remain essentially constant assuming that all other
+propensities also remain essentially constant. Hence, the
+is the only one for which this assump-
+smallest of
+}
+tion actually holds.
+
+τ Leap
+ν
+
+{
+
+There is an interesting analogy, therefore, between τ -
+leaping and the FRM (and NRM by extension). In both
+cases, a time interval is calculated for a speciﬁc reaction
+channel with assumptions made regarding all other reac-
+tion channels. In the FRM, it is assumed that no other
+In τ -leaping, it is assumed that all
+reactions ﬁre ﬁrst.
+other reactions obey Poisson statistics.
+In both cases,
+the time step is then set to the smallest of the set as it
+is the only one for which the assumptions actually hold.
+This suggests that the two methods might be seamlessly
+merged in some way. Our approach accomplishes this, as
+will be discussed in Sec. III.
+
+aντ
+
+Finally, with the time step τ calculated, one can then
+proceed to determine the number of times each reaction
+ﬁres in τ using Eqs. (6)–(8). Strictly speaking, the τ -leap
+method uses only Eq. (6). If the propensities of all re-
+actions are such that
+1, however, then Eq. (7)
+In Ref. [16] this is termed the Langevin
+is employed.
+method . Furthermore, if all
+1 then Eq. (8)
+is employed, which is equivalent to the explicit Euler
+method for solving ordinary diﬀerential equations.16 Fi-
+nally, a proviso is added16 whereby the SSA is used if
+τ <
+1/a0, since 1/a0 is the expected time to the next
+reaction ﬁring in the system.12
+∼
+
+√aν τ
+
+} ≫
+
+} ≫
+
+{
+
+{
+
+III. PARTITIONED LEAPING
+
+A. Theory
+
+≡
+
+In developing our new simulation approach we make
+two primary changes to the τ -leap method described
+above. The ﬁrst concerns the scaling factor ξ in Eq. (9).
+In Refs. [16] and [17] ξ is set equal to a0, the sum of
+Intuitively, however, a better
+all propensity functions.
+choice would seem to be aµ. Indeed, by using ξ
+aµ the
+parameter ǫ in Eq. (9) ceases to be a generic “error con-
+trol parameter”16,17 and rather takes the more physical
+deﬁnition as the relative fractional change in aµ over the
+time period τ Leap
+. Choosing values for ǫ becomes intu-
+itively simpler as a result; ǫ = 0.01, for example, means
+that aµ is constrained to change by no more than 1% dur-
+ing τ Leap
+also becomes
+µ
+better deﬁned: It represents the time period over which
+100)% assuming that all
+aµ is expected to change by (ǫ
+100)%. τ Leap
+thus
+(ǫ
+other propensities change by
+becomes directly analogous to the tentative next-reaction
+time τ ES
+µ , and is referred to hereafter as the “tentative
+leap time” for reaction channel Rµ.
+
+. The physical meaning of τ Leap
+
+×
+≤
+
+×
+
+µ
+
+µ
+
+µ
+
+It was argued in Ref. [17], however, that this choice for
+ξ is not appropriate since problems will arise if aµ ap-
+proaches zero. This is true, however the problems associ-
+ated with such “vanishing propensities” are not without
+solution. In Sec. III B 1 we will tackle these problems and
+
+5
+
+≡
+
+present strategies for overcoming them. Suﬃce it to say
+for now, however, that these strategies exist and Eq. (12)
+is used in our approach with ξ
+
+aµ.
+
+{
+
+}
+
+{
+
+or
+
+aντ
+
+} ≫
+
+The second major change that we make concerns how
+the species populations are updated once a time step τ
+is determined. The τ -leap method makes exclusive use
+of Eq. (6); Equations (7) and (8) are employed only if
+all values of
+1. This restraint is
+√aν τ
+not necessary, however. Once τ is calculated there is no
+reason why each individual reaction cannot be classiﬁed
+based on its value of aµ. The associated species popula-
+tions can then be updated using the appropriate leaping
+formula (6), (7) or (8). In this way, sets of reactions can
+be partitioned into “fast,” “medium,” and “slow” clas-
+siﬁcations based on the quantities
+. Furthermore,
+we can apply Gillespie’s proviso16 to each individual re-
+action as well, essentially classifying a reaction as “very
+slow” if τ <
+1/aµ. A tentative next-reaction time for
+∼
+such a reaction can then be generated from Eqs. (4) or
+(5) and Rµ deemed to ﬁre if τ ES
+
+aντ
+
+τ .
+
+{
+
+}
+
+This procedure amounts, therefore, to a theoretically
+justiﬁable partitioning scheme in which reactions are
+classiﬁed into four diﬀerent categories based on their
+propensity values, the calculated time step τ , and the cri-
+teria identiﬁed by Gillespie16,34 for transitioning between
+the descriptions (6), (7) and (8). The classiﬁcations are
+made as follows:
+
+µ ≤
+
+Exact Stochastic (very slow)
+
+1
+
+If aµτ <
+→
+∼
+If aµτ > 1 but
+
+1
+
+Poisson (slow)
+
+6≫
+1 but √aµτ
+
+→
+
+1
+
+6≫
+
+→
+
+1
+
+≫
+
+→
+
+Deterministic (fast)
+
+If aµτ
+
+≫
+If √aµτ
+
+•
+
+•
+
+•
+
+•
+
+Langevin (medium)
+
+Note that inclusion of the “Exact Stochastic” (ES) classi-
+ﬁcation leads to technical issues associated with the ran-
+dom nature of τ ES
+µ . A strategy for overcoming these is-
+sues will be presented in Sec. III B 2.
+
+Technical issues aside, the basic outline of our simula-
+
+tion approach is as follows:
+
+1. Initialize (species populations, rate constants, de-
+
+ﬁne ǫ
+
+1, etc.).
+
+≪
+
+2. Calculate the set of tentative leap times
+
+τ Leap
+ν
+
+{
+
+}
+
+using Eq. (12) (with ξ
+
+aµ).
+
+≡
+
+3. Set τ = Min
+{
+
+τ Leap
+ν
+
+.
+
+}
+
+4. Classify each reaction in the system using the cri-
+
+teria presented above.
+
+5. For all ES reactions, calculate tentative next-
+
+reaction times
+
+using Eqs. (4) and (5).
+
+τ ES
+ν }
+
+{
+
+6. Determine the set of reaction ﬁrings
+
+ES reactions, kµ(τ ) = 1 if τ ES
+For all other reactions, use Eqs. (6)–(8).
+
+µ ≤
+
+. For
+kν(τ )
+}
+τ , otherwise zero.
+
+{
+
+7. Advance the clock, update species populations and
+return to step 2 if stopping criterion not met.
+
+An important point to recognize from this preliminary
+algorithm is the minimal user intervention required for
+Indeed, once the reaction network is
+implementation.
+deﬁned and the associated rate parameters set, one need
+only deﬁne three model-independent parameters quanti-
+fying the concepts
+1 (for
+1 (deﬁning ǫ). In this pre-
+coarse classiﬁcations) and
+≪
+liminary form, however, the above algorithm will experi-
+ence serious implementation diﬃculties. A description of
+these and strategies for overcoming them are provided in
+the following section.
+
+1 (for ES classiﬁcation),
+
+≫
+
+≈
+
+B. Technical issues
+
+1. Vanishing propensities
+
+≡
+
+Use of ξ
+
+aµ in Eq. (9) will cause problems if aµ
+
+0.
+These problems and the strategies for overcoming them
+can be illustrated via a simple example. Consider a sys-
+tem comprised of the following three reactions,
+
+→
+
+R1 : S1
+R2 : S2
+R3 : S3
+
+S2
+S1
+
+→
+→
+→ ∗
+
+(16)
+
+where the last reaction is a decay, or disappearance,
+event.
+
+}
+
+Now, consider a situation in which X1 = 0, X2 = 10,
+and X3 = 105, and, for simplicity, let the rate constants
+= 1 s−1. The propensities for all three reactions
+cν
+{
+are then: a1 = 0, a2 = 10, and a3 = 105 s−1. This
+situation corresponds to the extreme case of aµ
+0, i.e.,
+aµ = 0. We will refer to reaction R1 as “inactive” and R2
+as “reactivating” since it creates a S1 molecule. Reaction
+R3 is completely independent of the other two reactions.
+If we now follow the logic of the preliminary algorithm
+
+→
+
+presented above, we see the following:
+
+1. a1 = 0 will lead to τ Leap
+
+1
+
+= 0 in step 2 via Eq. (12).
+
+2. This null value will be identiﬁed in step 3 as the
+
+smallest of
+
+; τ = 0 as a result.
+
+τ Leap
+ν
+
+{
+
+}
+
+3. Every reaction will be classiﬁed as ES in step 4
+
+since all
+
+aντ
+
+= 0.
+
+{
+
+}
+
+4. Tentative next-reaction times will thus be calcu-
+lated for each reaction in step 5, each of which will
+be equal to 1/aµ on average.12
+
+5. Given that X3
+
+τ ES
+. Re-
+3 i
+h
+action R3 will thus most likely ﬁre in the next sim-
+ulation step.
+
+τ ES
+2 i
+
+will be
+
+≪ h
+
+X2,
+
+≫
+
+6. Since R1 is independent of R3, R1 will remain inac-
+tive so long as R3 continues to ﬁre. It is easy to see
+104 times before R2 next ﬁres.
+that R3 will ﬁre
+
+∼
+
+6
+
+∼
+
+In its current form, therefore, the algorithm will pro-
+104 simulation steps)
+ceed one R3 ﬁring at a time (
+until R2 ﬁres once and reactivates R1. Clearly this is
+unacceptable since the entire purpose of the algorithm,
+i.e., “leaping” over fast reaction events, will have been
+lost. This example illustrates, therefore, that the prob-
+lems associated with vanishing propensities are related
+to the manner in which the time step is determined and
+are ones of eﬃciency rather than accuracy. Although
+this is demonstrated for the special case of aµ = 0, the
+same holds true for the general case of aµ
+0 (as will
+be demonstrated shortly). Furthermore, we can also see
+that these problems are not unavoidable. Clearly there
+is no reason why R3 cannot be allowed to leap during the
+time period prior to the next R2 ﬁring. As just demon-
+strated, however, a mechanism must be put into place to
+allow this to occur.
+
+→
+
+1
+
+Before discussing how to implement such a mechanism,
+it is useful ﬁrst to analyze the source of this problem
+In particular, it is instructive to analyze
+more deeply.
+the physical meaning of the null value of τ Leap
+arising
+from a1 = 0. The constraint in (9) quantiﬁes the con-
+cept “essentially constant” via the parameter ǫ and allows
+one to determine the time interval τ Leap
+over which aµ
+100)%. With a1 = 0, how-
+is expected to change by (ǫ
+×
+ever, any change in X1 will result in an inﬁnite fractional
+change in a1. This inﬁnite change will occur at the next
+R2 ﬁring, which in this case would be
+0.1 s from now.
+% change in a1 will occur at a ﬁnite point in the
+If an
+100)% change would nec-
+future, however, then an (ǫ
+essarily occur zero seconds from now. τ Leap
+= 0 is thus
+a manifestation of the fact that the minimum possible
+in this case, and that the constraint in
+change in a1 is
+(9) cannot be satisﬁed in this situation.
+
+∞
+
+∞
+
+∼
+
+×
+
+µ
+
+1
+
+Expanding on this point, we introduce the concept of
+the minimum possible propensity change, βµ, deﬁned as
+the fractional change in aµ associated with the minimal
+possible change in the reactant populations of Rµ. In the
+previous example, the minimum possible change in the
+1 change in the reactant
+propensities corresponds to a
+populations for all reactions. Thus, β1 =
+, β2 = 0.1
+and β3 = 10−5. To better illustrate the usefulness of this
+concept, however, consider a slightly modiﬁed version of
+the example above with X1 = 1 rather than zero. This
+corresponds to the more general case of aµ
+0. In Ta-
+ble I we present the time step determination calculations
+for this system using ǫ = 0.01, and the resultant reaction
+classiﬁcations.
+
+∞
+
+→
+
+±
+
+1
+
+From these calculations we see that essentially the
+same problems arise as in the situation where a1 = 0.
+Speciﬁcally, we see that while τ Leap
+no longer equals zero,
+it is very small. As such, it is again identiﬁed as the
+smallest of
+, and τ is very small as a result. This,
+in turn, leads to every reaction being classiﬁed as ES,
+and the algorithm proceeds one reaction at a time as be-
+fore. The source of the small value of τ Leap
+can again
+be traced to the minimum possible change in a1. In this
+case, with X1 = 1, the minimum change possible in a1 is
+
+τ Leap
+ν
+
+{
+
+}
+
+1
+
+TABLE I: Time step determination and classiﬁcation calcu-
+lations for the example system (16) with X1 = 1, X2 = 10,
+= 1 s−1. Tentative leap times are cal-
+X3 = 105 and
+culated using Eq. (12) with ǫ = 0.01. Note that τ Leap
+µ,m and
+τ Leap
+µ,σ2 are the ﬁrst and second expressions in the brackets on
+the right-hand side of Eq. (12), respectively.
+
+cν
+
+{
+
+}
+
+TABLE II: Time step determination and classiﬁcation calcu-
+lations using the “β-strategy” for the example system (16)
+= 1 s−1 and ¯ǫ = 0.01.
+with X1 = 1, X2 = 10, X3 = 105,
+1 = 3 and
+Classiﬁcations are made with the parameters
+
+cν
+
+{
+
+}
+
+≈
+
+1 = 100.
+
+≫
+
+7
+
+τ Leap
+1,m = 1.11
+τ Leap
+1,σ2 = 9.09
+τ Leap
+= 9.09
+1
+
+10−3 s
+10−6 s
+10−6 s
+
+τ Leap
+2,m = 1.11
+τ Leap
+2,σ2 = 9.09
+τ Leap
+= 9.09
+2
+
+10−2 s
+10−4 s
+10−4 s
+
+×
+×
+
+×
+
+×
+×
+
+×
+
+τ Leap
+3,m = 10−2 s
+τ Leap
+3,σ2 = 10.0 s
+τ Leap
+= 10−2 s
+3
+
+τ = 9.09×10−6 s
+
+a1τ = 9.09
+a2τ = 9.09
+
+10−6
+10−5
+
+×
+×
+
+a3τ = 0.909
+
+√a1τ = 0.0030
+√a2τ = 0.0095
+
+√a3τ = 0.95
+
+Classiﬁcations
+R1 : ES
+R2 : ES
+R3 : ES
+
+τ Leap
+1,m = 1.11
+τ Leap
+1,σ2 = 9.09
+τ Leap
+= 9.09
+1
+
+10−1 s
+10−2 s
+10−2 s
+
+τ Leap
+2,m = 1.11
+τ Leap
+2,σ2 = 9.09
+τ Leap
+= 9.09
+2
+
+10−1 s
+10−2 s
+10−2 s
+
+×
+×
+
+×
+
+×
+×
+
+×
+
+τ Leap
+3,m = 10−2 s
+τ Leap
+3,σ2 = 10.0 s
+τ Leap
+= 10−2 s
+3
+
+τ = 10−2 s
+
+a1τ = 0.010
+a2τ = 0.100
+
+a3τ = 1000.0
+
+√a1τ = 0.100
+√a2τ = 0.316
+
+√a3τ = 31.6
+
+Classiﬁcations
+R1 : ES
+R2 : ES
+R3 : Langevin
+
+∼
+
+100% (i.e., β1 = 1). This change can again be expected
+to occur at the next R2 ﬁring, or
+0.1 s from now. A 1%
+change, although physically unrealizable, would thus be
+expected to occur at 1/100th of this time, or at 10−3 s.
+This is reﬂected in the calculated value of τ Leap
+1,m in Ta-
+ble I, which accounts for the average expected change in
+a1. As it turns out, τ Leap
+1,σ2 , which accounts for the ﬂuctu-
+ations in the propensities, actually gives a much smaller
+value, leading to τ Leap
+10−5 s. Nevertheless, what we
+can garner from this analysis is that the problems as-
+sociated with vanishing propensities are directly related
+to our deﬁnition of “essentially constant.” While in most
+cases a 1%–5% change in aµ would probably constitute a
+reasonable deﬁnition, when the reactant populations for
+Rµ are small one can loosen the criterion. In this case, a
+100% change in a1 would satisfy the deﬁnition of “essen-
+tially constant,” while a 10% change would suﬃce for a2
+and 1%–5% for a3.
+
+≈
+
+1
+
+Our strategy for overcoming the problems associated
+with vanishing propensities thus amounts to deﬁning
+what “essentially constant” means for each individual re-
+τ Leap
+action before calculating the values of
+. Speciﬁ-
+ν
+cally, we calculate the set of values
+and use ǫ = βµ
+βν
+in Eq. (12) if βµ > ¯ǫ, where ¯ǫ is the initially deﬁned value
+of ǫ (i.e., 0.01, 0.03, etc.). If βµ < ¯ǫ, however, then we use
+ǫ = ¯ǫ. In words, if the minimum possible change in the
+propensity (βµ) is larger than the predeﬁned deﬁnition of
+“essentially constant” (¯ǫ) then we alter our deﬁnition of
+“essentially constant” for reaction Rµ before calculating
+τ Leap
+. If not, we stick with the predeﬁned deﬁnition.
+µ
+Note that this strategy will not work when aµ = 0 be-
+cause the presence of aµ in the numerator of (12) leads
+
+{
+}
+
+}
+
+{
+
+µ
+
+∞
+
+to a null value of τ Leap
+regardless of the value of ǫ (which
+would be
+in this case). It should also be noted that,
+while the deﬁnition of βµ is straightforward for mono-
+reactant reactions, the same is not true for multi-reactant
+reactions. Before turning our attention to these issues,
+however, let us examine the beneﬁts of using the above
+strategy in the preceding example. In Table II we present
+the time step determination calculations and the resul-
+tant reaction classiﬁcations for the same system as in
+Table I, but using the “β-strategy.”
+
+∼
+
+and τ Leap
+2
+
+The most striking observations comparing Tables I and
+II are the signiﬁcantly larger value of τ that is calculated
+in the latter case and the much coarser classiﬁcation of
+R3 that results. As discussed above, with X1 = 1 and
+X2 = 10, a 100% change in a1 and a 10% change in a2
+are expected to occur at the next ﬁring of R2, i.e.,
+0.1 s
+from now. Using ǫ = β1 = 1 and ǫ = β2 = 0.1 for calculating
+τ Leap
+, respectively, we see in Table II that these
+1
+expectations are realized. With X3 = 105, a 1% change
+in a3 will occur after 1000 ﬁrings of R3, which is expected
+0.01 s from now. Thus, in Table II we see that
+to occur
+τ Leap
+, in contrast
+3
+to the situation in Table I. As a result, reactions R1 and
+R2 are expected to ﬁre less than once during the next
+0.01 s (and are thus classiﬁed as ES) but R3 is expected
+1000 times. R3 is thus classiﬁed as “Langevin”
+to ﬁre
+(since a3τ
+1) and Eq. (7) would then
+6≫
+be used to determine the actual number of ﬁrings that
+would occur. Thus, a signiﬁcant acceleration is achieved
+by supplementing the preliminary algorithm in Sec. III A
+with the β-strategy.
+
+is identiﬁed as the smallest of
+
+1 but √a3τ
+
+τ Leap
+ν
+
+≫
+
+∼
+
+∼
+
+{
+
+}
+
+Before the β-strategy can be deemed complete, how-
+ever, we must address the aforementioned issues regard-
+
+ing the deﬁnition of βµ for multi-reactant reactions and
+handling the special case of aµ = 0, i.e., “inactive” reac-
+tions.
+
+→
+
+→
+
+→
+
+products, 2S1
+
+As discussed above, βµ is deﬁned as the fractional
+change in aµ resulting from the minimal possible change
+in the reactant populations of Rµ. For mono-reactant re-
+products, etc.) this
+actions (i.e., S1
+deﬁnition is clear. For multi-reactant reactions, however,
+the situation is complicated by the multiple combinations
+of reactant population changes possible. For example, for
+products, the possible reactant
+the reaction S1 + S2
+1 with X2 remaining
+population changes are: (i) X1
+1 with X1 remaining constant, and
+constant, (ii) X2
+(iii) all combinations of simultaneous X1
+1
+changes. The rigorous approach to this problem would be
+/aµ resulting from each of
+∆aµ
+to tally all of the values of
+|
+|
+these possibilities and let βµ equal the smallest of the set.
+This can be a time-consuming procedure, however, and
+increasingly complicated if higher-order reactions (e.g.,
+S1 + S2 + S3
+
+products) are considered.
+As a simple solution, therefore, we choose to neglect all
+simultaneous population change possibilities, and simply
+let
+
+1 and X2
+
+→
+
+±
+
+±
+
+±
+
+±
+
+(17)
+
+βµ = Min
+{
+
+∂aµ/∂Xj
+
+/aµ,
+
+.
+
+{
+
+}
+
+{
+
+Sj
+
+X −1
+
+1 , X −1
+2 }
+
+}
+where j indexes all reactant species
+involved in re-
+products,
+action Rµ. Thus, for the reaction S1 + S2
+βµ = Min
+It should also be noted that
+Eq. (17) is used for multi-molecular mono-reactant re-
+actions as well, such as 2S1
+products. The reason
+is that, in this case, the changes associated with a +1
+1 decrease,
+increase in X1 are not the same as for a
+−
+. The
+although they are similar and converge as X1
+quantity (daµ/dX1)/aµ suﬃciently approximates a
+1
+change, however, lying in between the two extremes.
+
+→ ∞
+
+→
+
+→
+
+±
+
+Finally, we turn our attention to the last issue that
+If inactive reactions
+we must consider in this section.
+are present in the system the strategy presented above
+will fail because replacing ǫ in (12) with βµ =
+simply
+results in τ Leap
+= 0. Intuitively, however, we
+know that the inﬁnite change in aµ will occur at the next
+ﬁring of a “reactivating” reaction. Thus, the approach
+that we take in this situation is a “brute force” search
+for all reactivating reactions and ensuring that we do not
+proceed beyond the point at which the next one ﬁres.
+
+× ∞
+
+= 0
+
+∞
+
+µ
+
+A number of subtleties must be considered in employ-
+ing such a strategy, however. First, in most cases numer-
+ous reactions will be completely independent of the inac-
+tive reaction. The reactant species populations for some
+of these may be large and, hence, these reactions should
+be allowed to leap during the period prior to the reacti-
+vation event. Second, the reactant species of reactivating
+reactions (RRs) will often also be involved in other reac-
+tions in the system, either as reactants or products. As
+such, the propensities of RRs may be expected to change
+by (ǫ
+100)% before their own next ﬁring. We must thus
+consider both tentative next-reaction times and tentative
+leap times for these reactions. Finally, we must consider
+
+×
+
+8
+
+that a multi-reactant reaction can become inactive due to
+the disappearance of any of its reactant species. Numer-
+ous “inactivity cases” will thus exist for these reactions,
+each of which will have its own associated set of RRs.
+
+Taking these issues into account, inactive reactions are
+
+handled as follows:
+
+1. For all inactive reactions, classify as ES (τ ES
+
+∞
+as a result) and identify all “reactivating” reac-
+tions. For inactive multi-reactant reactions, the
+list of RRs depends on the “inactivity case” (i.e.,
+X1 = 0, X2 = 0, etc.).
+
+µ =
+
+2. For all RRs, calculate average tentative next-
+reaction times and tentative leap times and let
+τ ES
+τµ = Min
+, where τµ is the “charac-
+µ i
+teristic reaction time” for Rµ.
+
+, τ Leap
+µ
+
+{h
+
+}
+
+3. For all other reactions, calculate tentative leap
+.
+
+times and let τµ = τ Leap
+
+µ
+
+4. Set the time step τ = Min
+{
+
+τν
+
+.
+
+}
+
+5. Proceed to the classiﬁcation step and beyond.
+
+µ
+
+or τ Leap
+µ
+
+Note that the “characteristic reaction time,” τµ, in step
+2 is simply a variable placeholder for storing values of
+either τ ES
+depending upon the classiﬁcation of
+Rµ. As will be seen in Sec. III B 2 and III C, this greatly
+simpliﬁes the description of the algorithm as values of
+τ Leap
+will often be calculated ﬁrst to obtain an initial
+µ
+time step and then subsequently replaced by values of
+τ ES
+µ
+
+if a reaction is classiﬁed as ES.
+
+→
+
+An additional subtlety concerns the deﬁnition of a RR
+for a multi-molecular reaction. As an example, consider
+products, which has three associ-
+the reaction S1 + S2
+ated inactivity cases: X1 = 0, X2 = 0, and X1 = X2 = 0.
+While the deﬁnition of a RR for the former two cases
+is clear, the same is not true for the latter. Obviously,
+only a reaction that creates both S1 and S2 can liter-
+ally reactivate the reaction in this case. We cannot limit
+our deﬁnition of a RR to these reactions alone, however,
+because that would preclude the possibility of reactiva-
+tion occurring via the ﬁring of a S1 producing reaction
+(which would change the inactivity case to X2 = 0) fol-
+lowed by a S2 producing reaction, and vice versa. Thus,
+in the case X1 = X2 = 0, we deﬁne a RR as one that
+produces a S1 molecule or a S2 molecule (or both). A
+reaction, therefore, does not have to literally be capable
+of reactivating a reaction for it to be considered a RR
+It must, however, constitute a step to-
+in some cases.
+wards reactivation. In Table III, we present deﬁnitions
+of RRs for all inactivity cases of generalized mono-, bi-,
+and tri-reactant reactions.
+
+To illustrate how all of this works, consider another
+
+simple example:
+
+(18)
+
+R1 :
+R2 :
+2S1
+R3 : S1 + S2
+S4
+R4 :
+
+S1
+S2
+S3
+
+∗ →
+→
+→
+→ ∗
+
+TABLE III: Deﬁnitions of “reactivating reactions” (RRs) for all inactivity cases of generalized mono-, bi-, and tri-reactant
+reactions. Note that RRs do not literally reactivate inactive reactions in many cases. A, B, and C are positive integers.
+
+9
+
+ASi
+
+products:
+
+→
+
+Case 1 : Xi < A
+
+Reactivating Reactions
+
+Reactions that create at least one Si molecule.
+
+ASi + BSj
+
+products (i
+
+= j):
+
+→
+
+Case 1 : Xi < A, Xj
+
+Case 2 : Xj < B, Xi
+
+B
+
+A
+
+≥
+
+≥
+
+Case 3 : Xi < A, Xj < B
+
+ASi + BSj + CSk
+
+→
+Case 1 : Xi < A, Xj
+
+B, Xk
+
+Case 2 : Xj < B, Xi
+
+A, Xk
+
+Case 3 : Xk < C, Xi
+
+A, Xj
+
+Case 4 : Xi < A, Xj < B, Xk
+
+≥
+
+≥
+
+≥
+
+Case 5 : Xi < A, Xk < C, Xj
+
+Case 6 : Xj < B, Xk < C, Xi
+
+C
+
+C
+
+B
+
+C
+
+B
+
+A
+
+≥
+
+≥
+
+≥
+
+≥
+
+≥
+
+≥
+
+products (i
+
+= j
+
+= k):
+
+Reactions that create at least one Si molecule.
+
+Reactions that create at least one Sj molecule.
+
+a
+All reactions from cases 1 and 2.
+
+Reactions that create at least one Si molecule.
+
+Reactions that create at least one Sj molecule.
+
+Reactions that create at least one Sk molecule.
+
+All reactions from cases 1 and 2.
+
+All reactions from cases 1 and 3.
+
+All reactions from cases 2 and 3.
+
+Case 7 : Xi < A, Xj < B, Xk < C
+
+All reactions from cases 1, 2 and 3.
+
+aSince reactions that produce Si and Sj will be included in both
+cases 1 and 2, care must be taken not to double count such reactions
+in case 3. Similar considerations must be made for cases 4–7 of
+ASi + BSj + CSk → products.
+
+Here, the ﬁrst three reactions could be seen as a simpliﬁed
+model of clustering or coagulation, where monomers S1
+are injected into a system at a constant (stochastic) rate
+and interact via a clustering cascade to form larger multi-
+mers, the largest being a trimer in this case. The last
+reaction is an unrelated decay event. For this example,
+let the initial populations X1(0) = X2(0) = X3(0) = 0
+and X4(0) = 106, and let the rate constants c1 = 103 s−1
+and c2 = c3 = c4 = 1 s−1.
+
+Now, let us consider the ﬁrst few steps of a hypothet-
+ical simulation in which populations are updated after
+each step by assuming that each reaction ﬁres its average
+number of times during τ (i.e., aµτ ). Calculations for
+such a simulation are presented in Table IV. Important
+points to note are as follows:
+
+Step 1 :
+
+•
+
+Reaction R3 is inactive because X1 = X2 = 0.
+Thus, any reactions creating S1 or S2 would nor-
+mally be considered a RR. In this case, however,
+even though R2 creates S2, it is not considered a
+RR because its status as inactive supersedes that
+of a RR.
+
+Step 3 :
+
+•
+
+The characteristic reaction time τ1 for reaction R1
+τ ES
+is set equal to its average next-reaction time
+1 i
+h
+
+−
+
+< τ Leap
+1
+
+because
+
+τ ES
+. τ2 and τ3 are set equal to
+1 i
+h
+because R2 and R3 are inactive, and τ4 is set
+∞
+equal to τ Leap
+because R4 is an unrelated active
+reaction. The result is that the time step τ is set
+. Reaction R1 thus ﬁres once and is
+equal to
+classiﬁed as ES while R4 is expected to ﬁre
+1000
+times and is classiﬁed as Langevin.
+
+τ ES
+1 i
+h
+
+∼
+
+4
+
+Step 2 :
+
+•
+
+•
+
+•
+
+Reactions R2 and R3 are still inactive, but the in-
+activity cases for both are diﬀerent than in Step 1.
+Here, R2 is inactive because X1 = 1 and R3 be-
+cause X2 = 0. The ﬁring of R1 in Step 1 has thus
+moved both reactions closer to reactivation.
+
+The time step determination and classiﬁcation cal-
+culations are similar to those in Step 1, with R1
+ﬁring once and R4 being classiﬁed as Langevin.
+
+The ﬁring of R1 in Step 2 has reactivated R2. Equa-
+tion (17) is thus used to calculate β2, giving a value
+of 1.5. This value represents the average change in
+a2 associated with a
+1 change in X1. A +1 in-
+crease in X1 leads to a 200% change in a1 while a
+
+±
+
+1 decrease leads to a 100% change.
+
+6
+6
+6
+•
+
+because τ Leap
+
+Reactivation of R2 results in a status change to
+“reactivating” since R2 creates S2 and R3 remains
+inactive because X2 = 0. Reactions R1 and R4 are
+now listed as “other active.” As such, τ1 and τ4
+are set equal to tentative leap times (which is
+∞
+because R3 is inactive, and τ2 =
+for R1), τ3 =
+∞
+τ Leap
+. a2 is thus expected
+2
+2
+to change by (ǫ
+100)% before the next ﬁring of
+R2. Speciﬁcally, this will occur upon the next ﬁring
+τ ES
+of R1. As a result, τ is again set equal to
+1 i
+h
+because using ǫ = 1.5 in Eq. (12) leads to τ Leap
+=
+τ ES
+. R1 thus again ﬁres once and R4 is classiﬁed
+1 i
+h
+as Langevin. Also note that, while unlikely, R2 now
+has a non-zero probability of ﬁring during τ .
+
+τ ES
+2 i
+h
+
+<
+
+×
+
+2
+
+Step 4 :
+
+•
+
+Calculations are similar to those in Step 3, with the
+only signiﬁcant diﬀerences being in the values of β2
+. Each are smaller than in Step 3 due to
+and
+the increased population of S1. The new value of
+τ ES
+β2 still leads to τ =
+1 i
+h
+
+τ ES
+2 i
+h
+
+, however.
+
+We can see from this example that signiﬁcant accelera-
+tion is achieved by employing the β-strategy coupled with
+the mechanism for handling inactive reactions. While
+some computational overhead is clearly required to im-
+plement these techniques, the beneﬁts far outweigh the
+costs.
+In this example, had the techniques presented
+here not been employed, the presence of inactive reac-
+tions would have led to all reactions being classiﬁed as
+ES so long as the inactive reactions persisted. As such,
+the temporal evolution achieved in the four steps pre-
+sented in Table IV would have required
+4000 steps to
+achieve.
+
+∼
+
+This revised β-strategy represents a signiﬁcant step
+forward in the development of our new simulation ap-
+proach. By overcoming the problems associated with
+vanishing propensities the constraint in Eq. (9) can be
+used with ξ
+aµ. This allows us to employ an im-
+proved “individual-based” time step determination pro-
+cedure analogous to that used in the FRM and NRM, and
+provides a means to seamlessly integrate the ES treat-
+ment of rare events into the overall multiscale algorithmic
+framework.
+
+≡
+
+The desire to treat rare events at such a ﬁne level of
+description brings with it additional technical diﬃcul-
+ties, however, which will be elucidated and addressed in
+the following section. Note, however, that knowledge of
+the exact moments at which rare events ﬁre may not be
+desired. It may be possible in these cases to eliminate
+the ES classiﬁcation altogether, letting the ﬁnest level of
+description be “Poisson,” and implement the approach
+presented above with the only additional consideration
+being that discussed in Sec. III B 3. This possibility, as
+well as the possible elimination of coarser levels of de-
+scription, will be discussed further in Sec. V.
+
+10
+
+2. Exact Stochastic treatment
+
+Two issues associated with the use of the ES classiﬁca-
+tion must be considered before our simulation approach
+can be implemented properly. The ﬁrst concerns the ran-
+dom nature of tentative next-reaction times and their
+eﬀect on the time step determination procedure. For re-
+actions classiﬁed as ES, tentative-next reaction times are
+calculated and the reactions deemed to ﬁre if τ ES
+τ .
+Note, however that if τ ES
+µ < τ and the clock is subse-
+quently advanced by τ , then the possibility of Rµ ﬁring
+τ ES
+again within the interval (τ
+µ ) is precluded. While
+the probability of this occurring may be small, it must be
+accounted for if one desires the ﬁne level of description
+associated with the ES classiﬁcation.
+
+µ ≤
+
+−
+
+To overcome this complication we employ an iterative
+procedure for determining τ and classifying reactions.
+Once an initial value of τ is determined, the reaction
+classiﬁcations are made and τ ES
+µ values calculated for all
+ES reactions. Some of these may be smaller than τ , and
+τ is thus adjusted to the smallest of these. Decreasing
+τ will result in decreased values of
+, however, and
+each reaction thus needs to be reclassiﬁed. Some reac-
+tions may be reclassiﬁed as ES which were previously
+classiﬁed more coarsely. τ ES
+µ values must thus be calcu-
+lated for all of these reactions, and again these values
+may be smaller than τ . The procedure is thus repeated
+until no further adjustments are necessary.39
+
+aντ
+
+}
+
+{
+
+τν
+
+Situations may also arise in which the reaction cor-
+is itself classiﬁed as ES and all
+responding to Min
+{
+values of τ ES
+are larger than τ . In this case, we leave τ
+unchanged unless all reactions in the system are classiﬁed
+as ES. To understand why this is so, consider a system
+comprised of two reactions:
+
+}
+
+µ
+
+R1 :
+R2 : S1
+
+∗ →
+→
+
+S1
+S2
+
+(19)
+
+If we let c1 = 109 s−1, c2 = 1 s−1 and X1 = 104, we see
+that:
+
+and τ Leap
+2
+
+= 10−7 s. Considering that
+
+1. Using ¯ǫ = 0.01, we get tentative leap times τ Leap
+=
+1
+τ ES
+=
+2 i
+h
+∞
+10−4 s, it is easy to see that τ Leap
+corresponds to
+the time period over which R1 is expected to ﬁre
+100 times. a2 is thus expected to change by 1%
+before the next R2 ﬁring.
+
+2
+
+2. The time step τ is set equal to 10−7 s, leading to
+R1 being classiﬁed as “Poisson” and R2 as ES.
+
+3. A tentative next-reaction time for R2 is then calcu-
+lated using either Eqs. (4) or (5), giving τ2 = τ ES
+2 ≈
+10−4 s. Since R1 is classiﬁed at a coarser level of
+description, τ1 = τ Leap
+=
+
+1
+
+At this point, we see that both τ1 and τ2 are larger than
+τ . Clearly, however, we cannot allow τ to increase to τ2,
+, because R1 would ﬁre
+which is now the smallest of
+
+τν
+
+.
+∞
+
+{
+
+}
+
+11
+
+TABLE IV: Time step determination and classiﬁcation calculations for the example system (18) with X1(0) = X2(0) = X3(0) =
+0, X4(0) = 106, c1 = 103 s−1, and c2 = c3 = c4 = 1 s−1. Calculations are shown for the ﬁrst four steps of a hypothetical
+simulation. After each step, population updates are made assuming that each reaction ﬁres aµτ times during τ [if aµτ
+1,
+kµ(τ ) assumed to be zero]. All calculations are performed using the β-strategy with ¯ǫ = 0.01, and supplemented with the
+methods devised for handling inactive reactions. Classiﬁcations are made with the parameters
+
+1 = 3 and
+
+1 = 100.
+
+≪
+
+≈
+
+≫
+
+Step 1
+
+Step 2
+
+X1 = 0, X2 = 0, X3 = 0, X4 = 106
+a1 = 103, a2 = 0, a3 = 0, a4 = 106 s−1
+, β3 =
+R2 (X1 < 2), R3 (X1 < 1, X2 < 1)
+
+Populations:
+Propensities:
+Min.
+Inactive:
+Reactivating: R1 (creates S1)
+Other active: R4
+
+/aµ: β1 = 0, β2 =
+|
+
+, β4 = 10−6
+
+∆aµ
+|
+
+∞
+
+∞
+
+X1 = 1, X2 = 0, X3 = 0, X4 = 999 000
+a1 = 103, a2 = 0, a3 = 0, a4 = 999 000 s−1
+10−6
+
+, β4 = 1.001
+
+, β3 =
+
+∞
+R2 (X1 < 2), R3 (X2 < 1)
+
+∞
+
+Populations:
+Propensities:
+Min.
+Inactive:
+Reactivating: R1 (creates S1)
+Other active: R4
+
+/aµ: β1 = 0, β2 =
+|
+
+∆aµ
+|
+
+×
+
+R1 (RR):
+
+R1 (RR):
+
+τ Leap
+1
+τ ES
+1 i
+h
+τ1
+
+=
+∞
+= 10−3 s
+= 10−3 s
+
+R2 (Inactive):
+
+R3 (Inactive):
+
+R4 (Active):
+
+h
+
+τ2 =
+
+τ ES
+2 i
+τ ES
+3 i
+h
+τ4 = τ Leap
+
+τ3 =
+
+4
+
+∞
+
+=
+
+=
+
+∞
+= 10−2 s
+
+Time step:
+
+τ = 10−3 s
+
+τ Leap
+1
+τ ES
+1 i
+h
+τ1
+
+=
+∞
+= 10−3 s
+= 10−3 s
+
+R2 (Inactive):
+
+R3 (Inactive):
+
+R4 (Active):
+
+h
+
+τ2 =
+
+τ ES
+2 i
+τ ES
+3 i
+h
+τ4 = τ Leap
+
+τ3 =
+
+4
+
+∞
+
+=
+
+=
+
+∞
+= 10−2 s
+
+Time step:
+
+τ = 10−3 s
+
+Classiﬁcations: R1: ES (a1τ = 1.0)
+R2: ES (a2τ = 0.0)
+R3: ES (a3τ = 0.0)
+R4: Langevin (a4τ = 103)
+
+Classiﬁcations: R1: ES (a1τ = 1.0)
+R2: ES (a2τ = 0.0)
+R3: ES (a3τ = 0.0)
+R4: Langevin (a4τ = 999)
+
+Step 3
+
+Step 4
+
+X1 = 2, X2 = 0, X3 = 0, X4 = 998 001
+a1 = 103, a2 = 1, a3 = 0, a4 = 998 001 s−1
+
+X1 = 3, X2 = 0, X3 = 0, X4 = 997 003
+a1 = 103, a2 = 3, a3 = 0, a4 = 997 003 s−1
+
+, β4 = 1.002
+
+10−6
+
+×
+
+∞
+
+/aµ: β1 = 0, β2 = 0.833, β3 =
+|
+
+∞
+
+, β4 = 1.003
+
+10−6
+
+×
+
+R2 (RR):
+
+R2 (RR):
+
+Populations:
+Propensities:
+Min.
+Inactive:
+Reactivating: R2 (creates S2)
+Other active: R1, R4
+
+R3 (X2 < 1)
+
+∆aµ
+|
+
+/aµ: β1 = 0, β2 = 1.5, β3 =
+|
+
+R1 (Active):
+
+τ1 = τ Leap
+
+1
+
+=
+
+τ Leap
+2
+τ ES
+2 i
+h
+τ2
+
+∞
+= 10−3 s
+= 1.0 s
+= 10−3 s
+
+R3 (Inactive):
+
+R4 (Active):
+
+τ3 =
+
+τ ES
+3 i
+h
+τ4 = τ Leap
+
+4
+
+=
+
+∞
+= 10−2 s
+
+Time step:
+
+τ = 10−3 s
+
+Classiﬁcations: R1: ES (a1τ = 1.0)
+
+R2: ES (a2τ = 10−3)
+R3: ES (a3τ = 0.0)
+R4: Langevin (a4τ = 998)
+
+Populations:
+Propensities:
+Min.
+Inactive:
+Reactivating: R2 (creates S2)
+Other active: R1, R4
+
+R3 (X2 < 1)
+
+∆aµ
+|
+
+R1 (Active):
+
+τ1 = τ Leap
+
+1
+
+=
+
+τ Leap
+2
+τ ES
+2 i
+h
+τ2
+
+∞
+= 10−3 s
+= 0.33 s
+= 10−3 s
+
+R3 (Inactive):
+
+R4 (Active):
+
+τ3 =
+
+τ ES
+3 i
+h
+τ4 = τ Leap
+
+4
+
+=
+
+∞
+= 10−2 s
+
+Time step:
+
+τ = 10−3 s
+
+Classiﬁcations: R1: ES (a1τ = 1.0)
+R2: ES (a2τ = 3.0
+×
+R3: ES (a3τ = 0.0)
+R4: Langevin (a4τ = 997)
+
+10−3)
+
+many more times than 100 and a2 would change by more
+than 1%. In this case then, τ must be retained at a value
+of 10−7 s, over which R1 is expected to ﬁre
+100 times
+and R2 is unlikely to ﬁre.
+
+∼
+
+2
+
+=
+
+τ ES
+1 i
+h
+
+Consider an alternative situation, however, where
+X1 = 100 rather than 104. In this case, a2 will change
+by 1% upon the next ﬁring of R1. It is easy to see then
+that τ = τ Leap
+= 10−9 s. Both reactions will
+thus be classiﬁed as ES since a1τ = 1 and a2τ = 10−7.
+Tentative next-reaction times will then be calculated for
+each reaction, and it is quite possible that τ ES
+1 will be
+larger than τ due to the random nature of next-reaction
+times (τ ES
+τ ). If this is the case, given
+that both reactions are classiﬁed as ES, there is no reason
+why we cannot increase τ and jump to the time at which
+the next reaction will ﬁre in the system.
+
+2 will likely be
+
+≫
+
+}
+
+τν
+
+→ ∗
+
+Finally,
+
+= Min
+{
+
+imagine that another, unrelated reaction is
+present in the system, such as S3
+. Again let
+X1 = 100 and assume that c3 and X3 are such that
+τ Leap
+and that R3 is classiﬁed at a coarse
+3
+level of description. This would occur,
+for example,
+if c3 = 1 s−1 and X3 = 1012, which would result in
+τ Leap
+= 0.01 s and R3 being classiﬁed as “Langevin.” In
+3
+this case, τ would again be initially set to 10−9 s, R1
+and R2 would be classiﬁed as ES, and τ ES
+could easily
+be > τ . If this is the case, then we could again increase τ
+(which in many cases would be τ ES
+to the new Min
+τν
+}
+{
+but in some situations may be τ Leap
+2 ) since
+3
+R3 is independent of R1 and R2.
+
+or even τ ES
+
+1
+
+1
+
+What the three scenarios presented above illustrate is
+that when all of the reactions in the system are classiﬁed
+as ES it is always safe to allow τ to increase to the time
+at which the next reaction will ﬁre in the system. When
+more coarsely classiﬁed reactions are present, however,
+this is not always so. In situations where the coarse re-
+actions are independent of the ES reactions it is safe to
+increase τ . Automatically and eﬃciently diﬀerentiating
+between this situation and that in which it is not ac-
+ceptable to increase τ is not trivial, however, especially
+when considering large, complex reaction networks. For
+this reason, we adopt the strategy of only allowing τ to
+increase if all reactions are classiﬁed as ES. τ is always
+allowed to decrease, however, meaning that ES reactions
+are deemed to ﬁre if, and only if, τ ES
+
+µ = τ .
+
+µ
+
+The second issue that we must consider concerns the
+proper use of Eq. (5) in our algorithm. As discussed in
+Sec. II A, the NRM operates by using Eq. (4) to calcu-
+late a value of τ ES
+for the reaction that just ﬁred and
+Eq. (5) for all other reactions. The expression in (5)
+is a transformation formula in which the new value of
+τ ES
+is calculated using the new value of the propensity,
+µ
+the old value of the propensity, the old value of τ ES
+µ ,
+and the old time step. Under normal circumstances, the
+“old” values are those from the previous simulation step.
+As discussed in note 14 of Ref. [13], however, there are
+situations in which this is not the case.
+In particular,
+when a reaction becomes inactive, the tentative next-
+reaction time τ ES
+. Upon reactivation, a new value
+
+µ =
+
+∞
+
+12
+
+∞
+
+× ∞
+
+= 0. Instead, the values of aµ, τ ES
+µ
+
+µ must be calculated. One cannot use a′
+
+of τ ES
+µ = 0 and
+τ ′ ES
+µ =
+in Eq. (5), however, because this will result in
+τ ES
+µ = 0
+and τ
+are used from the last simulation step at which Rµ was
+active. The approach, then, is simply to store the val-
+ues
+at the conclusion of each simulation
+step for all ES reactions that did not ﬁre and use them
+in Eq. (5) at the next step at which the corresponding
+reactions are active. Usually this is the subsequent step,
+but sometimes it is not.
+
+ν(τ ′ ES
+a′
+
+τ ′)
+}
+
+ν −
+
+{
+
+In our approach, an additional consideration must be
+made. We must account for the fact that reactions clas-
+siﬁed as ES can change their classiﬁcation in the subse-
+quent step and then return to an ES classiﬁcation at a
+later step. Although the reaction does not become inac-
+tive in this case, the same procedure of “carrying over”
+the values of aµ, τ ES
+and τ can be used. We simply ex-
+µ
+tend the procedure described above, therefore, and use
+the stored values of
+at the next step at
+ν −
+which the corresponding reactions are active and are clas-
+siﬁed as ES.
+
+ν(τ ′ ES
+a′
+
+τ ′)
+}
+
+{
+
+3. Negative populations
+
+The ﬁnal technical issue to consider concerns the possi-
+ble occurrence of negative populations during the course
+of a simulation. This possibility arises from the fact that
+Poisson and normal random variables are positively un-
+bounded and, while unlikely, could produce physically
+unrealizable kµ(τ ) values that result in the consumption
+of more reactant molecules than are present in the sys-
+tem. This issue has been identiﬁed previously, and has
+led to the development of modiﬁed τ -leap methods that
+attempt to overcome this problem by using a bounded
+binomial distribution22,23 or via identiﬁcation and care-
+ful consideration of “critical” reactions deemed in danger
+of exhausting their available reactant populations.20
+
+We have implemented a simple solution for overcom-
+ing this problem that involves tracking the state of the
+system and reversing the population updates if any pop-
+ulations are found to be negative after all reaction ﬁrings
+have been taken into account. The value of τ is then re-
+duced (which is always acceptable) and all reactions re-
+classiﬁed. We reduce τ by 50%, but any amount should
+suﬃce. A reduction in τ will result in smaller values of
+and, hopefully, alleviation of all negative popu-
+kν(τ )
+{
+}
+lations. If not, then the procedure is repeated until no
+further adjustments are necessary.39
+
+This approach is equivalent to the simple “try again”
+procedure discussed and implemented in [20] as a sec-
+ond layer of protection against the occurrence of nega-
+tive populations. The primary strategy introduced in [20]
+involves identiﬁcation of “critical” reactions and careful
+consideration of these via a DM SSA approach. This
+essentially amounts, therefore, to a partitioning of reac-
+tions into ES and “Poisson” classiﬁcations with the in-
+tent of avoiding negative populations by maintaining a
+
+6
+ﬁne-level description of rare events. Our method already
+accomplishes this via inclusion of the ES classiﬁcation
+and implementation of the β-strategy which accounts for
+small reactant populations. Thus, our approach over-
+comes the negative population problem without intro-
+ducing additional tunable parameters.
+
+C. Numerical Implementation
+
+With all of the technical issues hindering proper im-
+plementation of our approach now discussed, we present
+our algorithm in its ﬁnal form:
+
+1. Initialize (species populations, rate constants, de-
+
+2a. For all inactive reactions, classify as ES, set τµ =
+
+ﬁne
+
+1,
+
+1, ¯ǫ, etc.).
+
+≈
+
+≫
+
+, and identify all RRs.
+
+∞
+
+2b. For all RRs, calculate average tentative next-
+reaction times and tentative leap times
+(us-
+ing ξ
+) and let τµ =
+Min
+
+aµ and Max
+{
+, τ Leap
+.
+µ
+
+βµ, ¯ǫ
+}
+
+≡
+τ ES
+µ i
+
+{h
+
+}
+
+2c. For all other reactions, use Max
+{
+
+βµ, ¯ǫ
+}
+tentative leap times and let τµ = τ Leap
+
+to calculate
+.
+
+µ
+
+3. Set τ = Min
+{
+
+τν
+
+.
+
+}
+
+4. Classify all reactions not already classiﬁed as ES
+
+using the criteria presented in Sec. III A.
+
+5. For all newly classiﬁed ES reactions, calculate ten-
+
+tative next-reaction times and let τµ = τ ES
+µ .
+
+= τ and all reactions are ES, set τ =
+
+} 6
+
+τν
+.
+
+6a. If Min
+{
+τν
+Min
+}
+{
+τν
+
+6b. If Min
+{
+
+}
+
+< τ , return to step 3.
+
+7. Determine the set of reaction ﬁrings
+
+using
+the appropriate formulas40 and update the species
+populations.
+
+kν(τ )
+}
+
+{
+
+8. If any Xi(t+τ ) < 0, reverse all population updates,
+set τ = τ /2 and return to step 4. If not, advance
+the clock by τ and return to step 2 if stopping cri-
+terion not met.
+
+A couple of points should be noted regarding imple-
+mentation of the above algorithm. First, the procedure
+used to identify RRs in Step 2a involves constructing a
+data structure during the initialization step that records,
+for each reaction in the system, all reactions that act as
+RRs for all inactivity cases. When a reaction is ﬂagged
+as inactive, a subroutine is called to determine the in-
+activity case and the data structure is then accessed in
+order to perform the calculations in Step 2b for each RR.
+This data structure is thus similar in spirit to the Depen-
+dency Graph employed in Ref. [13] for implementing the
+NRM and could thus be termed a Reactivation Graph.
+
+13
+
+Whether this approach is optimal or not remains to be
+seen. Implementation of the algorithm is not dependent
+upon the manner in which RRs are identiﬁed, however,
+and this approach has been found to be satisfactory to
+date.
+
+Second, in determining the set of reaction ﬁrings in
+Step 7, use of Eqs. (7) and (8) for “Langevin” and “De-
+terministic” reactions, respectively, will result in kµ(τ )
+values that are real numbers rather than integers. Since
+it is diﬃcult to determine at what point a continuous
+population description is acceptable in lieu of an inte-
+ger description, we choose to round all kµ(τ ) values in
+Step 7 before updating the species populations. In [16]
+it was argued that use of Eq. (7) as opposed to (6) is an
+improvement computationally since generation of normal
+random numbers is faster than Poisson random numbers.
+Some of this improvement is clearly negated, therefore,
+by including a subsequent rounding operation, although
+we have yet to quantitatively investigate the extent of
+this eﬀect. While the same argument holds for “Deter-
+ministic” reactions, the elimination of the random num-
+ber generation operation should more than compensate
+for the added rounding procedure.
+
+IV. EXAMPLES
+
+With the presentation of our algorithm now complete,
+we will demonstrate in this section the utility of the
+method, in terms of eﬃciency and accuracy, via three
+illustrative examples. We will begin by considering the
+“decaying-dimerizing” reaction set which, because of its
+wide prior use,16,17,18,21,22,31 allows us to make direct
+comparisons to results obtained using τ -leaping.17 We
+will then consider a simple model of clustering that illus-
+trates the algorithm’s ability to treat systems in which
+species populations vary over many orders of magnitude.
+Finally, a biologically inspired model system will be con-
+sidered that illustrates how the stochastic process of gene
+expression can be accurately and eﬃciently simulated in
+conjunction with reactions involving large reactant pop-
+ulations (e.g., metabolic processes).
+
+A. The “decaying-dimerizing” reaction set
+
+The decaying-dimerizing reaction set is comprised of
+
+the following four reactions:
+
+(20)
+
+R1 : S1
+R2 : 2S1
+R3 : S2
+R4 : S2
+
+→ ∗
+S2
+→
+2S1
+→
+S3
+→
+
+In order to make direct comparisons to results ob-
+tained using “explicit” τ -leaping, we have performed the
+same calculations as in Ref. [17] using the same rate
+parameters and initial populations. Speciﬁcally, we let
+
+tude decrease for X1(10), in particular, and the shifts for
+X2(10) and X3(10), are noticeably less pronounced.
+
+B. Simple clustering
+
+Clustering processes are inherently multiscale since
+large numbers of small clusters generally coexist within
+a system with small numbers of large clusters. As such,
+clustering provides an ideal way to demonstrate the abil-
+ity of the PLA to treat systems in which species popula-
+tions vary over many orders of magnitude.
+
+We have thus considered a simple clustering model
+
+comprised of the following nine reactions:
+
+14
+
+(21)
+
+2S1
+R1 :
+R2 : S1 + S2
+R3 : S1 + S3
+...
+R9 : S1 + S9
+
+S2
+S3
+S4
+
+S10
+
+→
+→
+→
+
+→
+
+FIG. 1: Smoothed population histograms at t = 10 obtained
+from 10 000 simulation runs of the “decaying-dimerizing” re-
+action set (20) using the SSA and the PLA with various values
+of ¯ǫ (PLA-5% means ¯ǫ = 0.05, etc.). Reaction classiﬁcations
+were made in the PLA runs using
+
+1 = 3 and
+
+1 = 100.
+
+≈
+
+≫
+
+c1 = 1.0, c2 = 0.002, c3 = 0.5, c4 = 0.02, X1(0) = 4150,
+X2(0) = 39 565 and X3(0) = 3445, and we examined the
+population distributions for all species at t = 10. The
+results are shown in Fig. 1, where each smoothed fre-
+quency histogram is the product of 10 000 simulation runs
+of the SSA or the partitioned leaping algorithm (PLA)
+presented here. PLA runs were made using various values
+1 = 100.
+of ¯ǫ, between 0.01 and 0.05, with
+≈
+828 simulation steps to
+The SSA runs required 279 041
+complete, while the PLA runs required 23 578
+649 with
+¯ǫ = 0.01, 399
+3 with ¯ǫ = 0.05.
+The PLA thus delivered approximately 12-, 700-, and
+1700-fold decreases in the number of simulation steps re-
+quired, respectively.
+
+1 with ¯ǫ = 0.03, and 161
+
+1 = 3 and
+
+≫
+
+±
+
+±
+
+±
+
+±
+
+From an accuracy standpoint, Fig. 1 shows that the
+PLA results are in good agreement with the SSA re-
+sults. The PLA-1% histograms are almost indistinguish-
+able from those obtained using the SSA. As expected,
+however, the level of agreement decreases as the value
+of ¯ǫ increases. Nevertheless, the PLA-3% and PLA-5%
+results are still quite accurate, especially considering the
+signiﬁcant acceleration achieved (in terms of simulation
+steps) relative to the SSA. Furthermore, by comparing
+the PLA-3% results to those presented in Fig. 3 of [17],
+we see the same general accuracy trends. As ¯ǫ increases,
+the amplitudes of all histograms decrease, the X2(10)
+histogram shifts to the left, and the X3(10) shifts to
+the right. The accuracy achieved in Fig. 1 appears to
+somewhat better than that in [17], however. The ampli-
+
+For the sake of simplicity we have neglected dissociation
+reactions and assume that monomers (S1) are the only
+mobile species in the system. Furthermore, in order to
+conﬁne the multiscale eﬀects to variations in the species
+populations alone, we have chosen deterministic rate con-
+stants such that their stochastic counterparts are equiva-
+106 M−1 s−1,
+lent for all reactions. For R1 we choose 3.0
+106 M−1 s−1. We set
+and for all other reactions 6.0
+10−6 M and
+the initial monomer concentration to 1.66
+consider various system volumes Ω ranging from 10−15
+to 10−9 L. This corresponds to initial monomer popula-
+tions X1(0) = 103 to 109, and stochastic rate constants
+= 10−2 to 10−8 s−1. All simulations were run until
+cν
+{
+consumption of all monomers was complete.
+
+×
+
+×
+
+×
+
+}
+
+In Table V, we compare the average number of simula-
+tion steps required for PLA and SSA simulations of (21)
+for all system sizes considered. We see that for the small-
+est system the SSA and PLA give identical results, mean-
+ing that all reactions were classiﬁed as ES at all steps of
+the PLA simulations. As the system size increases, how-
+ever, increased amounts of “leaping” are observed. The
+eﬀect is modest for system sizes of 10−14 and 10−13 L,
+but increases dramatically beyond that. Moreover, the
+number of steps actually decreases for PLA simulations
+of systems larger than 10−11 L. The eﬀects of leaping thus
+overtake the system size eﬀects for these large systems.
+In Figs. 2 and 3 we show the classiﬁcations achieved for
+each reaction in (21) at each simulation step of a single
+PLA-3% simulation of systems of size 10−12 and 10−9 L,
+respectively. Comparison of these plots illustrates how
+leaping increases as the system size increases, as well as
+the inherent multiscale nature of the reaction network. In
+Fig. 2 we see extensive leaping for reactions R1–R3, with
+the classiﬁcations varying rapidly between ES, “Poisson”
+and, at times, “Langevin.” We also see that the extent of
+leaping decreases with increasing cluster size. Reactions
+
+TABLE V: Average numbers of steps required for PLA and
+SSA simulations of the simple clustering model (21). All val-
+ues were averaged over 10 000 simulation runs unless other-
+wise noted. Reaction classiﬁcations were made in the PLA
+runs using
+
+1 = 3 and
+
+1 = 100.
+
+≫
+Ω (L) X1(0) PLA-3% PLA-1%
+
+≈
+
+65 297
+
+678
+
+6776
+
+678
+
+6557
+
+42 944
+
+10−15
+10−14
+10−13
+10−12
+10−11
+10−10
+10−9
+
+103
+104
+105
+106
+107
+108
+109
+51 842
+aBased on 2500 simulation runs.
+bBased on 1000 simulation runs.
+cExtrapolation (not based on actual data).
+
+82 467
+
+67 989
+
+81 972
+
+329 894
+
+513 686
+
+464 971
+
+347 547
+
+SSA
+
+678
+
+6776
+
+67 760
+
+677 601
+
+a
+6 776 019
+67 760 339b
+c
+677 600 000
+
+15
+
+FIG. 3: Classiﬁcations vs. simulation step for each reaction of
+the simple clustering model (21) at Ω = 10−9 L [i.e., X1(0) =
+109]. Calculation details are the same as in Fig. 2.
+
+FIG. 2: Classiﬁcations vs. simulation step for each reaction of
+the simple clustering model (21) at Ω = 10−12 L [i.e., X1(0) =
+106]. Classiﬁcations are: (1) Exact Stochastic, (2) Poisson,
+(3) Langevin, (4) Deterministic. Results are for a single PLA
+simulation using ¯ǫ = 0.03,
+
+1 = 3 and
+
+1 = 100.
+
+≈
+
+≫
+
+R8 and R9, in fact, remain classiﬁed as ES throughout the
+course of the simulation. Comparison with Fig. 3 shows
+a signiﬁcant increase in leaping with system size. Reac-
+tions R1–R6 in Fig. 3 all achieve “Deterministic” status
+at various points during the simulation, while R7–R9 ex-
+perience small amounts of leaping up into the “Langevin”
+regime.
+
+In Fig. 4, we illustrate the accuracy achieved by the
+PLA via ﬁnal population histograms of select cluster sizes
+for a system of 10−12 L. We display results for clusters
+of sizes 2, 5, 8 and 10, which are representative of the
+entire spectrum of cluster populations. The results show
+
+FIG. 4: Final population distributions for select cluster sizes
+of the simple clustering model (21) at Ω = 10−12 L [i.e.,
+X1(0) = 106]. Smoothed frequency histograms were obtained
+from 10 000 simulation runs of the SSA and the PLA with
+various values of ¯ǫ. Reaction classiﬁcations were made in the
+PLA runs using
+
+1 = 3 and
+
+1 = 100.
+
+≈
+
+≫
+
+excellent accuracy for all cluster sizes, the populations of
+which vary by as many as four orders of magnitude.
+
+C. Stochastic gene expression
+
+The origins and consequences of stochasticity in bio-
+logical systems has been a subject of intense interest re-
+cently.1,2,3,4,5,6,7,8 In cellular systems the primary source
+of “intrinsic” stochastic noise is gene expression, where
+the small numbers of regulatory molecules involved in
+the process result in proteins being produced in “bursts”
+rather than continuously.1,3,7 Any realistic model of a
+
+cellular system must be able to account for this phe-
+nomenon. Other cellular processes, such as metabolism,
+often involve very large numbers of molecules, and it has
+been shown that stochastic ﬂuctuations in gene expres-
+sion can quantitatively aﬀect their dynamics.26 A full
+stochastic treatment of “whole-cell” biological models
+including both gene expression and metabolic networks
+is infeasible,41 however, providing motivation for devel-
+oping multiscale simulation methods capable of treat-
+ing systems containing both large and small numbers of
+molecules.
+
+We have applied the PLA to a simple biologically in-
+spired model system that involves both gene expression
+dynamics and protein-protein interactions. The network
+that we have considered is as follows:
+
+(22)
+
+G
+R1 :
+G∗
+R2 :
+R3 : P + Q
+P : Q
+R4 :
+} →
+R
+R5 :
+
+→
+→
+→ {
+
+{
+
+G∗
+G + nP
+P : Q
+}
+R + Q
+
+→ ∗
+
+The ﬁrst two reactions constitute the gene expression
+part of the network, in which the single gene G spon-
+taneously converts into an active conformation G∗ that
+then produces proteins P in bursts of n. The third and
+fourth reactions constitute the protein-protein enzymatic
+part of the network where P interacts with the enzyme Q
+that then
+to form an enzyme-substrate complex
+produces the ﬁnal product R and regenerates Q. The
+last reaction models the degradation of R.
+
+P : Q
+
+}
+
+{
+
+Rate constants for the ﬁve reactions in (22) were set
+108 M−1 s−1, 100 s−1, and
+equal to 750 s−1, 750 s−1, 6.0
+×
+50 s−1, respectively. The initial enzyme concentration
+10−7 M, n to 0.2XQ(0),42 and
+[Q]o was set equal to 1.66
+investigations were carried out for various system sizes
+ranging from 10−15 to 10−7 L. This corresponds to initial
+enzyme populations XQ(0) ranging from 102 to 1010. In
+all cases, the system began with a single entity of G and
+null populations of G∗,
+and R. All simulations
+P : Q
+were run until t = 1 s.
+
+×
+
+}
+
+{
+
+×
+
+In Fig. 5 we show a typical time course and values
+of the time step at each simulation step for a PLA-3%
+simulation of (22) at Ω = 10−11 L [i.e., XQ(0) = 106,
+105]. The time course plot in Fig. 5(a) illustrates
+n = 2
+the stochastic nature of the gene expression dynamics,
+apparent in the noisy time evolution of the gene prod-
+uct P . Conversely, the large-number dynamics result in
+much smoother trajectories for Q,
+and R. The
+time step plot in Fig. 5(b) illustrates the algorithm’s abil-
+ity to dynamically adjust as the system evolves. The ﬁrst
+0.006 s of simu-
+6000 simulation steps correspond to
+lated time, while the ﬁrst 8000 correspond to
+0.06 s.
+A time of 0.1 s is reached around step 8500. The entire
+simulation took 11 091 steps to complete. Thus, simu-
+lating the ﬁrst 10% of the evolved time required
+77%
+of all simulation steps. This is because of the relatively
+small population of P during the ﬁrst 0.1 s [apparent
+
+P : Q
+
+∼
+
+∼
+
+∼
+
+}
+
+{
+
+16
+
+FIG. 5: Results for a typical PLA-3% simulation of the simple
+gene expression model (22) at Ω = 10−11 L: (a) A typical
+time course, (b) value of the time step at each simulation
+1 = 3 and
+step. Reaction classiﬁcations were made using
+
+≈
+
+1 = 100.
+
+≫
+
+FIG. 6: Classiﬁcations vs. simulation step for reaction R3 of
+(22) at various system sizes. Classiﬁcations are: (1) Exact
+Stochastic, (2) Poisson, (3) Langevin, (4) Deterministic. Re-
+sults are for a single PLA simulation using ¯ǫ = 0.03,
+1 = 3
+and
+
+1 = 100.
+
+≈
+
+≫
+
+in Fig. 5(a)], which results in ﬁne reaction classiﬁcations
+during this period (see Fig. 6, middle panel). Coarser
+classiﬁcations are achieved around step 7000, however,
+and signiﬁcantly more reaction ﬁrings occur at each sim-
+ulation step. The ﬁnal 0.9 s is thus simulated in
+1/3
+the number of steps.
+
+∼
+
+Figure 6 illustrates how the classiﬁcations coarsen with
+increasing system size. For Ω = 10−14 L, corresponding
+to XQ(0) = 1000, the classiﬁcations for R3 never reach
+beyond “Poisson.” For Ω = 10−11 L, however, the classiﬁ-
+cations coarsen approximately midway through the sim-
+ulation (as just discussed), while for Ω = 10−7 L “Deter-
+ministic” status is achieved relatively quickly and main-
+tained almost exclusively throughout. Similar results are
+obtained for reactions R4 and R5 at these system sizes
+(data not shown) while R1 and R2 are classiﬁed as ES at
+all steps.
+
+In Table VI we compare the average number of sim-
+ulation steps required for SSA and PLA simulations of
+
+TABLE VI: Average numbers of steps required for PLA and
+SSA simulations of the simple gene expression model (22) for
+all system sizes considered. All values were averaged over
+10 000 simulation runs unless otherwise noted. Reaction clas-
+1 = 3 and
+siﬁcations were made in the PLA runs using
+
+≫
+
+1 = 100.
+Ω (L) XQ(0) PLA-3% PLA-1%
+
+21 987
+
+167 088
+
+62 317
+
+73 943
+
+104 393
+
+117 145
+
+9476
+
+12 322
+
+21 990
+
+10 974
+
+10−15
+10−14
+10−13
+10−12
+10−11
+10−10
+10−9
+10−8
+10−7
+
+102
+103
+104
+105
+106
+107
+108
+109
+1010
+8635
+aBased on 1000 simulation runs.
+bExtrapolation (not based on actual data).
+
+16 995
+
+11 082
+
+8605
+
+8540
+
+85 697
+
+66 585
+
+65 519
+
+≈
+
+SSA
+
+21 992
+
+213 321
+
+×
+
+2 125 071
+21 239 052a
+108 b
+2.1
+109 b
+×
+1010 b
+1011 b
+1012 b
+
+2.1
+
+2.1
+
+2.1
+
+2.1
+
+×
+
+×
+
+×
+
+(22) for all system sizes considered. For the PLA-3%
+simulations we see that the smallest system size requires
+the most simulation steps and experiences little, if any,
+leaping. The number of steps then initially decreases
+with increasing system size, increases again at 10−12 L,
+goes through a maximum at 10−11 L, and levels oﬀ at
+10−9 L. The increase in steps at 10−12 L is due to an in-
+creasing fraction of simulations requiring large numbers
+of steps. At 10−11 L, for example, 90% of all simulations
+required between 5770 and 45 462 steps to complete. At
+10−9 L the range was 5407 and 14 462. Thus, for sys-
+tems of size 10−12 to 10−10 L, the stochastic nature of
+the gene expression dynamics results in a wide variety
+of possible time-evolution trajectories, some of which re-
+quire many more simulation steps to complete than oth-
+ers. The PLA-1% results show a similar pattern, except
+at 10−14 L where the number of steps increases sharply
+relative to 10−15 L. Here, the leaping eﬀects are not great
+enough to overcome the eﬀects of increasing the system
+size. Leaping increases signiﬁcantly at 10−13 L, how-
+ever, and the number of steps again initially drops, goes
+through a maximum and eventually levels oﬀ. For both
+sets of PLA simulations we see signiﬁcant decreases in the
+numbers of steps required relative to the SSA for systems
+larger than 10−14 L.
+
+Finally, in Fig. 7 we demonstrate the accuracy of the
+PLA via smoothed population histograms at t = 1 s for
+species P , Q,
+and R. The results are plotted
+for a system size of 10−13 L (where signiﬁcant leaping
+is observed for both PLA-1% and PLA-3% simulations)
+and again show excellent accuracy with respect to the
+SSA.
+
+P : Q
+
+}
+
+{
+
+17
+
+FIG. 7: Population distributions at t = 1 s for all pro-
+tein species of the simple gene expression model (22) at
+Ω = 10−13 L [i.e., XQ(0) = 104]. Smoothed frequency his-
+tograms were obtained from 10 000 simulation runs of the SSA
+and the PLA with various values of ¯ǫ. Reaction classiﬁcations
+were made in the PLA runs using
+
+1 = 3 and
+
+1 = 100.
+
+≈
+
+≫
+
+V. DISCUSSION AND CONCLUSIONS
+
+In a recent review, Rao et al.6 discuss the signiﬁcant
+challenges associated with modeling intracellular noise
+in biochemical systems using current modeling tools.
+They conclude: “. . . [T]here are currently no satisfactory
+approaches for simulating processes concurrently across
+multiple scales of time, space or concentration.”6 In com-
+ing to this conclusion, the authors point speciﬁcally to
+numerous unresolved issues currently hindering multi-
+scale modeling strategies. These include the need for
+automatic and adaptive timescale separation techniques
+that require minimal modeler intervention and the chal-
+lenge of accurately modeling rare events without wasting
+computational expense simulating unimportant frequent
+events.
+
+1,
+
+≪
+
+≫
+
+1 and
+
+The partitioned leaping algorithm presented here
+largely overcomes these diﬃculties. Despite the various
+subtleties involved in developing the approach, the algo-
+rithm presented in Sec. III C remains relatively simple
+and concise. As a result, modeler intervention is ex-
+tremely minimal, requiring the deﬁnition of only three
+model-independent parameters quantifying the concepts
+1 (i.e., ¯ǫ). With the reaction network
+≈
+deﬁned and the rate parameters set, the algorithm then
+automatically and dynamically determines the appropri-
+ate level of description at which to treat each reaction
+in the system, taking correct account of stochastic noise
+while “leaping” over unimportant reaction ﬁrings. The
+partitioning is accomplished via Gillespie’s rigorously de-
+rived criteria16,34 for transitioning between the descrip-
+tions (6), (7) and (8), and reactions classiﬁed at the ﬁnest
+level of description are handled in an exact-stochastic
+manner via the methods of the Next Reaction method13
+[i.e., Eqs. (4) and (5)]. Signiﬁcant savings in computa-
+tional eﬀort are thus achieved while maintaining excellent
+accuracy with regard to both rare and frequent events.
+Furthermore, the algorithm maintains an adaptive time
+
+step character by utilizing the underlying physics of the
+problem to determine an “appropriate” time step at each
+simulation step. The time step determination proce-
+dure involves an “individual-based” approach analogous
+to that employed in the FRM12 and NRM,13 and results
+in the seamless integration of the SSA into the overall
+multiscale algorithmic framework. As such, we avoid
+the need to introduce ad hoc time discretizations for the
+treatment of rare events.
+
+→
+
+∆aµ
+|
+
+These beneﬁcial characteristics of the PLA arise pri-
+marily due to a subtle, yet signiﬁcant, ideological diﬀer-
+ence relative to τ -leaping. Speciﬁcally, the PLA is based
+on the idea of considering reactions individually. This
+idea arises on four fronts: (i) the use of
+/aµ, i.e.,
+|
+the relative fractional change in aµ, for quantifying the
+concept “essentially constant,” (ii) allowing reactions to
+carry personal deﬁnitions of “essentially constant” in or-
+der to overcome the problems associated with aµ
+0,
+(iii) calculating “characteristic reaction times” for each
+reaction and choosing the smallest as the time step in
+the time step determination procedure, and (iv) the sub-
+sequent classiﬁcation of each individual reaction based
+on the number of ﬁrings expected to occur. It is impor-
+tant to emphasize, however, that considering reactions
+individually is not equivalent to considering them inde-
+pendently. The connectivity of the reaction network is
+taken into account at all times via assumptions made re-
+garding all other reactions (e.g., that they obey Poisson
+statistics). This is reminiscent of the FRM formulation
+of the SSA, which is diﬀerent yet equivalent to the DM.
+Partitioned leaping could thus be seen, in some respects,
+as being the “individual-based” counterpart to τ -leaping.
+It should also be noted that various algorithmic modi-
+ﬁcations are possible which may improve the eﬃciency
+and/or accuracy of the PLA. One of these has been
+alluded to already, namely, the possible elimination of
+the ES and/or coarse classiﬁcations. As discussed in
+Sec. II B, there always exists a time interval over which
+the Poisson approximation (6) will be valid, even if this is
+the interval between successive reaction ﬁrings. As such,
+one could, in principle, employ the algorithm presented
+here using only Poisson random numbers. The reason
+for including an ES classiﬁcation is to maintain a ﬁne-
+level description of rare events, while coarse “Langevin”
+and “Deterministic” classiﬁcations (presumably) improve
+computational eﬃciency via faster generation of normal
+random numbers16 or by eliminating random number
+generation altogether.
+Inclusion of these descriptions
+adds complexity to the method, however, and, in the case
+of the ES classiﬁcation, brings with it various technical
+diﬃculties (see Sec. III B 2). Whether the gains associ-
+ated with including these descriptions outweigh the costs
+remains to be seen, and is something we plan on investi-
+gating further in the future.
+
+18
+
+The signiﬁcant body of work on “implicit” τ -
+leaping methods recently introduced by Petzold and
+co-workers18,19,21 also deserves considerable attention.
+These authors were concerned with the presence of “stiﬀ-
+ness”43 in chemical reaction networks and how it aﬀects
+the eﬃciency of τ -leaping methods. Drawing on their ex-
+perience in the ﬁeld of deterministic reaction rate equa-
+tion solvers, they developed various implicit τ -leaping
+methods that take into account the values of the propen-
+sity at both the beginning and end of the time step τ .
+By doing so, these methods are able to take larger time
+steps than explicit methods16,17 that only consider the
+propensity at the beginning of the step (the algorithm
+presented here is explicit). This comes at a cost, however:
+Implicit methods dampen ﬂuctuations in the species pop-
+ulations and, hence, underestimate the amplitude of the
+noise.18,19,21 Nevertheless, the ability of these methods to
+maintain stability in situations where explicit methods
+fail has been demonstrated.
+Incorporating these ideas
+into the PLA is an interesting possibility, and is an an-
+other area of possible future investigation.
+
+Finally, the signiﬁcant number of model reduction
+schemes30,31,32,33 recently proposed in the literature also
+deserves acknowledgment. These techniques attempt to
+overcome the problems associated with stiﬀness by elim-
+inating “fast” reactions in favor of reduced models that
+account for their contributions in an approximate way.
+The characteristic timescale for a reaction arises from
+two sources, the rate constant and the reactant species
+population(s). Thus, a reaction may be fast due to a
+large value of cµ or hµ. Since hµ can change apprecia-
+bly as a system evolves, however, outright elimination
+of a fast reaction is really only justiﬁed if cµ is large.
+Model reduction schemes are thus best suited for over-
+coming problems associated with widely disparate rate
+constants. Leaping techniques, on the other hand, are
+designed to overcome problems associated with widely
+disparate species populations. As such, we view these two
+classes of techniques as being complementary rather than
+competitive. Future techniques combining automatic and
+dynamic model reduction with partitioned leaping could
+open the door to computational investigations far beyond
+the reach of current approaches.
+
+Acknowledgments
+
+F. A. Escobedo, H. Lee, A. A. Quong, A. J. Golumbf-
+skie and C. F. Melius are thanked for useful discussions
+regarding this work. We acknowledge ﬁnancial support
+from the Semiconductor Research Corporation Graduate
+Fellowship Program.
+
+∗ Electronic address: lh64@cornell.edu
+
+† Electronic address: pqc1@cornell.edu
+
+1 H. H. McAdams and A. Arkin, Proc. Natl. Acad. Sci. USA
+
+(2004).
+
+2 A. P. Arkin, J. Ross, and H. H. McAdams, Genetics 149,
+
+formatics 20, 316 (2004).
+
+94, 814 (1997).
+
+1633 (1998).
+
+(1999).
+
+3 H. H. McAdams and A. Arkin, Trends Genet. 15, 65
+
+4 M. B. Elowitz, A. J. Levine, E. D. Siggia, and P. S. Swain,
+
+Science 297, 1183 (2002).
+
+5 N. Fedoroﬀ and W. Fontana, Science 297, 1129 (2002).
+6 C. V. Rao, D. M. Wolf, and A. P. Arkin, Nature 420, 231
+
+(2002).
+
+7 M. Kærn, T. C. Elston, W. J. Blake, and J. J. Collins,
+
+Nature Rev. Genet. 6, 451 (2005).
+
+8 J. M. Raser and E. K. O’Shea, Science 309, 2010 (2005).
+9 J. D. Plummer and P. B. Griﬃn, Nucl. Instr. Meth. Phys.
+
+Res. B 102, 160 (1995).
+
+10 S. Roy and A. Asenov, Science 309, 388 (2005).
+11 The International Technology Roadmap for Semiconduc-
+
+tors, 2001 Ed., http://public.itrs.net.
+
+12 D. T. Gillespie, J. Comput. Phys. 22, 403 (1976).
+13 M. A. Gibson and J. Bruck, J. Phys. Chem. A 104, 1876
+
+(2000).
+
+(2004).
+
+14 Y. Cao, H. Li, and L. Petzold, J. Chem. Phys. 121, 4059
+
+15 H. Resat, H. S. Wiley, and D. A. Dixon, J. Phys. Chem. B
+
+105, 11026 (2001).
+
+16 D. T. Gillespie, J. Chem. Phys. 115, 1716 (2001).
+17 D. T. Gillespie and L. R. Petzold, J. Chem. Phys. 119,
+
+8229 (2003).
+
+18 M. Rathinam, L. R. Petzold, Y. Cao, and D. T. Gillespie,
+
+J. Chem. Phys. 119, 12784 (2003).
+
+19 Y. Cao, L. R. Petzold, M. Rathinam, and D. T. Gillespie,
+
+J. Chem. Phys. 121, 12169 (2004).
+
+20 Y. Cao, D. T. Gillespie, and L. R. Petzold, J. Chem. Phys.
+
+123, 054104 (2005).
+
+21 M. Rathinam, L. R. Petzold, Y. Cao, and D. T. Gillespie,
+
+Multiscale Model. Simul. 4, 867 (2005).
+
+22 T. Tian and K. Burrage, J. Chem. Phys. 121, 10356
+
+(2004).
+
+23 A. Chatterjee, D. G. Vlachos, and M. A. Katsoulakis, J.
+
+Chem. Phys. 122, 024112 (2005).
+
+24 E. L. Haseltine and J. B. Rawlings, J. Chem. Phys. 117,
+
+6959 (2002).
+
+Biol. 85, 217 (2004).
+
+(2004).
+
+25 K. Burrage, T. Tian, and P. Burrage, Prog. Biophys. Mol.
+
+26 J. Pucha lka and A. M. Kierzek, Biophys. J. 86, 1357
+
+27 K. Vasudeva and U. S. Bhalla, Bioinformatics 20, 78
+
+19
+
+28 T. R. Kiehl, R. M. Mattheyses, and M. K. Simmons, Bioin-
+
+29 H. Salis and Y. Kaznessis, J. Chem. Phys. 122, 054103
+
+(2005).
+
+(2003).
+
+30 C. V. Rao and A. P. Arkin, J. Chem. Phys. 118, 4999
+
+31 Y. Cao, D. T. Gillespie, and L. R. Petzold, J. Chem. Phys.
+
+32 Y. Cao, D. Gillespie, and L. Petzold, J. Comput. Phys.
+
+122, 014116 (2005).
+
+206, 395 (2005).
+
+33 J. Goutsias, J. Chem. Phys. 122, 184102 (2005).
+34 D. T. Gillespie, J. Chem. Phys. 113, 297 (2000).
+35 The notation used in this article diﬀers from that in
+Refs. [16,17,18,19,34]. Here the subscripts µ and i will be
+used throughout to signify individual reactions and species,
+respectively, whereas ν and j will be used to index sets of
+reactions and species.
+
+36 D. T. Gillespie, Physica A 188, 404 (1992).
+37 We use this label because diﬀerentiating between exact-
+stochastic time intervals and “leaping” intervals will be
+important later.
+
+38 The expression in Eq. (5) diﬀers slightly from that in
+Ref. [13] as it is a relative time version of the transfor-
+mation formula.
+
+39 The number of iterations required in this procedure is
+deﬁnitively ﬁnite. In extreme situations, if τ is continually
+reduced, at some point all reactions will become classiﬁed
+as ES. Reclassiﬁcations will then no longer be necessary
+and the iterative loop will terminate.
+
+40 Standard techniques exist for generating Poisson and nor-
+µ = τ then
+
+mal random deviates.44 For ES reactions, if τ ES
+kµ(τ ) = 1, otherwise zero.
+
+41 D. Endy and R. Brent, Nature 409, 391 (2001).
+42 By allowing the number of proteins produced per expres-
+sion event to change we are eﬀectively varying the degree
+of “translational eﬃciency”7.
+
+43 Stiﬀness is generally associated with the presence of widely
+disparate timescales. A common deﬁnition of a stiﬀ system
+is one in which the time step chosen for numerical inte-
+gration is based on considerations of stability rather than
+accuracy.
+
+44 See, e.g., W. H. Press, S. A. Teukolsky, W. T. Vetter-
+ling, and B. P. Flannery, Numerical Recipes in C, The Art
+of Scientiﬁc Computing, 2nd Ed. (Cambridge University
+Press, New York, NY, 1999).
+
+

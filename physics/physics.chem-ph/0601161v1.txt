@@ -1,0 +1,1361 @@
+6
+0
+0
+2
+ 
+n
+a
+J
+ 
+0
+2
+ 
+ 
+]
+h
+p
+-
+m
+e
+h
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+1
+6
+1
+1
+0
+6
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Monte Carlo Algorithm for Least
+Dependent Non-Negative Mixture
+Decomposition
+
+Sergey A. Astakhov, Harald St¨ogbauer
+Alexander Kraskov, Peter Grassberger
+
+John von Neumann Institute for Computing,
+Forschungszentrum J¨ulich, D-52425, J¨ulich, Germany,
+and
+Division of Biology, California Institute of Technology,
+California 91125, USA
+
+February 2, 2008
+
+Abstract
+
+We propose a simulated annealing algorithm (called SNICA for “stochas-
+
+tic non-negative independent component analysis”) for blind decomposi-
+tion of linear mixtures of non-negative sources with non-negative coeﬃ-
+cients. The de-mixing is based on a Metropolis type Monte Carlo search
+for least dependent components, with the mutual information between re-
+covered components as a cost function and their non-negativity as a hard
+constraint. Elementary moves are shears in two-dimensional subspaces
+and rotations in three-dimensional subspaces. The algorithm is geared
+at decomposing signals whose probability densities peak at zero, the case
+typical in analytical spectroscopy and multivariate curve resolution. The
+decomposition performance on large samples of synthetic mixtures and ex-
+perimental data is much better than that of traditional blind source sepa-
+ration methods based on principal component analysis (MILCA, FastICA,
+RADICAL) and chemometrics techniques (SIMPLISMA, ALS, BTEM).
+
+1
+
+Introduction
+
+Decomposing linear mixtures (superpositions) into their components is a prob-
+lem occurring in many diﬀerent branches of science, such as telecommunications,
+seismology, image processing, and biomedical signal analysis (e.g., EEG, ECG,
+fMRI) [1]. Blind source separation (BSS), in particular, deals with the case
+where neither the sources, nor the mixing matrix are known, the only available
+
+1
+
+data being the mixed signals [2]. The standard approach to BSS is indepen-
+dent component analysis (ICA) [1, 2, 3, 4]. In ICA one typically ﬁrst applies a
+principle component transformation to “prewhiten” the data, i.e. to transform
+the covariance matrix into a unit matrix, and then uses some statistics going
+beyond second order (e.g. mutual information or temporal correlations) to min-
+imize interdependencies between the reconstructed sources by a ﬁnal rotation.
+A similar problem arises in analytical spectroscopy, where one wants to de-
+compose spectra of chemical mixtures into the contributions of individual com-
+ponents in order to identify the emitting (or absorbing) mixture constituents
+and quantify their abundances. Mixture decomposition problems of this sort
+are classiﬁed in analytical chemistry as quantitative analysis of “black” multi-
+component systems [5]. Compared to other applications of BSS, here we have
+two additional problems:
+
+•
+
+•
+
+Spectra of diﬀerent chemically pure substances often show very large over-
+laps. This is in conﬂict with the central assumption of ICA that the pure
+sources (mixture components) are statistically independent. One can relax
+this assumption partially (see, e.g., Refs. [6, 7]), although one can hardly
+do without any assumption of this type. But, because of overlaps between
+spectra of similar compounds, this becomes a serious obstacle in spectral
+mixture decomposition.
+
+In a vast majority of spectroscopic techniques, spectra are non-negative, as
+are also the coeﬃcients of the mixing matrix (concentrations). This gives
+rise to constraints which are not easily taken into account in typical ICA
+algorithms that heavily rely on linear algebra [8, 9]. This would not be
+problematic by itself – in other applications signals are often non-negative,
+too. But it does pose a very serious problem, if, as is usually the case,
+there are spectral regions where some of the sources have zero (or very
+small) intensity [10]. In this case, prewhitening will in general produce
+spectra violating the non-negativity constraints, and restoring them later
+will be far from trivial.
+
+For these reasons, this “Multivariate Spectral Curve Resolution” (MCR)
+problem [11] has led to a variety of chemometrics methods (for recent reviews
+see Refs. [12, 13, 14, 15, 16]). Generally, these algorithms resemble ICA in that
+they perform blind recovery of spectra and concentrations from the spectra of
+mixtures only, using no or little a priori information about mixture composition
+and/or about pure spectra. In view of the problems mentioned above, some of
+these MCR methods are less ambitious than ICA and estimate only feasible
+ranges for spectra and concentrations (see, for instance, a recent Monte Carlo
+approach [17] and references therein). Also, the MCR analysis is often facili-
+tated by including some additional information such as unimodality and closure
+(or mass balance) [15]. The eﬀect of overlap between spectra can be reduced by
+estimating their dependencies not from the spectra S(f ) directly, but from their
+second derivatives d2S(f )/df 2 [7, 18]. Another approach developed in chemo-
+metrics is based on the identiﬁcation of “pure variables” [19] for all mixture
+components. A pure variable is a frequency (wavelength) at which only one
+of the components contributes. The pure variables, thus, approximately mark
+the regions where at least one of the spectral components is guaranteed to be
+
+2
+
+independent from all others. This idea is central to several advanced chemomet-
+rics algorithms, e.g., KSFA [20], SIMPLISMA [21], IPCA [22] and SMAC [23].
+Also, Band-Target Entropy Minimization (BTEM) has been recently proposed
+which involves an explicit (made by visual inspection) choice of spectral features
+(target regions) to be retained in the course of constrained optimization [24].
+While eﬃcient and highly ﬂexible, supervised band selection has the drawbacks
+of being neither fully automated, nor completely blind.
+
+In order to cope with the non-negativity problem, several methods have been
+proposed. In Refs. [10, 25, 26], non-negativity is incorporated in an approxi-
+mate way already in the the basic decomposition algorithm. For a discussion see
+Ref. [27]. While the above are general purpose BSS methods, there exist more
+specialized chemometrics (MCR) algorithms designed to use non-negativity (see,
+e.g., [12, 13, 14, 15, 16, 24, 28]). In many of them, some variant of principle
+component analysis is used to ﬁrst prewhiten the data, i.e. to minimize the
+oﬀ-diagonal elements of the covariance matrix. In a class of algorithms known
+as MCR-ALS, prewhitening and the interdependence minimization are done as
+in standard ICA, but non-negativity is then enforced in a postprocessing step
+using the alternating least squares (ALS) technique [7, 29, 30]. In general, this
+gives better results than the algorithms without ALS. But, since the interdepen-
+dencies between the sources are not checked during the ALS step, one runs the
+risk of worsening them. In addition to that, applying post facto corrections to
+restore essential properties which were present in original data, but which were
+ruined by the main part of an algorithm, appears rather awkward conceptually.
+Here we argue that a more straightforward strategy is not only possible, but
+actually leads to de-mixing algorithms with notably improved performance. Our
+approach is conceptually very simple and is based on mixture decomposition into
+strictly non-negative least dependent components. Unlike other ICA methods,
+it does not resort to prewhitening. Instead, we split the linear de-mixing trans-
+formation into small random steps such that (i) on each step the non-negativity
+is preserved exactly, and (ii) the dependencies between the components tend
+to be reduced (the mutual information (MI) is minimized non-greedily). Since
+greedy minimization would lead to trapping in local minima of MI, we use a
+Metropolis-Hastings Monte Carlo strategy [31, 32]. The algorithm (which we
+term SNICA, for Stochastic Non-negative Independent Component Analysis) is
+explained in the next section. The numerical results presented here show that
+our new method is more eﬃcient than previous MCR algorithms, including ICA
+and ICA-ALS type methods [7] based on the same MI estimator.
+
+2 Method
+
+As in most ICA and MCR approaches, we start out with the linear mixture
+model
+
+X = AS,
+
+(1)
+
+where X is the matrix of mixed signals (observed spectra), S are pure sources
+(spectra of individual mixture components), and A is the matrix of their con-
+centrations (mixing matrix). We assume that A is a square K
+K matrix,
+i.e. the number of sources K is the same as the number of mixtures. X and S
+N , where the number N of frequencies in the spectra is much
+are of size K
+
+×
+
+×
+
+3
+
+larger than K. The task is to estimate blindly S and A, given only X.
+In
+our current setting the pure spectra and concentrations are assumed to be non-
+negative and we seek a solution (an estimate for S) in the form of statistically
+least dependent components Y = WX, with W−1 being an estimate for A up
+to scaling and permutation of components (ambiguities inherent to the linear
+mixture model). True and estimated mixing matrices can be compared using
+the Amari index P (W−1, A) which is a good measure of decomposition quality
+[2, 6, 7]. The Amari index vanishes when the recovered concentrations diﬀer
+from the true ones only in scaling and permutation of components, and it in-
+creases as the quality of decomposition becomes poor. Thus, small 1 values of
+the Amari index are desirable.
+
+We assume that each column vector yi, i = 1, 2, . . . , N is a realization of
+the same vector-valued random variable Y = (Y1, Y2, . . . , YK), and we look
+for solutions where its K components (i.e., the estimated individual spectra)
+have least mutual information. For a multivariate continuous random variable
+with given marginal and joint densities µj(yj) and µ(y1, y2, ..., yK), the mutual
+information is deﬁned as
+
+(2)
+
+(3)
+
+(4)
+
+I(Y1, Y2, ..., YK) =
+
+H(Yj)
+
+H(Y1, Y2, ..., YK),
+
+K
+
+Xj=1
+
+−
+
+H(Yj) =
+
+µj ln µjdyj
+
+− Z
+
+where
+
+and
+
+H(Y1, Y2, ..., YK) =
+
+µ ln µ dy1dy2...dyK
+
+− Z
+
+are the diﬀerential entropies [33]. Mutual information is zero if and only if the Yj
+are strictly independent (i.e., their joint density factorizes, µ =
+j µj), and it is
+positive otherwise. Notice that the MI is sensitive to all types of dependencies,
+not only linear correlations.
+
+Q
+
+To assess the dependencies between the estimated spectra (given by rows of
+Y) we use the precise MI estimator based on nearest neighbor statistics, denoted
+here as I(Y), developed in Ref. [34]. It is derived from the Kozachenko-Leonenko
+estimate for Shannon entropy [35]
+
+H(Y ) =
+
+ψ(k) + ψ(N ) + log cD +
+
+log ǫ(i)
+
+(5)
+
+−
+
+D
+N
+
+N
+
+Xi=1
+
+where ψ(
+) is the digamma function, ǫ(i) is twice the distance from the point
+·
+yi to its k-th neighbor, D is the dimension of Y , cD is the volume of the
+D-dimensional unit ball, and N is the length of sample. Mutual information
+could be computed by estimating the entropies (3),(4) separately, with the same
+value of k, and using Eq. (2). But this would involve very diﬀerent scales in
+the marginal and joint spaces, leading to diﬀerent biases. Looking for nearest
+neighbors on the same scale in the joint (Y1, Y2, ..., YK) and marginal Yj spaces
+signiﬁcantly increases the chance that the biases in H(Yj) and H(Y1, Y2, ..., YK)
+1In practice, we ﬁnd that good decomposition quality roughly corresponds to Amari indices
+
+P < 0.05, whereas P > 0.2 generally characterizes unacceptably poor performance.
+
+4
+
+cancel. This reduces the bias of the MI estimate. Since Eq. (5) holds for any
+value of k, one can ﬁrst look for k nearest neighbors in the joint space and then
+use the hyper-rectangles deﬁned by them to calculate the number of neighbors
+in the marginal spaces. The estimate for MI is then:
+
+(K
+
+1)/k
+
+I(Y1, Y2, ..., YK) = ψ(k)
+
+1)ψ(N ).
+(6)
+where nj are the numbers of nearest neighbors in the spaces Yj, j = 1, 2, . . . , K;
+denotes the average over all points yi, i = 1, 2, . . . , N . Implementation
+. . .
+i
+h
+details are given in Ref. [34].
+
+ψ(n1)+ψ(n2)+. . .+ψ(nK)
+i
+
++(K
+
+−h
+
+−
+
+−
+
+−
+
+Statistical errors in this MI estimator decrease with k, while systematic
+errors increase. Empirically, we found that the decomposition performance is
+best for the values of k in the range 10-20, reﬂecting a balance between these two
+types of errors. Also, spectral curve resolution by ICA was shown to be more
+eﬃcient if performed in the derivative space [7, 18], therefore in all simulations
+discussed below we estimate the MI from the second derivatives of spectra with
+respect to frequency.
+
+0.
+
+With this numerical measure of dependence, we can formulate the mixture
+decomposition problem as minimization of I(Y) under the linear de-mixing
+transformation Y = WX, subject to the non-negativity constraint 2 yik ≥
+In contrast to more traditional ICA methods that proceed by splitting the
+de-mixing matrix into a prewhitening transformation (eliminating linear cor-
+relations) and subsequent rotations [1, 6], we approach the above constrained
+optimization with a Monte Carlo strategy. To this end, the de-mixing ma-
+trix W is factorized into small steps, W = lim
+Wn with Wn = MnWn−1,
+n→∞
+where each Mn is chosen randomly and is either a shear transformation T
+in a two-dimensional (2D) subspace, or a rotation R in a 3D subspace (see
+below). The sequence of moves starts with Y0 = X, W0 = I (identity ma-
+trix). A move Yn = MnYn−1 is immediately rejected, if it results in at least
+one negative component yn,ik = (Yn)ik. Otherwise (i.e., if all yn,ik ≥
+0),
+it is accepted with probability one, if it leads to less dependent components,
+I(Yn−1) < 0, while it is accepted with probability exp(
+I/T ),
+△
+I > 0. Here, T is a ﬁctitious temperature. This is the famous Metropolis-
+if
+In order to make the
+Hastings Markov chain Monte Carlo method [31, 32].
+method more greedy at later stages, when Wn is already close to the optimum,
+we use a simple annealing schedule [36] where we start with high values of T
+and decrease it successively. Since both R and T matrices act only on low-
+dimensional subspaces (and are the identity in the complements), the diﬀerence
+I in each step can be computed from information in a 2D or 3D subspace
+△
+only [6]. The convergence to the global solution is monitored by computing
+the full dimensional mutual information I(Yn), which guarantees that the least
+dependent, although not necessarily independent, components are reached.
+
+I = I(Yn)
+
+−△
+
+△
+
+−
+
+In our method, the mutual information is used to direct the search in
+the global space, whereas the non-negativity constraint is important in that
+it restricts solutions to physically meaningful subspace. This constraint has
+strongest eﬀect, if large parts of the constraint boundaries yk = 0, k = 1, 2, . . . , K,
+are populated by the pure sources, as then any linear transformation is likely
+2Note that the non-negativity of estimated mixing matrix W−1 is not enforced explicitly,
+
+but it will be nonetheless satisﬁed to high accuracy.
+
+5
+
+a)
+
+I( )=0.0274
+
+S
+
+b)
+
+I(
+
+X
+
+)=3.8151
+
+1
+
+1
+
+P=0.46
+
+c)
+
+s1
+I(
+Y
+
+)=1.1466
+
+1
+
+1
+
+P=0.02
+
+d)
+
+x1
+)=0.0271
+Y
+
+I(
+
+s3
+
+1
+
+0
+0
+
+y3
+
+1
+
+0
+0
+
+s2
+
+y2
+
+x3
+
+1
+
+0
+0
+
+y3
+
+1
+
+0
+0
+
+0
+
+0
+
+x2
+
+y2
+
+0
+
+0
+
+y1
+
+1
+
+1
+
+y1
+
+1
+
+1
+
+Figure 1: De-mixing in three dimensions by shears and rotations. The scatter
+plots are: pure sources (a); mixture signals (b); components (c) resolved by 2D
+shears (trapped in a local minimum); components (d) recovered through opti-
+mization with 2D shears and 3D rotations about the diagonal. Also shown are
+the values of 3D mutual information (I) and the Amari index (P ) of incomplete
+(c) and successful (d) decompositions.
+
+to violate non-negativity. This happens when each pure spectrum has a high
+chance to be occasionally close to its zero baseline. Such sources are called
+well-grounded [10] and are common in spectroscopy.
+
+The idea of using 2D shear transformations in tandem with the non-negativity
+constraint was ﬁrst proposed in the context of “Positive Matrix Factorization”
+[37, 38]. The matrix T(ij)(α) representing a shear y′
+j = yj in
+the (i, j) subspace is obtained from identity matrix by adding one oﬀ-diagonal
+element,
+
+i = yi + αyj, y′
+
+t(ij)
+lm = [T(ij)(α)]lm = δlm + αδliδmj,
+
+i
+
+= j
+
+[1, K];
+
+l, m = 1, 2, . . . , K.
+
+(7)
+
+∈
+
+While 2D shear transformations are suﬃcient to decompose two-component
+mixtures, they appear to be too restrictive to sample eﬃciently higher dimen-
+sional de-mixing matrices. In higher dimensions, the minimization through a
+sequence of shears can easily get trapped in local minima of the MI landscape.
+One such case is illustrated in Fig. 1 in which a three-component mixture of
+exemplary infrared spectra is considered. First, decomposition was attempted
+using only 2D shears, and Fig. 1c shows the components found by constrained
+minimization. This conﬁguration corresponds to a local minimum of MI (com-
+pare to Fig. 1a and notice the values of mutual information and very poor
+
+6
+
+6
+decomposition performance, P = 0.46). Since the components have reached the
+constraint boundaries and a minimum of the cost function has been found to lie
+on this boundary, further de-mixing shears can be accepted only by increasing
+I(Y), which can be very slow. However, Fig. 1c suggests that the conﬁguration
+needs to be rotated in such a way that, afterwards, the three principal “beams”
+of points could be brought close to the coordinate axes (and MI be decreased
+further) by subsequent shears. This works indeed, and gives the correct pure
+components with high precision, as seen in Fig. 1d.
+
+The rotations needed to improve the eﬃciency are around the space diagonals
+in randomly chosen 3D subspaces. Let us denote by R(ijk)(α) the matrix which
+performs a rotation by the angle α around the diagonal in the positive octant
+of the subspace spanned by the components (i, j, k). It has the elements
+
+ii = r(ijk)
+r(ijk)
+ij = r(ijk)
+r(ijk)
+
+jj = r(ijk)
+jk = r(ijk)
+
+kk
+
+ki
+
+ik = r(ijk)
+r(ijk)
+
+ji = r(ijk)
+
+kj
+
+= (1 + 2 cos α)/3,
+
+=
+
+=
+
+1
+3
+1
+3
+
+−
+
+−
+
+(1
+
+cos α)
+
+−
+
+sin α
+√3
+sin α
+√3
+
+,
+
+.
+
+(1
+
+cos α) +
+
+(8)
+
+in the subspace spanned by (i, j, k), while it is the unit matrix in the comple-
+ment, r(ijk)
+In the results shown below, random
+.
+rotations and shears are used in ratio 1:1.
+
+lm = δlm for l, m /
+
+i, j, k
+
+∈ {
+
+}
+
+Of course, more sophisticated combinations of aﬃne transformations [39,
+40] can be designed to sample the de-mixing matrix. This might improve the
+performance of the algorithm further, especially in higher dimensions. But it is
+not clear whether the added complexity would be worthwhile.
+
+As seen from Eqs. (7),(8), the proposed moves T and R are parameterized
+by the “angle” α. For each Monte Carlo step its value is chosen randomly from
+some suitable range α
+h, h]. To realize an adaptive step-size control (where
+h is adjusted according to the progress of optimization), we use the following
+update rule
+
+[
+−
+
+∈
+
+hn+1 =
+
+f1hn,
+f2hn,
+
+(cid:26)
+
+if the move Mn is accepted;
+if it is rejected,
+
+(9)
+
+with the factors f1 > 1, f2 < 1 to be determined empirically. In our simulations
+we took f1 = 1.06, f2 = 0.98 with initial h0 = 0.2
+0.3, although the decom-
+position performance was found to be practically insensitive to precise values of
+h0 (see next section).
+
+−
+
+For the temperature annealing, we used rather simple schemes with only 2
+or 3 cooling steps, with the temperature in the last step chosen close to zero.
+This is because we found that the detailed annealing schedule had no signiﬁcant
+eﬀect on the ﬁnal results. It means, however, that the CPU times needed in the
+following simulations might not be optimal. The initial value of temperature T1
+was chosen of the order of the mutual information of pure mixture components.
+Choosing T1 too high leads to unfocused search, while choosing it too small
+increases the risk to get trapped in false minima. Both can result in poor
+performance, whereas our empirical choice of T1 ensured eﬃcient decomposition
+in most cases.
+
+At each temperature, the sequence of de-mixing moves is terminated when
+the mutual information has reached its global minimum, according to some
+
+7
+
+stopping criterion. In our code we kept track of the minimum of I(Yn) during
+the entire run,
+
+I(Yn)min = min
+n′<n
+
+I(Yn′ ).
+
+(10)
+
+Minimization is stopped when I(Yn)min does not decrease any more during the
+last M Monte Carlo steps, and the de-mixing matrix Wmin that corresponds to
+I(Yn)min is given as output. The chosen values of M were some compromise
+between the speed and the quality of decomposition.
+
+With all the above together, the stochastic non-negative de-mixing procedure
+
+with 2 cooling steps is then as follows:
+
+1. initialize n = 0, Yn = X, Wn = I; choose hn = h0, T = T1, M = M1;
+
+2. pick random i, j, k
+
+[1, K], α
+
+∈
+
+[
+−
+
+∈
+
+hn, hn];
+
+3. if n is even:
+
+else:
+
+compute shearing matrix Mn = T(ij)(α) (Eq. (7));
+
+compute rotation matrix Mn = R(ijk)(α) (Eq. (8));
+
+4. propose the move Z = MnYn, V = MnWn;
+
+5. if
+
+zlm < 0:
+
+∃
+reject the move, keep Yn+1 = Yn, Wn+1 = Wn and go to (9);
+
+6. estimate
+
+I = I(Z)
+
+I(Yn); pick random p
+
+[0, 1];
+
+△
+I < 0) or (
+
+−
+
+7. if (
+
+I > 0 and e−△I/T > p):
+
+△
+accept the move Yn+1 = Z, Wn+1 = V;
+
+△
+
+∈
+
+else:
+
+reject the move, and keep Yn+1 = Yn, Wn+1 = Wn;
+
+8. if I(Yn+1) reaches a new minimum:
+
+store it together with Ymin = Yn+1, Wmin = Wn+1, and nmin = n + 1;
+
+9. adjust the step size hn+1 according to Eq. (9);
+
+10. n = n + 1;
+
+if n < nmin + M :
+
+go to (2)
+
+else
+
+if T
+
+= T2:
+
+choose T = T2 and M = M2, set n = nmin, and go to (2)
+
+else:
+
+output Ymin and Wmin and stop.
+
+3 Results and discussion
+
+This section reports the results of extensive tests of the new algorithm performed
+on a large sample of spectral resolution problems. Here we stick to the strategy
+of statistical validation of decomposition performance developed earlier [6, 7].
+We stress that performing such tests on a statistically representative set of
+
+8
+
+6
+precisely known mixtures is virtually the only way to examine real eﬃciency of
+a de-mixing technique.
+
+−
+
+To compose a test set of randomized mixtures we ﬁrst collected a pool of
+3830 cm−1 (822
+99 experimental infrared absorption spectra in the range 550
+data points each) selected from the NIST database [41]. This pool of chemical
+species was designed to contain organic compounds that have common struc-
+tural groups (halogen-, alkyl-, nitro-substituted benzene derivatives, phenols,
+alkanes; alcohols, thiols, amines, esters) as well as a number of “outliers”, i.e.
+structures dissimilar from all the rest. This was done to be able to test how
+well the algorithm can treat both – mixtures of highly dependent sources [7]
+and cases in which very deep minima of MI are to be located. After that, 4
+sets with increasing dimensionality K = 3, 4, 7 or 10 (6000 mixtures each) were
+constructed by randomly choosing K normalized pure spectra from the pool
+and applying random square mixing matrices 3 of proper dimension K. Thus,
+our assessment of performance is based on 24000 decompositions in total.
+
+We examine the performance of the new decomposition technique (SNICA)
+in comparison with the recently developed MILCA algorithm which uses the
+same MI estimator [6]. In our previous study [7] MILCA was shown to be very
+eﬃcient when compared to other (MCR) decomposition algorithms on typical
+spectral mixture problems (both synthetic and real). MILCA can be easily
+combined with derivative preprocessing (to deal with overlapping spectra) and
+ALS postprocessing (to improve non-negativity of estimates). Decompositions
+by MILCA were performed in the second derivative space [7], and the postpro-
+cessing ALS iterations were stopped after 1000 steps (we veriﬁed that longer
+runs did not result in noticeable improvements).
+
+Monte Carlo de-mixing was done with a two-step annealing scheme. The
+initial temperatures and stopping criteria were T1 = 0.02, 0.05, 0.5, 1 and M1 =
+1000, 1000, 2500, 8000 (for K = 3, 4, 7, 10, respectively). For the subsequent
+“cooling” stage these were set to T2 = 10−7 in all four cases and M2 =
+500, 500, 1500, 3500.
+
+For each decomposition the Amari index P (W−1, A) was computed. Fig-
+ure 2 presents the distributions of the Amari indices with increasing dimension-
+ality K of the mixture problem. Judging from the most probable performance
+(peaks of the P distributions) and the minimal achieved values of P , SNICA
+clearly outperformed the other two algorithms. Also, the Monte Carlo de-mixing
+seems to gain advantage as the number of mixture components K increases. In
+the current implementation (with a very simple annealing scheme), SNICA is of
+order 10 times slower than MILCA and MILCA+ALS for K = 3, the algorithms
+have comparable speeds at K = 7, and SNICA is on average 2 times faster for
+K = 10 (with our stopping criteria).
+
+One of the mixture sets (K = 3) was also processed 4 by two representative
+ICA algorithms: the widely used FastICA [42] (for references on its chemomet-
+rics applications see Ref. [7]) and recently developed RADICAL [43] (both algo-
+rithms rely on decorrelation of data by PCA). The latter is similar to MILCA
+in many respects, notably in speed and performance [6], but uses a nearest
+neighbour estimator for entropies H(Y ) [44], not for MI. We observe that the
+performance of SNICA is superior to these two ICA techniques (Fig. 3a). In
+
+3Concentrations aij were generated uniformly randomly in the interval [0, 1].
+4Second derivative spectra were used. FastICA ran with its non-linearity parameter set to
+
+“skew”. RADICAL worked without augmentation of data.
+
+9
+
+Figure 2:
+(MILCA,
+Statistics of performance of MI-based algorithms
+MILCA+ALS and SNICA) at decomposing 3-, 4-, 7-, and 10-component mix-
+tures.
+
+10
+
+SNICA
+
+FastICA
+
+RADICAL
+
+K=3
+
+0
+
+0
+
+0.04 0.08 0.12 0.16 0.2
+
+Amari index
+
+SIMPLISMA
+b)
+
+SIMPLISMA+ALS
+
+K=10
+
+a)
+
+1500
+
+1500
+
+11
+
+0
+
+0
+
+0.04 0.08 0.12 0.16 0.2
+
+Amari index
+
+Figure 3: Performance of SNICA in comparison to traditional ICA (a) and MCR
+(b) algorithms (3- and 10-component mixtures, respectively).
+
+Figure 4: 500 SNICA decompositions (K = 3) represented by the grey points
+in coordinates (I(S),P ). For 10 selected decompositions the one-standard-
+deviation error bars of estimated I(Y) and Amari indices P were computed
+from 250-500 runs with randomized method parameters in each case (see text).
+
+particular, a signiﬁcant fraction (
+P > 0.2 (not shown), indicating relatively low performance.
+
+∼
+
+10%) of decompositions by FastICA have
+
+A similar comparison was made with a state-of-the-art curve resolution al-
+gorithm SIMPLISMA [21] 5 with and without ALS corrections (Fig. 3b). We
+see that ALS signiﬁcantly improves SIMPLISMA decompositions, but there is
+still a remarkable gap in performance between SIMPLISMA+ALS and SNICA.
+Fig. 3b shows the results for a high dimensional test set (K = 10). We should
+mention, however, that the advantage of SNICA over SIMPLISMA+ALS is less
+pronounced for smaller values of K, but it is still signiﬁcant.
+
+Interestingly, decomposing mixtures of weakly and highly dependent sources
+by SNICA turns out to be almost equally eﬃcient (Fig. 4, where the mutual
+information scale spans the whole range of I(S) for triples of spectra in our
+test set). This is in contrast to traditional ICA methods whose inaccuracies
+correlate with the dependencies between pure sources, making decompositions
+of overlapping spectra particularly diﬃcult [7].
+
+[500, 1500], M2 ∈
+
+In order to examine the sensitivity of the proposed technique to its pa-
+rameters we gathered the statistics of 10 decompositions with varied annealing
+temperature T1, initial Monte Carlo step size h0 and stopping criteria M1, M2.
+Each decomposition was attempted with these parameters taken uniformly ran-
+domly from their feasible ranges for K = 3: T1 ∈
+[0.1, 0.8],
+[0, 1000] (the “zero” temperature at the second anneal-
+M1 ∈
+ing step was kept ﬁxed at T2 = 10−7). As reﬂected by the error bars on Fig. 4,
+the performance of SNICA as measured by the Amari index is rather robust
+with respect to the parameter choices, suggesting that Figs. 2,3 are also robust.
+The deviations from the mean ﬁnal values of the cost function I(Y) are also
+small for all decompositions indicating that in all cases the global minima were
+reached. We note that these deviations may be simply due to statistical errors
+5We used the SIMPLISMA code given in Ref. [18], choosing the “oﬀset” parameter ran-
+domly from the interval [0.01,0.1] which is about 1-10% of the standard deviation of the mixed
+signals. This is consistent with the choice made in Ref. [24].
+
+[0.01, 0.03], h0 ∈
+
+12
+
+SIMPLISMA
+(+ ALS)
+0.971(0.973)
+0.994(0.995)
+0.866(0.899)
+0.943(0.953)
+0.576(0.963)
+0.969(0.967)
+0.887(0.958)
+
+BTEM
+
+SNICA
+
+MILCA
+(+ ALS)
+0.987(0.994)
+0.990(0.991)
+0.933(0.943)
+0.901(0.902)
+0.964(0.948)
+0.909(0.966)
+0.947(0.957)
+
+0.954
+0.992
+0.886
+0.899
+0.983
+0.904
+0.936
+
+0.973
+0.981
+0.972
+0.928
+0.953
+0.964
+0.962
+
+toluene
+n-hexane
+acetone
+aldehyde
+33DMB
+DCM
+average
+
+Table 1: Decomposition of 6-component experimental mixtures by MCR and
+ICA methods. The entries are normalized inner products between recovered and
+pure spectra of mixture constituents and their average values. Numerical data
+for SIMPLISMA and BTEM are from an independent study (Ref. [24], Table 3
+which gives comparison with some other MCR methods – IPCA [22], OPA-ALS
+[46]).
+
+in the MI estimation [34].
+
+= 0.035.
+
+A separate set of high-statistics simulations with SNICA (for K = 3, 4)
+was performed, in which the MI estimator of Ref. [34] was replaced by that of
+Ref. [45] 6 leaving the rest of the SNICA code, all parameters and data un-
+changed. These estimators were found to be comparable in speed and eﬃciency
+when used in ICA on spectral mixtures. However, while the statistics of the
+Amari index (denoted PK and PD) were very similar for 3-component mixtures,
+it seems that the estimator of Ref. [34] performs better in higher dimensions.
+Notably, in 70% of cases the decompositions of four-component mixtures using
+this estimator were better (PK < PD), with the average values
+= 0.022
+and
+
+PDi
+h
+Now we turn to an experimental mixture problem to test SNICA in a real-
+istic application of spectral mixture decomposition. To facilitate comparison,
+the example we chose was the one of Ref. [24] where the performances of sev-
+eral well-established curve resolution methods were compared. The experimen-
+tal data intended for blind separation consisted of FT-IR spectra (950
+3200
+cm−1 at 5626 wavelengths) of 14 mixtures of 6 solvents (toluene, n-hexane,
+acetone, 3-phenylpropionaldehyde (aldehyde), 3,3-dimethylbut-1-ene (33DMB),
+and dichloromethane (DCM)). In addition, the pure spectra of mixture con-
+stituents were measured in separate experiments. Thus, this mixture problem
+oﬀered a test case complicated by experimental features typical to analytical
+practice, such as non-linearities, instrumental noise, the presence of spectrome-
+ter background and impurities (residual water and CO2 in this case [24]).
+
+PK i
+h
+
+−
+
+First, we performed decomposition by a PCA-based ICA algorithm (MILCA,
+with and without ALS postprocessing) reducing the dimensionality of the data
+from 14 to 6 on the prewhitening step. The estimated components were then
+compared to the pure sources, computing the normalized inner products between
+them [7, 24]. The results are given in Table 1 which also contains the respective
+values obtained by two MCR methods – SIMPLISMA [21] and BTEM [24].
+SNICA was applied to this data set with a 3 step annealing schedule taking T1 =
+
+6We
+
+used
+
+the
+
+implementation
+
+by
+
+P.
+
+Tichavsky
+
+available
+
+at
+
+http://www.utia.cas.cz/user data/scientific/SI dept/Tichavsky.html.
+
+13
+
+1.5, T2 = 0.1, T3 = 10−7 and M = 6000 for all three steps. The Monte Carlo
+decomposition was done in the full 14 dimensional space (using second-order
+Savitzky-Golay smoothing diﬀerentiation [47] with a 5th order polynomial and
+a 51 point window), thus 14 components were resolved. Then, we selected only
+6 components which had the largest average contributions to the mixed signals
+(this is similar to retaining only the components with largest eigenvalues in the
+PCA dimension reduction). These 6 most intense components were compared to
+the pure sources (Table 1). On this data set, the estimates produced by SNICA
+are more accurate than those obtained by SIMPLISMA and BTEM without
+ALS and compare favorably with the results obtained by MILCA and ALS-
+versions of these algorithms. Notice that in order to produce accurate estimates
+SIMPLISMA needs ALS postprocessing corrections [28, 24] (see also Fig. 3b).
+With these corrections, its performance seems to match closely with SNICA,
+although higher statistics simulations (Fig. 3b) suggest that this might not be
+typical. Also, SNICA resolved all 6 components equally well, whereas the other
+methods produced 2-3 relatively poorly estimated spectra (notably, acetone and
+aldehyde appeared to be the most problematic due to their highly overlapping
+spectra).
+
+4 Conclusions
+
+In this paper we have proposed a new stochastic technique, SNICA, for blind re-
+covery of non-negative well-grounded sources from their linear mixtures. Avoid-
+ing the PCA decorrelation as being counterproductive in certain cases, our
+algorithm is based on a Metropolis Monte Carlo constrained minimization of
+mutual information between recovered sources. The de-mixing transformation
+is obtained as a sequence of random shears and rotations that resolves the least
+dependent strictly non-negative components.
+
+The SNICA approach can be related to some other PCA-free ICA methods
+(for example, Infomax [48] or TDSEP [49]) in that it does not resort to the some-
+what arbitrary decorrelation constraint [50, 51] introduced by PCA. Instead, it
+is replaced in SNICA by the non-negativity constraint which reﬂects a natu-
+ral property of spectral signals in the present application. PCA simpliﬁes and
+speeds up the decomposition considerably, but should be taken with caution.
+If the sources are strongly correlated, then PCA produces components which,
+in spite of being uncorrelated, are completely unphysical. If an ICA method
+(consisting of a rotation of prewhitened components) is used without ALS post-
+processing, it has no chance to undo the errors made by PCA prewhitening. For
+a speciﬁc example see Ref. [7]. ALS postprocessing improves the situation, but
+only partially.
+
+Here we have tested SNICA in spectral curve resolution on a representative
+set of mixture problems and experimental data. Our results indicate that the al-
+gorithm is superior in performance to its PCA-based counterpart (MILCA, with
+the same mutual information estimator) including the ALS-assisted version. We
+also found our algorithm to outperform SIMPLISMA+ALS which represents a
+good reference point among the state-of-the-art curve resolution chemometrics
+techniques. The method presented in this paper performs blind decomposition,
+but the use of additional a priori information about pure components (such
+as, e.g., sparseness of spectral signals) might possibly improve the performance
+
+14
+
+further. In blind separation of multivariate time sequences, the perfomance of
+MILCA was greatly enhanced if also mutual informations at diﬀerent time lags
+were included in the minimization [6]. In principle, the same can be done for
+SNICA, but we have not yet made any tests to see how practical this is.
+
+The assumptions of non-negativity and statistical independence of source
+signals are met in a variety of practical problems in analytical spectroscopy
+and beyond. The range of applications of blind non-negative spectral mixture
+decomposition spans almost all quantitative analytical approaches that rely on
+spectroscopic measurements and subsequent mixture analysis, including, e.g.,
+hyperspectral remote imaging [52, 53], microscopy of nano-structures [54] and
+biomedical samples [7, 55], and separation of independent light sources in multi-
+frequency astrophysical observational data [56]. SNICA can be applied to all of
+them.
+
+The source codes of SNICA, MILCA and the MI estimator are freely available
+
+online at http://www.fz-juelich.de/nic/cs/software.
+
+Acknowledgements
+
+We thank Prof. M. Garland for providing us with the data set of Ref. [24]. S. A.
+is grateful to Dr. Y. Alaverdyan and Prof. S. P. Mushtakova for discussions.
+We also thank the anonymous reviewers for their useful suggestions.
+
+References
+
+[1] Hyv¨arinen, A.; Karhunen, J.; Oja, E. Independent Component Analysis,
+
+Wiley: New York; 2001.
+
+[2] Cichocki, A.; Amari, S. Adaptive Blind Signal and Image Processing. Learn-
+
+ing Algorithms and Applications, Wiley: New York; 2002.
+
+[3] Comon, P. Signal Process. 1994, 36, 287-314.
+
+[4] Jutten, C.; Herault, J. Signal Process. 1991, 24, 1-10.
+
+[5] Liang, Y.-Z.; Kvalheim, O. M.; Manne, R. Chemometr. Intell. Lab. Syst.
+
+[6] St¨ogbauer, H.; Kraskov, A.; Astakhov, S. A.; Grassberger, P. Phys. Rev. E
+
+1993, 18, 235-250.
+
+2004, 70, 066123.
+
+[7] Astakhov,
+
+S. A.;
+
+P. Chemometr.
+arxiv.org/abs/physics/0412029).
+
+Intell. Lab. Syst.
+
+St¨ogbauer, H.; Kraskov, A.; Grassberger,
+at
+
+submitted
+
+(preprint
+
+2005,
+
+[8] Hesse, C. W.; James, C. J. IEEE Signal Process. Lett. 2005, 12, 792-795.
+
+[9] Lu, W.; Rajapakse, J. C. IEEE T. Neural Networ. 2005, 16, 203-212.
+
+[10] Plumbley, M. D.; Oja, E. IEEE T. Neural Networ. 2004, 15, 66-76.
+
+[11] Lawton, W. H.; Sylvestre, E. A. Technometrics 1971, 13, 617-633.
+
+[12] Geladi, P. Spectrochim. Acta B 2003, 58, 767-782.
+
+15
+
+[13] Hopke, P. K. Anal. Chim. Acta 2003, 500, 365-377.
+
+[14] Jiang, T.-H.; Liang, Y.; Ozaki, Y. Chemometr. Intell. Lab. Syst. 2004, 71,
+
+[15] de Juan, A.; Tauler, R. Anal. Chim. Acta 2003, 500, 195-210.
+
+[16] Lavine, B.; Workman, J. J. Anal. Chem. 2004, 76, 3365-3371.
+
+[17] Leger, M. N.; Wentzell, P. D. Chemometr. Intell. Lab. Syst. 2002, 62, 171-
+
+[18] Windig, W.; Stephenson, D. A. Anal. Chem. 1992, 64, 2735-2742.
+
+[19] Knorr, F. J.; Futrell, J. H.; Anal. Chem. 1979, 51, 1236-1241.
+
+[20] Malinowski, E. R. Anal. Chim. Acta 1982, 134, 129-137.
+
+[21] Windig, W.; Guilment, J. Anal. Chem. 1991, 63, 1425-1432.
+
+[22] Bu, D. S.; Brown, C. W. Appl. Spectrosc. 2000, 54, 1214-1221.
+
+[23] Windig, W.; Galagher, N. B.; Shaver, J. M.; Wise, B. M. Chemometr.
+
+Intell. Lab. Syst. 2005, 77, 85-96.
+
+[24] Widjaja, E.; Li, C.; Chew, W.; Garland, M. Anal. Chem. 2003, 75, 4499-
+
+[25] Lee, D. D.; Seung, H. S. Nature 1999, 401, 788-791.
+
+[26] Yuan, Z.; Oja, E. Lect. Notes Comput. Sc. 2004, 3195, 1-8.
+
+[27] Cichocki, A.; Georgiev, P. IEICE T. Fund. Electr. EA. 2003, E86A, 522-
+
+1-12.
+
+188.
+
+4507.
+
+531.
+
+[28] Duponchell, L.; Elmi-Rayaleh, W.; Ruckebusch, C.; Huvenne, J. P. J.
+
+Chem. Inf. Comp. Sci. 2003, 43, 2057-2067.
+
+[29] Tauler, R.; Kowalski, B.; Fleming, S. Anal. Chem. 1993, 65, 2040-2047.
+
+[30] Wang, J.-H.; Hopke, P. K.; Hancewicz, T. M.; Zhang, S. L. Anal. Chim.
+
+Acta 2003, 476, 93-109.
+
+[31] Metropolis, N.; Rosenbluth, A. W.; Rosenbluth, M. N.; Teller, A. H.; Teller,
+
+E. J. Chem. Phys. 1953, 21, 1087-1092.
+
+[32] Hastings, W. K. Biometrika 1970, 57, 97-109.
+
+[33] Cover, T. M.; Thomas, J. A. Elements of Information Theory, Wiley, New
+
+York; 1991.
+
+[34] Kraskov, A.; St¨ogbauer, H.; Grassberger, P. Phys. Rev. E 2004, 69, 066138.
+
+[35] Kozachenko, L. F.; Leonenko N. N. Probl. Inf. Transm. 1987, 23, 95-101.
+
+[36] Kirkpatrick, S.; Gelatt, C. D.; Vecchi, M. P. Science 1983, 220, 671-680.
+
+[37] Paatero, P.; Tapper, U. Environmetrics 1994, 5, 111-126.
+
+16
+
+[38] Paatero, P.; Hopke, P. K.; Begum, B. A.; Biswas, S. K. Atmospheric Envi-
+
+ronment 2005, 39, 193-201.
+
+[39] Chen, B.; Kaufman, A; Graph. Models 2000, 62, 308-322.
+
+[40] Toﬀoli, T.; Quick, J. Graph. Model. Im. Proc. 1997, 59, 89-95.
+
+[41] NIST Mass Spec Data Center. S. E. Stein, director, “Infrared Spec-
+tra” in NIST Chemistry WebBook, NIST Standard Reference Database
+Number 69, Eds. P. J. Linstrom and W. G. Mallard, March 2003, Na-
+tional Institute of Standards and Technology, Gaithersburg, MD, 20899
+(http://webbook.nist.gov).
+
+[42] Hyv¨arinen, A.; Oja, E. Neural Comput. 1997, 9, 1483-1492.
+
+[43] Learned-Miller, E. G.; Fisher, J. W. J. Machine Learn. Res. 2003, 4, 1271-
+
+1295.
+
+[44] Vasicek, O. J. Roy. Stat. Soc. B Met. 1976, 38, 54-59.
+
+[45] Darbellay, G. A.; Vajda, I. IEEE T. Inform. Theory 1999, 45, 1315-1321.
+
+[46] S´anchez, F. C.; Toft, J.; van den Bogaert, B,; Massart, D. L. Anal. Chem.
+
+1996, 68, 79-85.
+
+[47] Savitzky, A.; Golay, M. J .E. Anal. Chem. 1964, 36, 1627-1639.
+
+[48] Bell, A. J.; Sejnowski, T. J. Neural Comput. 1995, 7, 1129-1159.
+
+[49] Ziehe, A.; Laskov, P.; Nolte, G.; M¨uller, K. R. J. Machine Learn. Res.
+
+2004, 5, 777-800.
+
+[50] Cardoso, J.-F. J. Machine Learn. Res. 2003, 4, 1177-1203.
+
+[51] Naanaa, W.; Nuzillard, J. M. Signal Process. 2005, 85, 1711-1722.
+
+[52] Nascimento, J. M. P.; Dias J. M. B. IEEE T. Geosci. Remote Sens. 2005,
+
+43, 175-187.
+
+[53] Yuen, P. W. T.; Blagg, A.; Bishop, G. In Electro-Optical Remote Sensing;
+Kamerman, G. W.; Willetts, D. V., Eds; Proc. SPIE Vol. 5988, 2005, pp.
+107-118.
+
+[54] Lidke, K. A.; Rieger, B.; Jovin, T. M.; Heintzmann, R. Optics Express
+
+2005, 13, 7052-7062.
+
+1070-1077.
+
+[55] Kraﬀt, C.; Sobottka, S. B.; Schackert G.; Salzer, R. Analyst 2005, 130,
+
+[56] Maino, D; Farusi, A; Baccigalupi, C; Perrotta, F.; Banday, A. J.; Bedini,
+L.; Burigana, C.; De Zotti, G.; G´orski, K. M.; Salerno, E. Mon. Not. R.
+Astron. Soc. 2002, 334, 53-68.
+
+17
+
+

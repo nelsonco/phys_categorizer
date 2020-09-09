@@ -1,0 +1,1267 @@
+5
+0
+0
+2
+ 
+g
+u
+A
+ 
+7
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+6
+1
+1
+8
+0
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Link: http://charles.karney.info/biblio/constraint.html
+E-print: arXiv:physics/0508116
+
+Modeling molecules with constraints
+
+Charles F. F. Karney∗ and Jason E. Ferrara
+
+Sarnoff Corporation, Princeton, NJ 08543-5300
+
+(Dated: August 17, 2005)
+
+Techniques for simulating molecules whose conformations satisfy constraints are presented. A method for select-
+ing appropriate moves in Monte Carlo simulations is given. The resulting moves not only obey the constraints
+but also maintain detailed balance so that correct equilibrium averages are computed. In addition, techniques for
+optimizing the evaluation of implicit solvent terms are given.
+
+Keywords: molecular simulation, constrained moves, energy evaluation
+
+I. INTRODUCTION
+
+When attempting to compute thermodynamic quantities
+with a molecular simulation, we are frequently confronted
+with the problem of sampling in a high-dimensional conﬁg-
+uration space. The dimensionality of this space is given by
+the number of degrees of freedom for the molecular system.
+Techniques which lower the number of degrees of freedom
+will increase the efﬁciency of the thermodynamic sampling—
+provided, of course, that these techniques are physically justi-
+ﬁed. Thus, an implicit solvent model may be used to eliminate
+the degrees of freedom associated with the solvent molecules;
+the standard chemical force ﬁelds replace the electron charges
+with atom-centered partial charges thereby removing the elec-
+trons’ degrees of freedom. Further reductions in dimensional-
+ity are possible by imposing constraints on the relative posi-
+tions of the atoms in a molecule. Thus we might specify that
+the bond lengths and bond angles in a molecule are ﬁxed and
+only the torsion angles are allowed to vary. It is such a sce-
+nario that we examine in this paper. We address two aspects of
+this problem: how to move a molecule subject to constraints
+in order to allow equilibrium averages to be computed using
+the canonical-ensemble Monte Carlo method [1] and how to
+evaluate the energy efﬁciently.
+
+The imposition of constraints in molecular modeling has
+been extensively studied [2, §3.3.2, §15.1]. Let us start by elu-
+cidating the difference in the treatment of hard constraints in
+molecular dynamics and Monte Carlo simulations. We treat
+hard constraints by taking the limit where the “spring con-
+stant” for the hard degrees of freedom is inﬁnite. Molecular
+dynamics simulations then consider the evolution of the re-
+sulting system over a ﬁnite time. On the other hand, if we
+wish to determine the equilibrium properties of a system using
+the Monte Carlo method, then we need to consider averaging
+over sufﬁciently long times to allow equipartition of energy
+among all the degrees of freedom of a system. This is, of
+
+course, an example of nonuniform limits. We are interested in
+taking both τsim → ∞ and τequ → ∞, where τsim is the rep-
+resentative simulation time and τequ is the equipartition time
+(which is proportional to the “stiffness” of the constraints). In
+constrained molecular dynamics, we take the limit τequ → ∞
+ﬁrst, which prevents equipartition from occurring; whereas in
+equilibrium statistical mechanics, we take τsim → ∞ ﬁrst and
+this allows energy equipartition. If we are attempting to com-
+pute an equilibrium quantity, such as the free energy of bind-
+ing, it is essential to allow energy equipartition. Understand-
+ing this distinction explains the apparently contradictory re-
+sults for constrained and unconstrained averages for a ﬂexible
+trimer [2, §15.1].
+
+One way of understanding the constrained equilibrium sys-
+tem is to consider how the equilibrium distribution varies as
+the constraint is imposed. In the limit, the distribution col-
+lapses to a lower-dimensional sub-manifold of conﬁguration
+space. However, this sub-manifold has a “thickness” that de-
+pends on the details of the constraint term and, consequently,
+Monte Carlo moves for the constrained system need to reﬂect
+this thickness in order to sample the distribution correctly. As
+a consequence, we will need to specify the functional form of
+the constraint energy and the constraint is no longer a purely
+geometrical object. At ﬁrst glance, this would appear to com-
+plicate further the already complex algebra of constrained mo-
+tions [3]. However, we will propose an algorithm for making
+moves which is simple to implement and which automatically
+ensures that the correct equilibrium averages are computed.
+
+The second half of the paper considers a mundane—but
+nevertheless important—problem, namely how to evaluate the
+energy of a molecule made up of rigid subcomponents. We
+propose a consistent framework for avoiding the computation
+of constant terms and for imposing energy cutoffs. We extend
+this to the computation of the generalized Born solvation term
+and we describe a simple method for computing the solvent
+accessible surface area which has a bounded error.
+
+∗Electronic address: ckarney@sarnoff.com
+
+II. GENERALIZED MONTE CARLO MOVES
+
+We begin by assembling some techniques for combining
+Monte Carlo moves. We deﬁne an “E move” as an ergodic
+move which preserves exp(−βE) as the invariant distribu-
+tion, where β = 1/(kT ) and k is the Boltzmann constant.
+(Here, “ergodic” implies that the move allows all relevant
+portions to conﬁguration space to be explored.) Note that
+a zero move has a uniform invariant distribution. A typi-
+cal zero move samples a new conﬁguration from a distribu-
+tion which satisﬁes the symmetry requirement p(Γ′; Γ) =
+p(Γ; Γ′), where p(Γ′; Γ) is the probability density of picking
+a new conﬁguration of Γ′ given a starting conﬁguration of Γ.
+Clearly a sequence of n E moves is itself an E move. From
+the central limit theorem, a sequence of n zero moves is equiv-
+alent, in the limit of large n, to selecting the new conﬁguration
+from a multi-dimensional Gaussian.
+
+Instead of carrying out the n moves with a given energy
+E(Γ), we can consider the case where the energy is given by
+Eλ(Γ) which depends continuously on the parameter λ. A
+sequence of n Eλ moves where λ is varied adiabatically in
+such a way that its initial and ﬁnal values are λ0 is an Eλ0
+move. This follows because adiabatically varied systems are
+always in equilibrium with the instantaneous value of λ [4,
+§11]. Each Eλ move is carried out at a ﬁxed λ and λ is varied
+between the moves. In order to satisfy the adiabatic condition,
+we will need to take n large.
+
+A move from Γ to Γ′ may be subjected to “Boltzmann ac-
+ceptance with energy E”. This involves accepting the move
+(Γ′ is the new state) with probability M (x) and otherwise
+rejecting the move (Γ is the new state). Here M (x) is a
+function satisfying 0 < M (x) ≤ 1 and M (x)/M (−x) =
+exp(−x) with x = β(E(Γ′) − E(Γ)). Usually we take
+M (x) = min(1, exp(−x)); however other choices, e.g., the
+Fermi function, M (x) = 1/(1 + exp(x)), are possible [5].
+
+Consider an E1 move from Γ to Γ′ followed by an Boltz-
+mann acceptance using E2. This compound move is an
+(E1 + E2) move. The proof follows as a special case of
+the “multiple time-step” (MTS) method [6, §II] or, alterna-
+tively, as a special case of early rejection [2, §14.3.2]. If the
+E1 move was already a “rejected” move, i.e., Γ′ = Γ, then
+the Boltzmann test involving E2 automatically “succeeds”
+(M (0) = 1). Thus E2 does not need to be evaluated in this
+case.
+
+These results allow us to generalize the MTS method by
+
+splitting the energy into m terms (instead of just two),
+
+The method is deﬁned recursively as follows: a level-0 move
+is deﬁned to be a zero move; a level-l move, with l > 0, is
+deﬁned to be nl−1 level-(l − 1) moves the result of which is
+subjected to Boltzmann acceptance using El. By induction,
+we see that a level-l move is an El move, where
+
+E(Γ) =
+
+El(Γ).
+
+m
+
+Xl=1
+
+El(Γ) =
+
+El′ (Γ).
+
+l
+
+Xl′=1
+
+2
+
+It follows that a level-m move is an Em move, i.e., an E move.
+Typically we sample the zero moves from a Gaussian and we
+take n0 = 1. Standard Monte Carlo [1] is given by m = 1
+and n1 = 1. Standard MTS [6] is recovered with m = 2. The
+early rejection method [2, §14.3.2] is recovered with nl = 1
+m−1
+l′=l nl′ level-l
+(for all l). Note that a level-m move entails
+moves. At any stage in the recursion, we have the freedom to
+vary some of the components of E(Γ) adiabatically.
+
+Q
+
+In the following sections, we apply these techniques to
+constrained molecules.
+In simple cases, we can apply the
+MTS method semi-analytically to derive a correct constrained
+In more complicated cases, we apply the adiabatic
+move.
+technique to lift and to reapply the constraint.
+
+III. STIFF MOLECULES
+
+A constrained molecule is a mathematical idealization of a
+real system in which some degrees of freedom are stiff, i.e.,
+the associated energies are large. Thus we can split the energy
+into “hard” (h) and “soft” (s) components,
+
+E(Γ) = Eh(Γ) + Es(Γ),
+
+where Γ is the conﬁguration of the system. For example, let us
+assume that an all-atom force ﬁeld, such as Amber [7], pro-
+vides an accurate description of the system. (We recognize,
+of course, that present-day force ﬁelds are only approximate.
+However, our purpose here is to make the connection between
+an all-atom representation and a simpler rigid representation
+and, in this context, the details of the all-atom model are of
+secondary importance.) Then Eh might represent the bond
+stretching and bond bending terms, while Es is given by the
+other terms (bond torsion and the non-bonded energies).
+
+The constrained limit is now given by Eh → ∞. Before
+we consider this limit, it is useful to examine how the stiff
+system may be treated. Conventional Monte Carlo is inefﬁ-
+cient because, in order to have an reasonably large acceptance
+rate, the step-size needs to be set to a small value (determined
+by Eh) so that diffusion in the soft directions is very slow.
+However, we can apply MTS Monte Carlo in this case with
+E1 = Eh and E2 = Es.
+
+Let us apply this method to a system of “rigid” molecules,
+e.g., water molecules, taking Eh to include the intra-molecular
+energies (responsible for maintaining the rigidity) and Es to
+include the inter-molecular energies. Suppose the level-0
+moves consist of symmetrically displacing the atoms in each
+molecule. The result of the n1 level-1 Monte Carlo steps
+will clearly be a symmetric, independent, and nearly rigid dis-
+placement (translation and orientation) of each molecule. This
+conﬁguration is then subjected to Boltzmann acceptance with
+the inter-molecular energies. In this case, we can easily pass
+to the constrained limit (with exact rigidity), merely by ensur-
+ing that the trial (level-1) moves of the molecules are rigid.
+In this case, we have just rederived the “standard” move for a
+system of rigid molecules.
+
+In order to illustrate the application to ﬂexible molecules,
+we shall treat the molecules as being made up of several rigid
+
+subunits or “fragments” connected by ﬂexible bonds. How-
+ever we are interested in the limit where the inter-fragment
+bonds constrain the relative motions of fragments in certain
+ways, either by ﬁxing the bond lengths (allowing the bond an-
+gles and bond dihedrals to vary) or by ﬁxing the bond lengths
+and bond angles (allowing the bond dihedrals to vary). Such
+a model is adequate to describe a wide range of interesting or-
+ganic molecules including proteins and drug-like ligands. We
+assume that the rigidity of the fragments is imposed only by
+intra-fragment energy. If other terms (e.g., an improper tor-
+sion term involving atoms from two fragments) contribute to
+the rigidity of a fragment, then we shall treat such terms as
+additional inter-fragment energies.
+
+We apply the generalized MTS method to this system with
+m = 3, the intra-fragment energy given by E1, the inter-
+fragment bond constraints given by E2, and with E3 account-
+ing for all the other energies. The argument given above al-
+lows us to pass to the limit of strictly rigid fragments. The
+method is then equivalent to a standard MTS method where
+the “elementary” moves consist of rigid displacements of
+each fragment which are Boltzmann accepted with energy
+Eh = E2. A sequence of n = n2 such moves are made
+with the result Boltzmann accepted with energy Es = E3. A
+possible prescription [8, §VII] for the rigid displacements of
+the fragments is to translate the fragment by a vector sampled
+from an isotropic 3-dimensional Gaussian and to rotate the
+fragment by |s| about an axis ˆs where s is a “rotation vector”
+also sampled from an isotropic 3-dimensional Gaussian. The
+variances for the two Gaussians should be adjusted so that the
+translational and rotational components result in comparable
+displacements of the atoms of the fragment.
+
+Provided that the inter-fragment constraint terms Eh are
+it is not important to include a detailed
+sufﬁciently stiff,
+model of these terms; because the motion will take place near
+the bottom of the constraint potential well, a harmonic (i.e.,
+quadratic) approximation to the constraint potential will suf-
+ﬁce. On the other hand, if the stiffness of the constraint energy
+depends on any of the soft degrees of freedom, it is important
+that this effect be included.
+
+It is frequently the case that Eh may be computed much
+more rapidly than Es. For example, when imposing bond
+constraints on a molecule, Eh requires O(N ) computations,
+where N is the number of atoms, while Es requires O(N 2)
+computations for the electrostatic and implicit solvation ener-
+gies. Thus we might be able to take n reasonably large and
+still have the computational cost dominated by the evaluation
+of Es(Γ).
+
+In order to realize the full beneﬁts of imposing constraints
+we need to pass to the constrained limit (Eh → ∞).
+In
+this limit, the motion collapses onto a lower-dimensional sub-
+manifold in conﬁguration space. Unfortunately, in contrast to
+the case of rigid molecules, we cannot appeal to symmetry to
+enable us to take this limit analytically. Instead, we use the
+adiabatic technique.
+
+3
+
+IV. ADIABATICALLY VARYING THE STIFFNESS
+
+Let us rewrite the energy of the system, multiplying the
+Eh(Γ) by T /T ∗, where T is the temperature of the system,
+and T ∗ is a “constraint” temperature. The Boltzmann factor
+exp(−βE), will then have the form
+
+exp(−βE) = exp(−βEs − β∗Eh)
+
+where β∗ = 1/(kT ∗).
+
+In our application, where we are interested in the con-
+strained limit T ∗ → 0, a direct application of the MTS method
+leaves us with two bad choices. If we take T ∗ to be sufﬁciently
+small that we can consider the constraints to be satisﬁed, we
+will have to chose the step size for the Eh moves to be so
+small that the change in conﬁguration after n Eh moves will
+be small. On the other hand, letting T ∗ be sufﬁciently large to
+allow moves will result in conﬁgurations where the constraints
+are poorly satisﬁed.
+
+We overcome this difﬁculty by regarding T ∗ as a parameter
+(taking the place of λ) and by adiabatically varying T ∗ from
+zero (where the constraints are satisﬁed but MTS is ineffective
+at making moves) to a ﬁnite value (where the constraints are
+relaxed and MTS becomes effective) and back to zero again
+(to reimpose the constraints). During the course of changing
+T ∗, we make n Eh moves (each with the instantaneous value
+of T ∗). The effect of these n moves will be an Eh move with
+T ∗ = 0, i.e., a move which satisﬁes the Eh constraint.
+
+It remains to give a recipe for varying T ∗. As we vary T ∗,
+we would naturally adjust the step size for the moves in such a
+way that the number of steps needed to equilibrate the system
+is a constant, suggesting that we vary T ∗ exponentially. We
+therefore pick
+
+T ∗
+i =
+
+T ∗
+A exp(α(i − 1)),
+T ∗
+A exp(α(n − i)),
+
+(cid:26)
+
+for 0 < i ≤ m,
+for m < i ≤ n,
+
+where we have taken n = 2m + 1 and where T ∗
+is the con-
+i
+straint temperature used for the ith Eh move, T ∗
+0 = T ∗
+A is
+some temperature sufﬁciently small that we can consider the
+constraints to be exactly satisﬁed, and α is the rate of increase
+of the temperature which should be sufﬁciently small that the
+adiabatic condition is satisﬁed. Even though T ∗
+A and α are
+small, we can pick n sufﬁciently large that T ∗
+B =
+T ∗
+A exp(αm) is ﬁnite.
+In addition, we choose the step size for the ith Eh move to
+T ∗
+be di = k
+i where k is a constant. In traditional Monte
+Carlo, we normally pick k to maximize the diffusion rate
+which at the ith step is roughly
+
+m+1 = T ∗
+
+p
+
+Di =
+
+h(Γi − Γi−1)2i
+2
+
+∼
+
+Ad2
+i ,
+
+1
+2
+
+where A is the mean acceptance rate and h. . .i denotes an en-
+semble average. Maximizing the diffusion rate usually results
+in a rather small acceptance rate A ∼ 0.1 because rare large
+steps can lead to faster diffusion than frequent small steps.
+However, in our application, where we want the system to
+remain in equilibrium as we vary the temperature, rare large
+
+steps are bad. So we pick k to maximize ADi and this will
+usually result in A ∼ 0.5. Note that for a given k, we have
+
+Di ∼ CT ∗
+i ,
+
+where C is constant provided that the step size is not too large.
+The overall diffusion can be estimated by summing over the n
+steps,
+
+D =
+
+h(Γn − Γ0)2i
+2
+
+=
+
+n
+
+Xi=1
+
+Di ∼ 2CT ∗
+
+B/α,
+
+where we have assumed that successive steps are uncorrelated
+and we have taken α ≪ 1 and T ∗
+A. We should select
+parameters, α and T ∗
+B, in order to adjust D so that the Es
+acceptance rate is O(1).
+
+B ≫ T ∗
+
+This method includes internal diagnostics to verify that α is
+small enough. We deﬁne . . .↑ (resp. . . .↓) as the average of a
+quantity over the steps where T ∗
+i is increasing, i.e., i ≤ m + 1
+(resp. decreasing, i.e., i > m + 1). We monitor Eh(Γi)/T ∗
+i ↑
+and Eh(Γi)/T ∗
+i ↓ and demand that both should be close to the
+equilibrium value of N/2 (where N is the number of hard
+degrees of freedom). If α is too large, then we would ﬁnd
+
+Eh(Γi)/T ∗
+Eh(Γi)/T ∗
+
+i ↑ ≪ N/2,
+i ↓ ≫ N/2.
+
+In particular, if the ﬁnal Eh(Γn) is many times T ∗
+A, then the
+conﬁguration is “hung up” and does not obey the constraints.
+If this happens frequently, the simulation needs to be rerun
+with a smaller setting for α; if, on the other hand, it happens
+only rarely, we would merely reject the step. We can also
+monitor the mean acceptance rates A↑ and A↓. These should
+be about the same; however, if α is too large, we will ﬁnd
+A↑ ≫ A↓.
+
+A useful guideline for picking T ∗
+
+A is that once the n Eh
+moves are completed and the system is presumably equili-
+brated to T ∗
+A, we should be able to enforce the constraints by
+setting T ∗ = 0 (using any convenient energy minimization
+technique) with a negligible change in the conﬁguration, e.g.,
+with a negligible change in Es(Γ).
+
+V. PAIRWISE TERMS IN ENERGY
+
+Having made an adiabatic move using Eh, the ﬁnal step
+is to accept the move depending on the change in Es. We
+wish to compute this energy as efﬁciently as possible by us-
+ing the rigidity of the fragments. Force ﬁelds such as Amber
+[7] include two types of energies: interactions between atoms
+(the electrostatic and Lennard-Jones terms) and bond energies
+(stretch, bend, and torsion). Since the number of terms in
+non-bonded energies typically scales as O(N 2) where N is
+the total number of atoms in the system, while the number
+of bond terms scales as O(N ), we concentrate on optimizing
+the evaluation of the non-bonded terms. In our case where
+the molecules consist of rigid fragments connected by ﬂexi-
+ble bonds we need only include the bond terms contributed
+
+4
+
+by the much smaller number of inter-fragment bonds. Fur-
+thermore, we need only include the energy contributed by the
+“free” components of such bonds. Thus, if the lengths and an-
+gles of such bonds are constrained, then we need only include
+the torsion energy in Es(Γ).
+
+We start by assuming that the non-bonded energy terms can
+be expressed as a sum over atom pairs. This applies to the
+electrostatic and Lennard-Jones terms in Amber [7]. However,
+implicit solvent models have a more complex structure and we
+consider these in the next section.
+
+Suppose our molecular system consists of N atoms. These
+atoms are grouped into M molecules and we denote Ml as the
+set of atoms making up the lth molecule. Similarly, the atoms
+are divided into F rigid fragments and we denote Fa as the
+set of atoms making up the ath fragment. A typical pairwise
+energy term can then be written as
+
+Eg(Γ) =
+
+Cg,ij fg(rij ),
+
+X0<i<j≤N
+
+where g denotes the type of energy term (electrostatic or
+Lennard-Jones), i and j are atom indices, rij is the distance
+between atoms i and j, fg is some function of distance, and
+Cg,ij is a coefﬁcient which depends on the atoms but not on
+their positions. Thus for electrostatic interactions, Cg,ij de-
+pends on the partial charges on the two atoms (assumed to be
+constant in Amber) and on the bonding relation between the
+atoms. Physical energy functions satisfy limr→∞ fg(r) = 0.
+When the fragments are separated sufﬁciently, we have
+
+Eg → Eg0 =
+
+Cg,ij fg(rij ),
+
+X0<a≤F Xi<j
+i,j∈Fa
+
+which is independent of Γ. It is convenient to choose Eg0 as
+the “origin” for the Eg, i.e., we compute only
+
+Eg1 = Eg − Eg0 =
+
+Cg,ij fg(rij ).
+
+X0<a<b≤F Xi∈Fa
+j∈Fb
+
+We note that only energy differences enter into the computa-
+tion of observable quantities, and so we are free to select the
+arbitrary origin for energies.
+
+Let us consider the application of a small molecule (Nl
+atoms) interacting with a protein (Np ≫ Nl atoms) where
+only some of the protein side chains near the binding site are
+allowed to move. By avoiding computing the interaction en-
+ergy between atoms in the immobile portion of the protein,
+the above prescription reduces the computational cost from
+O(N 2
+
+p ) to O(NlNp).
+
+This cost may still be too large and we can substantially
+reduce the cost by implementing energy cutoffs for the inter-
+actions. This is easily accomplished by multiplying fg(rij )
+by a cutoff function, cg(rij ). A possible form for this cutoff
+function is
+
+1,
+0,
+
+cg(r) = 
+
+
+
+
+cg(rg1)
+
+rg2 − r
+rg2 − rg1
+
+for r < rg1,
+for r ≥ rg2,
+otherwise,
+
+with rg1 ≤ rg2, which linearly tapers the energy to zero over
+[rg1, rg2). Other tapering functions can be employed, or, by
+choosing rg2 = rg1, we can implement a sharp cutoff. This
+type of cutoff function implements a per-atom cutoff and is
+appropriate for energy terms which are additive at large dis-
+tances, such as the Lennard-Jones potential. The electrostatic
+potential, however, involves substantial cancellation at large
+distances—two neutral molecules interact via a dipole-dipole
+term which varies as 1/r3, while the individual atom-atom
+terms decay as 1/rij. In this case, we need to identify groups
+of atoms which should interact together. The residues of a
+protein provide a convenient grouping and we would typically
+assign all the atoms in a small-molecule ligand to a single
+group. Compatible with the usage for a protein, we refer to
+these groups as residues. For each residue, s, we deﬁne a cen-
+ter position, bs, most conveniently deﬁned as the center of
+mass, and a radius, deﬁned as the radius hs of the sphere cen-
+tered at bs which includes the van-der-Waals spheres of radius
+ρi of all the constituent atoms. We then apply a “per-residue”
+cutoff function multiplying the contribution from the residue
+pair (s, t) by cg(|bs − bt| − (hs + ht)).
+
+The values used for the cutoff radii, rg1 and rg2, need to
+evaluated based on the accuracy desired for the simulation.
+This can be determined by numerically determining the dif-
+ference in the results (either for the energies directly or for
+some derived quantity such as binding afﬁnity) between the
+ﬁnite- and inﬁnite-cutoff energies. In applications to Monte
+Carlo codes, it is possible to carry out the sampling at an en-
+ergy approximating the actual energy and to compensate for
+this when performing the canonical averages (which might be
+carried out on a subset of the Markov chain). In this case,
+the sampling energy might entail using shorter cutoffs than
+would be warranted on the basis of accuracy. Having deter-
+mined suitable cutoffs, it is a simple matter to evaluate the
+energy avoiding treating atom pairs beyond the respective cut-
+offs. In the following, we treat electrostatic (e) interactions,
+with a per-residue cutoff, and Lennard-Jones (l) interactions,
+with a per-atom cutoff; furthermore we assume that re2 ≥ rl2,
+i.e., the electrostatic interactions are longer range than the
+Lennard-Jones.
+
+We ﬁrst loop over all the atoms in each residue computing
+bs and hs for all residues s. We then loop over all pairs of
+residues, s ≤ t, skipping any pair whose atoms all belong
+to the same fragment or those for which |bs − bt| ≥ re2 +
+hs + ht. If the residue pair survives these tests, then all atom
+pairs (i, j) from different fragments are considered; if s = t,
+we restrict the pairs to i < j. All such pairs contribute to
+the electrostatic energy while those which satisfy rij < rl2
+contribute to the Lennard-Jones energy. There obviously is
+scope for additional optimization here. For example, the inner
+atom loop can be skipped if the second residue belongs to a
+single fragment which matches the fragment of a particular
+atom in the ﬁrst residue.
+
+Because of the way in which the cutoffs are applied, the re-
+sult for the energy is independent of the assignment of atoms
+to residues for energy terms which use a per-atom cutoff. In
+addition, differences in the non-bonded energies are indepen-
+dent of the assignment of atoms to fragments. The energies
+
+5
+
+for assemblies of 3 or more molecules can be expressed in
+terms of the energies of 1 or 2 molecules. These provide use-
+ful checks on the implementation.
+
+In some contexts it is useful also to deﬁne a “steric” energy
+term which is inﬁnite if any atoms overlap (with some deﬁni-
+tion of a “hard” atom radius) and is zero otherwise. This pro-
+vides a rapid check of new conﬁgurations—particularly when
+trying to “insert” a molecule during a grand canonical sim-
+ulation [9] or when switching systems using the wormhole
+method [10]. A conservative deﬁnition of the hard atom ra-
+dius is 0.55ρi for non-bonded atom pairs and 0.45ρi for 1-4
+atom pairs. We skip the check for 1-2 and 1-3 pairs and for
+those atoms with ρi = 0. This energy term can be imple-
+mented in essentially the same way as described above but
+with scope for additional speedups. The cutoff radius in the
+residue-residue distance check can be replaced by 0. An ad-
+ditional atom-residue distance check can be be used to avoid
+executing the inner atom loop if the outer atom is outside the
+sphere for the second residue. Finally, as soon as an overlap
+of hard spheres is detected the routine can immediately return
+an inﬁnite result.
+
+VI. IMPLICIT SOLVENT MODELS
+
+We now turn to the computation of the energy term for im-
+plicit solvent models. We focus here on the generalized Born
+solvent models [11] and we have considered various imple-
+mentations [12; 13; 14; 15; 16; 17]. Evaluating the solvation
+energy for a system of molecules with such models is typi-
+cally orders of magnitude slower than computing the energy
+of the molecules in vacuum. The computation time is fre-
+quently compared to the time to compute the energy with an
+explicit solvent model (including O(103) solvent molecules).
+However, such comparisons are misleading because implicit
+solvent models do not attempt to compute the energy of a
+particular conﬁguration of solvent molecules but to compute
+the free energy of solvation, i.e., to average over all possi-
+ble solvent conﬁgurations for a given conﬁgurations of solute
+molecules. Thus the chief beneﬁt of an implicit solvent model
+is to reduce dramatically the number of degrees of freedom
+in the problem. In the generalized Born solvent models, the
+energy is written as the sum of two terms: a polar term which
+is usually called the “GB” term and a cavity term which is
+proportional to the solvent accessible surface area, the “SA”
+term.
+
+The GB term involves long-range interactions and is the
+most costly to compute. We address the calculation of this
+term ﬁrst. The basic expression is [11]
+
+Gpol = −
+
+1
+2
+
+1
+4πǫ0 (cid:18)
+
+1 −
+
+ǫ0
+ǫs (cid:19) Xi,j
+
+qiqjf (rij , αi, αj),
+
+(1)
+
+ij + αiαj exp(−r2
+
+where ǫs is the permittivity of the solvent, f (rij , αi, αj) =
+ij /(4αiαj))]−1/2, and the double sum
+[r2
+runs over all pairs of atoms (including i = j and i ≶ j).
+In eq. (1), αi is the “generalized” Born radius of the ith atom,
+which is larger that the “bare” Born radius to account for the
+
+fact that atoms close to i partially shield it from the solvent.
+Gpol represents the electrostatic energy required to solvate a
+pre-assembled group of molecules and thus this term is added
+to the vacuum electrostatic energy. The various implementa-
+tions for the GB term differ in how αi is computed.
+
+For illustrative purposes,
+
+let us consider the model of
+Hawkins et al. [13; 14; 15; 16]. (With minor modiﬁcations,
+the technique is applicable to other GB models.) We express
+αi as [13, eq. (10)]
+
+1
+αi
+
+1
+ρi
+
+=
+
+−
+
+∆ij ,
+
+Xj6=i
+
+where ρi is the radius of atom i,
+
+∆ij =
+
+∞
+
+Z
+
+ρi
+
+dr
+r2 Hij(r; rij , ρj)
+
+(2)
+
+(3)
+
+1,
+0,
+
+0,
+
+
+
+
+
+
+
+
+
+
+is the reduction in the effective inverse Born radius of atom i
+due to atom j. Here Hij is the fraction of the area of a sphere
+of radius r centered on the ith atom eclipsed by a jth atom
+and is given by [13, eq. (12)]
+
+j − (rij − r)2
+ρ2
+4rij r
+
+,
+
+Hij =
+
+for |rij − ρj| ≤ r ≤ rij + ρj,
+
+for r < ρj − rij ,
+otherwise (r ≷ rij ± ρj).
+
+Evaluating the integral in eq. (3) then gives
+
+∆ij =
+
+lij − uij
+2
+
+−
+
+(r2
+
+ij − ρ2
+
+ij − u2
+
+j )(l2
+8rij
+
+−
+
+ln(lij /uij)
+4rij
+
++ l′
+
+ij,
+
+otherwise,
+
+for ρi > ρj + rij ,
+ij)
+
+where uij = 1/(rij + ρj), lij = 1/ max(ρi, |rij − ρj|), and
+ij = 1/ρi − 1/ max(ρi, ρj − rij ). The term l′
+l′
+ij is only non-
+zero for ρj > ρi + rij , which is a possibility not considered
+in [13].
+
+Clearly Gpol is no longer the sum of pairwise atom-atom
+contributions because the interaction of two atoms is affected
+by the modiﬁcation of the dielectric environment by a third
+atom. However Gpol may be evaluated by two pair-wise op-
+erations carried out in sequence. The ﬁrst evaluates the gen-
+eralized Born radii αi and the second computes the resulting
+electrostatic energy.
+
+As with the treatment of the electrostatic and Lennard-
+Jones terms, we can seek to limit the computational cost
+of evaluating Gpol by the use of cutoff functions. Because
+eq. (1) provides the dielectric screening for the vacuum elec-
+trostatic term, it is important that the cutoff function multiply-
+ing f (rij , αi, αj) exactly match that used for the electrostatic
+term.
+
+We also introduce a cutoff in eq. (2) by multiplying ∆ij by
+cb(rij ). A per-atom cutoff is justiﬁed since all the ∆ij are
+positive. Because ∆ij scales as r−4
+for large rij, the error
+ij
+introduced by cb(rij ) scales relatively slowly as r−1
+b1 . In prac-
+tice, this means we need to make rb1 reasonably large which
+
+6
+
+in turn means that the cost of evaluating Gpol in the case of a
+small ligand interacting with a protein is much larger than the
+cost for the electrostatic potential. In particular, the screening
+of the ligand may modify the Born radii of a large number of
+protein atoms and this unavoidably leads to a large number of
+pair contributions to eq. (1).
+
+The procedure for computing the energy outlined in the pre-
+vious section can now be modiﬁed to deal with the evaluation
+of Gpol. As before our “zero” energy is given by separat-
+ing all the fragments of all the molecules inﬁnitely far apart.
+We set up the calculation of a system of molecules by pre-
+computing αi0 which is given by eq. (2) with the sum restrict-
+ing to include only the intra-fragment contributions (i.e., index
+j ranges only over atoms within the same fragment as atom i).
+We compute ∆ij and ∆ji together because they involve many
+of the same terms, allowing the loops to be restricted to i < j,
+and we apply the Born cutoff to the calculation of αi0.
+
+When computing the energy of a molecular system, we
+compute all the updates to the Born radii due to atoms in dif-
+ferent fragments within the Born cutoff, applying the same
+techniques of lumping the atoms into residues described above
+(which allows the cutoff criteria to be applied to groups of
+atoms) and of restricting the loops to s ≤ t and, for s = t,
+to i < j. During this phase we mark all the residues which
+contain atoms with αi 6= αi0. We then make a second pass
+over the atoms to evaluate the terms in eq. (1). We use the
+i ⇋ j symmetry of the summand to make the restrictions
+s ≤ t and, for s = t, i ≤ j. In the innermost loop, we accumu-
+late qiqjf (rij , αi, αj) if i and j belong to different fragments.
+Otherwise, we add qiqj[f (rij , αi, αj) − f (rij, αi0, αj0)] and
+we can skip this evaluation if both αi = αi0 and αj = αj0. In
+addition, we can skip pairs of residues if all the atoms in each
+residue belong to the same fragment and if neither residue is
+marked as having modiﬁed Born radii.
+
+Salt effects [18] are easy to include within this framework.
+A minor complication occurs in the GB model of Qiu et
+al. [12] because αi0 depends on the “volume” of the atoms and
+in this model the volume depends on the 1-2 bonded atoms
+which may belong to a different fragment. We account for
+this by assuming the presence of such bonded atoms with an
+ideal bond length. This is, therefore, only exact if the inter-
+fragment bonds are at their ideal lengths. Our treatment here
+may be considered as a generalization of the frozen atom ap-
+proximation for GB/SA [19]. However, in our application we
+make all the approximations in the energy function and the re-
+sulting energy is then a “state variable” and simulations based
+on this are well behaved. In contrast the implementation of
+frozen atom approximation deﬁnes the energy so that it de-
+pends on the history of the system which may cause the sim-
+ulation to exhibit unphysical properties.
+
+VII. SOLVENT ACCESSIBLE SURFACE AREA
+
+The other important contribution to the solvation free en-
+ergy is the cavity term. This is obtained by placing spheres
+centered at each atom with radius ai = ρi + rw where rw is
+a nominal water radius (typically rw = 0.14 nm). The cavity
+
+term is given by
+
+Gcav =
+
+σiAi,
+
+Xi
+
+where Ai is the “solvent accessible surface area” for the ith
+atom, i.e., the exposed surface area of the spheres around i
+which is not occluded by any other spheres and σi is the sur-
+face tension for the ith atom. (Typically σi is taken to be a
+constant independent of atom, σi ≈ 3 kJ mol−1 nm−2; how-
+ever the method we describe does not require this assump-
+tion.) As before, the zero energy state is obtained by sep-
+arating the fragments inﬁnitely. The energy is then given
+by the additional occlusion of the surface that occurs as the
+fragments are assembled into molecules and the molecules
+brought into contact with one another.
+
+The exact evaluation of this term is quite complex and for
+this reason a simple pairwise approximation has been devel-
+oped [20]. However, the errors in this method are poorly
+quantiﬁed. This together with the fact that this term is typi-
+cally small compared to the electrostatic terms in the energy
+lead us to develop a simple zeroth-order quadrature method.
+We select an accuracy level for the cavity calculation δ, e.g.,
+δ = 0.1 kJ/mol. We prepare for the calculation of the
+cavity term by placing each fragment in a “template” posi-
+tion and we arrange a set of points on a sphere of radius ai
+around each atom i. The number of points is chosen to be
+Ni = ⌈4πa2
+i σi/δ⌉. The points are distributed approximately
+uniformly around each sphere and the entire surface energy
+of the sphere, 4πa2
+i σi is divided among the Ni points. (We
+will discuss the details of how to select the points and assign
+the energy later.) We next perform the intra-fragment occlu-
+sion by deleting all the points of atom i which are within aj of
+some atom j 6= i. In this way each fragment is surrounded by
+a cloud of surface points each representing about δ of cavity
+energy.
+
+In order to compute the cavity term for a particular molec-
+ular conﬁguration we transform the surface points for each
+fragment from their template positions to their actual positions
+and make a copy of the cavity energies for each point. We con-
+sider all pairs of atoms (i, j) such that i and j are in different
+fragments and rij < ai + aj. We subtract from Gcav the ener-
+gies of all the points on atom i that are within aj of atom i and
+we set the energies of these points to zero (to avoid their being
+counted multiple times). The optimizations described above
+can be used: the application of a residue-residue cutoff (ex-
+cluding residue pairs (s, t) with |bs − bt| ≥ 2rw+hs+ht), an
+atom-residue cutoff, and the treatment of the (i, j) and (j, i)
+terms together.
+
+In practice, the cost of evaluating this term is small for
+δ ≈ 0.1 kJ/mol. The error is proportional to δ and it is
+easy to benchmark a particular calculation by repeating it with
+smaller δ. The resulting Gcav is obviously a discontinuous
+function of conﬁguration, jumping by ±δ as points move in
+and out of the water spheres of other atoms. Thus it’s an inap-
+propriate model for a molecular dynamics simulation. How-
+ever, it yields satisfactory results for Monte Carlo simulations.
+Let us return to the question of how to position the points
+on the atom sphere and how to divide the energy between
+
+7
+
+these points. Ideally, we would divide the energy of the sphere
+based on the area of Voronoi polygons around each point. The
+error will then be proportional to the maximum radius of the
+Voronoi polygons and the ideal distribution of points is the one
+which minimizes this maximum radius. This is the so-called
+“covering problem” for the sphere, i.e., how to cover a sphere
+with identical discs [21]. Unfortunately, there are no general
+solutions to this problem. So instead we divide the sphere into
+equal intervals of latitude and we divide each latitudinal inter-
+val longitudinally into approximately square regions. A point
+is placed at the center of each region and the area of the re-
+gion is assigned to that point. Within each fragment, we alter
+the position of the pole from one atom to the next, in order
+to avoid the occlusion of many points simultaneously as frag-
+ments move relative to one another.
+
+VIII. DISCUSSION
+
+We have shown how to make Monte Carlo moves for a
+molecular system with constraints. Constraints are imposed
+in a realistic way ensuring that we obtain the right distribu-
+tion corresponding to a thermodynamic equilibrium. We will
+still need to know this constrained distribution if we wish to
+make wormhole moves [10], because, in order to satisfy de-
+tailed balance, we require knowledge of the wormhole vol-
+umes and these include a factor proportional to the “thick-
+ness” of the constraint manifold. The adiabatic move involves,
+naturally, many evaluations of the constraint energy raising a
+concern that the implementation will be slow. In reality, the
+cost of evaluating the constraint energy is minuscule, particu-
+larly in comparison with the solvation energy, so it is possible
+to evaluate the constraint energy many thousands of times in
+the course of an adiabatic move with minimal impact on the
+overall running time. The method avoids much of the algebra
+associated with other ways of imposing constraints [22] and
+thus is more ﬂexible and is easier to implement.
+
+In the simple case of a molecule in which only a number
+of dihedral angles are allowed to vary, the movement of all
+the atoms in the molecule is bounded and thus the soft-energy
+acceptance probability is reasonably large.
+In contrast, the
+method where the dihedral angles are perturbed may lead, due
+to a lever effect, to large motions if the molecule itself is large.
+This method can easily be generalized to do localized
+movements. Thus, we can tailor the random displacements
+of a protein to explore the movement of a single loop. De-
+tailed balance is ensured if the random displacement is a func-
+tion of the atom but not of its position.
+(The general case
+can be accommodated by a suitable factor in the acceptance
+probability.) This method of localized movements is more
+widely applicable than techniques such as “concerted rota-
+tions” [22; 23; 24]. Artiﬁcially ﬁxing the positions of some
+atoms would, of course, mean that the moves would not be
+ergodic. This would be justiﬁed if we were interested in ex-
+amining the restricted system and we would then require er-
+godicity over the restricted conﬁguration space.
+
+We have also considered how to optimize the evaluation
+of the energy in a system of molecules made up of rigid
+
+fragments bonded together. This allows the use of implicit
+solvent at an acceptable cost.
+If the system is further con-
+strained to allow only the variation of the torsion angle of the
+inter-fragment bonds (ﬁxing the bond lengths and bond an-
+gles), then we should also consider modifying the force ﬁeld
+to “loosen” the torsion energies to counteract the effect of
+the hard constraints on the other bond terms. G¯o and Scher-
+aga [25] show the importance of considering such an effect
+and Katrich et al. [26] have offered a prescription for con-
+verting a general force ﬁeld to include this effect. Alterna-
+tively, we might consider re-parameterizing the torsion terms
+by carrying out constrained geometry optimizations of model
+molecules where the energy of the molecule is minimized with
+the dihedral angles ﬁxed [27].
+
+Acknowledgment
+
+This work was supported by the U.S. Army Medical Re-
+search and Materiel Command
+No.
+The views, opinions, and ﬁnd-
+DAMD17-03-C-0082.
+ings contained in this report are those of the author and
+should not be construed as an ofﬁcial Department of the
+Army position, policy, or decision. No animal testing was
+conducted and no recombinant DNA was used.
+
+Contract
+
+under
+
+References
+
+[1] N. Metropolis, A. W. Rosenbluth, M. N. Rosenbluth, A. H.
+Teller, and E. Teller, Equation of state calculations by fast com-
+puting machines, J. Chem. Phys. 21, 1087–1092 (1953).
+
+[2] D. Frenkel and B. Smit, Understanding Molecular Simulation:
+From Algorithms to Applications (Academic Press, 2002), 2nd
+edition.
+
+[3] M. Fixman, Classical statistical mechanics of constraints: A
+theorem and application to polymers, Proc. Nat. Acad. Sci. 71,
+305–3053 (1974).
+
+[4] L. D. Landau and E. M. Lifshitz, Statistical Physics, vol. 5 of
+Course of Theoretical Physics (Pergamon Press, 1969), 2nd edi-
+tion.
+
+[5] C. H. Bennett, Efﬁcient estimation of free energy differences
+from Monte Carlo data, J. Comput. Phys. 22, 245–268 (1976).
+[6] B. Het´enyi, K. Bernacki, and B. J. Berne, Multiple “time step”
+
+Monte Carlo, J. Chem. Phys. 117, 8203–8207 (2002).
+
+[7] W. D. Cornell, P. Cieplak, C. I. Bayly, I. R. Gould, K. M. Merz,
+Jr., D. M. Ferguson, D. C. Spellmeyer, T. Fox, J. W. Caldwell,
+and P. A. Kollman, A second generation force ﬁeld for the simu-
+lation of proteins, nucleic acids and organic molecules, J. Am.
+Chem. Soc. 117, 5179–5197 (1995).
+
+[8] C. F. F. Karney, Quaternions
+report,
+
+Sarnoff Corp.
+
+Technical
+arXiv:physics/0506177.
+
+in molecular modeling,
+(June 2005). E-print
+
+[9] D. J. Adams, Grand canonical ensemble Monte Carlo for a
+
+Lennard-Jones ﬂuid, Mol. Phys. 29, 307–311 (1975).
+
+[10] C. F. F. Karney, J. E. Ferrara, and S. Brunner, Method for com-
+puting protein binding afﬁnity, J. Comput. Chem. 26, 243–251
+(2005). E-print arXiv:cond-mat/0401348.
+
+8
+
+[11] W. C. Still, A. Tempczyk, R. C. Hawley, and T. Hendrickson,
+Semianalytical treatment of solvation for molecular mechanics
+and dynamics, J. Am. Chem. Soc. 112, 6127–6129 (1990).
+[12] D. Qiu, P. S. Shenkin, F. P. Hollinger, and W. C. Still, The
+GB/SA continuum model for solvation: A fast analytical method
+for the calculation of approximate Born radii, J. Phys. Chem.
+A 101, 3005–3014 (1997).
+
+[13] G. D. Hawkins, C. J. Cramer, and D. G. Truhlar, Pairwise solute
+descreening of solute charges from a dielectric medium, Chem.
+Phys. Lett. 246, 122–129 (1995).
+
+[14] G. D. Hawkins, C. J. Cramer, and D. G. Truhlar, Parametrized
+models of aqueous free energies of solvation based on pairwise
+descreening of solute atomic charges from a dielectric medium,
+J. Phys. Chem. 100, 19824–19839 (1996).
+
+[15] V. Tsui and D. A. Case, Molecular dynamics simulations of nu-
+cleic acids with a generalized Born solvation model, J. Am.
+Chem. Soc. 122, 2489–2498 (2000).
+
+[16] V. Tsui and D. A. Case, Theory and applications of the gen-
+eralized Born solvation model in macromolecular simulations,
+Biopolymers (Nucl. Acid Sci.) 56, 275–291 (2001).
+
+[17] A. Onufriev, D. Bashford, and D. A. Case, Exploring protein
+native states and large-scale conformational changes with a
+modiﬁed generalized Born model, Proteins: Struc. Func. Bioinf.
+55, 383–394 (2004).
+
+[18] J. Srinivasan, M. W. Trevathan, P. Beroza, and D. A. Case, Ap-
+plication of a pairwise generalized Born model to proteins and
+nucleic acids: Inclusion of salt effects, Theor. Chem. Acc. 101,
+426–434 (1999).
+
+[19] O. Guvench, J. Weiser, P. Shenkin, I. Kolossv´ary, and W. C.
+Still, Application of the frozen atom approximation to the
+GB/SA continuum model for solvation free energy, J. Comput.
+Chem. 23, 214–221 (2002).
+
+[20] J. Weiser, P. S. Shenkin, and W. C. Still, Approximate
+atomic surfaces from linear combinations of pairwise overlaps
+(LCPO), J. Comput. Chem. 20, 217–230 (1999).
+
+[21] L. Fejes T´oth, Regular Figures, vol. 48 of International Series
+of Monographs in Pure and Applied Mathematics (Macmillan,
+1964).
+
+[22] N. G¯o and H. A. Scheraga, Ring closure and local confor-
+mational deformations of chain molecules, Macromolecules 3,
+178–187 (1970).
+
+[23] L. R. Dodd, T. D. Boone, and D. N. Theodorou, A concerted ro-
+tation algorithm for atomistic Monte Carlo simulation of poly-
+mer melts and glasses, Mol. Phys. 78, 961–996 (1993).
+
+[24] M. Mezei, Efﬁcient Monte Carlo sampling for long molecular
+chains using local moves, tested on a solvated lipid bilayer, J.
+Chem. Phys. 118, 3874–3879 (2003).
+
+[25] N. G¯o and H. A. Scheraga, Analysis of the contribution of in-
+ternal vibrations to the statistical weights of equilibrium con-
+formations of macromolecules, J. Chem. Phys. 51, 4751–4767
+(1969).
+
+[26] V. Katritch, M. Totrov, and R. Abagyan, ICFF: A new method to
+incorporate implicit ﬂexibility into an internal coordinate force
+ﬁeld, J. Comput. Chem. 24, 254–265 (2003).
+
+[27] M. W. Schmidt, K. K. Baldridge, J. A. Boatz, et al., The general
+atomic and molecular electronic structure system, J. Comput.
+Chem. 14, 1347–1363 (1993).
+
+

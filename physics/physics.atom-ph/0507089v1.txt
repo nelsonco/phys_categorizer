@@ -1,0 +1,5196 @@
+Qprop: A Schr¨odinger-solver for intense laser-atom interaction
+
+Dieter Bauer∗, Peter Koval
+Max-Planck-Institut f¨ur Kernphysik, Postfach 103980, 69029 Heidelberg, Germany
+
+February 21, 2014
+
+Abstract
+
+The Qprop package is presented. Qprop has been developed to study laser-atom inter-
+action in the nonperturbative regime where nonlinear phenomena such as above-threshold
+ionization, high order harmonic generation, and dynamic stabilization are known to oc-
+cur.
+In the nonrelativistic regime and within the single active electron approximation,
+these phenomena can be studied with Qprop in the most rigorous way by solving the
+time-dependent Schr¨odinger equation in three spatial dimensions. Because Qprop is op-
+timized for the study of quantum systems that are spherically symmetric in their initial,
+unperturbed conﬁguration, all wavefunctions are expanded in spherical harmonics. Time-
+propagation of the wavefunctions is performed using a split-operator approach. Photoelec-
+tron spectra are calculated employing a window-operator technique. Besides the solution of
+the time-dependent Schr¨odinger equation in single active electron approximation, Qprop
+allows to study many-electron systems via the solution of the time-dependent Kohn-Sham
+equations.
+
+5
+0
+0
+2
+ 
+l
+u
+J
+ 
+2
+1
+ 
+ 
+]
+h
+p
+-
+m
+o
+t
+a
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+9
+8
+0
+7
+0
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+∗
+
+Email: dbauer@mpi-hd.mpg.de
+
+1
+
+PROGRAM SUMMARY
+
+Title of program: Qprop.
+
+Catalogue number: To be assigned.
+
+Program obtainable from: CPC Program Library, Queen’s University of Belfast, N. Ireland.
+
+Computer on which program has been tested: PC Pentium IV, Athlon.
+Operating system: Linux.
+
+Program language used: C++.
+
+Memory required to execute with typical data: Memory requirements depend on the number
+of propagated orbitals and on the size of the orbitals. For instance, time-propagation of a
+hydrogenic wavefunction in the perturbative regime requires about 64 KByte RAM (4 radial
+orbitals with 1000 grid points). Propagation in the strongly nonperturbative regime providing
+energy spectra up to high energies may need 60 radial orbitals, each with 30000 grid points,
+i.e., about 30 MByte. Examples are given in the article.
+
+No. of bits in a word: Real and complex valued numbers of double precision are used.
+
+Peripheral used: Disk for input–output, terminal for interaction with the user.
+
+CPU time required to execute test data: Execution time depends on the size of the propagated
+orbitals and the number of time-steps.
+
+Distribution format: Compressed tar archive.
+
+Keywords: Time-dependent Schr¨odinger equation, split operator, Crank-Nicolson approxi-
+mant, window-operator
+
+Nature of the physical problem: Atoms put into the strong ﬁeld of modern lasers display a
+wealth of novel phenomena that are not accessible to conventional perturbation theory where
+the external ﬁeld is considered small as compared to inneratomic forces. Hence, the full ab
+initio solution of the time-dependent Schr¨odinger equation is desirable but in full dimension-
+ality only feasible for no more than two (active) electrons.
+If many-electron eﬀects come
+into play or eﬀective ground state potentials are needed, (time-dependent) density functional
+theory may be employed. Qprop aims at providing tools for (i) the time-propagation of the
+wavefunction according to the time-dependent Schr¨odinger equation, (ii) the time-propagation
+of Kohn-Sham orbitals according to the time-dependent Kohn-Sham equations, and (iii) the
+energy-analysis of the ﬁnal one-electron wavefunction (or the Kohn-Sham orbitals).
+
+Method of solution: An expansion of the wavefunction in spherical harmonics leads to a cou-
+pled set of equations for the radial wavefunctions. These radial wavefunctions are propagated
+using a split-operator technique and the Crank-Nicolson approximation for the short-time
+
+2
+
+propagator. The initial ground state is obtained via imaginary time-propagation for spheri-
+cally symmetric (but otherwise arbitrary) eﬀective potentials. Excited states can be obtained
+through the combination of imaginary time-propagation and orthogonalization. For the Kohn-
+Sham scheme a multipole expansion of the eﬀective potential is employed. Wavefunctions can
+be analyzed using the window-operator technique, facilitating the calculation of electron spec-
+tra, either angular-resolved or integrated.
+
+Restrictions onto the complexity of the problem: The coupling of the atom to the external ﬁeld
+is treated in dipole approximation. The time-dependent Schr¨odinger solver is restricted to the
+treatment of a single active electron. As concerns the time-dependent density functional mode
+of Qprop, the Hartree-potential (accounting for the classical electron-electron repulsion) is
+expanded up to the quadrupole. Only the monopole term of the Krieger-Li-Iafrate exchange
+potential is currently implemented. As in any nontrivial optimization problem, convergence
+to the optimal many-electron state (i.e., the ground state) is not automatically guaranteed.
+
+Unusual features of the program: The program uses the well established libraries blas, la-
+pack, and f2c.
+
+1
+
+Introduction
+
+Progress in the construction of lasers brings powerful sources of electromagnetic radiation
+into the laboratory. The frequency domain of modern lasers covers a wide range from the
+infrared to the ultraviolet. Laser intensities of 1016 W/cm2 and more are routinely achieved in
+many laboratories all over the world [1]. Such powerful light causes a number of strong-ﬁeld
+phenomena like tunneling and above-threshold ionization, high order harmonic generation,
+nonsequential ionization, pronounced dynamic Stark-shifts, and the (not yet experimentally
+conﬁrmed) dynamic stabilization [1, 2, 3, 4, 5, 6]. All these phenomena are not accessible
+through “conventional” perturbation theory where the external laser ﬁeld is required to be
+small compared to the atomic binding force acting on the electron.
+
+In the nonrelativistic regime (i.e., moderate charge states and moderate laser intensities
+< 1018 Wcm−2), the solution of the time-dependent Schr¨odinger equation is the most rigorous
+nonperturbative approach to the problem of intense laser-atom interaction. Fortunately, most
+of the above mentioned phenomena (apart from nonsequential ionization) can be understood
+within a single active electron picture, making a numerical ab initio treatment possible at all.
+However, since an electron released by an intense laser may travel thousands of atomic units
+during the pulse, huge numerical grids in position space are needed. It was thus natural to
+investigate ﬁrst low-dimensional model systems where the three electronic degrees of freedom
+were restricted to the laser polarization direction (see, e.g., [7, 8, 9, 10, 11]). Much qualitative
+insight was gained by these model studies while the quantitative agreement with experiment
+or full three-dimensional calculations is, in general, poor.
+
+With continuously increasing computer power, two- and three-dimensional models of one
+and two-electron atoms were investigated. Two and three-dimensional studies of the single
+active electron dynamics in intense laser ﬁelds permit the use of elliptically polarized drivers,
+
+3
+
+the calculation of angular distributions, and the investigation of the polarization properties of
+the light emitted into (high order) harmonics.
+
+The methods used for the time-dependent propagation of the electronic wavefunction have
+been improved to lower the computational demand. Examples are variable time- and space
+stepping [12, 15], advanced ﬁnite diﬀerence approximations [13, 14], advanced interpolation
+methods like Gauss-Legendre or B-Spline interpolation [15, 16], higher-order time propagators
+[17, 18], or matrix iterative methods [19].
+
+Codes propagating two-electron wavefunctions in their full dimensionality are currently
+at the limit of feasibility [13, 20]. It is unlikely that more complex systems will be treated
+on an equal footing because of the exploding computational demand. Even if the ﬁnal, high-
+dimensional, multi-electron wavefunction were available, its analysis would pose new problems.
+In other words, the brute-force approach to multi-electron atoms in intense laser ﬁelds is a
+dead end [21].
+
+It is the Nobel-prize winning density-functional theory (DFT) that provides a genuine resort
+for quantum mechanics to treat many-electron systems as ab initio as possible. The central
+theorem of DFT, the Hohenberg-Kohn theorem, states that quantum mechanics may be based
+on the electron density alone. The density remains a three-dimensional quantity, independently
+of the number of particles in the system. As a consequence, density-functional theory does not
+suﬀer from the exponential explosion of computational demand, the so-called exponential wall
+[21]. In fact, DFT is now well-established in electronic structure calculations and quantum
+chemistry [21, 22, 23, 24, 25]. Most of the modern formulations of density-functional theory
+rely on the Kohn-Sham equations which provide a practicable computational scheme. Density-
+functional theory has been extended to the time-dependent domain [26, 27, 28, 29] and a
+number of algorithms for time-dependent Kohn-Sham-solvers have been published [30, 31, 32].
+Two of the most interesting observable quantities are the spectrum of the radiation emit-
+ted by the atom and photoelectron spectra. The former can be easily calculated via the
+In
+Fourier-transformation of the dipole acceleration while the latter is much more tricky.
+principle, one should project the ﬁnal wavefunction onto the (continuum) eigenstates of the
+unperturbed Hamiltonian. This is numerically very demanding, especially if the continuum
+eigenstates are analytically unknown. In contrast to the straightforward projection, implicit
+methods to calculate the photoelectron spectra can be of distinct advantage. In the Qprop
+code, a window-operator technique [33, 34] for the energy-analysis of the ﬁnal wavefunction
+is employed, facilitating the calculation of total and angular-resolved photoelectron spectra
+without explicit determination of eigenstates.
+
+The aim of this paper is to present a collection of routines that consistently realize three
+issues: (i) time-propagation of a wavefunction according to the time-dependent Schr¨odinger
+equation, (ii) time-propagation of Kohn-Sham orbitals according to the time-dependent Kohn-
+Sham equations, and (iii) the energy-analysis of the ﬁnal one-electron wavefunction (or the
+Kohn-Sham orbitals). The actual algorithm for time propagation has been taken from [14],
+where it was introduced explicitly for the case of a linearly polarized laser ﬁeld. In Qprop, we
+generalized the algorithm in two directions: (i) elliptic polarization, and (ii) eﬀective many-
+electron potentials. For the exchange-part of the eﬀective Kohn-Sham potential we use the
+expression suggested by Krieger, Li, and Iafrate [35]. The implementation of the window-
+operator routine for the spectral analysis of wavefunctions was inspired by the work of Schafer
+
+4
+
+and Kulander [33].
+
+Qprop does not posses a ﬁxed input/output interface but rather is a library, functions of
+which realize the time-propagation and the analysis of the wavefunction. Hence, in order to
+proﬁt from the program, the user should be familiar with the basics of the underlying theory
+and the algorithm. Both are presented in Secs. 2 and 3. Moreover, the ﬁve examples in Sec. 4
+should ease the ﬁrst steps. Additional examples, patches, updates, and further documentation
+are provided elsewhere [36]. The Qprop package has been successfully applied to a number
+of problems [37, 38, 39, 40, 41, 42, 43].
+
+2 Theoretical background
+
+2.1 Time-dependent ﬁrst-principle equations
+
+The nonrelativistic quantum dynamics of an electron is governed by the time-dependent
+Schr¨odinger equation, i.e., the electron wavefunction Ψ(rt) obeys1
+
+Here, spin degrees of freedom are neglected. The Hamiltonian H may depend on time t and
+in general reads
+
+i
+
+∂Ψ(rt)
+∂t
+
+= HΨ(rt).
+
+H = HS =
+
+[p + A(rt)]2 + φ(rt)
+
+(cid:19)
+
+1
+2
+
+(cid:18)
+
+where A(rt) and φ(rt) are vector and scalar potential, respectively. The operator p is the
+canonical momentum while p′ = p + A(rt) is the kinetic momentum so that p′2/2 = [p +
+A(rt)]2/2 is the kinetic energy. Extending the Schr¨odinger equation (1) to N -electron systems
+is formally straightforward, leading to a N -electron wavefunction in a 3N -dimensional Hilbert
+space (spin neglected). In practice, however, current super computers are hardly capable of
+treating two-electron atoms in full dimensionality exposed to strong laser ﬁelds [20], let alone
+systems with more than two electrons.
+
+Time-dependent density-functional theory (TDDFT) oﬀers to reduce the numerical eﬀort
+dramatically [26, 27, 28, 29]. The basic quantity of density-functional theory is the electron
+density n(rt), which is always a function of three space coordinates and time, independent of
+the number of particles N . In practice, time-dependent density functional theory is formulated
+via the time-dependent Kohn-Sham equation
+
+i
+
+∂Ψi(rt)
+∂t
+
+= HKSΨi(rt),
+
+i = 1, 2, . . . N,
+
+describing the evolution of the Kohn-Sham orbitals Ψi(rt), the only physical signiﬁcance of
+which is to build the electronic density according to
+
+(1)
+
+(2)
+
+(3)
+
+(4)
+
+1Atomic units (me = ~ = |e| = 1) are used unless noted otherwise.
+
+n(rt) =
+
+2.
+Ψi(rt)
+|
+|
+
+N
+
+i=1
+X
+
+5
+
+Kohn-Sham Hamiltonian HKS and Schr¨odinger Hamiltonian H diﬀer only by an eﬀective
+potential in the scalar potential φKS(rt). This eﬀective potential depends on the Kohn-Sham
+orbitals themselves,
+
+φ(rt)
+
+φKS[Ψ1(rt), Ψ2(rt), . . . , ΨN (rt)]
+
+φKS(rt),
+
+→
+
+HKS =
+
+[p + A(rt)]2 + φKS(rt)
+
+.
+
+(5)
+
+1
+2
+
+(cid:18)
+
+Thus, the Kohn-Sham equation corresponds to a set of nonlinear Schr¨odinger equations for
+the Kohn-Sham orbitals Ψi(rt). From the numerical point of view the nonlinearity does not
+pose a serious problem. The important point is that (2) and (5) have the same structure so
+that the same propagation scheme can be used for both the Schr¨odinger wavefunction and the
+Kohn-Sham orbitals. In the following we shall present the propagation algorithm employed in
+the Qprop package.
+
+≡
+
+(cid:19)
+
+2.2 Propagation algorithm
+
+Short-time propagator
+
+Equation (1), together with an initial wavefunction Ψ(r, t = t0), governs the time evolution of
+Ψ(rt) for all times t. Introducing the propagator
+
+U (t2, t1) = T exp
+
+H(τ ) dτ
+
+,
+
+(6)
+
+t2
+
+i
+
+−
+
+(cid:18)
+
+t1
+
+Z
+
+(cid:19)
+
+where T denotes the time-ordering operator, one has
+
+Ψ(rt2) = U (t2, t1)Ψ(rt1).
+
+In most numerical approaches the time-propagation from the initial time t0 to the ﬁnal one
+tf is divided into small steps ∆t during which the possibly explicit time-dependence of the
+Hamiltonian and the time-ordering can be ignored so that the short-time propagator simpliﬁes
+to
+
+−
+The ﬁnite-time propagation from t0 to tf can be decomposed in a product of short-time prop-
+agators,
+
+≈
+
+U (t + ∆t, t)
+
+exp[
+
+i∆tH(t + ∆t/2)].
+
+U (tf , t0) =
+
+U (ti + ∆t, ti)
+
+(7)
+
+(8)
+
+with ∆t = (tf −
+
+t0)/M .
+
+Crank-Nicolson approximation for the short-time propagator
+
+The short-time propagator (7) can be straightforwardly applied to a wavefunction only if the
+Hamiltonian is diagonal. In order to avoid diagonalization each time step the Crank-Nicolson2
+
+2The last name of Phyllis Nicolson is often misspelled “Nicholson”.
+
+M −1
+
+i=0
+Y
+
+6
+
+approximant is used [44]. The Crank-Nicolson approximation is easily motivated by the fact
+that the short-time propagation of Ψ(rt) half a timestep forward generates the same state as
+the propagation of Ψ(r, t + ∆t) half a timestep backward,
+
+U (t + ∆t/2, t + ∆t)Ψ(r, t + ∆t) = U (t + ∆t/2, t)Ψ(rt).
+
+(9)
+
+Expanding the exponent in the short-time propagator (7) in a Taylor series, the unitary Crank-
+Nicolson propagator (accurate to the third order in the time step ∆t)
+
+U (t + ∆t, t) = UCN(t + ∆t, t) + O(∆t)3, UCN(t + ∆t, t) =
+
+(10)
+
+i ∆t
+1
+−
+1 + i ∆t
+
+2 H
+2 H
+
+t + ∆t
+2
+t + ∆t
+2
+
+(cid:0)
+
+(cid:0)
+
+(cid:1)
+
+(cid:1)
+
+is obtained. The actual implementation of the Crank-Nicolson propagator leads to an implicit
+algorithm. Because of the Hamiltonian in the denominator we cannot apply UCN directly to
+a wavefunction (unless the Hamiltonian is diagonal). Hence, we go back to (9) and actually
+solve
+
+(1 + i∆tH/2)Ψ(r, t + ∆t) = (1
+
+i∆tH/2)Ψ(rt)
+
+(11)
+
+−
+
+for Ψ(r, t + ∆t) each time step. We observe that the Crank-Nicolson propagator requires the
+application of the Hamiltonian H to the orbitals Ψ(rt) and Ψ(r, t + ∆t). Further below we
+show how the wavefunction is expanded and discretized, leading to implicit matrix equations
+corresponding to (11).
+
+Kohn-Sham Hamiltonian in the linearly polarized laser ﬁeld
+
+In this subsection we discuss the more general case of a Kohn-Sham Hamiltonian (5) keeping
+in mind that the Schr¨odinger Hamiltonian (2) is obtained by omitting the electron-electron
+interaction altogether. We write the Kohn-Sham Hamiltonian in the form
+
+HKS(t) =
+
+2 + VI (t) + V (r) + Vee[n(rt)]
+
+(12)
+
+1
+2 ∇
+
+−
+
+−∇
+
+2/2, the Hamiltonian contains the
+where, apart from the familiar kinetic energy term
+interaction with the electromagnetic ﬁeld VI (t) in dipole approximation, the central-ﬁeld po-
+tential of the nucleus (or atomic core) V (r), and the Kohn-Sham eﬀective potential Vee[n(rt)].
+In principle, the eﬀective electron-electron interaction potential Vee[n(rt)] can be written as
+a functional of the total electronic density n(rt). In practice, it is approximated using the
+Kohn-Sham orbitals Ψi(rt). Details on the implemented approximations will be presented
+below in Sec. 2.5. Here, we only assume that the radial multipole functions V i
+ee(rt), i = 0, 1, 2
+in the expansion
+
+Vee[n(rt)] = V 0
+
+ee(rt) + V 1
+
+ee(rt) cos θ + V 2
+
+ee(rt)
+
+(3 cos2 θ
+
+1) +
+
+−
+
+· · ·
+
+(13)
+
+1
+2
+
+are known. Terms i > 2, i.e., beyond the quadrupole, are neglected. Note that the expansion
+(13) holds for linearly polarized light only since the eﬀective potential Vee[n(rt)] is assumed to
+remain azimuthally symmetric with respect to the polarization axis.
+
+7
+
+The interaction with the laser ﬁeld in dipole approximation is usually established either in
+ez reads
+
+length or velocity gauge. Thus the interaction operator VI (t) for linear polarization
+in general
+
+k
+
+VI (t) =
+
+iA(t)
+
++
+
++ zE(t),
+
+∂
+∂z
+
+A2(t)
+2
+
+−
+
+(14)
+
+where A(t)ez is the vector potential and E(t)ez is the electric ﬁeld of the laser pulse. In the
+velocity gauge only the ﬁrst two terms are present whereas in the length gauge only the third
+term is left. The purely time-dependent term A2(t)/2 is easily transformed away and, in fact,
+is by default not taken into account in Qprop. Depending on the problem, either length or
+velocity gauge may be advantageous. For instance, high-order above threshold ionization is
+treated in velocity gauge at lower computational cost than in length gauge [45]. The ionization
+rate of heavy ions, on the other hand, is more easily calculated using length gauge.
+
+Radial–angular separation of the Hamiltonian
+
+Atomic systems in their ground state manifest a prevailing spherical symmetry. Expanding
+the atomic orbitals Ψi(rt) in spherical harmonics Ylm(θ, ϕ) = Ylm(Ω),
+
+∞
+
+l
+
+Ψi(rt) =
+
+1
+r
+
+Φilm(rt)Ylm(Ω),
+
+(15)
+
+m=−l
+X
+and inserting this expansion into (1) with the Kohn-Sham Hamiltonian (12) and the dipole
+interaction for linear polarization (14), a set of diﬀerential equations for the radial orbitals
+Φilm(rt) is obtained,
+
+l=0
+X
+
+i
+
+∂Φilm(rt)
+∂t
+
+=
+
+1
+2
+
+∂2
+∂r2 + V (r) +
+
+l(l + 1)
+2r2
+
+−
+
+(cid:18)
+
+(cid:19)
+
+Φilm(rt) +
+
+Ylm
+
+Vee[n(rt)]
+Yl′mi
+|
+|
+
+Φil′m(rt)+
+
++ iA(t)
+
+r
+
+ −
+
+Xl′ h
+
+Ylm
+
+cos θ
+
+|
+
+Yl′mi
+|
+
+∂
+∂r
+
+Φil′m(rt)
+r
+
++
+
+sin θ
+
+|
+
+∂
+∂θ |
+
+Yl′mi
+
+Φil′m(rt)
+r
+
++
+
+!
+
+Ylm
+
+cos θ
+
+|
+
+Yl′m
+|
+
+Φil′m(rt).
+i
+
+(16)
+
+Xl′ h
+Ylm
+
+Xl′ h
+
+Xl′ h
+
++ rE(t)
+
+The latter equation shows that the radial orbitals for diﬀerent magnetic quantum numbers m
+are decoupled for a linearly polarized laser ﬁeld in dipole approximation. Hence, the general
+expansion (15) can be reduced to
+
+Ψi(rt) =
+
+Φilm(rt)Ylm(Ω)
+
+Φilm(rt)Ylm(Ω),
+
+(17)
+
+1
+r
+
+∞
+
+Xl=0
+
+1
+r
+
+≈
+
+L−1
+
+Xl=0
+
+where the i-th orbital possesses a single, well-deﬁned magnetic quantum number m = mi.
+Consequently, only L radial orbitals per Kohn-Sham orbital i will be involved in the propa-
+gation for linear polarization, whereas L2 radial orbitals are involved in the general expansion
+1 on the numerical grid is related to
+(15). The maximum orbital quantum number l = L
+the number of absorbed photons and must be chosen suﬃciently large. The spectral analysis
+explained in Sec. 2.6 below can be used to check whether L was chosen properly (see also
+Sec. 4.4).
+
+−
+
+8
+
+Breaking-down the Hamiltonian
+
+Inserting the electron-electron interaction potential (13) into (16) and calculating the matrix
+elements with the spherical harmonics, (16) can be recast in the matrix form [14]
+
+i
+
+∂
+∂t
+
+Φi(rt) =
+
+Hat + Hmix + H(1)
+
+ang + H(2)
+
+ang + H(3)
+ang
+
+Φi(rt)
+
+(cid:16)
+
+(cid:17)
+
+where Φi(rt) denotes a column vector in l-space,
+
+Φi(rt) = [Φi0m(rt), Φi1m(rt), . . . , Φi(L−1)m(rt)]T,
+
+and the matrices Hat, Hmix, H(1)
+
+ang, H(2)
+
+ang, H(3)
+
+ang read
+
+Hat =
+
+1
+2
+
+∂2
+∂r2 + V (r) +
+
+−
+
+l(l + 1)
+2r2 + V 0
+
+ee(rt) + plmV 2
+
+ee(rt),
+
+Hmix =
+
+−
+
+H(1)
+
+ang =
+
+i
+
+A(t)
+r
+
+−
+
+H(2)
+
+ang = (rE(t) + V 1
+
+ee(rt))
+
+H(3)
+
+ang = V 2
+
+ee(rt)
+
+0
+c0m
+0
+...
+
+iA(t) 
+
+
+
+
+
+0
+c0m
+0
+...
+
+
+
+−
+
+
+
+
+
+
+
+c0m
+0
+c1m
+
+0
+
+0
+c1m
+0
+
+c2m
+
+. . .
+0
+. . .
+0
+c2m . . .
+
+0
+
+. . .
+
+∂
+∂r
+
+,
+
+
+
+
+
+
+
+
+
+c0m
+0
+2c1m
+
+−
+
+0
+
+0
+2c1m
+0
+
+0
+0
+
+. . .
+. . .
+3c2m . . .
+
+3c2m
+
+0
+
+. . .
+
+−
+
+c0m
+0
+c1m
+
+0
+
+0
+c0m
+0
+...
+
+
+
+
+
+
+
+
+
+0
+c1m
+0
+
+c2m
+
+0
+. . .
+0
+. . .
+c2m . . .
+
+0
+
+. . .
+
+0
+0
+q0m
+...
+
+
+
+
+
+
+
+
+
+0
+0
+0
+
+q0m
+0
+0
+
+. . .
+0
+q1m . . .
+. . .
+0
+
+
+
+q1m
+
+0
+
+0
+
+. . .
+
+
+
+
+
+
+3m2
+l(l + 1)
+(2l + 1)(2l + 3)
+
+−
+
+,
+
+,
+
+
+
+
+
+
+
+
+
+,
+
+
+
+
+
+
+
+
+
+clm =
+
+(l + 1)2
+m2
+(2l + 1)(2l + 3)
+
+−
+
+s
+
+, plm =
+
+qlm =
+
+3
+2(2l + 3) s
+
+[(l + 1)2
+
+m2][(l + 2)2
+(2l + 1)(2l + 5)
+
+−
+
+m2]
+
+.
+
+−
+
+with
+
+Note that Hat is diagonal in l-space, Hmix, H(1)
+with Φi(l±1)m(rt) while H(3)
+
+ang couples Φilm(rt) with Φi(l±2)m(rt).
+
+ang, and H(2)
+
+ang couple an l-component Φilm(rt)
+
+9
+
+(18)
+
+(19)
+
+(20)
+
+(21)
+
+(22)
+
+(23)
+
+(24)
+
+(25)
+
+(26)
+
+The calculation of the spatial derivatives in Hat and Hmix will be discussed below. Next,
+
+the matrix Hmix is split into a sum over mutually commuting matrices Hlm
+
+mix,
+
+Hmix ≡
+
+Hlm
+
+mix,
+
+L−2
+
+Xl=0
+
+(27)
+
+H0m
+
+mix =
+
+iA(t)
+
+−
+
+0
+c0m
+0
+...
+
+
+
+
+
+
+
+
+
+c0m 0 0 . . .
+0 0 . . .
+0
+0 0 . . .
+0
+
+0
+
+0 0 . . .
+
+∂
+∂r
+
+,
+
+
+
+
+
+
+
+
+
+H1m
+
+mix =
+
+iA(t)
+
+−
+
+0
+0
+0
+0
+0 c1m
+...
+
+0
+
+0
+0 . . .
+c1m 0 . . .
+0 . . .
+0
+
+0
+
+0 . . .
+
+
+
+
+
+
+
+
+
+∂
+∂r
+
+
+
+
+
+
+
+
+
+, . . .
+
+(28)
+
+Commutativity of the Hlm
+for the splitting of the corresponding propagator without introducing any additional errors,
+
+mix allows us to use the algebraic equation exp(a + b) = exp(a) exp(b)
+
+exp
+
+i∆t
+
+"−
+
+L−2
+
+ 
+
+l=0
+X
+
+Hlm
+mix
+
+!#
+
+L−2
+
+l=0
+Y
+
+=
+
+exp
+
+i∆tHlm
+mix
+
+.
+
+−
+
+(cid:16)
+
+(cid:17)
+
+(29)
+
+Moreover, only two elements in the matrices Hlm
+fectively to 2
+decomposed in a sum of commuting terms as well.
+
+×
+
+2 matrices. Analogously, the Hamiltonians H(1)
+
+mix are diﬀerent from zero, making them ef-
+ang can be
+
+ang, and H(3)
+
+ang, H(2)
+
+Calculation of the spatial derivatives
+
+The calculation of the spatial derivatives in Hmix and Hat is implemented using improved ﬁnite
+diﬀerence expressions [14]. The radial orbitals Φilm(rt) are represented on an equidistant grid
+with grid spacing ∆r = h and Nr grid points,
+
+Φilm(rt) = [Φilm(r1t), Φilm(r2t), . . . , Φilm(rNr t)]T, rn = hn, n = 1, 2, . . . Nr.
+
+(30)
+
+Implicit fourth order Simpson and Numerov expressions for the ﬁrst and the second derivative
+are employed,
+
+∂Φilm
+∂r
+
+= Φ′
+
+ilm ≈
+
+(cid:18)
+
+1 +
+
+∆2
+
+h2
+6
+
+∆1Φilm =: M−1
+
+1 ∆1Φilm,
+
+∂2Φilm
+∂r2 = Φ′′
+(cid:19)
+The ﬁnite diﬀerence operators ∆1Φilm(rnt)
+∆2Φilm(rnt) := (Φilm(rn+1t)
+
+ilm ≈
+
+h2
+12
+
+∆2
+
+1 +
+
+(cid:18)
+
+−
+
+∆2Φilm =:
+
+2M−1
+
+2 ∆2Φilm.
+
+−
+
+:= (Φilm(rn+1t)
+
+2Φilm(rnt) + Φilm(rn−1t))/h2 can be written as Nr
+
+−
+
+Φilm(rn−1t))/2h and
+Nr ma-
+
+×
+
+(31)
+
+(32)
+
+−1
+
+(cid:19)
+
+−1
+
+10
+
+trices, and M1, M2 are given by
+
+M1 =
+
+4 1
+1 4
+
+1
+
+1
+6
+
+
+
+
+
+
+
+
+
+1
+
+4
+. . .
+
+. . .
+. . .
+
+
+
+
+
+
+
+
+
+, M2 =
+
+1
+6
+
+−
+
+10
+1
+
+1
+10
+
+1
+
+
+
+
+
+
+
+
+
+1
+
+10
+. . .
+
+. . .
+. . .
+
+.
+
+
+
+
+
+
+
+
+
+(33)
+
+In order to ensure unitary time propagation, the matrix M−1
+that end the upper left and lower right corners of ∆1 and M1 are modiﬁed [14],
+
+1 ∆1 must be antihermitian. To
+
+(∆1)11 =
+
+(∆1)NrNr =
+
+(M1)11 = (M1)NrNr =
+
+(34)
+
+y
+2h
+
+,
+
+y
+2h
+
+,
+
+−
+
+4 + y
+6
+
+with y = √3
+
+2.
+
+−
+
+In the case of the Coulomb potential
+satisﬁes at the origin r = 0 the relation
+
+−
+
+Z/r, the second derivative of a radial s-state orbital
+
+Φ′′
+
+i(l=0)m(0t) =
+
+2ZΦ′
+
+i(l=0)m(0t)
+
+= 0.
+
+−
+
+(35)
+
+This fact can be taken into account by modifying the upper left elements in ∆2 and M2 [14],
+
+(∆2)11 =
+
+2
+h2
+
+−
+
+1
+
+(cid:18)
+
+Zh
+
+−
+
+12
+
+10Zh
+
+−
+
+(cid:19)
+
+,
+
+(M2)11 =
+
+2
+
+1 +
+
+(∆2)11
+
+.
+
+(36)
+
+h2
+12
+
+−
+
+(cid:18)
+
+(cid:19)
+
+The fourth order expressions (31) and (32), and their modiﬁcations to ensure unitary time
+propagation and the correct behavior at r = 0, hardly add additional cost to the propagation
+routine (see [14] or the additional documentation provided with Qprop and online at [36]).
+
+Splitting of the time-propagator
+
+Summarizing the previous sections, we write the Hamiltonian
+
+H = Hat +
+
+Hlm
+
+mix + H(1)
+ang
+
++ H(2)
+ang
+
+lm
+
+lm
+
++
+
+H(3)
+ang
+
+lm
+
+,
+
+L−3
+
+(cid:17)
+
+Xl=0
+
+L−2
+
+Xl=0 (cid:16)
+
+where all terms can be written as a tensor product of operators acting either in “l-space” or
+“r-space,”
+
+Hat = 1l
+
+M−1
+
+2 ∆2 + V (r) +
+
+⊗
+
+(cid:18)
+
+l(l + 1)
+2r2 + V 0
+
+ee(rt) + plmV 2
+
+ee(rt)
+
+,
+
+(cid:19)
+
+Hlm
+
+mix =
+
+iA(t)Llm
+
+M−1
+
+1 ∆1,
+
+⊗
+
+lm
+
+H(1,2)
+ang
+
+−
+
+=
+
+iA(t)Tlm
+
+1r + Llm
+
+rE(t) + V 1
+
+ee(rt)
+
+1r,
+
+⊗
+
+(cid:0)
+V 2
+ee(rt)1r.
+
+lm
+
+H(3)
+ang
+
+= Plm
+
+⊗
+
+(cid:1)
+
+−
+
+⊗
+
+1
+r
+
+11
+
+(37)
+
+(38)
+
+(39)
+
+(40)
+
+(41)
+
+6
+1l and 1r are unity matrices, and Llm, Tlm, and Plm are 2
+
+2 matrices
+
+×
+
+Llm =
+
+0
+clm
+
+ 
+
+clm
+0 !
+
+, Tlm = (l + 1)
+
+0
+clm
+
+clm
+0 !
+
+ 
+
+−
+
+, Plm =
+
+0
+qlm
+
+ 
+
+qlm
+0 !
+
+.
+
+(42)
+
+The matrices Llm and Tlm act on the lth and (l + 1)th component of the wavefunction while
+the matrix Plm acts on the lth and (l + 2)th component.
+
+The short-time propagator (7) with the Hamiltonian (37) is approximated up to third order
+
+in ∆t = 2τ as the product
+
+Usplit(t + 2τ, t) =
+
+exp
+
+0
+
+Yl=L−3
+
+−
+
+(cid:16)
+
+0
+
+lm
+
+iτ H(3)
+ang
+
+(cid:17)
+exp(
+
+Yl=L−2 h
+−
+
+2iτ Hat)
+
+(cid:16)
+
+×
+
+×
+
+exp
+
+−
+
+lm
+
+iτ H(1,2)
+ang
+
+exp
+
+iτ Hlm
+mix
+
+(cid:17)
+
+L−3
+
+(cid:17)i
+
+Yl=0
+
+−
+
+(cid:16)
+
+−
+
+(cid:16)
+
+×
+
+(cid:17)i
+
+(cid:17)
+
+exp
+
+iτ Hlm
+mix
+
+exp
+
+lm
+
+iτ H(1,2)
+ang
+
+exp
+
+lm
+
+iτ H(3)
+ang
+
+,
+
+(43)
+
+−
+
+(cid:16)
+
+−
+
+(cid:16)
+
+(cid:17)
+
+) is approximated by the corresponding Crank-Nicolson expres-
+
+×
+
+L−2
+
+Yl=0 h
+iτ
+
+· · ·
+
+where each factor exp(
+sion (10).
+
+−
+
+Further details about the actual implementation of the propagation algorithm can be found
+in the documentation provided with the program and online at [36]. We only mention here that
+in Qprop the above described propagation procedure for linear polarization using expansion
+(17), as well as the more general algorithm for elliptical polarization using expansion (15) are
+implemented. The propagator in the latter case is even more complex than (43). It is used in
+the example in Sec. 4.5.
+
+2.3 Imaginary time propagation
+
+The time-dependent Schr¨odinger equation (1) determines the evolution of a quantum system
+in time, starting from an initial state Ψ(rt0). Often the initial state is the ground state of the
+unperturbed quantum system with
+
+−
+
+H0 =
+
+2 + V (r).
+
+1
+2 ∇
+Ground states are analytically known only for a few speciﬁc potentials. In contrast, numerical
+approaches allow to ﬁnd ground states for arbitrary potentials. They are often based on
+the fact that the total energy of the ground state is minimal. In Qprop the ground state
+can be determined using the ordinary propagation algorithm presented above in Sec. 2.2 with,
+however, the real time step ∆t replaced by an imaginary time step ∆t
+i∆t. Why this works
+may be seen as follows: Let an arbitrary wavefunction Ψ(r0) be expanded in eigenstates ψn(r)
+of the Hamiltonian H0. The wavefunction at later times then reads (without perturbations)
+
+→ −
+
+(44)
+
+n are the eigenenergies corresponding to ψn(r). Propagating one imaginary time step
+where
+E
+leads to
+
+Ψ(r∆t) =
+
+an exp(
+
+n∆t)ψn(r).
+
+−E
+
+Ψ(rt) =
+
+an exp(
+
+nt)ψn(r)
+i
+E
+
+−
+
+n
+X
+
+n
+X
+
+12
+
+(45)
+
+(46)
+
+−E
+
+n∆t) is biggest for minimum
+
+The factor exp(
+time propagation the corresponding state ψmin(r) dies out slowest (if
+fastest (if
+
+Emin, which means that during imaginary
+Emin > 0) or explodes
+
+Emin < 0). The (renormalized) Ψ(rt) thus converges to the ground state ψmin(r).
+
+The choice of the initial “guess” for the ground state wavefunction before imaginary time
+propagation is not critical but aﬀects the time needed for convergence. The method even
+works with a random initial wavefunction, as it is illustrated in Sec. 4.1.
+
+n =
+
+E
+
+Imaginary time propagation can be also applied in the case of several Kohn-Sham orbitals
+(see example in Sec. 4.3). The Pauli exclusion principle is implemented via Gram-Schmidt
+orthogonalization [46] each imaginary time step.
+
+2.4 Imaginary absorbing potential
+
+An obvious limitation of propagation in position space is the ﬁnite size of the numerical grid.
+Electron density approaching the boundaries—if treated without special care—will be reﬂected
+and may cause undesired, spurious eﬀects. However, the electron density reaching the (suﬃ-
+ciently remote) boundary can be considered to contribute to ionization only but otherwise does
+not aﬀect the dynamics of the atomic remainder. In order to avoid spurious eﬀects it is desir-
+able and, in fact, possible to formulate exact permeable boundary conditions. Unfortunately,
+such permeable boundary conditions are easily implemented in one-dimensional calculations
+only [47]. In three-dimensional calculations so-called “absorbing boundaries” [48], although
+not mathematically rigorous, proved to be most convenient and practicable. In Qprop the
+absorbing boundary is of the form
+0 to be deﬁned by the user. Clearly,
+iVim(r) with Vim(r)
+Vim(r) should be a function that is close to zero in the main interaction region and increases
+up to a suﬃciently high value at the grid boundary R = Nr∆r. A nonvanishing imaginary po-
+tential destroys unitary time propagation and thus leads to “dissipation” of the wavefunction.
+2 may be used to evaluate the ionization probability
+The decreasing norm N (t) =
+P (t) = 1
+
+i|
+N (t) (see example in Sec. 4.2).
+
+Ψ(t)
+Ψ(t)
+|
+
+≥
+
+−
+
+|h
+
+−
+
+2.5 Eﬀective potentials
+
+According to the Hohenberg-Kohn theorem (see, e.g., [21] and references therein), the electron
+density determines all observable quantities of a quantum systems, i.e., all observables are
+functionals of the density. Only a few of these functionals are known explicitly while many of
+them must be approximated in practice.
+
+An electron density n(r) in an external potential V (r) yields the potential energy
+
+Epot[n] =
+
+V (r)n(r) d3r,
+
+Z
+
+(47)
+
+while the exact kinetic energy as an explicit functional of the density Tkin[n(r)] is, in general,
+unknown.
+
+Kohn and Sham (see, e.g., [21] and references therein) considered an auxiliary system
+of noninteracting electrons whose density ns(r) coincides with the density n(r) of the real,
+interacting system. Because the auxiliary electrons do not interact with each other (but move
+in a common, eﬀective potential), their Schr¨odinger equation separates, and the kinetic energy
+
+13
+
+(48)
+
+(49)
+
+(50)
+
+(51)
+
+(53)
+
+(54)
+
+is simply the sum of one-particle kinetic energies,
+
+The Kohn-Sham orbitals Ψi(r) satisfy the Kohn-Sham equation
+
+Ts =
+
+1
+2
+
+−
+
+2
+
+Ψi
+|
+
+.
+i
+
+|∇
+
+Ψi
+h
+i
+X
+
+1
+2 ∇
+
+−
+
+(cid:20)
+
+2 + Vee(r)
+(cid:21)
+
+Ψi(r) = ǫiΨi(r).
+
+ns(r) =
+
+2,
+Ψi(r)
+|
+|
+
+i
+X
+
+Vee(r) = V (r) + U (r) + Vxc(r),
+
+which, in turn, uniquely determines the potential Vee(r), commonly split in the form
+
+The only physical signiﬁcance of the Kohn-Sham orbitals is to form the correct density
+
+−
+
+Z/r),
+
+where V (r) denotes the same potential that is present in the interacting system’s Hamiltonian
+(e.g., V (r) =
+
+n(r′)
+r′
+r
+|
+is the Hartree-potential accounting for the mutual repulsion of the electrons, and Vxc(r) denotes
+the so-called exchange-correlation potential. The nuclear potential V (r), although entirely
+independent of the electron density, can be formally written as the variational derivative of
+the external potential energy (47),
+
+U (r) =
+
+d3r′
+
+(52)
+
+−
+
+Z
+
+|
+
+V (r) =
+
+δEpot[n]
+δn(r)
+
+.
+
+Analogously, the Hartree potential is the variational derivative of the electron-electron repul-
+sion energy,
+
+U (r) =
+
+δEH[n]
+δn(r)
+
+,
+
+EH[n] =
+
+1
+2
+
+Z Z
+
+n(r)n(r′)
+
+r
+|
+
+−
+
+r′
+
+|
+
+d3r′ d3r.
+
+The exchange-correlation potential Vxc(r) is split further into exchange and correlation poten-
+tial, Vxc(r) = Vx(r) + Vc(r). In what follows, the correlation potential Vc(r) is neglected.
+
+Approximations for time-dependent eﬀective potentials
+
+The time-independent Kohn-Sham equation (49) has its time-dependent counterpart, as al-
+ready anticipated in Eqs. (1), (5), and (12). Analogous to the Hohenberg-Kohn theorem,
+the Runge-Gross theorem [26] asserts that also in the time-dependent case, the density n(rt)
+determines all observable quantities.
+
+In Qprop the time-dependent potentials of electron-electron repulsion and exchange are
+calculated adopting an adiabatic viewpoint, i.e., expressions known from stationary density
+functional theory are evaluated using the now time-dependent density n(rt). The eﬀective
+potential (13) is written as a sum of Hartree and exchange potential,
+
+Vee[n(rt)] = U [n(rt)] + Vx[n(rt)].
+
+(55)
+
+14
+
+The Hartree potential is expanded analogously to (13),
+
+U [n(rt)] = U 0(rt) + U 1(rt) cos θ + U 2(rt)
+
+(3 cos2 θ
+
+1
+2
+
+1) +
+
+.
+
+· · ·
+
+−
+
+(56)
+
+In the current version of Qprop the latter expansion is terminated (at latest) after the
+quadrupole term. The exchange potential Vx[n(rt)] is approximated using the expression pro-
+posed by Krieger, Li, and Iafrate (KLI) in [35]. Within the KLI approximation, going beyond
+the groundstate, monopole term turns out to be hard while in local density approximation it
+is simple to go up to the quadrupole term as well.
+
+Hartree potential
+
+The Hartree-potential (52) is calculated using the Kohn-Sham density (4) and the orbitals
+−1 in spherical harmonics, the following expressions for the Hartree
+r′
+(17). Expanding
+|
+multipoles U k(rt) in equation (56) are obtained,
+
+r
+|
+
+−
+
+(57)
+
+(58)
+
+(60)
+
+(61)
+
+(62)
+
+U 0(rt) =
+
+Λ(r′t) dr′,
+
+U 1(rt) =
+
+Θ(r′t) dr′,
+
+1
+r>
+
+r<
+r2
+>
+
+Z
+
+Z
+
+Λ(rt) = 2
+
+2,
+Φilm(rt)
+|
+|
+
+il
+X
+
+r2
+<
+r3
+>
+where r< and r> are min(r, r′) and max(r, r′), respectively. The auxiliary functions Λ(rt),
+Θ(rt), and Ξ(rt) read
+
+Ξ(r′t) dr′
+
+U 2(rt) =
+
+(59)
+
+Z
+
+Θ(rt) = 2
+
+cl−1,mΦ∗
+
+i,l−1,m(rt) + clmΦ∗
+
+i,l+1,m(rt)
+
+Φilm(rt),
+
+Xil
+plmΦ∗
+
+(cid:2)
+ilm(rt) + qlmΦ∗
+
+Ξ(rt) = 2
+
+Xil
+
+(cid:2)
+
+i,l+2,m(rt) + ql−2,mΦ∗
+
+i,l−2,m(rt)
+
+Φilm(rt).
+
+(cid:3)
+
+(cid:3)
+
+The factor 2 in these expressions stems from the spin degeneracy,
+i.e., we assume spin-
+unpolarized systems where each Kohn-Sham orbital is occupied by two electrons of opposite
+spin. The coeﬃcients clm, plm, and qlm are given by (25) and (26).
+
+Krieger-Li-Iafrate approximation to the exchange potential
+
+It is possible to derive an integral equation that implicitly deﬁnes the so-called optimized
+eﬀective potential [49, 50, 51]. However, this integral equation is diﬃcult to solve, and simpler
+expressions of comparable accuracy are needed in practice. Krieger, Li, and Iafrate (KLI) [35]
+simpliﬁed the full integral equation and obtained for the exchange potential
+
+xσ (r) = V Slater
+V KLI
+
+xσ
+
+(r) +
+
+Nσ−1
+
+i=1
+X
+
+2
+Ψiσ(r)
+|
+|
+nσ(r)
+
+Ψiσ(r′)
+2
+|
+|
+
+(cid:0)
+
+xσ (r′)
+V KLI
+
+uxiσ(r′)
+
+d3r′
+
+(63)
+
+−
+
+(cid:1)
+
+Z
+
+15
+
+where σ =
+
+denotes the spin variable of Nσ electrons,
+
+,
+↑
+
+↓
+
+is the spin density,
+
+nσ(r) =
+
+2
+Ψiσ(r)
+|
+|
+
+Nσ
+
+i=1
+X
+
+Nσ
+
+i=1
+X
+
+V Slater
+xσ
+
+(r) =
+
+2
+Ψiσ(r)
+|
+|
+nσ(r)
+
+uxiσ(r)
+
+is the so-called Slater-potential, and
+
+uxiσ(r) =
+
+1
+Ψ∗
+iσ(r)
+
+Ψjσ
+δEx[
+{
+δΨiσ(r)
+
+]
+}
+
+=
+
+−
+
+Nσ
+
+j=1
+X
+
+Ψjσ(r)
+Ψiσ(r)
+
+Ψ∗
+
+iσ(r′)Ψjσ(r′)
+r′
+
+r
+|
+
+−
+
+|
+
+Z
+
+d3r′
+
+with the exact exchange energy
+
+Ψjσ
+Ex[
+{
+
+] =
+}
+
+−
+
+1
+2
+
+Nσ
+
+Ψ∗
+
+iσ(r)Ψ∗
+
+jσ(r′)Ψjσ(r)Ψiσ(r′)
+
+Xσ=↑,↓
+
+i,j=1 Z Z
+X
+
+r
+|
+
+−
+
+r′
+
+|
+
+d3r′ d3r.
+
+(67)
+
+The integral equation (63) can be solved for V KLI
+
+2 and integrating over space. Introducing the short-hand notation
+Ψjσ(r)
+|
+|
+2A(r) d3r of an entity A, the matrix equation
+Ψjσ(r)
+average
+|
+|
+
+xσ (r) by multiplying both sides with
+jσ for the orbital
+A
+i
+h
+
+R
+
+Nσ−1
+
+i=1
+X
+
+(δji
+
+Mjiσ)Qiσ =
+
+−
+
+V Slater
+xσ
+h
+
+−
+
+uxjσ
+
+jσ
+i
+
+for the Nσ
+
+1 coeﬃcients
+
+−
+
+is obtained. The (Nσ
+
+1)
+
+−
+
+×
+
+(Nσ
+
+−
+
+Qiσ =
+
+V KLI
+xσ −
+h
+1) matrix Mjiσ is given by
+
+uxiσ
+
+iσ
+i
+
+Mjiσ =
+
+Z
+
+2
+2
+Ψjσ(r)
+Ψiσ(r)
+|
+|
+|
+|
+nσ(r)
+
+.
+
+(64)
+
+(65)
+
+(66)
+
+(68)
+
+(69)
+
+(70)
+
+The term with the highest occupied spin orbital i = Nσ is excluded from the sums in (63) and
+(68) since it can be shown that QNσσ = 0 [35]. After solving (68) for Qiσ, all the quantities
+on the right hand side of (63) are determined, and the KLI potential can be evaluated.
+
+Currently, only spin-unpolarized systems where n(r) = 2nσ(r), Nσ = N/2 with N the
+xσ = V KLI
+number of electrons in the system, and V KLI
+are tractable with Qprop. Orbital
+degeneracies > 2 are possible, so that no unnecessary overhead arises for Kohn-Sham orbitals
+that evolve identically in a laser ﬁeld. For instance, the four 2p orbitals with σ =
+and
+= 1 behave identically in dipole approximation and thus can be subsumed under a single
+m
+|
+orbital Ψi(rt) of degeneracy di = 4.
+
+,
+↑
+
+↓
+
+x
+
+|
+
+Further computational details can be found in the documentation provided with the pro-
+gram and online [36]. In the current version of Qprop the KLI potential is restricted to the
+ground state monopole contribution V KLI
+(r). The latter is suﬃcient to determine state-of-
+the-art eﬀective potentials for the ground state of spherically symmetric systems (or other
+
+x
+
+0
+
+16
+
+0
+
+systems in central ﬁeld approximation). The ground state KLI potential V KLI
+(r, t = 0) may
+then be used for either frozen-core calculations or it may be re-calculated each time step as an
+approximation to the real TDDFT exchange potential. The latter approximation should be
+acceptable as long as most of the electrons stay inside the atom and the deviation from spher-
+ical symmetry remains small. The dipole contribution to the time-dependent KLI potential
+would be already very complicated due to the coupling of many angular momenta. Within
+simpler approaches (e.g., local density approximation) where the exchange potential is given
+explicitly as a functional of the density n(rt), an expansion up to the quadrupole is much
+simpler.
+
+x
+
+2.6 Spectral analysis: the window-operator technique
+
+Qprop allows to calculate an initial state of interest and propagates this state in time. By the
+end of propagation—usually at the end of the laser pulse—the ﬁnal state Ψ(r) = Ψ(r, t = tf)
+is obtained. It is useful to analyze its spectrum with respect to the Hamiltonian H0 of the
+atomic system (without laser) whose eigenstates we denote by ψE (r),
+
+=
+
+Ψ
+|
+
+i
+
+cE
+
+ψE
+|
+
+i
+
+d
+
+.
+
+E
+
+XZ
+
+In order to avoid the explicit calculation of all the eigenstates
+, a window-operator tech-
+i
+nique very similar to the one proposed in [33, 34] is employed. A window-operator WEγn of
+energy
+
+and of energy width γ is deﬁned as
+
+ψE
+|
+
+E
+
+WEγn =
+
+γ2n
+)2n
+
++ γ2n ,
+
+(H0 − E
+where n is the integer order of the window-operator. The higher the order n, the more
+rectangular is the window proﬁle.
+
+When acting on a state
+
+the
+scalar product of which gives a measure for the population of states that lie within the window
+of width γ, centered around the electron energy
+
+, the window-operator returns the energy component
+i
+
+χEγn
+|
+
+Ψ
+|
+
+i
+
+,
+
+χEγn
+h
+
+χEγn
+|
+
+i
+
+=
+
+Ψ
+h
+
+W 2
+|
+
+Eγn|
+
+Ψ
+
+=
+
+i
+
+E
+
+cE ′
+|
+
+2
+|
+
+γ2n
+)2n
+
+′
+
+(
+E
+
+(cid:18)
+
+− E
+
+XZ
+
+2
+
+′.
+
+d
+
+E
+
++ γ2n
+
+(cid:19)
+χEγn
+|
+
+Hence, for γ
+
+2. Finite
+|
+energy width γ, on the other hand, allows to model realistic measurements with a ﬁnite energy
+resolution.
+
+0 the modulus squared of the energy component
+
+equals
+
+cE
+|
+
+→
+
+i
+
+Since WEγn has the operator H0 in the denominator,
+using the factorization
+Ψ
+|
+
+the equation W −1
+Eγn|
+
+χEγn
+
+=
+
+i
+
+i
+
+χEγn
+|
+
+i
+
+is actually calculated by solving
+
+)2n
+
++ γ2n
+
+=
+
+(H0 − E
+
+2n−1
+
+[H0 − E
+
++ γ exp(iνnk)] [H0 − E −
+
+γ exp(iνnk)] ,
+
+(74)
+
+k=1
+Y
+where the phases νnk are uniformly distributed between 0 and π/2,
+
+(71)
+
+(72)
+
+(73)
+
+(75)
+
+νnk = (2k
+
+1)π/2n.
+
+−
+
+17
+
+In the current version of Qprop, the energy component
+
+is calculated for the ﬁxed
+order n = 3 for both the general (15) and the reduced expansion (17).
+is then ob-
+tained as an expansion in spherical harmonics with the radial energy components denoted by
+Rχ
+in form of expansions over spherical harmonics allow
+i
+to calculate diﬀerential probabilities of electron emission. The probability Pγn(
+), diﬀerential
+E
+in energy, reads
+
+lm(r). The energy components
+
+χEγn
+|
+
+χEγn
+|
+
+χEγn
+|
+
+i
+
+i
+
+Pγn(
+E
+
+) =
+
+χEγn
+h
+
+χEγn
+|
+
+i
+
+=
+
+dr dΩ
+
+Z
+
+Rχ
+
+lm(r)Ylm(Ω)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+lm
+X
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+2
+
+=
+
+lm Z
+X
+
+dr Rχ∗
+
+lm(r)Rχ
+
+lm(r).
+
+(76)
+
+Useful information about the emission probability diﬀerential in energy and in angle is obtained
+by simply omitting the integration over the solid angle,
+
+Pγn(
+E
+
+, Ω) =
+
+dr
+
+(cid:12)
+Xlm
+(cid:12)
+(cid:12)
+(cid:12)
+, Ω) simplify for the reduced expansion (17) since the
+(cid:12)
+sum over m is absent then. Examples for the calculation of electron spectra are given in
+Secs. 4.4 and 4.5.
+
+The probabilities Pγn(
+E
+
+) and Pγn(
+E
+
+Z
+
+(77)
+
+2
+
+.
+
+Rχ
+
+lm(r)Ylm(Ω)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+3 Program structure
+
+The Qprop package is arranged as a library of classes whose objects represent orbitals, grids,
+and Hamiltonians. In order to use the library, an executable program has to be written. This
+program is usually short and may be regarded as an extended input-ﬁle which proﬁts from all
+the powerful C++ features. Compared to a foolproofed approach where the user never makes
+direct contact with the actual data structures, our library-oriented approach requires more
+knowledge of the internal structures. On the other hand, once the user got acquainted with
+the important classes and functions, he or she may really beneﬁt from the huge ﬂexibility.
+
+Content and functionality of the internal data structures will be considered in the following
+Sec. 3.1. The ﬁve examples in Sec. 4 are aimed at facilitating the ﬁrst steps in the usage of
+Qprop.
+
+3.1 Internal data structures
+
+The classes fluid, wavefunction, grid, and hamop build the core of the Qprop library.
+Objects of classes fluid and wavefunction represent real valued and complex valued one-
+dimensional arrays, respectively.3 The methods provided by these classes allow to initialize the
+corresponding arrays, to manipulate them, and to store (load) them to (from) ﬁles. From the
+physical point of view, objects of class wavefunction typically represent radial wavefunctions
+or sets of radial orbitals to be propagated. However, objects of class wavefunction may be
+used for any auxiliary quantity that can be represented by a complex vector. The heart of the
+3The name “fluid” may appear strange. It is mainly for “historical” reasons since this class was originally
+
+developed for a ﬂuid code that naturally deals with real valued arrays.
+
+18
+
+Qprop library, namely the actual short-time propagation (43), is implemented as a member
+function of class wavefunction.
+
+The entries of an object of class wavefunction are accessible through an object of class
+grid, which deﬁnes the number of spatial grid points, the number of angular momentum
+quantum numbers, the number of orbitals, the grid spacing, and whether expansion (15) or
+(17) is used. In other words, objects of class grid deﬁne the numerical grid on which the objects
+of class wavefunction are deﬁned, e.g., the number of grid points Nr in radial direction, the
+upper limit L
+1 for the l quantum numbers in the expansions (15) or (17), and the number
+of Kohn-Sham orbitals. The most important functions of class grid are collected in Tab. 1.
+
+−
+
+Table 1: Main functions (methods) of class grid.
+
+Method
+
+Arguments
+
+Description and comments
+
+set dim
+
+(long dim)
+
+Deﬁnes type of expansion,
+dim=44 or (17) dim=34.
+
+i.e., either (15)
+
+index
+
+set delt
+set ngps
+
+size
+r
+ngps x
+ngps y
+ngps z
+
+(double dr)
+(long N r, long L, long N orb)
+
+(long r, long l, long m, long n) Calculates the index of a wavefunction (or or-
+bital) entry; radial position r, angular momen-
+tum l, magnetic quantum number m, orbital
+no. n; n is irrelevant for dim=44 while m is ir-
+relevant for dim=34
+Deﬁnes ∆r
+Deﬁnes Nr, L, and number of Kohn-Sham or-
+bitals.
+Returns size of grid object
+Calculates r, given rindex
+1]
+Returns number of radial gridpoints Nr
+Returns number of angular momenta L
+Returns number of orbitals N
+
+(void)
+(long rindex)
+(void)
+(void)
+(void)
+
+[0, Nr
+
+−
+
+∈
+
+Objects of class hamop collect a number of external potentials that set up the Hamiltonian.
+
+These potentials are to be deﬁned by the user and are listed in Tab. 2.
+
+Class wavefunction is clearly the most important part of the Qprop library. As already
+mentioned, it contains the methods to initialize, to load and to store the radial orbitals, to
+propagate them in time, to calculate the observable quantities and eﬀective potentials. Table 3
+shows some of the public methods to perform these tasks. Several methods are overloaded, i.e.,
+they are distinguished by the diﬀerent sets of arguments only. The meaning of most arguments
+is self-explanatory. Since many of the methods need to know in which order the radial orbitals
+are organized in the internal, one-dimensional array,4 the ﬁrst argument often is of class grid.
+In order to control the verbosity of some complex methods, there is an integer iv argument at
+the end of the parameter list. Setting it to zero suppresses any output to the stdout stream.
+Objects of class fluid are basically real valued, one-dimensional arrays, i.e., the real counter
+parts of wavefunction objects. They are used to store eﬀective potentials and auxiliary
+quantities that are not complex. For instance, calculate hartree zero in Tab. 3 returns an
+
+4There are only one-dimensional arrays internally.
+
+19
+
+Table 2: Functions needed to deﬁne an object of class hamop. The argument me is for parallel
+computing purposes where it allows to let the potentials depend on the job number.
+
+Function
+
+Arguments
+
+Description and comments
+
+vecpot x
+
+(double t, int me)
+
+vecpot y
+
+(double t, int me)
+
+vecpot z
+
+(double t, int me)
+
+scalarpotx
+
+(double x, y, z, t, int me)
+
+x-component of the vector potential (only rel-
+evant for dim=44, i.e., with Eq. (15))
+y-component of the vector potential (only rel-
+evant for dim=44, i.e., with Eq. (15))
+z-component of the vector potential (only rel-
+evant for dim=34, i.e., with Eq. (17))
+Spherically symmetric potential V (r) in (16),
+x corresponds to r, y and z are not needed
+
+scalarpoty
+scalarpotz
+field
+imagpot
+
+(double x, y, z, t, int me)
+(double x, y, z, t, int me)
+(double t, int me)
+(long xindex, yindex, zindex,
+double t, grid g)
+
+0 since not used here
+≡
+0 since not used here
+≡
+electric ﬁeld E(t) in (16)
+
+imaginary potential Vim(r) from Sec. 2.4;
+xindex is the radial index for dim=34 or 44
+while yindex and zindex are not relevant here
+
+object of class fluid. Usage of the class is straightforward and can be understood from the
+examples in Sec. 4.
+
+Apart from the classes wavefunction, grid, hamop and fluid, another class cmatrix and
+several functions are deﬁned. Class cmatrix deals with matrix operations, some of which make
+use of the blas and lapack libraries. However, class cmatrix is currently used only inside
+member functions of class wavefunction so that there is no need to discuss its features in the
+present paper.
+
+3.2 External libraries and source codes
+
+Qprop needs the libraries blas, lapack, and f2c— all available free of charge [52, 53, 54].
+Note that they are part of many Linux distributions. Apart from the libraries, Qprop proﬁts
+from two programs to be cited: Clebsch-Gordan coeﬃcients (needed for the KLI potential
+(63)) are calculated using the program ned by Arturo Sierra [55], and spherical harmonics
+(needed for the implementation of (77)) are calculated as in the Racah package [56].
+
+3.3 Distribution and installation
+
+The program is distributed as a single tarball qprop.tar.gz. The archive is organized in
+several subdirectories with source code, makeﬁles and README-ﬁles.
+Installation consists of
+extracting the tarball and creating links to the libraries blas, lapack, and f2c in the subdi-
+rectory lib/i386/. The top directory contains a makeﬁle qprop/GNUmakefile.tmpl, which
+controls the compilation of the qprop library. The user will probably need to adjust the
+variable ROOT in this ﬁle. This variable points to the absolute location of the Qprop package.
+
+20
+
+Table 3: Selected functions (methods) of class wavefunction.
+
+Method
+
+Arguments
+
+Description and comments
+
+calculate staticpot
+
+(grid g, hamop hamil)
+
+calculate Lambda
+calculate Theta
+calculate Xi
+calculate hartree zero
+calculate hartree one
+calculate hartree two
+calculate kli zero
+
+dump to file sh
+energy
+
+2
+1
+
+expect z
+expect z
+init
+
+init rlm
+
+propagate
+
+(grid g, fluid deg)
+(grid g, fluid deg, fluid ms)
+(grid g, fluid deg, fluid ms)
+(grid g, fluid Lambda)
+(grid g, wavefunction Theta)
+(grid g, wavefunction Xi)
+(grid g, fluid Lambda, fluid ls,
+fluid ms, fluid deg,
+int slateronly, int iv)
+(grid g, FILE file, int st, int iv)
+(double time, grid g, hamop hamil,
+int me, wavefunction staticpot,
+double charge)
+(grid g)
+(grid g, fluid deg, const fluid ms)
+(long size)
+(grid g, int inittype, double w,
+fluid ls)
+(grid g, FILE file, int ooi, int iv)
+(grid g, int inittype, double w,
+fluid ls, fluid ms)
+(complex timestep, double time,
+grid g, hamop hamil, int me,
+wavefunction staticpot, int m, double
+nuclear charge)
+
+totalenergy hartree
+totalenergy exact x
+
+(grid g, fluid Lambda, fluid U 0)
+(grid g, fluid ells, fluid deg)
+
+Calculates static part of total potential (scalarpotx + centrifugal potential +
+imagpot) using Hamiltonian hamil
+Calculates auxiliary quantity Λ(rt) (60)
+Calculates auxiliary quantity Θ(rt) (61)
+Calculates auxiliary quantity Ξ(rt) (62)
+Calculates monopole term (57) in expansion (56)
+Calculates dipole term (58) in expansion (56)
+Calculates quadrupole term (59) in expansion (56)
+Calculates groundstate KLI potential (63). Auxiliary array Lambda must be
+provided (see function calculate Lambda() in this table). Flag slateronly=1
+leaves only ﬁrst summand V Slater
+Saves orbitals in file
+Calculates kinetic energy plus potential energy due to static potential staticpot,
+e.g., bracket in equation (82) below
+
+(r) on right hand side of (63)
+
+xσ
+
+=
+Calculates
+for the entire set of Kohn-Sham orbitals.
+Calculates
+Various ways to initialize wavefunction objects (cf. examples in Sec. 4)
+
+for a single orbital.
+
+z
+Ψ(t)
+|
+h
+
+Ψ(t)
+i
+|
+
+z
+h
+z
+h
+
+i
+i
+
+Propagates a wavefunction from time to time+timestep. hamil determines only
+external ﬁelds in this function. Potential of nucleus is supposed to be contained in
+staticpot (see calculate staticpot() in this table). nuclear charge is used
+to account for correction (36). There is an overloaded version for the propagation
+of several Kohn-Sham orbitals (cf. Sec. 4.3)
+Calculates Hartree energy EH[n] (54)
+Calculates exchange energy Ex (67)
+
+qprop/
+
+doc/
+lib/i386/
+obj/i386/
+src/
+
+base/
+circ/
+hydrogen/
+ionization/
+neon/
+winop/
+
+Figure 1: Directory structure of the Qprop package.
+
+Figure 1 shows the directory structure of the Qprop package. The basic source code is
+placed in the subdirectory src/base/. The code of several examples is placed in subdirectories
+in src/. Five examples are provided and discussed in Sec. 4.
+
+The other directories contain extra documentation (in doc/), object ﬁles .o (in obj/i386/),
+and the library ﬁles (or links to) libqprop.a, libblas.a, liblapack.a, libf2c.a (in
+lib/i386/). The subdirectories with source code contain also the Makefiles so that the
+executable ﬁles can be compiled with the make utility. By default the executable is put in
+the same directory.
+
+4 Test calculations
+
+In order to facilitate a quick start, ﬁve examples for the application of the Qprop code are
+provided in the directories src/hydrogen/, src/ionization/, src/neon/, src/winop/, and
+src/circ/. The examples are chosen such that, on one hand they are not too run-time
+consuming while, on the other hand they cover in a non-trivial manner the key issues (i)
+imaginary time propagation, (ii) real time propagation, (iii) determination of an eﬀective
+potential using DFT, (iv) calculation of electron spectra, and (v) circular polarization.
+
+Each subdirectory in src/ contains the source code in the ﬁles with extension .cc and an
+appropriate Makefile to generate the executable program in the same directory. The output
+will be written to ﬁles in the subdirectories res.
+
+4.1 Ground state via imaginary time propagation
+
+The goal in this example is to calculate the nonrelativistic ground state of the hydrogen atom
+by means of imaginary time propagation. As explained in Sec. 2.3, imaginary time propagation
+is a powerful method to compute the ground state in any potential. The hydrogen atom was
+chosen because of its simplicity and the fact that the solution is analytically known. We
+start with an unbiased guess, that is, a random s-orbital. The source code of the program
+hydrogen im.cc is located in the subdirectory src/hydrogen/. In the following we discuss
+
+22
+
+the few crucial points.
+
+After standard directives concerning header ﬁles, the ﬁle potentials.cc is included.
+
+// *** potentials, nuclear_charge, and laser pulse parameters
+//
+#include<potentials.cc>
+
+are declared in potentials.cc ***
+
+The ﬁle potentials.cc is a piece of code, which deﬁnes a few global variables and the
+potentials that make up the Hamiltonian. The idea is to put the code common to imaginary
+and real time propagation in an extra ﬁle, thus reducing liability to inconsistencies. The laser
+ﬁeld is oﬀ (E 0=0.0) during imaginary time propagation.
+
+Next, variables are declared and initialized. Let us consider the lines below the initialization
+
+of the object g of class grid:
+
+// *** declare the grid ***
+g.set_dim(34); // 44 elliptical polariz., 34 linear polariz.
+g.set_ngps(1000,1,1); // N_r, L, N
+g.set_delt(0.2/nuclear_charge); // delta r
+g.set_offs(0,0,0);
+
+// there is no offset in r, l, and N
+
+Depending on the polarization of the laser light, the suitable expansion of the wavefunction
+in spherical harmonics is chosen, i.e., either (15) with all L2 radial orbitals, suitable for any
+polarization in the xy-plane, or (17) for linear polarization along the z-axis (where L radial
+orbitals suﬃce). General and reduced expansion require diﬀerent propagation procedures.
+Thus a propagation mode has to be speciﬁed using the set dim() function. The next line
+g.set ngps(1000,1,1) deﬁnes Nr = 1000 spatial grid points for each radial orbital Φilm(rt),
+1), and N = 1 orbital. The hydrogen
+L = 1 l-quantum numbers (ranging from 0 to L
+ground state requires only a single orbital Φ1s(r) of s-symmetry so that L = 1 is chosen. Since
+nuclear charge is 1, ∆r = 0.2 follows, and the equidistant grid reaches up to rmax = 200 au.
+There are no grid oﬀsets for the two propagation modes 34 and 44 discussed in this paper so
+that the grid initialization is completed by g.set offs(0,0,0).
+
+−
+
+The Hamiltonian hamilton of class hamop is initialized through the functions deﬁned in
+
+potentials.cc:
+
+// the Hamiltonian
+hamilton.init(g,vecpot_x,vecpot_y,vecpot_z,scalarpotx,scalarpoty,scalarpotz,
+
+imagpot,field);
+
+// this is the linear and constant part of the Hamiltonian
+staticpot.init(g.size());
+staticpot.calculate_staticpot(g,hamilton);
+
+The time-independent part of the Hamiltonian is stored in staticpot (see calculate-
+staticpot in Tab. 3).
+
+The radial wavefunction is stored in the object wf of class wavefunction. In this example
+there is only a single radial wavefunction because N L = 1. The lines below initialize and
+normalize the wavefunction wf (dots “...” indicate lines of code that are omitted for the sake
+of clarity).
+
+23
+
+// *** wavefunction initialization ***
+wf.init(g.size());
+wf.init(g,iinitmode,1.0,ells);
+wf.normalize(g);
+...
+
+wf.dump_to_file_sh(g,file_wf_ini,1)
+
+Depending on the argument iinitmode of type int, the wavefunction may be initialized
+either randomly or with hydrogenic orbitals. The interested user may have a look at the
+corresponding init function in wavefunction.cc. In this example, the wavefunction is ini-
+tialized randomly (iinitmode = 1) and written to file wf ini. (i.e., a ﬁle in the subdirectory
+src/hydrogen/res/). The ﬁle consists of two columns of numbers (real and imaginary part)
+and NrLN lines, i.e., only a single radial orbital in this example.
+
+The array ells[i] is used to assign the l quantum number 0 to the radial wavefunction Φl.
+This information is solely needed by the initialization routine init when L > 1 (see the more
+complex example 4.3 below).5
+
+The actual propagation is a loop:
+
+// *** imaginary time propagation ***
+for (ts=0; ts<lno_of_ts; ts++)
+{
+
+time = time + imag(timestep);
+...
+
+wf.normalize(g);
+...
+
+}
+
+E_tot = real(wf.energy(0.0,g,hamilton,me,staticpot,nuclear_charge));
+...
+
+wf.propagate(timestep, 0.0, g, hamilton, me, staticpot, 0, nuclear_charge);
+
+Being inside the body of the loop, the short-time propagator is applied consecutively to the
+orbitals in wf with an imaginary time step g.delt x()/4.0, i.e., 0.05 here. The short-time
+propagation is handled by the wavefunction member function propagate() (cf. Tab. 3). Its
+ﬁrst argument timestep is the pure imaginary time step. The second argument, i.e., the
+time, is irrelevant for the determination of the ground state and thus set to zero. Grid,
+Hamiltonian, process ID me, constant potential part staticpot, magnetic quantum number
+m = 0, and nuclear charge (as deﬁned in potentials.cc) follow as arguments.
+
+In the loop body the total energy is calculated each imaginary time step so that one may
+keep track of the convergence of the total energy. After each propagation step the function is
+normalized because propagation in imaginary time is not unitary.
+
+5If we choose L = 2 and ells[0]=1 we obtain the 2p state since only the radial wavefunction Φl=1 will be
+initialized with random numbers while Φl=0 ≡ 0. Note that there is no coupling between diﬀerent l quantum
+numbers during imaginary time propagation.
+
+24
+
+Imaginary propagation stops when a key is hit, i.e., when the user is satisﬁed with the
+convergence of the ground state energy, or at latest after lno of ts = 640000 time steps.
+After propagation, the orbital is stored in file wf fin in src/hydrogen/res/. The converged
+0.5001510772159702 au.
+ground state energy on the numerical grid chosen above reads
+The names of the ﬁles generated in src/hydrogen/res/ depend on the simulation param-
+
+−
+
+=
+
+E
+
+eters and read in the case discussed here
+
+hydrogen_im-34-1000-2.00e-01.log
+hydrogen_im_info-34-1000-2.00e-01.dat
+hydrogen_im_obser-34-1000-2.00e-01.dat
+hydrogen_im_wf_fin-34-1000-2.00e-01.dat
+hydrogen_im_wf_ini-34-1000-2.00e-01.dat
+
+The ﬁrst ﬁle is a log-ﬁle containing all the important simulation parameters for inspection by
+the user. The second ﬁle is a xml-ﬁle from which other programs may conveniently read the
+simulation parameters. Observables are stored in the third ﬁle (time step and energy in two
+columns). Fourth and ﬁfth ﬁle contain the wavefunction after and before the imaginary time
+propagation.
+
+Before imaginary-time propagation
+
+After imaginary-time propagation
+
+ 0.8
+
+ 0.6
+
+ 0.4
+
+ 0.2
+
+ 0
+
+)
+
+r
+
+(
+
+Φ
+
+ 
+l
+a
+t
+i
+b
+r
+o
+ 
+l
+a
+i
+d
+a
+R
+
+-0.2
+
+ 0
+
+ 2
+
+ 4
+ 6
+Distance  r, au
+
+ 8
+
+ 10
+
+Figure 2: Initial (random) orbital before imaginary time propagation and ﬁnal orbital con-
+verged to the hydrogenic 1s radial wavefunction 2r exp(
+
+r).
+
+−
+
+The radial wavefunctions before and after imaginary time propagation are shown in Fig. 2.
+The wavefunction after imaginary time propagation converged to the 1s radial wavefunction
+2r exp(
+
+r).
+
+The program hydrogen re.cc in the same directory reads the wavefunction from ﬁle
+hydrogen im wf fin-34-1000-2.00e-01.dat and propagates it in real time with the laser
+ﬁeld switched on. The essential lines are provided with comments so that the code should be
+
+−
+
+25
+
+self-explanatory. Additional entities of interest such as the time-resolved ground state popula-
+tion, the expectation value in laser polarization direction
+, and the total norm on the grid
+i
+are calculated inside the main propagation loop.
+
+z
+h
+
+4.2 One, two, and three-photon ionization of hydrogen
+
+The results presented in this example were obtained using the code in src/ionization. First,
+the hydrogen 1s ground state is generated again using hydrogen im.cc. Afterwards, the
+wavefunction is propagated in a Nc = 20-cycle sin2-pulse (sin2 with respect to the electric
+ﬁeld)
+
+E(t) = E0 ez sin2
+
+ωt
+2Nc (cid:19)
+
+(cid:18)
+
+cos(ωt + ϕ),
+
+0
+
+t
+
+T = Nc
+
+≤
+
+≤
+
+2π
+ω
+
+for diﬀerent laser intensities I between 1011 and 1012 Wcm−2 using ionization.cc. The
+0 E(t′) dt′, is implemented in
+vector potential A(t) corresponding to (78), i.e., A(t) =
+potentials.cc. We want to focus on one and three-photon ionization. To that end we chose
+R
+ω = 0.8 and ω = 0.17, respectively.
+
+−
+
+t
+
+It is well known that if the ponderomotive energy
+
+Up =
+
+E2
+0
+4ω2 ,
+
+k =
+
+Ip
+~ω
+
+i.e., the time-averaged quiver energy of a free electron in a laser pulse of amplitude E0, is
+much smaller than the ionization potential Ip > ~ω, ionization will be a perturbative process
+in the multiphoton regime, and perturbation theory in lowest nonvanishing order (LOPT) is
+suﬃcient.
+
+The number of photons needed to overcome the ionization potential of the atom is given
+
+by
+
+where ~ω is the energy of a photon and
+small ponderomotive energy the ac Stark shift can be omitted.
+
+A
+⌋
+⌊
+
+(cid:23)
+
+(cid:22)
+denotes the smallest integer > A. Thanks to the
+
+If the photon energy is smaller than the ionization potential, one-photon ionization is im-
+possible because of energy conservation. On the other hand, k + 1, k + 2, . . . photon ionization
+is possible but unlikely in the LOPT regime. The latter predicts that the ionization rate
+Γk(I, ω) for a k-photon process is proportional to the k-th power of the light intensity (see,
+e.g., [5]), i.e.,
+
+Γk(I, ω) = σk(ω)I k,
+where the coeﬃcient σk(ω) denotes the generalized cross section for k-photon ionization. As
+long as ΓkT
+1 the ionization probability is also proportional to Γk. Figure 3 shows the
+numerical results obtained with ionization.cc in src/ionization, conﬁrming the power-
+law behavior in the multiphoton LOPT regime.
+
+(81)
+
+≪
+
+4.3 Calculation of the neon ground state conﬁguration
+
+In this example, the total energy of the neon atom will be calculated within the Kohn-Sham
+formalism of density-functional theory. The theoretical background is presented above in
+Sec. 2.
+
+(78)
+
+(79)
+
+(80)
+
+26
+
+ω = 0.80
+I
+˜ 
+ω = 0.17
+I3
+
+˜ 
+
+s
+t
+i
+n
+u
+
+ 
+.
+
+b
+r
+a
+ 
+,
+)
+
+ω
+
+ 
+,
+
+I
+
+(
+
+ 
+
+P
+d
+l
+e
+i
+y
+ 
+c
+i
+n
+o
+r
+t
+c
+e
+l
+e
+ 
+l
+a
+t
+o
+T
+
+ 1
+
+ 0.8
+
+ 0.6
+
+ 0.4
+
+ 0.2
+
+ 0
+
+3 1011
+
+6 1011
+
+9 1011
+
+Intensity I, W/cm2
+
+Figure 3: Ionization probability after a 20-cycle sin2-pulse vs laser intensity for the two carrier
+frequencies ω = 0.8 and ω = 0.17 (one and three-photon ionization, respectively). The power-
+law in (81) is conﬁrmed.
+
+In our nonrelativistic treatment, the total ground state energy of the neon atom can be
+calculated using only the three Kohn-Sham orbitals Ψ1s(r), Ψ2s(r), and Ψ2p(r), occupied by
+2, 2, and 6 “electrons”, respectively,
+
+// *** declare the grid ***
+nuclear_charge = 10.0;
+g.set_dim(34); // only 34 (linear polariz.) works in Kohn-Sham mode
+g.set_ngps(10000,2,3); // we need 2 angular momenta and 3 orbitals here
+g.set_delt(0.01);
+g.set_offs(0,0,0);
+
+really_propagate[0] = 1; // orbital 0 is to be propagated (not frozen!)
+really_propagate[1] = 1; // orbital 1 is to be propagated (not frozen!)
+really_propagate[2] = 1; // orbital 2 is to be propagated (not frozen!)
+
+The lines
+
+degener[0]
+degener[1]
+degener[2]
+
+ms[0]
+ms[1]
+ms[2]
+
+= 2; // two electrons in 1s shell
+= 2; // two electrons in 2s shell
+= 6; // six electrons in 2p subshell
+
+= 0; // m quantum number of orbital 0
+= 0; // m quantum number of orbital 1
+= 0; // whether one puts 0,1, or -1 here
+
+// does not matter for the ground state
+
+27
+
+ells[0]
+ells[1]
+ells[2]
+
+= 0; // l quantum number of orbital 0
+= 0; // l quantum number of orbital 1
+= 1; // l quantum number of orbital 2
+
+are self explanatory. They assign l and m quantum numbers, degeneracies (i.e., occu-
+pation numbers), and the information whether orbital no. i should be really propagated
+(really propagate[i]=1) or considered frozen (really propagate[i]=0).
+
+As compared to the simpler case of atomic hydrogen in Sec. 4.1 the overloaded Kohn-Sham
+ee from the multipole
+
+version of propagate() requires the radial functions V 0
+expansion (13) as arguments:
+
+ee, and V 2
+
+ee, V 1
+
+Lambdavector = wf.calculate_Lambda(g,degener);
+U_H0 = wf.calculate_hartree_zero(g,Lambdavector);
+U_x0 = wf.calculate_kli_zero(g,Lambdavector,ells,ms,
+degener,islateronly,0);
+
+V_ee_0 = U_H0 + U_x0;
+
+wf.propagate(timestep, 0.0, g, hamilton, me, staticpot,
+
+V_ee_0, V_ee_1, V_ee_2, ms, nuclear_charge, really_propagate);
+
+wf.normalize(g,ms);
+
+ee(r) = U 0(r) + V KLI 0
+
+Because all shells in ground state neon are closed, the electron density distribution is
+spherical, and so is the eﬀective potential. Thus the monopole term of the eﬀective po-
+tential V 0
+(r) is suﬃcient. The same holds for open-shell systems
+in the commonly applied central ﬁeld approximation. The function normalize(g,ms) per-
+forms a Gram-Schmidt orthonormalization of the Kohn-Sham orbitals. Exchange potential
+(in KLI approximation) and Hartree potential are calculated using calculate kli zero()
+and calculate hartree zero(), respectively.
+
+x
+
+Next, a few characteristic energies are calculated and written to the ﬁle file obser imag
+
+//
+// calculate energies
+//
+orb_energs = wf.orbital_energies(0.0, g, hamilton,me,
+
+staticpot, nuclear_charge);
+
+orb_hartreesandexchange = wf.orbital_hartrees(0.0,g,me,U_H0+U_x0);
+E_sp = wf.totalenergy_single_part(g,orb_energs, degener);
+hartree_energy = wf.totalenergy_hartree(g,Lambdavector,U_H0);
+x_energy=wf.totalenergy_exact_x(g,ells,degener);
+E_tot = real(E_sp + hartree_energy + x_energy);
+//
+// output to observables file
+//
+fprintf(file_obser_imag,"%i %15.10le %15.10le %15.10le %15.10le ",
+ts,E_tot,E_sp,real(hartree_energy),real(x_energy));
+
+for (i=0;i<g.ngps_z();i++) // loop over KS orbitals
+
+fprintf(file_obser_imag,
+
+28
+
+Table 4: Orbital-, single-particle-, Hartree-, exchange- and total energies for the neon atom
+after imaginary time propagation. The accuracy of the results improves with decreasing grid
+spacing ∆r = h. The maximum radius covered by the grid was ﬁxed to 80 au in each calcula-
+tion. Exact KLI values were taken from [51, 57].
+
+h, au
+
+→
+
+ǫ1s, au
+−
+ǫ2s, au
+−
+ǫ2p, au
+−
+Esp, au
+−
+EH[n], au
+Ex, au
+−
+Etot, au
+−
+
+0.02
+
+0.01
+
+0.005
+
+0.0025
+
+exact KLI LDA for Ne
+
+30.79983
+1.70687
+0.84941
+182.6479
+66.20527
+12.11682
+128.5595
+
+30.79928
+1.70711
+0.84941
+182.6154
+66.17606
+12.10324
+128.5426
+
+30.80127
+1.70722
+0.84940
+182.6137
+66.16999
+12.10013
+128.5439
+
+30.80188
+1.70725
+0.84940
+182.6114
+66.16588
+12.09900
+128.5446
+
+30.80
+1.707
+0.8494
+
+12.099
+128.5448
+
+in [58]
+30.3058
+1.32281
+0.49803
+182.2495
+65.72649
+11.71043
+128.2334
+
+"%15.10le ",real(orb_energs[i]+orb_hartreesandexchange[i]));
+
+Here, we deﬁned the orbital energy of Kohn-Sham orbital i as
+
+The result is stored in the array orb energs. The single-particle energy is deﬁned as
+
+i
+X
+i.e., the orbital energies Eorbi, weighted by the occupation numbers di. The total energy is
+then given by
+
+with EH according (54) and Ex according (67). The orbital energies ǫi in (49) are given by
+
+Eorbi =
+
+Ψi
+
+2
+
+∇
+2 −
+
+−
+
+Z
+r
+
+(cid:28)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+Ψi
+
+.
+
+(cid:29)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+Esp =
+
+diEorbi,
+
+Etot = Esp + EH + Ex
+
+ǫi = Eorbi + Eeei
+
+where
+
+Eeei =
+
+Z
+
+d3r
+
+2Vee(r) =
+Ψi(r)
+|
+|
+
+Veei
+h
+
+i
+
+denotes the orbital contribution due to the electron-electron interaction. In the code above,
+is stored in the array orb hartreesandexchange. The sum of orb energs[i] and
+Eeei
+orb hartreesandexchange[i] gives ǫi, which is written to ﬁle file obser imag as well. Note
+that owing to the nonlinearity of the Kohn-Sham equation Etot 6
+
+The numerical results for diﬀerent grid spacings ∆r = h are collected in Tab. 4. Very good
+agreement with the exact KLI values is obtained. Of particular interest is the orbital energy
+of the valence electron, i.e., ǫ2p. Imagine we want to use the eﬀective potential Vee for a single
+active electron calculation where only the valence electron is propagated while all others are
+
+i diǫi.
+
+P
+
+=
+
+(82)
+
+(83)
+
+(84)
+
+(85)
+
+(86)
+
+29
+
+kept “frozen”. Such an approach will only lead to quantitative correct answers if the modulus
+of the orbital energy
+is close to the ﬁrst ionization potential (i.e., if Koopmans’ theorem
+[59] is satisﬁed). The ionization potential of neon is Ip = 0.793 showing that KLI yields an
+enormous improvement compared to the simpler local density approximation (LDA) which is
+37% oﬀ.
+
+ǫ2p
+|
+
+|
+
+A few remarks are advisable at that point.
+
+1. In the current version of Qprop the KLI potential is implemented for the search of
+the ground state conﬁguration only. Unfortunately, the multipole expansion of the KLI
+expansion is utterly complicated if the Kohn-Sham orbitals loose their well-deﬁned l
+quantum number (as it is the case when the laser ﬁeld is switched on). For more details
+see the extra documentation in doc or online [36]. The Hartree potential, on the other
+hand, can be evaluated using the time-dependent, perturbed Kohn-Sham orbitals up to
+the quadrupole.
+
+2. As in any nontrivial optimization problem, it is not given for granted that the Gram-
+Schmidt orthonormalization during imaginary time propagation in the Kohn-Sham mode
+converges to the correct ground state conﬁguration. The better are the initial guesses
+for the orbitals, the higher is the chance to ﬁnd the true ground state. For the case of
+neon with only a few orbitals this is not a critical issue. We found out that for heavier
+atoms it is a good strategy to “build up” the electron conﬁguration step by step, i.e.,
+starting with an ion and adding one electron after the other. In that way we successfully
+generated the ground state conﬁguration of xenon.
+
+3. With a bad initial guess the orbital energies may cross during imaginary time propa-
+gation. However, for a proper KLI potential it is important that the last orbital (i.e.,
+the orbital with the highest index i) remains the outermost one during imaginary time
+propagation, since it is this orbital that is excluded from the sum in (63). Moreover, the
+sequence of orbitals must remain consistent with their degeneracies.
+
+4. It is instructive (and a good test) to choose instead of the three orbitals above ﬁve
+orbitals 1s, 2s, 2p−1, 2p0, 2p1, all occupied by 2 electrons. The results in Tab. 4 are not
+aﬀected, of course.
+
+4.4 Energy analysis of the ﬁnal wavefunction
+
+Besides the actual time propagation, the Qprop package provides a tool to evaluate energy
+spectra and angular distributions of the photoelectrons. The spectral analysis of the ﬁnal
+wavefunction is performed using the window-operator approach introduced in Sec. 2.6. Here,
+we present an implementation of it called Winop.
+
+The program winop.cc is located in the subdirectory src/winop. It computes the prob-
+ability distributions (76) and (77) from a one-electron wavefunction Ψi(r) given in form of
+either the expansion (15) or expansion (17).
+
+First, the energy range and spectral resolution is deﬁned:
+
+//
+// set a few essential parameters for the calculation of the spectra
+
+30
+
+//
+lnoofwfoutput
+no_energ
+gamma
+energy_init
+
+// 0 -- initial state, 1 -- final state.
+// number of energy bins
+
+= 1;
+= 2750;
+= 1.0e-4; // half width of the window operator (72)
+= -0.55; // first energy; last energy then is
+
+// energy_init + (no_energ-1)*2*gamma
+
+// define for how many angles (77) should be evaluated
+no_theta
+no_phi
+
+= 1; // no_theta angles between 0 and (1-1/no_theta)*pi
+= 1; // no_phi angles between 0 and (1-1/no_phi)*2*pi
+
+The variable lnoofwfoutput speciﬁes which of the stored wavefunctions should be consid-
+ered for the calculation of the spectrum. This is important if several wavefunctions (or orbitals)
+are saved in the same ﬁle. In src/hydrogen/hydrogen re.cc, for instance, the wavefunction
+is saved two times: before the propagation loop and after so that lnoofwfoutput can be 0
+(for an analysis of the initial wavefunction) or 1 (for the analysis of the ﬁnal wavefunction).
+
+The next three parameters deﬁne the spectral range and resolution. The latter is governed
+by the parameter γ of the window-operator (72): the smaller it is the higher is the spectral
+resolution. The variables no theta and no phi specify the number of angles for which the
+directional spectra (77) are evaluated.
+
+In order to ensure that the spectra are really calculated with respect to the proper Hamilto-
+nian, the same potentials.cc-ﬁle should be used for both the wavefunction propagation and
+the spectral analysis. For the latter only the unperturbed, spherically symmetric Hamiltonian
+is taken into account.
+
+The grid associated with the wavefunction to be loaded is determined from the info-ﬁle
+generated by the propagation program (e.g., hydrogen re.cc in src/hydrogen) and stored
+in g load. It is sometimes advisable to calculate the spectra on a grid that is larger than the
+grid on which the wavefunction was obtained because the energy resolution in the continuum
+increases when the grid radius is increased. In fact, our numerical grid is a spherical box whose
+discrete energy levels lie the closer together the bigger the radius is chosen. Since the level
+spacing increases with increasing energy, high resolution at high energies is only obtained for
+suﬃciently large grid radii. Grid g is used for the analysis. The loaded wavefunction is then
+regridded from g load to g.
+
+The core of winop.cc is a loop over the energy bins centered at
+
+. Inside the loop, the
+
+E
+
+function
+
+winop_fullchi( fullchi, result_lsub, &result_tot, energ, gamma,
+
+staticpot, V_ee_0, nuclear_charge, g, wf, iv);
+
+calculates the state
+named fullchi. The latter is needed to evaluate (76) and (77). The partial results
+
+for order n = 3 and gives it back as an object of class wavefunction,
+
+χEγn
+|
+
+i
+
+Plmγn(
+E
+
+) =
+
+Z
+
+dr Rχ∗
+
+lm(r)Rχ
+
+lm(r)
+
+(87)
+
+are of interest because they reﬂect selection rules related to angular momentum. They are
+returned via the array result lsub. Moreover, the partial spectra (87) may be used to
+
+31
+
+check the convergence of the wavefunction propagation with respect to the number of angular
+momenta L: if the partial contribution for l = L
+
+1 is sizeable, L should be increased.
+
+The output of winop.cc to ﬁle file res in the case of the restricted expansion (linear
+
+−
+
+polarization) (17) is organized as follows:
+
+column 1
+Energy
+
+E
+
+columns 2 to L + 1
+part. spectra Eq. (87)
+
+column L + 2
+total Eq. (76)
+
+columns L + 3 to L + 3+no phi*no theta
+angular resolved Eq. (77)
+
+In the last no phi*no theta columns the results are stored in the form
+
+(θ, ϕ) = (0, 0), (∆θ, 0), (2∆θ, 0)
+
+(π
+
+∆θ, 0),
+
+−
+(0, ∆ϕ), (∆θ, ∆ϕ), (2∆θ, ∆ϕ)
+
+· · ·
+
+(π
+
+∆θ, ∆ϕ)
+
+· · ·
+
+−
+
+...
+
+(0, 2π
+
+∆ϕ), (∆θ, 2π
+
+∆ϕ)
+
+(π
+
+∆θ, 2π
+
+∆ϕ)
+
+−
+
+· · ·
+
+−
+
+−
+
+−
+
+with ∆θ = π/no theta and ∆ϕ = 2π/no phi.
+
+In the case of the general expansion (15) we have additional output for the various m
+
+quantum numbers:
+
+column 1
+Energy
+
+E
+
+columns 2 to L2 + 1
+part. spectra Eq. (87)
+
+column L2 + 2
+total Eq. (76)
+
+columns L2 + 3 to L2 + 3+no phi*no theta
+angular resolved Eq. (77)
+
+Columns 2 to L2 + 1 contain the Plmγn(
+E
+
+) in the form
+
+(l, m) = (0, 0), (1,
+
+1), (1, 0), (1, 1), (2,
+
+2), (2,
+
+1)
+
+(L
+
+1, L
+
+1),
+
+−
+
+−
+
+−
+
+· · ·
+
+−
+
+−
+
+i.e., m is the faster running index.
+
+The actual winop.cc example-ﬁle the user ﬁnds in the src/winop-directory reads the ﬁnal
+wavefunction generated by the example for circular polarization in the following Sec. 4.5.
+However, the user may try to adapt the winop.cc-ﬁle in order to analyze a ﬁnal wavefunction
+generated by ionization.cc described in Sec. 4.2.
+
+As a test we reproduced the photoelectron spectrum obtained by Schafer and Kulander in
+[33]. The laser parameters were chosen as speciﬁed in [33]. They are explicitly given in the
+caption of Fig. 4. The photon energy ~ω = 2.33 eV corresponds to six-photon ionization in
+lowest order. Since we have to allow for multiphoton absorption with each photon increasing
+the angular quantum number l by one, L was set to 15. The fastest electrons to be resolved in
+the spectrum must not reach the absorbing boundary within the simulation time. To be safe,
+40000 grid points in radial direction and ∆r = 0.1 were chosen.
+
+After having generated the ﬁnal wavefunction with Qprop, Winop was used to calculate
+the spectrum shown in Fig. 4. One clearly identiﬁes eight above-threshold ionization peaks.
+The peaks are located at
+
+k =
+
+E
+
+−|E1s
+
+|
+
++ kω
+
+Up,
+
+−
+
+k = kmin, kmin + 1, kmin + 2, . . .
+
+and separated by ~ω. The Up-shift away from the “naively” expected position at
+is due to the ac Stark-eﬀect. The integer kmin is the smallest integer k that yields
+
++ kω
+
+−|E1s
+|
+k > 0.
+E
+
+32
+
+Schafer and Kulander (1990)
+
+Qprop
+
+)
+
+E
+(
+n
+γ
+
+P
+
+ 
+
+ 
+,
+
+y
+t
+i
+l
+i
+b
+a
+b
+o
+r
+p
+
+ 
+l
+a
+i
+t
+n
+e
+r
+e
+f
+f
+i
+
+D
+
+ 1e-06
+
+ 1e-08
+
+ 1e-10
+
+ 1e-12
+
+U
+
+p
+
+ω
+
+ 0
+
+ 5
+
+ 10
+Electron energy E, eV
+
+ 15
+
+ 20
+
+Figure 4: Continuum part of the electron spectrum of H(1s) according Eq. (76) after the
+1013 W/cm2 with
+interaction with a linearly polarized, λ = 535 nm laser pulse of intensity 2
+a trapezoidal proﬁle in the electric ﬁeld (up and down-ramped over 2 cycles, constant over 10
+10−2 eV was chosen. There is good agreement
+cycles). An energy bin of half-width γ = 1.25
+·
+between the spectrum by Schafer and Kulander [33] and ours. The formation of a sequence of
+peaks, all separated by ~ω, is the manifestation of so-called above-threshold ionization where
+the electron absorbs more photons than necessary to reach the continuum. The shift of the
+peaks by the ponderomotive energy Up is due to the ac Stark shift of the continuum (with
+respect to the ground state).
+
+·
+
+The minor diﬀerences between the two curves in Fig. 4 is due to the slightly diﬀerent
+) in [33], the diﬀerent orders n used, and—most importantly—the ﬁnal
+deﬁnition of Pγn(
+E
+wavefunctions that were used for the analysis. The latter were obtained independently using
+diﬀerent propagation algorithms.
+
+4.5 Rabi-ﬂopping in a circularly polarized laser ﬁeld
+
+In the last example we consider a hydrogen atom, driven resonantly by a circularly polarized
+laser ﬁeld in dipole approximation,
+
+E(t) = ˆE[cos(ωt)ex
+
+sin(ωt)ey].
+
+−
+
+(88)
+
+The ﬁeld vector rotates clockwise in the xy-plane. The laser frequency is chosen to be resonant
+with the 1s
+
+2p-transition,
+
+↔
+
+ω =
+
+E2p
+
+− E1s =
+
+3
+8
+
+.
+
+33
+
+Owing to the resonant driving a two-level approximation is adequate for not too high ﬁeld
+amplitudes ˆE, i.e.,
+
+Ψ(t)
+i
+|
+
+= d1s(t) exp(
+
+1s
+E1st)
+i
+|
+
+i
+
+−
+
++ d2p(t) exp(
+
+,
+2p−1i
+E2pt)
+i
+|
+
+−
+
+d1s(0) = 1, d2p(0) = 0.
+
+(89)
+
+Here we assume that the atom starts in the 1s ground state, and we make use of the fact that
+the 2p level with m =
+1 will be predominantly populated (as will be justiﬁed below). The
+2 is then governed by the diﬀerential
+d2p(t)
+time evolution of the two populations
+|
+|
+equations
+
+2 and
+d1s(t)
+|
+|
+
+−
+
+d
+dt
+d
+dt
+
+d1s(t) =
+
+i ˆEM− d2p(t),
+
+d2p(t) =
+
+i ˆEM ∗
+
+− d1s(t)
+
+1
+2
+1
+2
+
+−
+
+−
+
+where
+
+256
+243
+As a consequence, the ground state population evolves according
+
+r exp(iϕ) sin θ
+
+2p−1|
+h
+
+M− =
+
+1s
+|
+
+=
+
+i
+
+.
+
+2 = cos2
+d1s(t)
+|
+|
+
+ΩR
+2
+
+t
+
+(cid:18)
+
+(cid:19)
+
+ΩR = M− ˆE =
+
+256
+243
+
+ˆE.
+
+where ΩR is the so-called Rabi frequency (see any text book on quantum optics, e.g., [60]). In
+our case one has
+
+The example code can be found in the subdirectory src/circ. Since we are dealing
+with circular polarization we need to employ the general expansion (15) and therefore set
+g.set dim(44). The program circ im.cc generates the hydrogen ground state on a numeri-
+cal grid with Nr = 1000, L = 1, and ∆r = h = 0.15. The ground state wavefunction (stored
+in ./res/circ im wf fin-44-1000-1.50e-01.dat) and the corresponding info ﬁle (stored in
+circ im info-44-1000-1.50e-01.dat) are read by the program circ re.cc, which performs
+the actual time propagation.
+
+The propagation algorithm for elliptical polarization using the wavefunction expansion (15)
+is signiﬁcantly more involved than the method for linear polarization explained in Sec. 2.2. A
+detailed description can be found online at [36] and in the directory doc. Here we only note
+that in propagation mode 44 the vector potential must be of the form
+
+so that the Hamiltonian (with the purely time-dependent term
+reads
+
+∼
+
+A2(t) transformed away)
+
+where
+
+A(t) = Ax(t) ex + Ay(t) ey
+
+H(t) =
+
+2 + V (r) + VI(t)
+
+1
+2 ∇
+
+−
+
+VI(t) =
+
+iAx(t)∂x
+
+iAy(t)∂y.
+
+−
+
+−
+
+34
+
+(90)
+
+(91)
+
+(92)
+
+(93)
+
+(94)
+
+(95)
+
+(96)
+
+(97)
+
+The vector potential components Ax and Ay are deﬁned in potentials.cc. In order to match
+(88) they are chosen as
+
+Ax(t) =
+
+sin(ωt),
+
+Ay(t) =
+
+cos(ωt).
+
+(98)
+
+ˆE
+ω
+
+−
+
+ˆE
+ω
+
+−
+
+Real time propagation is performed for ˆE = 3.774
+
+1011 W/cm2)
+on a numerical grid with Nr = 1000, h = 0.15, and L = 4. The expected Rabi-frequency (94) is
+10−3. Fig. 5 shows that the temporal behavior of the ground state population (i.e.,
+ΩR = 3.976
+the third column in the output ﬁle ./res/circ re obser-0.375000-44-1000-1.50e-01.dat)
+is in excellent agreement with Eq. (93).
+
+10−3 (corresponding to 5
+
+·
+
+·
+
+·
+
+ 1
+
+)
+
+t
+
+(
+s
+1
+
+P
+
+ 0.8
+
+ 
+,
+e
+t
+a
+t
+s
+ 
+d
+n
+u
+o
+r
+g
+ 
+f
+o
+ 
+n
+o
+i
+t
+a
+l
+u
+p
+o
+P
+
+ 0.6
+
+ 0.4
+
+ 0.2
+
+ 0
+
+ 0
+
+ 0.2
+
+ 0.4
+
+ 0.6
+
+ 1.2
+ 0.8
+Time t, Rabi periods  2π / Ω
+R
+
+ 1
+
+ 1.4
+
+ 1.6
+
+Figure 5: Population P1s(t) =
+frequency (94) ΩR = 3.976
+
+2 vs time, rescaled with the help of the expected Rabi
+d1s(t)
+|
+|
+10−3.
+
+·
+
+Figure 6 shows the result of a spectral analysis using the program winop circ.cc6 in
+src/winop, which reads the ﬁnal wave function stored in src/circ/res/circ re wf-0.37-
+5000-44-1000-1.50e-01.dat and the corresponding info ﬁle. Moreover, potentials.cc in
+src/circ is included for the proper deﬁnition of the unperturbed Hamiltonian. The spectra
+0.55, 0.0] with a resolution γ = 10−4. On the logarithmic
+are calculated in the energy range [
+scale down to 10−50 and beyond in Fig. 6 many more states than just the 1s and the 2p−1
+are populated. However, looking up the populations of the n = 2-levels at
+1/8 in
+the ﬁle ./res/res-0.375000-44-1000-4-2.000e-04-1.000e-04.dat one infers that the next
+10−5 less populated than the 2p−1. Hence,
+“important” state (the 2p1) is already a factor
+the two-level approximation is very well applicable at 5
+
+1011 W/cm2.
+
+−
+
+≈
+
+=
+
+−
+
+E
+
+6This ﬁle should be copied to winop.cc before using make for compilation.
+
+·
+
+35
+
+ 1
+
+ 1e-10
+
+ 1e-20
+
+ 1e-30
+
+ 1e-40
+
+)
+
+E
+(
+n
+γ
+
+P
+
+ 
+
+ 
+,
+y
+t
+i
+l
+i
+b
+a
+b
+o
+r
+p
+ 
+l
+a
+i
+t
+n
+e
+r
+e
+f
+f
+i
+
+D
+
+ 1e-50
+1
+
+)
+
+E
+(
+n
+γ
+
+P
+
+ 
+
+1e-10
+
+ 
+,
+y
+t
+i
+l
+i
+b
+a
+b
+o
+r
+p
+ 
+l
+a
+i
+t
+n
+e
+r
+e
+f
+f
+i
+
+D
+
+1e-20
+
+1e-30
+
+1e-40
+
+1e-50
+
+m =  0
+
+m = –1
+
+s-states
+
+p-states
+
+m = +1
+
+m = –2
+
+m =  0
+
+m = +2
+
+p-states
+
+d-states
+
+-12
+
+-9
+
+-6
+
+-3
+
+0
+
+-12
+
+-9
+
+-6
+
+-3
+
+0
+
+Electron energy E, eV
+
+Electron energy E, eV
+
+Figure 6: Partial spectra for l = 0 (s-states), l = 1 (p-states), l = 2 (d-states), l = 2 (f -states),
+and the diﬀerent m-quantum numbers (plotted in diﬀerent colors). States with ms not shown
+are not populated at all.
+
+By virtue of the partial spectra in ./res/res-0.375000-44-1000-4-2.000e-04-1.000e-
+-04.dat it is also observed that the population of all states p0, d−1, d1, f−2, f0, f2 remain
+exactly zero. This is because all couplings generated by the Hamiltonian (96) (with a vector
+potential (97)) require
+= 1. As long as one starts with a well-deﬁned
+state of the unperturbed system one could remove all the strictly unpopulated states in the
+expansion (15), thus saving a considerable amount of run-time. In cases where, for instance,
+the initial state is the ground state one could replace the general expansion (15) by
+
+= 1 and
+
+∆m
+|
+
+∆l
+|
+
+|
+
+|
+
+Ψi(rt) =
+
+1
+r
+
+Φilm(rt) Ylm(Ω),
+
+m+=2
+Xl X
+where
+l + 2, . . . , l. However, we did not implement
+l,
+this in the present version of Qprop in order to allow also for the propagation of superpositions
+of states with diﬀerent ms.
+
+m+=2 runs in steps of 2, i.e., m =
+
+P
+
+−
+
+−
+
+It is interesting to increase the laser intensity so that more and more states—including the
+continuum—become involved, and the two-level approximation breaks down. Note that for
+
+36
+
+obtaining converged results both Nr and L must be increased appropriately. It is known that
+E ≈ E1s + 2~ω splits into two,
+at higher laser intensity the lowest-order photoelectron peak at
+separated by the Rabi frequency ΩR [61]. The interested reader may try to reproduce this
+result using Qprop.
+
+5 Summary and Outlook
+
+The Qprop package has been introduced. The purpose of the package is to study atoms or
+other (initially) spherical systems in strong laser ﬁelds. Qprop allows to investigate a great
+variety of nonperturbative phenomena including above-threshold ionization, high-order har-
+monic generation, and stabilization. The full time propagation of nonrelativistic, one-electron
+wavefunctions is realized. Eﬀective potentials incorporating electron-electron repulsion and
+exchange can be taken into account. Further development will be aimed at removing the
+following restrictions:
+
+The external ﬁeld is currently treated in dipole approximation only, i.e., exp[i(ωt
+
+kr)] is
+approximated by exp(iωt). Going beyond the dipole approximation by taking into account the
+r), allows to study new phenomena related to
+next order, exp[i(ωt
+the v
+B-electron drift in k-direction. The azimuthal symmetry is broken then so that (15)
+has to be employed.
+
+exp(iωt)(1
+
+kr)]
+
+ik
+
+−
+
+−
+
+−
+
+≈
+
+×
+
+·
+
+Many-electron systems can be currently treated only on a Kohn-Sham level using either
+the local density approximation or KLI. Although ab initio in principle, many important
+observables cannot be calculated in practice because their functional dependences on the Kohn-
+Sham orbitals are unknown. If, on the other hand, the full, generally correlated, many-electron
+wavefunction (or a reasonable approximation to it) is available, the computation of observables
+is straightforward. However, already the time propagation of a two-electron wavefunction is
+a demanding task [13, 20] as soon as the continuum becomes involved. For few-electron
+systems, the time-dependent multi-conﬁgurational Hartree-Fock method or related approaches
+are worth being investigated. Our current activities show that the implementation of such kind
+of schemes beneﬁts heavily from the routines provided by Qprop.
+
+This work was supported by the Deutsche Forschungsgemeinschaft.
+
+Acknowledgement
+
+References
+
+[1] P. Agostini and L. F. DiMauro, Rep. Prog. Phys. 67 (2004) 813.
+
+[2] W. Becker, F. Grasbon, R. Kopold, D.B. Miloˇsevi´c, G.G. Paulus, and H. Walther, Adv.
+
+At. Mol. Opt. Phys. 48 (2002) 35.
+
+[3] C.J. Joachain, M. D¨orr and N.J. Kylstra, Adv. At. Mol. Opt. Phys. 42 (2000) 225.
+
+[4] Th. Brabec and F. Krausz, Rev. Mod. Phys. 72 (2000) 545.
+
+[5] N. B. Delone and V. P. Krainov, Multiphoton processes in atoms, Springer, Berlin (1999).
+
+37
+
+[6] M. Protopapas, C.H. Keitel, and P.L. Knight, Rep. Prog. Phys. 60 (1997) 389.
+
+[7] Q. Su and J. H. Eberly, Phys. Rev. A 44 (1991) 5997.
+
+[8] Ue-Li Pen and T. F. Jiang, Phys. Rev. A 46 (1992) 4297.
+
+[9] Q. Chen and I. B. Bernstein, Phys. Rev. A 47 (1993) 4099.
+
+[10] R. Grobe and J. H. Eberly, Phys. Rev. A 48 (1993) 4664.
+
+[11] M. S. Pindzola, P. Gavras, and T. W. Gorczyca, Phys. Rev. A 51 (1995) 3999.
+
+[12] C. Cerjan and R. Kosloﬀ, Phys. Rev. A 47 (1993) 1852.
+
+[13] E. S. Smyth, J. S. Parker and K. T. Taylor, Comp. Phys. Comm. 114 (1998) 1.
+
+[14] H. G. Muller, Laser Physics 9 (1999) 138.
+
+[15] X.-M. Tong, Sh.-I. Chu, Chem. Phys. 217 (1997) 119.
+
+[16] H. Bachau, E. Cormier, P. Decleva, J. E. Hansen and F. Mart´in, Rep. Prog. Phys. 64
+
+(2001) 1815.
+
+[17] I. V. Puzynin, A. V. Selin and S. I. Vinitsky, Comp. Phys. Comm. 126 (2000) 158.
+
+[18] C. Cerjan and K. C. Kulander, Comp. Phys. Comm. 63 (1991) 529.
+
+[19] M. Nurhuda and F.H.M. Faisal, Phys. Rev. A 60 (1999) 3125.
+
+[20] K. J. Meharg, J. S. Parker and K. T. Taylor, J. Phys. B 38 (2005) 237.
+
+[21] W. Kohn, Rev. Mod. Phys. 71 (1999) 1253.
+
+[22] R.M. Dreizler and E.K.U. Gross, Density Functional Theory, Springer, Berlin, 1990.
+
+[23] R.G. Parr and W. Yang, Density-Functional Theory of Atoms and Molecules, Oxford
+
+University Press, Oxford, 1989.
+
+[24] D. Joubert, Density Functionals: Theory and Applications, (Springer, Berlin, 1998).
+
+[25] C. Fiolhais, F. Nogueira, M. Marques (Eds.), A Primer in Density Functional Theory,
+
+Springer, Heidelberg, 2003.
+
+[26] E. Runge and E.K.U. Gross, Phys. Rev. Lett. 52 (1984) 997.
+
+[27] K. Burke and E.K.U. Gross, in [24], p. 116.
+
+[28] C.A. Ullrich, S. Erhard, and E.K.U. Gross, in: Super Intense Laser Atom Physics IV,
+
+H.G. Muller and M.V. Fedorov, (Eds.), Kluwer, 1996, p. 267.
+
+[29] M.A.L. Marques and E.K.U. Gross, in [25], p. 144.
+
+[30] M. A. L. Marques, A. Castro, G. F. Bertsch and A. Rubio, Comp. Phys. Comm. 151
+
+(2003) 60.
+
+38
+
+[31] W. R. Burdick, Y. Saad, L. Kronik, I. Vasiliev, M. Jain and J. R. Chelikowsky,
+
+Comp. Phys. Comm. 156 (2003) 22.
+
+[32] X.-M. Tong, Shih.-I. Chu, Phys. Rev. A 57 (1998) 454.
+
+[33] K. J. Schafer and K. C. Kulander, Phys. Rev. A 42 (1990) 5794.
+
+[34] K. J. Schafer, Comp. Phys. Comm. 63 (1991) 427.
+
+[35] J. B. Krieger, Yan Li and G. J. Iafrate, Phys. Rev. A 45 (1992) 101.
+
+[36] http://www.qprop.de
+
+[37] D. Bauer, D.B. Miloˇsevi´c, and W. Becker, J. Mod. Opt. (accepted)
+
+[38] D.B. Miloˇsevi´c, D. Bauer, and W. Becker, J. Mod. Opt. (accepted)
+
+[39] D. Bauer, D. B. Milo˘sevi´c, and W. Becker, Phys. Rev. A (accepted),
+
+see also
+
+quant-ph/0504053
+
+[40] F. Lindner, M.G. Schaetzel, H. Walther, A. Baltuˇska, E. Goulielmakis, F. Krausz,
+D.B. Miloˇsevi´c, D. Bauer, W. Becker, and G.G. Paulus, Phys. Rev. Lett. (accepted),
+see also quant-ph/0503165
+
+[41] D. Bauer, Phys. Rev. Lett. 94 (2005) 113001.
+
+[42] D. Bauer and F. Ceccherini, Phys. Rev. A 66 (2002) 053411.
+
+[43] D. Bauer and F. Ceccherini, Optics Express 8 (2001) 377.
+
+[44] J. Crank and P. Nicolson, Proc. Cambridge Philos. Soc. 43 50 (1947).
+
+[45] E. Cormier and P. Lambropoulos, J. Phys. B 29 (1996) 1667.
+
+[46] S. Chaturverdy, A. K. Kapoor, and V. Srinivasan, J. Phys. A 31 (1998) L367.
+
+[47] K. Boucke, H. Schmitz, and H.-J. Kull, Phys. Rev. A 56 (1997) 763.
+
+[48] D. Neuhasuer (misspelling, should read “Neuhauser”) and M. Baer, J. Chem. Phys. 90
+
+(1989) 4351.
+
+[49] R.T. Sharp and G.K. Horton, Phys. Rev. 90 (1953) 317.
+
+[50] J.D. Talman and W.F. Shadwick, Phys. Rev. A 14 (1976) 36.
+
+[51] T. Grabo, T. Kreibich, S. Kurth and E.K.U. Gross, in: Strong Coulomb Correlations in
+Electronic Structure Calculations: Beyond the Local Density Approximation, V.I. Anisi-
+mov, (Eds.), Gordon and Breach, 2000, p. 203.
+
+[52] http://www.netlib.org/blas/
+
+[53] http://www.netlib.org/lapack/
+
+39
+
+[54] http://www.netlib.org/f2c/
+
+[55] http://www.ugr.es/local/aquiran/codigos.htm
+
+[56] S. Fritzsche, T. Inghoﬀ, M. Tomaselli, Comp. Phys. Comm. 153 (2003) 424.
+
+[57] C. A. Ullrich and E. K. U. Gross, Comm. At. Mol. Phys. 33 (1997) 211.
+
+[58] http://physics.nist.gov/PhysRefData/DFTdata/Tables/10Ne.html
+
+[59] T. Koopmans, Physica 1 (1933) 104.
+
+[60] Marlan O. Scully and M. Suhail Zubairy, Quantum Optics, Cambridge University Press,
+
+Cambridge (1997).
+
+[61] K. J. LaGattuta, Phys. Rev. A 47 (1993) 1560.
+
+40
+
+

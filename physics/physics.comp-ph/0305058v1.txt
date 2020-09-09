@@ -1,0 +1,1212 @@
+3
+0
+0
+2
+ 
+y
+a
+M
+ 
+4
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+8
+5
+0
+5
+0
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Going forth and back in time :
+a fast and parsimonious algorithm for mixed
+initial/ﬁnal-value problems
+
+Antonio Celani a,b, Massimo Cencini b,c, Alain Noullez b,
+∗
+
+aCNRS, INLN, 1361 Route des Lucioles, F-06560 Valbonne, France
+bCNRS, Observatoire de la Cˆote d’Azur, B.P. 4229, F-06304 Nice Cedex 4, France
+cDipartimento di Fisica Universit`a di Roma “La Sapienza” and Center for
+Statistical Mechanics and Complexity INFM UdR Roma 1, Piazzale Aldo Moro, 2,
+I-00185 Roma, Italy
+
+Abstract
+
+We present an eﬃcient and parsimonious algorithm to solve mixed initial/ﬁnal-
+value problems. The algorithm optimally limits the memory storage and the com-
+putational time requirements : with respect to a simple forward integration, the cost
+factor is only logarithmic in the number of time-steps. As an example, we discuss
+the solution of the ﬁnal-value problem for a Fokker-Planck equation whose drift
+velocity solves a diﬀerent initial-value problem – a relevant issue in the context of
+turbulent scalar transport.
+
+Key words:
+1991 MSC: 65M99, 76F25
+
+Initial/ﬁnal-value problems, turbulent transport
+
+1 Introduction
+
+In the investigation of dynamical systems, the standard initial-value problem
+is to compute from the equations of motion the state of the system at a ﬁnal
+time t, given its initial condition at time t0. Sometimes, however, the state
+of the system might be known at a ﬁnal time t, and one would be interested
+in evolving the system backward in time to compute its earlier states, back
+to t0. This can in theory be easily accomplished by reversing the direction of
+
+∗ Corresponding author.
+
+Email address: anz@obs-nice.fr (Alain Noullez).
+
+Preprint submitted to Journal of Computational Physics
+
+2 February 2008
+
+the time-integration, thus transforming the ﬁnal-value problem in an initial-
+value one. Problems might however appear if the forward evolution is given
+by a mapping that is not one-to-one, as the previous state can thus become
+undeﬁned. Even if the time evolution is given by a diﬀerential system, the
+backward evolution becomes unstable if the forward dynamics is dissipative,
+as is the case in many physical systems, like for instance Navier-Stokes tur-
+bulence. The problem stems from the fact that a dissipative system contracts
+volumes in phase space in the forward direction, and thus expands them in
+the backward direction and ampliﬁes any small numerical errors, like those
+caused by roundoﬀ.
+
+Another quite diﬃcult task is to obtain the evolution of a system when part
+of the variables that specify the state are given at an initial time t0 and the
+remaining ones are given at the ﬁnal time t. We refer to this class of problems
+as “mixed initial/ﬁnal-value”. We will be interested in a special subclass of
+such problems, that can be schematically written as follows
+
+du
+ds
+dz
+ds
+
+= f (u, s) ,
+
+u(t0) = u0
+
+= g(z, u, s) ,
+
+z(t) = zt ,
+
+where u and z are vectors in a given space. Far from being an academic
+oddity, this problem is relevant to many physical situations, among which we
+will discuss in detail the transport of scalar ﬁelds by a dynamically evolving
+ﬂow. Consider indeed the problem of ﬁnding the solution a(s) of the stochastic
+diﬀerential equation
+
+(1)
+
+(2)
+
+(3)
+
+da(s)
+ds
+
+= v(a(s), s) + √2κ η(s) ,
+
+with the ﬁnal value a(t) = x.
+
+Eq. (3) describes the evolution of a particle transported by the velocity ﬁeld v
+and subject to molecular diﬀusion with diﬀusivity κ, represented here by the
+t′). The
+zero-mean Gaussian process η with correlations
+velocity ﬁeld v at any time s has to be obtained from some dynamical law
+(e.g. the Navier-Stokes equations) and from its initial value at s = t0. It is
+easy to recognize that v plays the role of the variable u in Eqs. (1-2) whereas
+a has to be identiﬁed with z. An equivalent description may be given in terms
+of the transition probability P (y, s
+x, t) – i.e. the probability that a particle
+is in y at time s given that it will be in x at time t. The propagator evolution
+is ruled by the well known Kolmogorov equation [1,2]
+
+ηi(t)ηj(t′)
+
+= δijδ(t
+
+−
+
+h
+
+i
+
+|
+
+∂sP (y, s
+
+x, t)
+
+|
+
+−
+
+∇y ·
+
+−
+
+[v(y, s)P (y, s
+
+x, t)] = κ
+
+|
+
+2
+yP (y, s
+
+x, t) ,
+
+|
+
+∇
+
+(4)
+
+2
+
+where the ﬁnal condition is set : P (y, t
+|
+is P that has to be interpreted as z in (2).
+
+−
+
+x, t) = δ(x
+
+y). In the latter case, it
+
+In this article, we propose a fast and memory-sparing algorithm to solve the
+problem (1-2) or to allow one to go back through the time evolution if the
+dynamics is unstable or non-invertible. In Sec. 2 we describe in detail the
+algorithm, comparing it to more naive and less eﬃcient strategies. In Sec. 3
+we present an application to the problem of front generation in passive scalar
+turbulence (see e.g. [3,4]).
+
+2 Backward Algorithm
+
+The obvious diﬃculty with Eqs. (1–2) resides in the fact that, since the initial
+conditions of u and z are set at diﬀerent times, they cannot be evolved in
+parallel. Also, the time evolution of u(s) might be non-invertible or unstable
+in the backward time direction. The whole history of u(s) in the interval [t0, t]
+is thus needed to integrate z(s) from time t back to time t0.
+
+−
+
+t0 + (t
+
+t0)j/N, . . . , tN ≡
+
+Before presenting our own algorithm, we wish to discuss some naive strate-
+gies to expose their shortcomings and advantages, and introduce notations.
+In the following, we will assume the whole time interval [t0, t] to be dis-
+cretized in N identical time steps, small enough to ensure accurate integra-
+tion of Eqs. (1–2). The states u(s), z(s) thus have to be computed at the
+N + 1 times t0, . . . , tj ≡
+t. In our applications, the
+states u(s) and z(s) will be d-dimensional vector ﬁelds, numerically resolved
+with Ld collocation points, and therefore have a size O(d Ld), typically very
+large, that will be taken as unit of measure when describing the storage re-
+quirements S(N) of the diﬀerent algorithms. The CPU time cost T(N) will
+refer only to (forward) integrations of u and will be expressed in terms of the
+time to perform a single forward integration step. We will also give examples
+of memory use and CPU time for d = 2, L = 1024 and N = 214, which are
+typical values of moderately resolved direct numerical simulations in compu-
+tational ﬂuid dynamics, requiring 16 MB of memory to store a single state
+array.
+
+The most obvious and simple strategy is the following :
+
+A1. integrate forward Eq. (1) from t0 to tN and store u(s) at all time
+steps t0 . . . tN ;
+A2. integrate backward Eq. (2) from tN back to t0.
+
+The number of integration steps needed by this procedure is T(N) = N,
+while the memory storage cost is a frightening S(N) = N. As soon as the
+
+3
+
+dimensionality of the space or the number of collocation points increase, this
+approach becomes rapidly unfeasible. Taking our typical ﬂuid dynamics value,
+one would need 256 GB of memory, which is clearly irrealistic.
+
+A diﬀerent strategy that minimizes the memory requirements is :
+
+←
+
+N and store the initial condition u0 ;
+
+B1. set n
+B2. integrate forward Eq. (1) from t0 to tn ;
+B3. integrate backward Eq. (2) from tn to tn−1, update n
+back to step B2 if n
+
+0.
+
+≥
+
+n
+
+1, and go
+
+←
+
+−
+
+While this method is very advantageous in memory S(N) = 1, it is pro-
+hibitively expensive because of the large number of iterations needed : T(N) =
+N(N + 1)/2. With the previously given numerical parameters, one needs a
+daunting increase by a factor 8200 in CPU time with respect to algorithm A.
+
+To improve algorithm B, one can think of using more memory and a simple
+generalization goes as follows :
+
+C1. integrate forward Eq. (1) from t0 to tN and store the states u(s) at the
+M equidistant times τk = tN k/M , k = 0, . . . , M
+1 (we assume here N to
+be a multiple of M for convenience) ;
+C2. apply algorithm B successively in each segment [τk, τk+1].
+
+−
+
+The number of operations is T(N) = N(N + M)/(2M) remains however
+prohibitive unless we raise M to be O(N). Now, since the memory storage
+is S(N) = M, M cannot be made too large as well. Again refering to the
+numerical parameters given above, we have that for M = 16 the storage re-
+quirement is reasonably low (256 MB) yet the time factor with respect to
+algorithm A is a still discouraging 512.
+
+A further possibility which helps reducing the number of iterations and is
+almost reasonable for the memory storage needs is :
+
+D1. integrate forward Eq. (1) from t0 to tN and store M states u(s) at
+times τk = tN k/M , k = 0, . . . , M
+D2. integrate forward Eq. (1) from tN k/M to tN (k+1)/M , using the stored state
+at τk as initial condition and saving the states u(s) at all time steps in a
+further set of N/M storage locations ;
+D3. integrate backward Eq. (2) from tN (k+1)/M to tN k/M using the N/M saved u(s),
+update k
+
+1 and go back to step D2 if k
+
+1. Set k
+
+←
+
+M
+
+1 ;
+
+−
+
+−
+
+0.
+
+k
+
+←
+
+−
+
+≥
+
+M)(M
+
+This procedure needs a reasonable total number of time steps T(N) = N +
+(N
+1, and is thus
+≈
+asymptotically linear in N, provided we have enough memory. The storage
+requirement is indeed rather large S(N) = M + N/M and is minimized for a
+
+1)/M, that is T(N)
+
+2N when N
+
+≫
+
+≫
+
+M
+
+−
+
+−
+
+4
+
+ﬁxed N by taking M = √N . With our typical parameters, we would have to
+take M = 128 and store 256 ﬁelds, amounting to roughly 4 GB, still too large
+for typical workstations.
+
+Algorithm D is still too greedy in memory, but it gives the idea of dividing the
+problem into smaller subproblems that have a much smaller running time, and
+that be combined later to give the full solution. If we push this idea further,
+we can build a recursive algorithm that integrates backward from tN to t0 by
+integrating forward from t0 to tN/2, and using the states at t0 and tN/2 to call
+itself successively in the intervals [tN , tN/2] and [tN/2, t0]. We have chosen here
+the subdivision base (the equivalent of M in the previous algorithm) to be 2,
+because it gives the simplest and one of the most eﬃcient algorithms, but
+other bases could be used to slightly reduce the number of integration steps,
+at the price of using more storage. Of course, recursion can be eliminated and
+it is in its non-recursive form that we will describe our procedure. To do that,
+we will need a stack, that is a list of states to which we can add (push/save)
+a new item or remove (pull/delete) the last stored item. A stack can always
+be implemented as an array in programming languages that do not have it as
+a built-in type. We will also use the index [top] to refer to the (last pushed)
+element on top of the stack. Our algorithm is then very easy to state :
+
+←
+
+N and push the initial condition u0 on
+
+R1. set the desired time index n
+the stack ;
+R2. if the state on top of the stack does not correspond to the index n,
+(j[top] + n + 1)/2 to the upper midpoint of the interval, integrate
+set j
+forward u[top] from t[top] to tj, push the state uj on the stack and go back
+to step R2 ;
+R3. pull the state u[top] ≡
+Eq. (2) from tn to tn−1, set n
+
+un from the stack, use it to integrate backward
+
+1, and go back to step R2 if n
+
+←
+
+0.
+
+n
+
+←
+
+−
+
+≥
+
+To understand better the behavior of algorithm R, the easiest is to show an
+example of how it works in a simple case for a small value of N. Fig. 1 does
+this for N = 20, showing the stack movements at every time step. Even for
+such a small value of N, algorithm R needs 3.5 times less memory and is only
+2.1 times slower than algorithm A, while it is 5 times faster than algorithm B.
+
+log2(N)
+⌈
+
+It is obvious that our algorithm needs a very small amount of storage S(N) =
+, that is only 15 ﬁelds or 240 MB for our typical example with N =
+1+
+⌉
+214. The computing time is also very reasonable : the computing time T(N)
+obeys the recursions T(N) = 2 T(N/2) + N/2
+1 if N is even and T(N) =
+2 T(
+if it is odd. The number of steps thus depends on the
+precise binary representation of N, but is given approximately by T(N)
+≈
+/2 + 1 (equality being achieved if N is a power of 2), that is a
+log2(N + 1)
+N
+⌉
+⌈
+cost factor that is only logarithmic in the number of time steps. In our same
+example, we ﬁnd that we will need 7 times more integration steps than the
+
+N/2
+⌊
+
+N/2
+⌈
+
+) +
+⌋
+
+−
+
+⌉
+
+5
+
+Stack
+
+Steps Total steps
+
+u0 u10 u15 u18
+
+u19 u20
+
+20
+
+Time
+
+s = t20
+
+s = t19
+
+s = t18
+
+s = t17
+
+s = t16
+
+s = t15
+
+s = t14
+
+s = t13
+
+s = t12
+
+s = t11
+
+s = t10
+
+s = t9
+
+s = t8
+
+s = t7
+
+s = t6
+
+s = t5
+
+s = t4
+
+s = t3
+
+s = t2
+
+s = t1
+
+s = t0
+
+u0 u10 u15 u18
+
+u19
+
+u0 u10 u15 u18
+
+u0 u10 u15 u16
+
+u17
+
+u0 u10 u15 u16
+
+u0 u10 u15
+
+u0 u10 u12 u13
+
+u14
+
+u0 u10 u12 u13
+
+u0 u10 u12
+
+u0 u10 u11
+
+u0 u10
+
+u0 u5 u7 u8 u9
+
+u0 u5 u7 u8
+
+u0 u5 u7
+
+u0 u5 u6
+
+u0 u5
+
+u0 u2 u3 u4
+
+u0 u2 u3
+
+u0 u2
+
+u0 u1
+
+u0
+
+20
+
+20
+
+20
+
+22
+
+22
+
+22
+
+26
+
+26
+
+26
+
+27
+
+27
+
+36
+
+36
+
+36
+
+37
+
+37
+
+41
+
+41
+
+41
+
+42
+
+42
+
+0
+
+0
+
+2
+
+0
+
+0
+
+4
+
+0
+
+0
+
+1
+
+0
+
+9
+
+0
+
+0
+
+1
+
+0
+
+4
+
+0
+
+0
+
+1
+
+0
+
+Fig. 1. Algorithm R in action for N = 20. The state of the stack is shown for every
+time tj at the beginning of label R3, where the state u(tj) becomes available on
+top of the stack. Steps is the number of forward integration steps needed for this
+particular time, while Total steps is the number of forward steps since the ﬁnal
+time t20 to the current time.
+
+brute force algorithm A, but 1100 times less storage, so that the whole stack
+can be kept in-core during the backward integration.
+
+The algorithm we propose is thus quite eﬃcient in computing time, and very
+economical in memory, opening the door to the study of the backward evo-
+lution of very large multi-dimensional ﬁelds. To give an idea of possible ap-
+
+6
+
+plications, one might study the “seed” at t0 that gave birth to a particular
+structure observed at time t. As an example, we will discuss in the following
+section the numerical implementation and an application of this algorithm to
+scalar transport in turbulent ﬂows.
+
+3 Scalar ﬁelds in turbulent ﬂows
+
+The transport of scalar ﬁelds, such as temperature, pollutants and chemical
+or biological species advected by turbulent ﬂows, is a common phenomenon of
+great importance both in theory and applications [3]. A scalar ﬁeld, θ(x, t),
+obeys the advection-diﬀusion equation
+
+∂tθ + v
+
+∇θ = κ
+
+2 θ + φ ,
+
+·
+
+∇
+
+where κ is the molecular diﬀusivity, v is the velocity ﬁeld, and φ is the scalar
+input acting at a characteristic lengthscale Lφ. The presence of a scalar source
+allows for studying stationary properties. Thanks to the linearity of Eq. (5),
+the problem can be solved in terms of the particle propagator [3,4]
+
+θ(x, t) =
+
+ds
+
+dy P (y, s
+
+x, t) φ(y, s) ,
+
+t
+
+Z0
+
+Z
+
+t
+
+*
+
+Z0
+
+|
+
++
+
+a
+
+θ(x, t) =
+
+ds φ(a(s), s)
+
+,
+
+as can be directly checked by inserting (6) in (5) and using (4). To make more
+intuitive the physical content of Eq. (6), we can rewrite it as
+
+h
+
+. . .
+i
+
+where
+a denotes the average over particle trajectories obeying (3) with
+a(t) = x. From (7) one understands that θ(x, t) is built up by the superposi-
+tion of the input along all trajectories ending at point x at time t.
+
+The velocity ﬁeld evolves according to the Navier-Stokes equation :
+
+∂tv + v
+
+∇v =
+
+∇p + ν
+
+2v + f .
+
+·
+
+−
+
+∇
+
+Where the pressure p is ﬁxed by the incompressibility condition (∇
+v = 0), ν
+is the kinematic viscosity, and f the energy input. Notice that θ does not enter
+the equation for the velocity ﬁeld and therefore the scalar is called passive.
+
+·
+
+7
+
+(5)
+
+(6)
+
+(7)
+
+(8)
+
+In the following we will consider a passive scalar ﬁeld evolving in a two dimen-
+sional turbulent velocity ﬁeld, and show how the numerical study of particle
+propagator conveys some information on the dynamical origin of structures in
+the scalar ﬁeld.
+
+3.1 Numerical Implementation
+
+2π with
+We integrate Eqs. (5), (8) and (4) in a doubly periodic box 2π
+Ly grid points (the results here discussed are for Lx = Ly = 1024) by
+Lx ×
+a standard 2/3-dealiased pseudo-spectral method [5,6]. A detailed description
+of the properties of the velocity ﬁeld in two-dimensional Navier-Stokes tur-
+bulence can be found in [7]. Here we only mention that the velocity ﬁeld is
+r1/3.
+self-similar with Kolmogorov scaling i.e. (v(x + r, t)
+·
+However, the passive scalar increments θ(x + r)
+θ(x) are not self-similar,
+since large excursions occur with larger and larger probability for increasingly
+small separations r (see, e.g., [8,9]).
+
+v(x, t))
+
+r/r
+
+×
+
+∼
+
+−
+
+−
+
+|
+
+Time integration of Eqs. (5) and (8) is performed using a second order Runge-
+Kutta scheme modiﬁed to integrate exactly the dissipative terms. Both the
+velocity ﬁeld and passive scalar were initialized to zero and integrated for
+a transient until a statistically stationary state was reached. The propaga-
+tor is initialized at the ﬁnal time as a Gaussian P (y, t
+−
+|
+2/(2δ2)]/(√2πδ), where the width δ is of the order of few grid points The
+y
+time evolution of Eq. (4) is implemented by a second-order Adams-Bashforth
+scheme modiﬁed to exactly integrate the dissipative terms. The adoption of
+diﬀerent schemes for the forward and backward integration is motivated by the
+requirement of minimizing the use of Fast Fourier Transforms. To implement
+the backward algorithm it is also necessary to store the scalar and velocity
+forcings, and this is easily accomplished by including in the stored states the
+seed(s) of the pseudo-random number generator(s).
+
+x, t) = exp[
+
+−|
+
+x
+
+The quality of the integration can be tested using the following relation
+
+s
+
+Z0
+
+Z
+
+ds′
+
+dy P (y, s′
+
+x, t) φ(y, s′) =
+
+dy P (y, s
+
+x, t) θ(y, s) ,
+
+(9)
+
+|
+
+Z
+
+|
+
+which stems from (4) and (5). In Fig. 2a we show both sides of (9), the quality
+of the integration is rather good.
+
+We have also performed Lagrangian simulations, i.e. we have integrated par-
+ticle trajectories evolving backward in time according to Eq. (3). For the in-
+tegration we used an Euler-Itˆo scheme, and the particle velocity has been
+obtained by means of a bilinear interpolation. In Fig. 2b we show the r.h.s
+
+8
+
+10-2
+
+10-4
+
+10-6
+
+0
+
+12
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+-2
+
+0
+
+(a)
+
+(b)
+
+1024
+s
+
+2048
+
+1024
+s
+
+2048
+
+1
+
+10-1
+
+10-2
+
+0
+
+12
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+-2
+
+0
+
+512
+
+1536
+
+2048
+
+512
+
+1536
+
+2048
+
+1024
+
+s
+
+1024
+
+s
+
+s
+
+R
+
+0 ds′
+
+dy P (y, s′
+
+x, t)φ(y, s′) and
+|
+
+x, t)θ(y, s) as a function
+Fig. 2. (a)
+|
+of time s. Time is expressed in unit of time steps (longer integration times display
+the same features). The diﬀerence is detectable only looking at absolute errors, here
+x, t)θ(y, s) obtained integrating the propagator
+shown in the inset. (b)
+|
+and by integrating 106 particles initially distributed according to P (y, t
+x, t). In the
+R
+|
+inset, the absolute error.
+
+dy P (y, s
+
+dy P (y, s
+
+R
+
+R
+
+of (9) evaluated with the propagator and with the Lagrangian trajectories the
+ﬁnal condition of which have been set according to the propagator distribu-
+x, t). We recall that in the limit of inﬁnite particles the propagator
+tion P (y, t
+|
+is exactly recovered. The good agreement of Fig. 2b reﬂects the fact that, al-
+though pseudo-spectral methods are not suited to preserve the positivity of the
+propagator, the presence of small negative regions is not severely penalizing.
+Indeed, a closer inspection of the propagator shows that the negative values
+are limited to small amplitude oscillations where P (y, s
+x, t) is vanishingly
+small.
+
+|
+
+3.2 Frontogenesis in passive scalar advection
+
+A striking and ubiquitous feature of passive scalar turbulence is the presence
+of fronts (also called “cliﬀs” or “sheets”), i.e. regions where the scalar has very
+strong variations separated by large regions (“ramps” or “plateaux”) where
+scalar ﬂuctuations are weak (see Fig. 3) [8,9,10,11,12,13,14,15,16].
+
+The genesis of fronts and plateaux is best understood in terms of particle
+trajectories : to trace back the build-up of large and small scalar diﬀerence we
+study the evolution of the propagator
+
+χ(y, s
+
+x, x + r, t) = P (y, s
+
+x + r, t)
+
+P (y, s
+
+x, t) ,
+
+|
+
+−
+
+|
+
+|
+
+(10)
+
+9
+
+Fig. 3. Left : Typical snapshots of the scalar ﬁeld θ. Note the presence of sharp fronts
+separating large regions in which the scalar assumes close values. Right : Close-up
+of a region containing a front. Across the upper and the middle spot there is a front,
+whereas the middle and lower one lie in a plateau. The distance between consecutive
+spots is larger than the diﬀusive scale Lκ, but smaller than the injection scale Lφ.
+In this simulation Lκ ≈
+25
+and
+
+15, respectively. Lengths are expressed in grid points.
+
+170, the spot separation and diameter are
+
+2 , Lφ ≈
+
+≈
+
+≈
+
+which is related to the scalar diﬀerence by the formula
+
+θ(x + r, t)
+
+θ(x, t) =
+
+ds
+
+dy χ(y, s
+
+x, x + r, t) φ(y, s) .
+
+(11)
+
+−
+
+|
+
+t
+
+Z0
+
+Z
+
+Notice that χ evolves backward according to Eq. (4), with the ﬁnal condition
+δ(y
+χ(y, s
+
+x, x + r, t) = δ(y
+
+x).
+
+r)
+
+x
+
+|
+
+−
+
+−
+
+−
+
+−
+
+The numerical procedure was as follows. After the integration of Eqs. (5)
+and (8) over ﬁve eddy turnover times (the typical time-scale of large-scale
+motion) we choose x and r such that x, x + r are on a front or a plateau,
+respectively (see the right panel of Fig. 3). Then χ is integrated backward
+in time. In Fig. 4, we show four snapshots of the backward evolution of the
+ﬁeld χ. Already at a ﬁrst glance the evolution of χ appears very diﬀerent for
+the two ﬁnal conditions : the blobs starting inside a plateau (ﬁrst column)
+experience a strong mixing, while blobs lying initially across a front mix very
+poorly remaining compact and far aside. This is the basic mechanism for
+the formation of intense structures in passive scalar turbulence (for a related
+theoretical study see [17]).
+
+10
+
+x, t) for x and r starting
+Fig. 4. From top to bottom : backward evolution of χ(y, s
+|
+in a plateau (ﬁrst column) and across a front (second column), see the right panel of
+Fig. 3. Colors are coded according to the intensity of the ﬁeld χ, yellow is for positive
+values and blue for negative ones. At each time, the intensity is normalized according
+to the maximum of the ﬁelds in absolute value. The relatively smaller intensity on
+the ﬁrst column is due to the fast mixing leading to strong cancellations between
+the positive and negative parts. Time is in eddy turnover times, the total number of
+time steps is 214. To compare with ﬁgure 3, here the panel is 900
+900 grid points.
+
+×
+
+Acknowledgments
+
+We are grateful to G. Boﬀetta, S. Musacchio, and M. Vergassola for several
+useful discussions and suggestions. M.C. has been supported by the EU un-
+der the contract HPRN-CT-2000-00162. A.C. acknowledges the EU contract
+
+11
+
+HPRN-CT-2002-00300. Numerical simulations have been performed at IDRIS
+(project 021226).
+
+References
+
+1996).
+
+[1] H. Risken, The Fokker Planck Equation (Springer-Verlag, New York/Berlin,
+
+[2] C. W. Gardiner, Handbook of Stochastic Methods : For Physics, Chemistry and
+
+the Natural Sciences (Springer-Verlag, New York/Berlin, 1996).
+
+[3] B. I. Shraiman and E. D. Siggia, Scalar turbulence, Nature 405, 639 (2000).
+
+[4] G. Falkovich, K. Gaw¸edzki, and M. Vergassola, Particles and ﬁelds in ﬂuid
+
+turbulence, Rev. Mod. Phys. 73, 913 (2001).
+
+[5] D. Gottlieb and S.A. Orszag, Numerical Analysis of Spectral Methods : Theory
+
+and Applications, (SIAM, Philadephia, 1977).
+
+[6] C. Canuto, M. Y. Hussaini, A. Quarteroni and T. A. Zang, Spectral methods
+
+in ﬂuid dynamics, (Springer-Verlag, New York/Berlin, 1988).
+
+[7] G. Boﬀetta, A. Celani, and M. Vergassola, Inverse energy cascade in two-
+dimensional turbulence : Deviations from Gaussian behavior, Phys. Rev. E 61,
+29 (2000).
+
+[8] A. Celani, A. Lanotte, A. Mazzino, and M. Vergassola, Universality and
+Saturation of Intermittency in Passive Scalar Turbulence, Phys. Rev. Lett. 84,
+2385 (2000).
+
+[9] A. Celani, A. Lanotte, A. Mazzino, and M. Vergassola, Fronts in passive scalar
+
+turbulence, Phys. Fluids 13, 1768 (2001).
+
+[10] F. Dalaudier, C. Sidi, M. Crochet, and J. Vernin, Direct evidences of “sheet”
+
+in the atmospheric temperature ﬁeld, J. Atmos. Sci. 51, 237 (1994).
+
+[11] R. G. Luek, Turbulent mixing at the Paciﬁc subtropical
+
+front, J. Phys.
+
+Oceanogr. 18, 1761 (1988).
+
+[12] K. R. Sreenivasan, On local isotropy of passive scalars in turbulent shear ﬂows,
+
+Proc. Roy. Soc. London A434, 165, (1991).
+
+[13] L. Mydlarski and Z. Warhaft, Passive scalar statistics in high-P´eclet-number
+
+grid turbulence, J. Fluid Mech. 358, 135, (1998).
+
+[14] F. Moisy, H. Willaime, J. S. Andersen, and P. Tabeling, Passive Scalar
+Intermittency in Low Temperature Helium Flows, Phys. Rev. Lett. 86, 4827
+(2001).
+
+[15] A. Pumir, A numerical study of the mixing of a passive scalar in three
+dimensions in the presence of a mean gradient, Phys. Fluids 6, 2118 (1994).
+
+12
+
+[16] S. Chen and R. H. Kraichnan, Simulations of a randomly advected passive scalar
+
+ﬁeld, Phys. Fluids 68, 2867 (1998).
+
+[17] E. Balkovsky and V. Lebedev, Instanton for the Kraichnan passive scalar
+
+problem, Phys. Rev. E 58, 5776 (1998).
+
+13
+
+

@@ -1,0 +1,5928 @@
+7
+0
+0
+2
+ 
+r
+a
+
+M
+ 
+7
+2
+ 
+ 
+]
+n
+a
+-
+a
+t
+a
+d
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+8
+3
+2
+3
+0
+7
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Practical Macrostate Data Clustering
+
+Brian White∗
+
+Computer Systems Laboratory
+
+Dept. of Electrical and Computer Engineering
+
+Cornell University
+
+Ithaca, NY 14853
+
+David Shalloway†
+
+Biophysics Program
+
+Cornell University
+
+Ithaca, NY 14853
+
+Abstract
+
+Dept. of Molecular Biology and Genetics
+
+Spectral clustering methods have been shown to outperform traditional distance-based ap-
+
+proaches, such as k-means and hierarchical clustering, based on their use of global information
+
+encoded in eigenvectors of a matrix describing inter-item relations. Macrostate data clustering
+
+[Korenblum and Shalloway, Phys. Rev. E, Volume 67, 2003] used an analogy to the dynamic
+
+coarse-graining of a stochastic system to construct a linear combination of eigenvectors that prob-
+
+abilistically assigned items to clusters. A “minimum uncertainty criterion” lead to an objective
+
+function that minimized the inherent fuzziness of the cluster assignments. The resulting non-linear
+
+optimization problem was solved by a brute-force technique that was unlikely to scale to prob-
+
+lems larger than a few hundred items. A novel approach to solving this optimization problem
+
+is presented. It scales to 20,000 items—the memory limitations of a commodity computational
+
+node and within range of problem sizes of biological interest. To further accommodate biological
+
+applications, the theory is amended to apply to asymmetric dissimilarity matrices, such as those
+
+derived from DNA sequence alignment scores, and the algorithm is extended to recursively examine
+
+hierarchical substructure, such as that arising during protein classiﬁcation. Potential application
+
+to molecular dynamics and protein classiﬁcation is discussed.
+
+∗Electronic address: bwhite@csl.cornell.edu
+
+1
+
+†Electronic address: dis2@cornell.edu
+
+2
+
+I.
+
+INTRODUCTION
+
+The need to coarse grain a large set of items to a smaller set of clusters is a ubiquitous
+
+problem in engineering and the sciences. Formally, a solution assigns N items embedded
+
+in a NM -dimensional space to a set of m clusters, with m
+
+N. Clustering proceeds from
+
+≪
+
+an N
+
+N dissimilarity matrix D, where the oﬀ-diagonal element Dij provides an inverse
+
+×
+
+indicator of the correlations between the measurements of items i and j. The resulting
+
+assignment functions wα have elements wα(i) that describe the probability of item i being
+
+assigned to cluster α. If the wα(i) are continuous in the range zero to one, they describe a
+
+fuzzy clustering; frequently the assignment probabilities are restricted to binary values and
+
+instead give a hard clustering.
+
+The dissimilarity matrix may be deﬁned directly and externally from the clustering al-
+
+gorithm, as when clustering protein sequences using inter-item sequence alignment scores.
+
+Alternately, when the data are numerical, the dissimilarity matrix may be derived from the
+
+NM measurement matrix X and a distance measure deﬁned on the measurement space,
+
+Dij =
+
+(Xia −
+
+Xja)gab(Xib −
+
+Xjb)
+
+(1)
+
+1/2
+
+,
+
+#
+
+NM
+
+"
+Xa,b=1
+
+where g is a problem-speciﬁc Euclidean metric tensor. The metric tensor is taken to be the
+
+identity when the dimensions are orthogonal, but may otherwise be adjusted to account for
+
+correlations. Here, each dimension provides one set of the NM measurements on the items.
+
+For example, in the context of a DNA microarray gene expression analysis, the items would
+
+represent genes and the measurements might correspond to gene expression levels measured
+
+at diﬀerent times or across diﬀerent conditions.
+
+N
+
+×
+as in
+
+Clustering is an inherently global problem whose optimal solution informally maximizes
+
+each cluster’s internal cohesion and external isolation [1]. Traditional distance-based meth-
+
+ods, such as hierarchical clustering and k-means, approximate this goal by minimizing an
+
+aggregate statistic over item-item or item-cluster distances. For example, Single Linkage
+
+and Complete Linkage are agglomerative methods that iteratively merge the pair of clusters
+
+having minimum inter-cluster distance. Single Linkage deﬁnes inter-cluster distance as the
+
+minimum distance between items in diﬀerent clusters, whereas Complete Linkage uses the
+
+3
+
+(a)
+
+(b)
+
+(c)
+
+FIG. 1: Defects in distance-based methods. (a) Single Linkage applied to Two Diamonds. (b)
+
+Complete Linkage applied to Crescentric. (c) k-means applied to Crescentric.
+
+(a)
+
+(b)
+
+FIG. 2: Macrostate data clustering applied to (a) Two Diamonds and (b) Crescentric.
+
+maximum distance between items in diﬀerent clusters. k-means is a partitional, combina-
+
+toric method that adjusts k centroids so as to minimize the sum of the distances between
+
+each item and its respective, nearest centroid.
+
+The notions of cohesion and isolation that intuitively deﬁne a quality clustering are
+
+inherently global connectivity relations. The sub-optimal clusterings of traditional methods,
+
+such as those in Figure 1, are often related to their inability to infer such connectivity
+
+information from inter-item distances. Single Linkage improperly clusters the Two Diamonds
+
+data set [2] in Figure 1(a) by prematurely merging two sub-clusters that straddle the interface
+
+between the diamonds. This eﬀectively merges the two dominant clusters before integrating
+
+three singletons into their respective diamonds. Though the items at the boundary of the
+
+diamonds are tightly bound, their clusters should not have been joined since each item has
+
+few connections to the opposite cluster and many slightly weaker connections to its own
+
+cluster. This failure to reconcile the degree of connectivity with the magnitude of a single
+
+connection is a shortcoming of distance-based approaches [3]. Similarly, the marginally larger
+
+separation between the singletons and their nearest neighbors, relative to other inter-item
+
+4
+
+distances, should have been oﬀset by the many connections between them.
+
+Complete Linkage and k-means favor convex clusters owing to their shared goal of mini-
+
+mizing intra-cluster variance. They fail to obtain a good partitioning of the Crescentric data
+
+set [4] in Figures 1(b) and 1(c) since its non-convex crescents have intra-cluster distances
+
+that occasionally exceed inter-cluster distances. In these two examples, it is evident that an
+
+item’s cluster membership does not necessarily inﬂuence a nearby neighbor’s membership.
+
+In a connectivity-based approach, items would instead exert an inﬂuence over one another,
+
+allowing clusters to become elongated or protruding.
+
+The concept of connectivity may be introduced to clustering through graph partitioning,
+
+which represents each item as a node in a graph and assigns graph edge weights according to
+
+inter-item aﬃnities. This analogy is the origin of spectral clustering methods, which analyze
+
+the eigenvalues and eigenvectors of a matrix describing graph connectivity.
+
+In principle,
+
+eigenvector components are a function of the entire graph. Therefore, eigenvectors have the
+
+potential to represent the global inter-item connectivity lacking in distance-based methods.
+
+By utilizing this global information, the spectral macrostate data clustering algorithm devel-
+
+oped by Korenblum and Shalloway [5] outperforms k-means and the hierarchical clustering
+
+algorithms with respect to Two Diamonds (Figure 2(a)) and Crescentric (Figure 2(b)). Re-
+
+lated spectral clustering methods have been shown to be superior to k-means across several
+
+synthetic benchmarks [6, 7] and have been applied across diverse areas including VLSI cir-
+
+cuit partitioning [8, 9, 10, 11], image segmentation [12], load balancing [13, 14], and protein
+
+structure comparison [3].
+
+Graph partitioning methods represent a graph in terms of a symmetric aﬃnity or ad-
+
+jacency matrix A, whose entries are non-negative, inter-item aﬃnities. An early approach
+
+to spectral graph partitioning [15] used the ﬁrst k eigenvectors of A as its best low-rank
+
+approximation. These eigenvectors were projected onto a discrete, feasible solution with
+
+wα(i)
+
+1, 1
+
+by an optimization problem formulated as a constrained linear program.
+
+∈ {−
+
+}
+
+Many popular approaches to graph bipartitioning are based on objective function min-
+
+imization, which typically seeks to balance partition sizes and to minimize cut edges that
+
+cross partitions.
+
+Introducing the balanced partition constraint makes the problem NP-
+
+complete [16], thus motivating heuristic approaches. Fiedler recognized that the second
+
+smallest eigenvalue of the graph Laplacian is the optimal solution to a related, continuous
+
+problem in which the wα(i) are real valued [17]. This optimal solution is obtained by the
+
+5
+
+corresponding eigenvector–the Fiedler vector. The symmetric Laplacian [18] matrix from
+
+which it is derived has oﬀ-diagonal elements corresponding to the sign-inverted elements of
+
+A and diagonal elements that are sums over the corresponding rows of A:
+
+Lij = δij
+
+Aik
+
+! −
+
+ 
+
+Xk
+
+k Aik if i = j
+if i
+Aij
+
+otherwise .
+
+P
+−
+0
+
+Aij = 
+
+
+
+= j and i and j are connected
+
+The optimality of the Fiedler vector spurred a number of approaches that relax the in-
+
+tractable, discrete problem to a continuous one based on spectral analysis of the (possibly
+
+normalized) Laplacian [12, 14, 19, 20]. The real-valued eigenvector components are then
+
+assigned to discrete partitions via thresholding according to eigencomponent sign, median
+
+value, or a large gap between adjacent sorted components. Hall [21] considered the related
+
+problem of optimally placing connected nodes in an r-dimensional space and found that
+
+each eigenvector of the Laplacian supplied one dimension of the coordinate. The Fiedler ap-
+
+proach is readily extended to multiple clusters through recursive spectral bipartitioning [13].
+
+However, direct partitional m-way clustering approaches [7, 9, 10, 22, 23, 24, 25, 26] have
+
+been shown to give better performance.
+
+Real-valued cluster assignments implicitly express uncertainty. Unlike graph partitioning,
+
+which is often invoked from within a closed system that requires a hard assignment, to, for
+
+example, distribute computation or data, data clustering results are frequently subject to
+
+human analysis. The degree of certainty with which an item is assigned to a cluster therefore
+
+provides additional information during analysis. For example,
+
+low certainty may focus
+
+attention on those items requiring manual classiﬁcation. The relatively greater assignment
+
+ambiguity of items with low certainties also indicates they are the items most likely to be
+
+classiﬁed diﬀerently by alternate clustering algorithms.
+
+Objective functions adopted from graph partitioning, such as those that minimize edge
+
+cuts, have proven valuable in making relative comparisons: they have been used to search
+
+for an optimal partition when thresholding [11] and to assign items that are diﬃcult to
+
+classify through heuristics [10]. They have also been used to derive theoretical bounds on
+
+partitioning quality [27, 28, 29, 30]. However, these objective functions do not support the
+
+intended use of data clustering for manual analysis, where the quality of a cluster is reﬂected
+
+in the degree to which it minimizes uncertainty. Imposing constraints on the real-valued
+
+assignment functions makes possible a probabilistic interpretation and an objective function
+
+6
+
+6
+that quantiﬁes cluster cohesion and isolation by measuring the degree of cluster fuzziness.
+
+A minimum uncertainty principle then prescribes how to deﬁne clusters and provides an
+
+absolute measure of clustering quality.
+
+Korenblum and Shalloway [5] have previously described a data clustering method that
+
+(1) optimizes an objective function that measures the information content of the clustered
+
+representation, (2) automatically determines the optimal number of clusters m, and (3) pro-
+
+vides fuzzy clustering assignment probability information. To accomplish this they used a
+
+stochastic model for data clustering based on the working hypothesis that each item selected
+
+for analysis has been statistically sampled from a continuous density distribution pB(~x) of
+
+possibilities in a d-dimensional dataspace. This might reﬂect experimental selection from
+
+a continuous distribution of items (e.g., if members of a large population have been ran-
+
+domly selected for analysis) or might reﬂect complete analysis of a ﬁnite population that
+
+was naturally selected from a continuous distribution of possibilities (e.g., as in the case of
+
+a complete gene expression level analysis). If pB is concentrated in separable subregions,
+
+then it is natural to dissect the possibility space along the corresponding subregion bound-
+
+aries. The subregions are called macrostates and the items or microstates lying within each
+
+macrostate are gathered into a cluster. A similar dynamical metaphor motivates the growing
+
+body of diﬀusion-based clustering approaches [5, 31, 32, 33, 34, 35, 36] that consider random
+
+walks over weighted graphs.
+
+The macrostate data clustering proposed by Korenblum and Shalloway is a fuzzy, spec-
+
+tral, m-way clustering approach in which the wα are a linear combination of the ﬁrst m
+
+eigenvectors, chosen so that all values lie between zero and one to allow a probabilistic inter-
+
+pretation. Sec. II A shows how macrostates would be computed in the hypothetical case that
+
+pB were known a priori. This approach is heuristically motivated by macrostate dissection
+
+methods that were previously developed for stochastic dynamic systems described by the
+
+Smoluchowski equation. Sec. II B describes show how this procedure can be adapted to data
+
+clustering when the underlying pB is not known. As desired, this converts the clustering
+
+problem into an optimization problem using an information-dependent objective function
+
+and achieves the goals set above.
+
+The resultant non-linear information optimization problem was previously solved by a
+
+brute-force technique that worked for modest size problems (N = 200), but which could
+
+not solve the larger problems [e.g., N
+
+O(104)] that emerge in areas of interest such as
+
+∼
+
+7
+
+gene chip analysis [37]. This paper describes an eﬃcient algorithm that scales to problem
+
+sizes of biological interest. Several other extensions accommodate biological data sets: the
+
+theory has been adapted in Sec. II D to handle asymmetric dissimilarity matrices, such as
+
+those derived from DNA sequence alignment scores [38] and the algorithm may be invoked
+
+recursively to expose hierarchical substructure, such as that arising during the classiﬁcation
+
+of proteins [39].
+
+A practical two-phased solution to the global optimization problem is described in Sec. III.
+
+An approximate solver determines a set of real-valued wα, whose components may not
+
+precisely satisfy the probabilistic requirements. Nevertheless, thresholding the approximate
+
+solution is an alternative to other hard clustering methods that deﬁne m clusters from m
+
+eigenvectors. As the approximate solver builds clusters from m representatives, or items
+
+strongly identiﬁed with a particular cluster, it is particularly relevant to methods based on
+
+the similar ideas of prototypes [10] and sign structures [23]. In the limit in which the clusters
+
+are completely isolated or disconnected, the approximate solution is exact. In other cases,
+
+it is reﬁned to yield a fuzzy clustering via the second phase, constrained solver. Sec. IV
+
+applies the solver to several large problems and Sec. V discusses its broader applicability to
+
+molecular dynamics simulations and the hierarchical classiﬁcation of protein structures.
+
+II. THEORY
+
+A. Continuous Macrostate Dissection
+
+Coarse graining in nonequilibrium statistical physics reduces the complexity of a com-
+
+plete, microscopic description of a dynamical system to a simpler model that captures its
+
+essential, macroscopic features [40]. This technique projects a conﬁguration of rapidly ﬂuctu-
+
+ating microscopic states (microstates) onto a set of more slowly varying macroscopic states
+
+(macrostates). For example, a classical, microscopic description of a protein is provided
+
+by the bond lengths, bond angles, and dihedral angles associated with atoms along the
+
+backbone. Such a system may be approximated by the dihedral angles alone owing to the
+
+high-frequency, small-scale bond length vibrations and the near rigidity of the bond an-
+
+gles. The resulting Ryckaert-Bellemans [41] potential of a single dihedral angle is shown
+
+in Figure 3. It remains characterized by the full range of the angular coordinate, though
+
+8
+
+U(φ)
+
+p
+
+B
+
+ψ
+1
+
+−2π/3
+
+φ = 0
+
+2π/3
+
+wα
+
+wγ
+
+wβ
+
+0.5
+
+0.5
+
+1
+
+0
+
+1
+
+0
+
+1
+
+0
+
+0.5
+
+Ψ
+β
+
+ψ
+2
+
+Ψ
+
+α
+
+Ψ
+γ
+
+σ
+1
+
+σ
+2
+
+FIG. 3: Macrostate dissection of Ryckaert-Bellemans dihedral angle potential. The Ryckaert-
+
+Bellemans potential U (φ) gives rise to the equilibrium distribution pB ∝
+Smoluchowski operator is deﬁned according to Eq. (2) and discretized. Spectral analysis of the
+
+e−βU (φ). Given pB, the
+
+operator yields the eigenfunctions, of which ψ0 = pB, ψ1, and ψ2 are shown. Two non-trivial
+
+σn = ψn/ψ0 are also shown. The nodal surfaces of the σn separate macrostates, as in the ψn. In
+
+addition, the structure of the σn is approximately level within a macrostate. Linear combinations
+
+of σ0, σ1, and σ2 deﬁne the assignment functions wα, wβ, and wγ, which in turn ﬁlter out the
+
+macrostate regions from pB to deﬁne macrostate distributions Ψα, Ψβ, and Ψγ, respectively.
+
+its well-deﬁned catchment regions separate the Gibbs-Boltzmann equilibrium probability
+
+distribution, pB, into three macrostates corresponding to the single trans and two gauche
+
+conformations. Consideration of dihedral angles across the entire protein may lead to further
+
+coarsening into “folded” and “unfolded” states. In such high-dimensional systems, visual
+
+determination of macrostates is not practical: a means of automatically dissecting conﬁg-
+
+uration space into macrostate regions, such as the regions Ψα, Ψβ, and Ψγ of the single
+
+dihedral angle shown in Figure 3, is required.
+
+Dissection of the equilibrium probability distribution may be accomplished by coarse
+
+graining an initial system description provided by a ﬁne-grained diﬀerential equation over
+
+microstates into a master equation whose relatively fewer degrees of freedom correspond
+
+to the system’s metastable macrostates.
+
+In the case of highly interactive, overdamped
+
+systems, such as those arising from protein dynamics, an appropriate ﬁne-grained model
+
+is the diﬀusion equation. As a further simpliﬁcation, the momentum distribution may by
+
+9
+
+taken close to equilibrium, so that probability evolves independently of momentum according
+
+to the Smoluchowski equation [42]
+
+∂p
+∂t
+
+= ~
+
+∇ ·
+
+[pB ~
+∇
+
+p−1
+B p
+
+] ,
+
+(cid:0)
+
+(cid:1)
+
+where pB is the potential- and temperature-dependent Gibbs-Boltzmann distribution. In
+
+general, the equation would account for anisotropic diﬀusion through an arbitrary symmet-
+
+ric tensor. However, the tensor may be brought to a diagonal form through orthogonal
+
+transformation of coordinates and to a multiple of the identity by rescaling the coordinates.
+
+The resulting scalar may then by absorbed into the time coordinate as done in Eq. (2). To
+
+facilitate eventual transition to a discrete system, Eq. (2) may be written in operator form
+
+as
+
+∂p(x, t)
+∂t
+
+=
+
+Γ(x, x′) p(x′, t) dx′ .
+
+Formally, the equation is solved via the spectral expansion
+
+p(~x, t) =
+
+cn e−γn t ψn(~x) ,
+
+where the non-negative1 eigenvalues γn and the right eigenfunctions ψn satisfy
+
+From Eq. (2) it is evident that pB is a stationary solution to the Smoluchowski equation
+
+Therefore, pB must be proportional to the ground-state eigenfunction ψ0, with corresponding
+
+eigenvalue γ = 0. Without loss of generality, ψ0 may be normalized such that c0 = 1. Eq.
+
+(4) then describes the relaxation of an initial distribution p(~x, 0) to its equilibrium state
+
+ψ0(~x)
+
+with relaxation rates given by the eigenvalues. Since the probability distribution equilibrates
+
+to the Gibbs-Boltzmann distribution,
+
+(2)
+
+(3)
+
+(4)
+
+(5)
+
+(6)
+
+Z
+
+∞
+
+n=0
+X
+
+Γ ψn = γn ψn .
+
+Γ pB = 0 .
+
+lim
+t→∞
+
+p(~x, t) = ψ0 ,
+
+ψ0 = pB ,
+
+10
+
+1 The eigenfunctions corresponding to negative eigenvalues are not normalizable
+
+so long as the equilibrium state is non-degenerate. A d-fold degenerate equilibrium state
+
+results when pB has support in d disjoint regions. Such a situation is characterized by d
+
+zero eigenvalues, but is easily resolved in advance and so need not be considered except for
+
+some numerical issues discussed later.
+
+As discussed in greater detail in Refs. 43 and 44, a concentration of pB into m separable
+
+macrostate regions will be reﬂected in a gap in the relaxation rates
+
+0 = γ0 < γ1 < ...γm−1 ≪
+
+γm .
+
+The gap partitions relaxation dynamics into two distinct phases: fast, localized probabil-
+
+ity waves bring each macrostate to its internal equilibrium, while the m
+
+1 non-trivial
+
+−
+
+low-frequency eigenfunctions redistribute probability across macrostates to reach a global
+
+equilibrium. Probability is transported according to the exponential decay of eigenfunc-
+
+tion amplitudes and ﬂows between regions whose amplitudes diﬀer in sign. Hence, nodal
+
+surfaces in the low-lying eigenfunctions separate macrostates. Since the low-lying eigenfunc-
+
+tions primarily transport probability across, rather than within, macrostates, the integrated
+
+probabilities within each macrostate, the macrostate occupation probabilities pocc
+
+α , remain
+
+approximately constant during the slow relaxation phase. As the disparity between rates
+
+across the two phases increases, the macrostates become more distinctly separated from one
+
+another. Hence the minimum gap parameter ργ
+
+γn/γn−1 < ργ
+
+(1 < n < m)
+
+γm/γm−1 > ργ ,
+
+(7a)
+
+(7b)
+
+determines the number of clusters and expresses a desired tolerance for the quality of those
+
+clusters.
+
+Nodal surfaces have previously been used to determine macrostate boundaries. In the
+
+case m = 2, the sign of eigenvector amplitudes has been used to separate clusters in spec-
+
+tral bipartitioning. This technique was generalized to a larger number of “aggregates” by
+
+Deuﬂhard et al. [23], who projected the m amplitudes of a single ensemble member i onto
+
+an m-vector describing their sign
+
+(sign(ψ0)i, sign(ψ1)i, . . . , sign(ψm−1)i) .
+
+The authors show that this sign structure uniquely assigns each member to a cluster. Unfor-
+
+tunately, the sign structure may be heavily perturbed so that ambiguities exist for near-zero
+
+11
+
+amplitudes. The authors arrive at a hard clustering that resolves the ambiguities, but does
+
+not preserve the uncertainty of the ambiguous ensemble members.
+
+Macrostate dissection linearly relates the m low-frequency eigenfunctions to a set of m
+
+continuous, fuzzy macrostate assignment functions
+
+wα(~x) : α = 1, . . . , m
+}
+
+{
+
+where
+
+wα(~x) =
+
+Mαn σn(~x) ,
+
+m−1
+
+n=0
+X
+
+σn(~x)
+
+ψn(~x)/ψ0(~x) .
+
+≡
+
+The non-negativity of ψ0 guarantees that the low-lying σn, like the low-lying ψn, have
+
+nodal surfaces at macrostate boundaries. Renormalizing by ψ0 eﬀectively smooths out
+
+intra-macrostate amplitude ﬂuctuations so that the σn are approximately constant within a
+
+macrostate when n < m 2. Fig. 3 in this paper, Fig. 3 in Ref. 43, and Fig. 1 in Ref. 44 give
+
+pictorial examples of the relationship between ψn, σn, and wα.
+
+Separation along nodal surfaces allows selection of coeﬃcients Mαn so that, far from
+
+macrostate boundaries, the assignment functions approximate a hard partitioning by as-
+
+signing ensemble members to clusters with near certainty:
+
+wα(~x)
+
+0 or 1
+
+(away from macrostate boundaries) .
+
+(10)
+
+≈
+
+Near the macrostate transition regions the assignment functions may take on intermediate
+
+values, so long as they satisfy
+
+(8)
+
+(9)
+
+(11a)
+
+(11b)
+
+wα(~x)
+
+0 ,
+
+≥
+
+wα(~x) = 1 ,
+
+α, ~x
+
+∀
+
+~x .
+
+∀
+
+α
+X
+
+These conditions ensure that the assignment functions cover the entire space, so that they
+
+eﬀectively act as ﬁlters to fractionally select those ensemble members that belong to the
+
+corresponding macrostate. Fig. 3 shows that the three assignment functions wα, wβ, and wγ
+
+isolate the three concentrated regions Ψα, Ψβ, and Ψγ of the equilibrium distribution pB.
+
+The assignment functions express uncertainty whenever they deviate appreciably from
+
+zero or unity. Thus, while the most informative dissection of space is a strictly binary,
+
+2 Only the low-frequency σn will take constant values away from macrostate boundaries. The σn (n
+
+m),
+
+≥
+
+like their corresponding ψn, will vary within the macrostate regions.
+
+12
+
+hard assignment, the least informative assigns each ensemble member to each macrostate
+
+with equal likelihood 1/m. Intuitively, the degree of uncertainty is related to the amount
+
+of overlap between assignment functions wα and wβ6=α. This may be quantiﬁed by the
+
+uncertainty
+
+Υα(M)
+
+β6=α
+
+≡ P
+
+wα(~x) wβ(~x) pB(~x) d~x
+wα(~x) pB(~x) d~x
+
+,
+
+which is an entropic measure in the information-theoretic sense in that it increases with
+
+increasing ignorance of the system. M is included as an argument to the uncertainty Υα
+
+since it is indirectly dependent on the Mαn through the assignment functions.
+
+An alternate derivation of uncertainty proceeds from a ﬁlter analogy, in which the wα
+
+are viewed as devices for preparing and observing statistical ensembles. Fig. 3 depicts the
+
+preparation of pB in three alternate macrostates. For example, the distribution prepared in
+
+macrostate α at t = 0 is
+
+Ψα(~x, 0) =
+
+wα(~x) pB(~x)
+wα pB(~x) d~x
+
+,
+
+where Ψα has been normalized to satisfy conservation of probability. The deﬁnition ﬁlters
+
+R
+
+the equilibrium distribution with an assignment function to select the appropriate ensemble
+
+(12)
+
+(13)
+
+members.
+
+as
+
+Since the expectation value of the observable
+
+(~x) given probability distribution Ψ is
+
+O
+
+<
+
+>=
+
+O
+
+O
+
+Z
+
+(~x) Ψ(~x, t) d~x ,
+
+the probability that an ensemble member in state Ψα is observed in macrostate α is deﬁned
+
+pobs
+α (Ψα; t) =
+
+wα(~x) Ψα(~x, t) d~x .
+
+(14)
+
+Because the wα are constructed from the smooth low-frequency σn, they will be fuzzy and
+
+will have support in overlapping regions. Therefore, even a measurement on state Ψα(~x, 0)
+
+immediately following its preparation at t = 0 will have some probability of ﬁnding ensemble
+
+members in macrostates other than α: the probability Υα that an ensemble member prepared
+
+in macrostate α will be observed in that macrostate at t = 0 may be less than unity.
+
+Combining Eqs. (13) and (14) and relating the fraction to Υα(M) through Eq. (12), yields
+
+Υα(M)
+
+pobs
+α (Ψα; 0) =
+
+≡
+
+w2
+α pB d~x
+wα pB d~x
+
+= 1
+
+Υα(M) .
+
+−
+
+(15)
+
+The Υα(M) measure the certainties of the macrostate assignments (0
+
+Υα(M)
+
+1).
+
+≤
+
+≤
+
+Since a quality dissection should not unduly sacriﬁce the certainty of one macrostate to
+
+R
+
+R
+
+Z
+
+R
+R
+
+13
+
+favor another, a good deﬁnition of the macrostates is one that maximizes the product (i.e.,
+
+the geometric mean) of their certainties. Imposing this minimum uncertainty criterion is
+
+equivalent to choosing the Mαn that minimize the objective function
+
+α
+X
+In combination with the constraints imposed by Eq. (11), its minimization determines the
+
+Φ(M)
+
+≡ −
+
+log Υα(M) .
+
+(16)
+
+Mαn to complete the macrostate dissection.
+
+B. Macrostate Data Clustering: Symmetric Γ
+
+Physical coarse graining may be adapted to fuzzy data clustering by viewing the contin-
+
+uous microstates describing the ﬁne-grained physical system as discrete data items and the
+
+macrostates as clusters. The analog to Eq. (2), in which the Smoluchowski operator acts on
+
+the continuous probability distribution p(~x, t), is
+
+dp(t)
+dt
+
+= Γ
+
+p(t) ,
+
+·
+
+(17)
+
+in which the transition rate matrix Γ acts on the probability vector p(t) of individual item
+
+probabilities pi(t).
+
+Eq. (17) is consistent with a (biased) random walk approach to data clustering [5, 24, 31,
+
+32, 34, 35, 36, 45]. Under this interpretation, probability diﬀuses along edges in a weighted
+
+graph. As in the physical system, a data set amenable to clustering exhibits a large disparity
+
+between fast, local ﬂuctuations that equilibrate probability within a cluster and less frequent
+
+transitions that cross cluster boundaries. Edge weights are deﬁned as a function of inter-item
+
+distance and are related to the probability or rate of diﬀusion between items. For example,
+
+the probability of transitioning in a single step from item i to item j may be deﬁned as the
+
+weight between the two items normalized by the sum of the weights between i and each of
+
+its neighbors [24, 32, 36, 45]. The stochastic matrix so deﬁned is the transition probability
+
+matrix associated with a discrete-time Markov chain.
+
+In principle, Γ could be deﬁned by discretizing the Smoluchowski operator in Eq. (2).
+
+Doing so requires knowledge of the equilibrium distribution pB, which, while frequently
+
+available for a physical system, is in general unknown for a data set. Deriving it from the
+
+data through functional density estimation would be computationally ineﬃcient. Instead,
+
+14
+
+it is possible to posit a form of Γ consistent with the assumed kinetic model. Tishby and
+
+Slonim [35] have argued that transition probabilities should be exponential in inter-item
+
+distance, since this form is consistent with the typical assumption that distances are additive
+
+and that probabilities are multiplicative. Belkin and Niyogi [31] have shown that Eq. (17)
+
+induces a Gaussian (i.e., exponential in distance squared) form, while Nadler et al. [34] have
+
+found that a normalized Gaussian form approximates the backward Fokker-Planck equation
+
+of a related system.
+
+The present derivation follows Korenblum and Shalloway [5], who used dimensionality to
+
+motivate the form of Γ. Since the left-hand side of Eq. (17) has units of inverse time and
+
+the diﬀusion constant (implicit on the right-hand side since it was taken to be unity) has
+
+units of distance squared divided by time, Γ must have units of inverse distance squared,
+
+independent of dimensionality. This form accounts for the attenuation in transition rate
+
+across long distances, but not for potential occlusion by intervening items that would prevent
+
+direct transition between two items. Such interception of probability may be modeled by an
+
+exponential cutoﬀ scaled to the mean nearest-neighbor squared distance
+
+:
+
+d2
+0i
+
+h
+
+Γij =
+
+,
+
+i
+
+= j ,
+
+e−(Dij )2/2hd2
+0i
+(Dij)2
+N
+
+d2
+0i
+
+h
+
+= N −1
+
+(Di<)2 ,
+
+i=1
+X
+
+where Di< is the smallest element in the ith row of D. The negative diagonal elements of Γ
+
+by the conservation of probability and the subsequent requirement that
+
+are ﬁxed as
+
+where
+
+The positivity of the oﬀ-diagonal elements
+
+is necessary to ensure that the pi(t) remain non-negative under temporal evolution.
+
+Γii =
+
+Γji
+
+−
+
+Xj6=i
+
+1
+
+Γ = 0 .
+
+·
+
+1i = 1 ,
+
+i .
+
+∀
+
+Γij ≥
+
+0 ,
+
+i
+
+= j ,
+
+15
+
+(18a)
+
+(18b)
+
+(19)
+
+(20)
+
+(21)
+
+6
+6
+The left and right eigenvectors of Γ are identical and intrinsically orthogonal because
+
+of the symmetry of Eq. (18). They may be normalized to ensure the orthonormalization
+
+condition
+
+where the inner product is expressed in bra-ket notation
+
+Eq. (20) and the symmetry of Γ imply that
+
+ψn|
+
+ψmi
+
+h
+
+= δnm ,
+
+x
+
+y
+
+h
+
+|
+
+i ≡
+
+N −1 x
+
+y .
+
+·
+
+Γ
+
+1 = 0 ,
+
+·
+
+ψ0 = 1 .
+
+so that ψ0 is proportional to 1. Eq. (23) ﬁxes normalization to give
+
+As in a continuous system, Γ may have multiple stationary eigenvectors. In this case Eq. (25)
+
+will not hold, though the set of degenerate groundstates will span the 1 vector. Appendix B
+
+discusses a straightforward computational procedure for ensuring the validity of Eq. (25)
+
+when Γ is symmetric.
+
+of the ψn, rather than the σn
+
+The constancy of ψ0 allows the discrete form of Eq. (8) to be expressed directly in terms
+
+The discrete analogs of the constraints of Eq. (11)
+
+may be written in terms of M
+
+where
+
+wα =
+
+Mαn ψn .
+
+m−1
+
+n=0
+X
+
+0
+
+wα,i ≥
+wα,i = 1
+
+α, i
+
+∀
+
+i ,
+
+∀
+
+α
+X
+
+wα,i = −→M α ◦
+−→M α = ˆε0 ,
+
+−→ψ i ≥
+
+0
+
+α, i
+
+∀
+
+α
+X
+
+ˆε0 =
+
+−→ψ
+
+1
+|
+
+h
+
+i
+
+,
+
+−→M α = (Mα0, Mα1, . . . , Mα(m−1)) ,
+
+16
+
+(22)
+
+(23)
+
+(24)
+
+(25)
+
+(26)
+
+(27)
+
+(28)
+
+(29)
+
+(30)
+
+(31)
+
+and −→ψ is the supervector having components (ψ0, ψ1, . . . , ψm−1). When Eq. (25) holds,
+
+the right-hand side of Eq. (31) simpliﬁes to e1, the vector whose ﬁrst component is one and
+
+all others are zero. Under such circumstances, Eq. (30) reduces to
+
+Items are assumed to be sampled from an unknown, continuous probability distribution
+
+pB, so that a uniform average over a large set of items approximates an equilibrium-weighted
+
+average in a continuous space
+
+f (~x) pB(~x) d~x = lim
+N→∞
+
+f (~xi) = lim
+
+N→∞h
+
+f
+
+1
+|
+
+i
+
+.
+
+Z
+
+This motivates the following deﬁnition of the equilibrium vector
+
+which plays a role analogous to pB in a continuous system and, like pB, is identical to ψ0
+
+in a non-degenerate system. Therefore, the integrals over pB in the certainty Υα(M) of a
+
+physical system are approximated by sums over peq and the certainty of a cluster α is
+
+Mαn = δn0 .
+
+α
+X
+
+1
+N
+
+N
+
+n=1
+X
+
+peq = 1 ,
+
+wα|
+Υα(M) = h
+1
+|
+h
+
+wαi
+wαi
+
+.
+
+(32)
+
+(33)
+
+(34)
+
+The objective function of Eq. (16) is unchanged from the continuous system: its minimization
+
+through judicious choice of an m
+
+m matrix M that respects Eqs. (29) and (30) provides
+
+a fuzzy dissection of the items into m clusters.
+
+×
+
+C. Spectral Structure of Transition Rate Matrix Γ
+
+Understanding the relation between the transition rate matrix Γ as used in macrostate
+
+data clustering and the the transition probability matrix P of a discrete-time Markov chain
+
+illuminates the spectral structure of the former through the extensive perturbative analysis
+
+in the literature on the latter. Further, the explicit relationship between Γ and P links
+
+macrostate data clustering to other diﬀusion-inspired spectral clustering methods, which
+
+are typically described via a discrete-time Markov chain.
+
+A discrete-time Markov chain describes transitions of a process X from state Xi−1 at
+ti −
+
+ti−1 is the ﬁxed time between each pair
+
+time ti−1 to state Xi at time ti, where ∆t
+
+≡
+
+17
+
+of temporally-contiguous transitions. The chain respects the Markov property that asserts
+
+that the probability of transition is dependent solely on the state from which the process
+
+transitioned, independent of earlier states. Formally,
+
+Pr(Xn+1 = x
+|
+
+Xn = xn, ..., X1 = x1, X0 = x0) = Pr(Xn+1 = x
+|
+
+Xn = xn) .
+
+A discrete-time Markov chain is speciﬁed in terms of the (left) stochastic transition prob-
+
+ability matrix P , satisfying
+
+(35a)
+
+(35b)
+
+(36)
+
+where Pij is the probability of transitioning from state j to state i in a single step:
+
+Therefore,
+
+The transition rate matrix Γ is the generator of a continuous-time Markov chain. Unlike
+
+a discrete-time Markov chain, which transitions at ﬁxed time intervals, a continuous-time
+
+Markov chain transitions after spending a variable, but memoryless, state holding time in
+
+the state from which it is transitioning. Probability evolves in a continuous-time Markov
+
+chain according to Eq. (17). The ﬁrst-order expansion of this equation
+
+Pij = 1 ,
+
+i
+X
+
+Pij ≥
+
+0 ,
+
+i, j ,
+
+∀
+
+Pij = Pr(Xn+1 = i
+|
+
+Xn = j) .
+
+p(t + ∆t) = P
+
+p(t) .
+
+·
+
+p(t + ∆t)
+
+p(t) + ∆t Γ
+
+≈
+= (I + ∆t Γ)
+
+p(t)
+
+·
+p(t)
+
+·
+
+P
+
+p(t)
+
+≡
+
+·
+
+establishes the relationship between the transition rate matrix Γ of a continuous-time Markov
+
+chain and the transition probability matrix P of a discrete-time Markov chain
+
+P (∆t) = I + ∆t Γ .
+
+(37)
+
+Eq. (37) deﬁnes a valid transition probability matrix for the range of ∆t satisfying Eq.
+
+(35). Assuming that Γ is a transition rate matrix satisfying Eqs. (19), (20), and (21), a valid
+
+18
+
+choice of ∆t is mini −
+of P from the eigenvalues γn and right eigenvectors ψn of Γ
+
+1/Γii. Then, Eq. (37) establishes the eigenvalues and right eigenvectors
+
+P
+
+ψn = (I + ∆t Γ)
+
+ψn
+
+·
+
+·
+
+= (1 + γn ∆t) ψn .
+
+Hence, the transition rate matrix Γ and the transition probability matrix P have identical
+
+right eigenvectors ψn with eigenvalues γn and 1 + γn ∆t, respectively.
+
+The realization of Eq. (10) is critically dependent on the constancy or level structure of
+
+an eigenvector across items sharing a cluster. On the basis of a dynamical metaphor, the
+
+previous sections argued that at long times intra-cluster probability ﬂuctuations equilibrate
+
+so that the dominant ﬂow of probability within the ψn (or σn) occurs between clusters
+
+and that intra-cluster variation across eigenvector magnitudes is small. The sign structure
+
+of an eigenvector then establishes a gradient of probability ﬂow from negative to positive
+
+components. While intuitive, this dynamical perspective is neither necessary nor analyti-
+
+cally informative. The validity of this and other spectral clustering approaches may be seen
+
+directly from matrix perturbation theory, which quantiﬁes the intuition that small pertur-
+
+bations to the stochastic matrix of a Markov chain [7, 23, 46, 47] or to a general matrix [48]
+
+along with a large separation in its eigenspectrum lead to small perturbations in the space
+
+spanned by the low-lying eigenvectors. These perturbative results depend on the structure
+
+of Γ, rather than on its accuracy in modeling imposed system dynamics, thus justifying the
+
+macrostate data clustering approach independent of any dynamical considerations.
+
+Perturbation theory proceeds from a block-diagonal matrix (or a matrix that may be
+
+brought to this form via permutation), where each of the m blocks Bi corresponds to an
+
+isolated subset. The system will have a left invariant subspace of dimension m spanned
+
+by the m degenerate left eigenvectors with eigenvalue γn = 0, for a transition rate matrix,
+
+or γn = 1, for a transition probability matrix. Similarly, the system will have a right
+
+invariant subspace of the same dimension, though there is no distinction between left and
+
+right subspaces if the matrix is hermitian. By deﬁnition of the transition matrices (i.e.,
+
+Eqs. (20) or (35a)), 1 will be in the left invariant subspace, though a numerical eigensystem
+
+solver has freedom within the degenerate subspace to return any set of m eigenvectors
+
+spanning it and is not required to produce 1 as one of these eigenvectors. Figure 4(a)
+
+shows two sets of eigenvectors that span the triply-degenerate subspace of the Degenerate
+
+19
+
+Spiral data set. The data set consists of three crescents that are separated to the point of
+
+isolation. Figure 5(a) shows the block-diagonal structure of the resulting Γ matrix, which
+
+eﬀectively suppresses any transitions between the clusters. The degeneracy of the system
+
+is evident in the eigenspectrum of Figure 4(a), where the ﬁrst three eigenvalues are zero
+
+to numerical precision. The three eigenvectors shown to the left of the eigenspectrum span
+the degenerate subspace, but ψ0 6
+procedure of Appendix B may be used to enforce this condition. The two resulting, non-
+
+= 1 in violation of Eq. (25). Since Γ is symmetric, the
+
+trivial eigenvectors shown to the right of the eigenspectrum, along with ψ0 = 1, provide an
+
+alternate basis for the degenerate subspace.
+
+The eigenvectors in each of the two alternate bases of Figure 4(a) are constant away from
+
+cluster boundaries. This is characteristic of degenerate systems: the block-diagonal form of
+
+Γ and 1
+
+Γ = 0 mean that 1
+
+Bi = 0. Hence the m indicator vectors
+
+·
+
+·
+
+χα : α = 1, . . . , m
+}
+
+{
+
+, with
+
+χα(x) = 1 if item x is in subset α and zero otherwise, may be taken as an orthogonal basis
+
+of the left degenerate subspace [23]. Indeed, up to the sign of ψ1, this indicator basis was
+
+returned by the numerical solver in the leftmost pane of Figure 4(a). Since any vector in the
+
+degenerate subspace may be expanded in the indicator basis, the eigenvectors of any valid,
+
+alternate basis must also be level within a cluster. The signiﬁcance of the level structure or
+
+piecewise constancy of eigenvectors with respect to spectral clustering has previously been
+
+discussed by Meila and Shi [24, 45]. This level structure is inherited by the crisply-deﬁned
+
+assignment functions, which fulﬁll Eq. (10) exactly, as shown in the ﬁgure.
+
+Stewart [48] has shown that the eigenvectors corresponding to a cluster of eigenvalues are
+
+sensitive to small perturbations in the matrix elements, though the subspace they span re-
+
+mains nearly invariant. In particular, the stability of an invariant subspace may be expressed
+
+in terms of a ratio ǫ, whose numerator grows with the magnitude of the perturbations E
+
+to block-diagonal form A and whose denominator grows with the separation between eigen-
+
+values in the low- (i.e., near-degenerate) and high-ends of the spectrum3. A hypothesis
+
+condition involving the magnitude of the perturbations and the separation in the eigenspec-
+
+trum establishes the theorem result, namely that vectors spanning the invariant subspace
+
+3 Sections 4.4 and 4.5 of Ref. [48] make the dependence on both the matrix element perturbation and the
+eigenspectrum separation explicit, whereas subsequent work related speciﬁcally to Markov chains [46]
+also requires a separation in the eigenspectrum, but is less direct about its role in perturbations to the
+eigensystem.
+
+20
+
+of A are perturbed by O(ǫ) to span the invariant subspace of A + E, while the eigenval-
+
+ues of A + E are perturbed by O(
+
+E
+
+2) from those of A. The condition is similar to the
+
+||
+
+||
+
+gap condition of Eq. (7), in which the ratio of eigenvalues ensures not only a large sepa-
+
+ration between eigenvalues but also that the separation is globally signiﬁcant and reﬂects
+
+a perturbed block-diagonal form of Γ in which the magnitude of E is small. Considering
+
+irreducible transition probability matrices, Deuﬂhard et al. [23] ﬁnd that the level structure
+
+of the eigenvectors is preserved to a ﬁrst-order perturbation in the magnitude of E and the
+
+inverse of the separation between the corresponding eigenvalue and the Perron root λ0 = 1.
+
+The perturbative results state that the level structure of a degenerate system is largely
+
+preserved for small perturbations to Γ that introduce inter-cluster communication to lift
+
+the degeneracy. In this respect spectral analysis reﬂects the global properties of a data set:
+
+clusters, deﬁned according to the intra- and inter-cluster communication between items,
+
+are clearly discernible in the low-lying eigenvectors. Local, purely distance-based clustering
+
+methods have no equivalent means of determining, not merely the similarity of two items,
+
+but the relative similarity of those items given the global relations they share with others in
+
+the data set.
+
+The near-level structure of the eigenvectors under perturbation allows the expansion of
+
+the assignment functions to approximate Eq. (10). An example of the eﬀects of perturbation
+
+on an eigensystem is given by the Spiral data set in Figure 4(b), in which the three crescents
+
+of the Degenerate Spiral data set are brought closer to one another. The relative proximity
+
+of the three crescents allows inter-cluster communication that weakens intra-cluster cohe-
+
+siveness: the degeneracy in the eigenspectrum has been broken, the low-lying eigenvectors
+
+are only approximately level, and the assignment functions are fuzzy. Since the system is
+
+non-degenerate, ψ0 = 1 and is not shown in the ﬁgure. As desired, the strong separation in
+
+the eigenspectrum allows construction of assignment functions that exhibit only minor per-
+
+turbations from the degenerate case. The expected perturbation of the assignment functions
+
+could, in principle, be determined prior to their construction through the formal results of
+
+Stewart [48] and the perturbative parameter ǫ.
+
+Eventually, a system suﬀers such signiﬁcant perturbation that the eigenspectrum gap is
+
+lost and with it all eigenvector structure. When the three crescents overlap one another,
+
+as in the Collapsed Spiral data set of Figure 4(c), the block structure of Γ in Figure 5(c)
+
+is seriously degraded. The eigenspectrum shows no discernible gap and the eigenvectors,
+
+21
+
+failing to indicate the individual crescent clusters, bear no resemblance to those of the two
+
+previous data sets. The method correctly infers from the eigenspectrum that the data set
+
+does not have any well-separated clusters.
+
+D. Macrostate Data Clustering: Asymmetric Γ
+
+Rather than being derived from measurements during the clustering process, as is the
+
+symmetric distance metric of Eq. (1), dissimilarities may be provided directly as raw data.
+
+For example, protein sequences can be clustered based on dissimilarities deﬁned as sequence-
+
+sequence alignment scores, such as BLAST E-values [49]. Such biological measures of simi-
+
+larity are frequently asymmetric. ProClust [50] eﬀectively normalizes distances by the length
+
+of the ﬁrst sequence in a pair to discourage two sequences from having a strong transitive link
+
+through domains shared with an intermediate sequence, despite lack of any direct, mutual
+
+similarity. PSI-BLAST E-values [51], which measure the reliability of a sequence compari-
+
+son between a query and a target, are also inherently asymmetric: the underlying algorithm
+
+derives a score matrix based on the query and iteratively reﬁnes it according to the multiple
+
+alignments resulting from its comparison against a database. Such data may be symmetrized
+
+by taking an average [52] or maximum [3] over the pair or, for binary measures indicating the
+
+presence or absence of inter-protein similarity, by replacing the two ambiguous, asymmetric
+
+results with a single value derived from a more computationally-expensive algorithm [53].
+
+However, symmetrizing data may not be well motivated, particularly in situations for which
+
+asymmetry was intentionally introduced to meet a speciﬁc need, as in ProClust.
+
+The perturbative results due to Stewart [48] apply to general matrices, so that the ex-
+
+istence of a spectral gap indicates that the eigenvectors of an asymmetric Γ will exhibit
+
+the near-level structure conducive to macrostate data clustering. Since an asymmetric ma-
+
+trix may have complex eigenvalues, the obvious generalization of the spectral gap condition
+
+of Eq. (7) involves a ratio of magnitudes of eigenvalues. This approach is consistent with
+
+Stewart’s theory, which accommodates complex eigenvalues through the use of norms and
+
+absolute values. In the context of the dynamical interpretation given by Eq. (4), the complex
+
+components of eigenvalues represent oscillation between macrostates. The requirement that
+
+there be a large disparity in the magnitude of ’slow’ and ’fast’ modes makes the intuitive as-
+
+22
+
+ψ
+0
+
+ψ
+1
+
+ψ
+2
+
+γ
+γ
+5
+4
+γ
+3
+
+−γ
+γ
+2
+0
+
+(a)
+
+ψ
+1
+
+ψ
+2
+
+ψ
+1
+
+ψ
+2
+
+γ
+5
+
+γ
+3
+
+γ
+γ
+2
+γ
+1
+0
+
+wα
+
+wβ
+
+wγ
+
+wα
+
+wβ
+
+wγ
+
+ψ
+1
+
+ψ
+2
+
+γ
+γ
+5
+4
+γ
+3
+γ
+2
+
+γ
+1
+γ
+0
+
+(b)
+
+(c)
+
+23
+
+FIG. 4: Spectral analysis and macrostate data clustering of three crescents with varying degrees of
+
+separation. Each panel plots the data set, the eigenvectors ψn, and the eigenvalues γn. Assignment
+
+functions wα are shown for those data sets admitting a clustering. (a) Degenerate Spiral. The
+
+extreme separation of the crescents leads to a triply degenerate system. The ﬁrst column of three
+
+eigenvectors are one possible set that spans the degenerate subspace. To ensure that ψ0 is non-zero
+
+and adheres to Eq. (25), the procedure of Appendix B was applied to obtain ψ0 = 1 and the two
+
+subsequent eigenvectors pictured to the right of the eigenvalues. The eigenvectors, and hence the
+
+assignment functions, are level. (b) Spiral. The relative assignment strengths are displayed as the z
+
+coordinate overlaid on the two-dimensional plot of the data set. The nearness of the three crescents
+
+has broken the degeneracy, as reﬂected in the eigenspectrum. The eigenvectors are perturbed from
+
+a level structure, but the spectral gap allows for a valid clustering. (c) Collapsed Spiral. The
+
+three crescents have merged. No structure representative of the three crescents remains in the
+
+eigenvectors and no gap exists in the eigenspectrum: no macrostate data clustering is possible.
+
+(a)
+
+(b)
+
+(c)
+
+FIG. 5: Structure of Γ. Each element has been normalized by the average component of the
+
+Spiral Γ. Color gradient indicates the value of matrix elements, with Γij ≤
+Γij ≥
+Degenerate Spiral. Block diagonal structure reﬂects the degeneracy of the system. (b) Spiral. The
+
+1 shaded white. The only negative values occur along the diagonal according to Eq. (21). (a)
+
+0 shaded black and
+
+presence of oﬀ-diagonal elements breaks the degeneracy, but the matrix is an evident perturbation
+
+from a block-diagonal form. (c) Collapsed Spiral. The original block-diagonal structure is badly
+
+degraded.
+
+sertion that the metastability of a macrostate depends not only on a slow rate of transition,
+
+but also on a slow rate of oscillation.
+
+An asymmetric matrix gives rise to complex eigenvalues and eigenvectors. The left eigen-
+
+vectors ϕn and the right eigenvectors ψn are uniquely deﬁned and related through a bi-
+
+orthogonality condition
+
+ϕn|
+
+ψmi
+
+h
+
+= δnm .
+
+The deﬁnition of Γ continues to guarantee Eq. (20), with ϕ0 = 1. From the discussion in
+
+Sec. II C it follows that the m indicator vectors χα span the left degenerate subspace. Given
+
+that a groundstate of 1 simpliﬁes the theory and that (minor perturbations to) the level
+
+structure of the indicator vectors are favorable to macrostate data clustering, it is natural
+
+to expand the assignment functions in the left eigenvectors.
+
+In principle, the theory can directly accommodate expansion in the left eigenvectors.
+
+However, practical diﬃculties arise because of the imaginary components of the eigenvectors,
+
+their lack of internal orthogonality, and the potential invalidity of ϕ0 = 1 in a degenerate
+
+system. Since macrostate data clustering must take a linear combination of eigenvectors that
+
+24
+
+ensures the reality of the assignment functions, there is no loss of generality in constructing
+
+an equivalent real basis ˜ϕn deﬁned from linear combinations of the left eigenvectors. Complex
+
+eigenvalues and eigenvectors arise in complex conjugate pairs: if the jth and j+1st eigenvalues
+
+form a complex conjugate pair with γj+1 = γ∗
+complex conjugate pair with ϕj+1 = ϕ∗
+
+j , then the associated eigenvectors also form a
+
+j . Therefore, the real basis may be deﬁned as
+
+˜ϕn
+
+˜ϕn
+
+˜ϕn+1
+
+= ϕn
+
+=
+
+=
+
+1
+2 (ϕn + ϕn+1)
+1
+2i (ϕn −
+
+ϕn+1) 
+
+
+if γn ∈
+
+if γn ∈
+
+R ,
+
+C .
+
+The lack of orthogonality of the left eigenvectors ϕn, and the ˜ϕn, complicates the eval-
+
+
+
+uation of the cluster certainty and the form of the equality constraints. Eqs. (25) and (26)
+
+yield a simpliﬁed form of the certainty of cluster α, as expressed in Eq. (34), when the ψn
+
+Υα(M) =
+
+n M 2
+αn
+Mα0
+
+.
+
+P
+Similarly, the brevity of the equality constraints of Eq. (30) relies on orthonormality to
+
+reduce the inner product of the ψn from Eq. (26) with the supervector −→ψ to a Kronecker
+
+are orthonormal:
+
+delta.
+
+Since the ˜ϕn are used in an expansion, it is the subspace they span that must be preserved
+
+rather than their individual forms. Therefore, it is possible and desirable to seek an alternate,
+
+orthogonal basis spanning the same subspace.
+
+If A is deﬁned to be the matrix whose m
+
+columns are the ˜ϕn, then the singular value decomposition of A yields the desired orthogonal
+RN ×m, the (thin) singular value
+
+basis as the left singular vectors un. For a matrix A
+
+∈
+
+decomposition [54] is deﬁned as
+
+with the orthogonal matrices U
+
+RN ×m = [u0, . . . , um−1] and V
+
+∈
+
+of left singular vectors un and right singular vectors vm and with the matrix Σ
+
+∈
+
+Rm×m = [v0, . . . , vm−1]
+Rm×m of
+
+∈
+
+singular values σn. The non-negative singular values are ordered
+
+σ0 ≥
+
+. . .
+
+≥
+
+σr−1 > σr = . . . = σm−1 = 0
+
+so that
+
+A = U Σ V T ,
+
+rank(A) = r .
+
+25
+
+Then, the null space of A is spanned by the
+
+subset of the right singular vectors
+
+and the range of A is spanned by the
+
+{
+u0, . . . , um−1}
+the ˜ϕn are linearly independent, A has full column rank r = m and the desired orthogonal
+
+subset of the left singular vectors. Since
+
+{
+
+vr, . . . , vm−1}
+
+basis are the m columns of U.
+
+Unfortunately, the singular value decomposition may not produce 1 as one of the left
+
+singular vectors. In fact, the ˜ϕn from which the SVD is computed may not include 1 if the
+
+system is degenerate. Nevertheless, 1 is in the m-dimensional, left subspace spanned by the
+
+˜ϕn. Therefore, projecting 1 out from the original left subspace reduces its dimensionality by
+
+one to m
+
+1. Though the left subspace is accessible only through the m ˜ϕn, none of which
+
+−
+
+are necessarily the null vector after the projection, SVD can extract the m
+
+1 left singular
+
+−
+
+vectors spanning the reduced space, which may then be augmented with 1 to construct the
+
+desired basis of m orthogonal vectors spanning the left subspace. Procedurally, the columns
+
+an of A are deﬁned as
+
+an ≡
+
+˜ϕn − h
+
+˜ϕn|
+
+1
+i
+
+1 .
+
+The SVD of A will have m
+
+1 non-zero singular values. The diﬃculty of resolving “zero”
+
+−
+
+given numerical inaccuracy may be avoided by selecting the m
+
+1 left singular vectors corre-
+
+−
+
+sponding to the largest singular values. The (complex) eigenvalues of the asymmetric Γ were
+
+used to determine m and to select the appropriate set of left eigenvectors for orthogonaliza-
+
+tion via SVD; the singular values from the SVD serve only to select out from this set of m
+
+vectors the m
+
+1 spanning the reduced subspace that excludes 1. After being normalized to
+
+−
+
+ensure the equivalent of Eq. (22), the orthogonal basis ˆϕ, comprised of elements from the set
+1, u0, . . . , um−2}
+{
+with previous work, ψn are used when referring to symmetric Γ with the understanding that
+
+, assumes the role of the eigenvectors ψn in Sec. II B. To avoid confusion
+
+they should be replaced by ˆϕ when Γ is asymmetric. This distinction is made explicit in
+
+the discussion of algorithmic control ﬂow in Sec. III E.
+
+III. COMPUTATIONAL METHODS
+
+Deﬁning macrostate data clusters requires minimizing the objective function Φ(M) sub-
+
+ject to constraint Eqs. (29) and (30). Korenblum and Shalloway [5] solved this global, non-
+
+linear optimization problem via a proof-of-concept, geometrical approach that iteratively
+
+26
+
+discovered constraints in order to enumerate candidate −→M α. Their solution is reviewed
+
+brieﬂy before the current two-phase, heuristic solution is discussed. The expected polyno-
+
+mial execution time of the two-phase solver make it considerably more eﬃcient than the
+
+exhaustive enumeration of the previous brute-force, combinatoric approach.
+
+Φ(M) is to be minimized as a function of the m2 degrees of freedom of M within the
+
+feasible region deﬁned by the m
+
+N inequality constraints of Eq. (29) and the m equality
+
+constraints of Eq. (30). The equality constraints may be used to eliminate m degrees of
+
+freedom. Therefore, the inequality constraints are half-spaces that deﬁne a polytope as
+
+a feasible region within an m(m
+
+1)-dimensional subspace. Korenblum and Shalloway
+
+have shown that a minimum of the constrained problem lies at a vertex of the polytope:
+
+a minimum is constrained by m(m
+
+1) “active” inequality constraints and all m equality
+
+constraints. The brute-force minimization routine initialized M to a ﬁxed location within
+
+the polytope and chose a random direction along which to iteratively discover and travel
+
+along faces (of decreasing dimensionality) until a vertex was reached. This process of random
+
+×
+
+−
+
+−
+
+enumeration continued until the same minimum was repeatedly discovered.
+
+The ﬁrst-phase of the current minimization routine, discussed in Sec. III A, solves m linear
+
+equations to ﬁnd an approximate solution that satisﬁes the equality constraints but that may
+
+violate the inequality constraints, which are not explicitly considered. Sec. III B describes
+
+how this approximation may then be adjusted through a constrained linear program to
+
+satisfy the inequality constraints. The resulting solution is a fuzzy, m-way clustering of the
+
+input data set. Each of the m clusters may be recursively analyzed, as outlined in Sec. III C.
+
+Each invocation of the two-phased solver is preceeded by a routine that identiﬁes outliers
+
+directly from analysis of the eigenvectors. The asymptotic complexity of each of the above
+
+modules as well as the speciﬁc libraries used in implementing them is presented in Sec. III E.
+
+In addition, a diagram makes explicit the ﬂow of control between the modules.
+
+A. Unconstrained Approximate Solution
+
+The linear expansion of the assignment functions in Eq. (26) describes a hyperplane as a
+
+subspace of the m + 1 dimensions w, ψ0, ψ1, . . . , ψm−1. Since the hyperplane is deﬁned by
+
+the m coeﬃcients Mα0, Mα1, . . . , Mα(m−1) of the normal vector, any m equations describing
+
+27
+
+(a)
+
+(b)
+
+FIG. 6: Assignment function hyperplanes. The intersections of the wα, wβ, and wγ from the
+
+Degenerate Spiral and Spiral data sets of Figure 4. The largest assignment strength at a given
+
+coordinate is plotted to form the intersections of the hyperplanes. The impulses represent the
+
+items in the eigenspace representation. (a) Degenerate Spiral. The degeneracy collapses the items
+
+in the eigenspace representation to one of three coordinates. (b) Spiral. Lifting of the degeneracy
+
+perturbs the items from their eigenspace coordinates in (a).
+
+(linearly independent) items in the plane suﬃce to ﬁx the coeﬃcients and uniquely charac-
+
+terize the hyperplane. Whenever ψ0 = 1, the hyperplane may be considered to be a function
+
+of the m variables w, ψ1, . . . , ψm−1. Such is the case in Figure 6, where the intersections of
+
+the assignment functions wα, wβ, and wγ corresponding to the Degenerate Spiral and Spiral
+
+data sets from Figure 4 are plotted as a function of the non-constant low-lying eigenvectors
+
+ψ1 and ψ2. At a given (ψ1, ψ2) coordinate, the largest assignment strength is plotted; this
+
+strength describes the highest probability with which an item is assigned to one of the m
+
+clusters.
+
+The triply-degenerate zero eigenvalue of the Degenerate Spiral data set induces a perfectly
+
+level structure in the ﬁrst three low-lying eigenvectors (see Figure 4(a)), which, in turn,
+
+collapses the N items in the eigenspace representation −→ψ i to three points. As expected, the
+
+nodal surfaces of the eigenvectors have segregated the items into three clusters according to
+
+their sign structure [23]: (
+
+), (
+
+, +), or (+, 0).
+
+,
+−
+
+−
+
+−
+
+Macrostate data clustering is particularly straightforward for a degenerate system. Each
+
+cluster α may be associated with a representative item rα, where the representatives are
+
+selected as the mutually most distance m items or simply as m items with mutually unique
+
+sign structures. Since each representative has the same eigenspace representation −→ψ rα as
+
+any other item i in the same cluster, the choice of a representative from amongst those items
+
+in a cluster is immaterial. The common representation of a representative and an item i
+
+28
+
+means that their assignment functions and constraints have the same expansion and are thus
+
+satisﬁed simultaneously. Therefore, a complete and optimal clustering over the N items is
+
+speciﬁed by a hard clustering that unambiguously assigns representative rα to cluster α
+
+wα(rβ) = δα,β .
+
+(38)
+
+Such an assignment clearly satisﬁes the equality constraints of Eqs. (27) and (28). Further,
+
+it is optimal since a hard clustering has no overlap between clusters.
+
+Strictly degenerate systems are uncommon in practice. Fortunately, the above procedure
+
+may be generalized to non-degenerate data sets, where the fuzzy wα are determined from M
+
+as opposed to being set as in Eq. (38). Therefore, it is instructive to solve the degenerate
+
+case by computing M rather than by assigning the wα directly. From Eq. (26), Eq. (38) is
+
+written in terms of M as
+
+(ψ0)rα (ψ1)rα . . . (ψm−1)rα
+
+Mα0
+
+
+
+(ψ0)rβ (ψ1)rβ . . . (ψm−1)rβ
+
+
+
+. . .
+
+. . .
+
+. . . . . .
+
+(ψ0)rµ (ψ1)rµ . . . (ψm−1)rµ
+
+
+
+
+
+
+
+
+Mα1
+...
+Mα(m−1)
+
+
+
+
+
+
+
+
+
+
+
+·
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+= eα .
+
+(39)
+
+So long as the eigenspace representation of the representatives are linearly independent, i.e.,
+
+the matrix on the left-hand side is non-singular, the above linear system may be solved to
+
+determine −→M α. Hence, the solution of m such systems completely determines the assignment
+
+functions.
+
+In a non-degenerate data set, the low-lying eigenvectors are perturbed from a piecewise
+
+constant structure (see Figure 4(b)) so that each item has a unique eigenspace representation,
+
+as shown in Figure 6(b). From this plot it is evident that the extremal items, i.e., those
+
+furthest removed from the origin, are the constrained items. Those items that are most
+
+strongly assigned to a cluster prevent its associated hyperplane from being shifted in the
+
+positive w direction, since doing so would force the assignment strength of one of these
+
+items to exceed unity. Conversely, those items that are weakly assigned to a cluster prevent
+
+the hyperplane from being shifted in the negative w direction, which might force their
+
+probability of assignment to become negative. When the constraints are satisﬁed for these
+
+extremal items, the linearity of the hyperplanes ensures that the constraints will also be
+
+satisﬁed for the intermediate items.
+
+29
+
+The assignment probabilities imposed on the representatives guarantee that the equal-
+
+ity constraints are satisﬁed, not only for the representatives, but for all items. This may
+
+be seen by recognizing that the sum of m assignment function hyperplanes, of the form
+
+of Eq. (26), retains that form and is itself a hyperplane. The summation hyperplane
+
+α Mα0,
+
+α Mα1, . . . ,
+
+is a subspace of the m + 1 dimensions
+
+it. In particular, the m representatives rα, all of which satisfy
+P
+
+P
+
+P
+
+deﬁne the hyperplane. The linearity of the hyperplane then implies that
+
+α wα, ψ0, ψ1, . . . , ψm−1, with the m coeﬃcients
+α Mα(m−1) of the normal vector. As such, m items suﬃce to deﬁne
+β wβ(rα) = 1, uniquely
+β wβ(i) = 1 for
+
+P
+
+P
+
+all items i in the plane.
+
+P
+
+In an m = 2 dimensional system, choosing as the representatives the two most separated
+
+items and applying the above procedure would achieve the global minimum for Φ(M). The
+
+situation is complicated by increased dimensionality, where extremal representatives provide
+
+an approximate solution that may violate some inequality constraints, i.e., yield assignment
+
+probabilities less than zero or greater than one. For example, choosing extremal items
+
+as representatives for the Spiral data set forces a non-extremal item to have a negative
+
+assignment probability. Constraint violations, if they occur, will occur in the neighborhood
+
+of extremal items. Therefore, despite possible violations of the inequality constraints, the M
+
+deﬁned by this approximate solver is an approximation to a valid, nearby solution. During
+
+the second phase of the minimization, the constrained solver explores the neighborhood of
+
+this approximation to determine a solution that does satisfy all constraints.
+
+Korenblum and Shalloway have shown that a minimum arises when m(m
+
+1) inequality
+
+−
+
+constraints are active. These constraints correspond to those items whose assignments are
+
+forced by a valid solution procedure to zero or unity, as done for the representatives. While
+
+the approximate solver does indeed make m(m
+
+1) inequality constraints active, they are re-
+
+−
+
+stricted to involve one of the m representatives. In principle, the m(m
+
+1) active constraints
+
+−
+
+need not involve a ﬁxed set of m items. For example, the active inequality constraints for
+
+the m = 3 problem of Figure 6(b) involve four items. An obvious generalization to the cur-
+
+rent representative selection strategy is to choose, for each cluster under consideration, that
+
+item that is furthest from the origin and then to choose m
+
+1 items that are furthest from
+
+−
+
+it and that have unique sign structures. However, this generalization does not salvage the
+
+Spiral problem since it would continue to select the same m = 3 representatives as the more
+
+constrained approach. Therefore, as the approximate solver is already a heuristic approach,
+
+30
+
+little seems lost in restricting it to a single representative for each of the m clusters.
+
+Representatives are selected by ﬁrst using an N 2 comparison to choose those two items
+
+that are furthest separated in eigenspace. An iterative procedure than examines the re-
+
+maining O(N) items and extends the representative set to include that item whose minimal
+
+distance to any of the current representatives is maximal and whose sign structure diﬀers
+
+from that of any current representative. Appendix C describes how the sign structure as
+
+used for representative selection diﬀer from those proposed by Deuﬂhard et al. [23].
+
+Viewed in the eigenspace representation −→ψ i, the representatives associate a direction (and
+
+magnitude) with each cluster. The separation between clusters along nodal eigenvector sur-
+
+faces ensures that the representatives have a strong angular separation, while the relatively
+
+small perturbations from a level eigenvector structure group the items in a cluster near the
+
+associated eigenvector. Hence, Scott and Longuet-Higgins [22] noticed that the similarity
+
+of two items was strongest when the cosine of the angular between them approached unity.
+
+Similarly, Chan et al. [10] select an initial set of m prototypes according to magnitude and
+
+near orthogonality to all previously selected prototypes. They then assign any item whose
+
+eigenspace representation is within a small angle of the prototype to the associated cluster.
+
+Those items that are not within the tight angular cone of some prototype are combinatorially
+
+assigned to a cluster through use of a min-cut objective function. The process is iterated
+
+with the prototypes in subsequent rounds deﬁned as the vector average of all items assigned
+
+to the corresponding cluster. Alpert et al. [9] describe a vector partitioning approach in
+
+which the eigenspace representation of items within a cluster are summed to form a vector.
+
+Maximizing an objective function that sums the squares of these vectors then partitions
+
+items according to both direction and magnitude.
+
+Rather than considering a continuous direction, the magnitudes of item in the eigenspace
+
+representation may be projected onto their signs. This technique has frequently been ap-
+
+plied to the Fiedler vector to threshold the continuous solution it describes onto a binary
+
+partitioning required by the problem statement [12, 14, 19, 20]. Deuﬂhard et al. [23] pro-
+
+posed sign structures as a higher-dimensionality generalization to thresholding or clustering
+
+according to sign.
+
+In their work, the sign structure of each item uniquely assigns it to
+
+a cluster, assuming the sign structure is stable with respect to perturbations. The sign
+
+structure of an item i is unstable if the magnitudes of all components of −→ψ i are beneath a
+
+threshold, in which case the sign structure may not reﬂect that of the item’s cluster, but
+
+31
+
+rather may be inﬂuenced by numerical noise around zero. To overcome this ambiguity, the
+
+authors expand a cluster characteristic function in the low-lying eigenvectors using a least
+
+squares approximation involving only those components corresponding to stable items. The
+
+coeﬃcients of this expansion may then be used to determine approximate cluster charac-
+
+teristic functions over all items. An ambiguous item is then assigned to the cluster whose
+
+approximate characteristic function has the strongest signal for that item.
+
+The procedure suggested by Deuﬂhard et al. is similar to that used by the approximate
+
+solver: both use the components of the low-lying m eigenvectors from a subset of the items
+
+in the expansion of a function whose ith entry indicates the strength with which item i is
+
+assigned to the corresponding cluster. The approximate solver uses m representatives to es-
+
+tablish the coeﬃcients Mαn of the assignment functions, whereas Deuﬂhard et al. use a set
+
+of stable sign structures, with cardinality at least m, to determine the coeﬃcients of cluster
+
+characteristic functions. The fundamental diﬀerence between the two approaches is that
+
+macrostate data clustering creates fuzzy assignment functions. Therefore, the solution pro-
+
+vided by the approximate solver must be amended to satisfy the probabilistic interpretation
+
+provided by the constraints.
+
+B. Constrained Solution from Approximation
+
+Though it violates constraints, the solution µ found by the approximate solver is favorable
+
+with respect to the objective function Φ(µ). The conditions upon which spectral clustering
+
+methods depend, the presence of a large gap in the eigenspectrum and small perturbations
+
+from a block-diagonal Γ, guarantee that perturbations to the eigenvectors ψn of Γ are also
+
+small. The constraints, M, and Φ(M), all of which are coupled to the ψn, will also be mildly
+
+perturbed to the same order. Therefore, µ is the exact solution to an unperturbed system
+
+and is within a small perturbation of the actual solution to the perturbed system.
+
+−→µ may be considered to be a direction in the m2-dimensional space that deﬁnes a solution,
+where it linearizes the rows of µ as (µ00, µ01, . . . , µ0(m−1) . . . µ(m−1)(m−1)). Seeking a nearby
+
+solution then amounts to picking a vector −→M , deﬁned analogously to −→µ , whose magnitude
+and direction are similar to −→µ . Thus, the non-linear objective function of Eq. (16) may be
+replaced by a linear objective function that maximizes the distance of −→M along −→µ , reducing
+the global optimization problem over the vertices of the polytope to a search localized in
+
+the direction of −→µ . Introducing the constraints allows the new optimization problem to be
+
+32
+
+FIG. 7: M computed for Spiral data set as the solution of a linear program. Its components are
+
+small perturbations from the strictly binary form of µ found by the approximate solver.
+
+formalized as the following linear programming problem
+
+−
+
+10−10
+
+−→M α −
+−→M β 0.957988
+
+−
+−→M γ 0.042003 1
+
+10−10 1
+
+10−10
+
+10−10
+
+−
+
+−
+
+10−10
+
+maximize −→µ T −→M
+
+subject to C −→M
+
+y
+
+≤
+
+where the C and y are deﬁned to express the constraints of Eqs. (29) and (30).
+
+The simplex method is a standard approach to solving linear programs. Though it has
+
+worst-case exponential running time, it has been shown to be eﬃcient in practice: Spielman
+
+and Teng [55] analyzed its expected performance under Gaussian perturbation to arbitrary
+
+inputs, ﬁnding it to be polynomial in the dimensions of C and the standard deviation of the
+
+Gaussian perturbation. Applied to the Spiral data set, a simplex solver mildly perturbs the
+
+strictly binary form of µ to the M shown in Figure 7. The negative values are artifacts of
+
+the tolerance used in enforcing the constraints.
+
+In principle, the ﬁrst invocation of the linear programming solver simply returns M to
+
+the feasible region, where the inequality constraints are satisﬁed.
+
+It does not necessarily
+
+place M at a vertex (or even on a face) of the polytope, where the optimal solution lies.
+
+A second invocation of the solver, with a maximization condition that attempts to extend
+
+the solution vector along −→M instead of along −→µ , would ensure that the solution reaches the
+surface of the polytope. In practice, multiple iterations have not been necessary to achieve
+
+high-quality solutions.
+
+C. Recursive Macrostate Data Clustering
+
+Macrostate data clustering is partitional: unlike hierarchical methods, such as agglom-
+
+erative clustering, which iteratively merge clusters, it may directly break a data set into
+
+the best deﬁned m
+
+2 clusters. Even a nominally partitional strategy such as recursive
+
+≥
+
+bisection, which is constrained to solve m = 2 problems at each step, has a hierarchical
+
+33
+
+nature: a data set such as Crescentric Mosaic in Figure 8 would require two recursive bisec-
+
+tions to discover the three pairs of crescents, representing the highest level structure, and
+
+then three additional bisections to diﬀerentiate the two crescents within a pair. A strictly
+
+partitional approach would treat Crescentric Mosaic as an m = 6 problem, thus looking past
+
+the high-level structure to focus directly on the constituent crescents.
+
+Each of these approaches has the same drawback—an inability to directly convey to a
+
+researcher the diﬀerent spatial scales of the data set and the clusters at each scale.
+
+In
+
+principle, agglomerative clustering should discover the three pairs and the six crescents.
+
+However, these will be hidden within the dendrogram created by the method to represent the
+
+data set’s hierarchical structure. Recursive bisection will also discover clusters at diﬀerent
+
+spatial scales. Unfortunately, it will also ﬁnd spurious partitionings, such as a single pair
+
+of crescents separated from the other two pairs, which are necessary as transient steps to
+
+determine meaningful clusterings, such as the m = 3 partitioning of the three pairs, but
+
+which do not themselves consistently separate items according to spatial scale.
+
+A strictly partitional approach may be eﬃcient at immediately uncovering the most ﬁne-
+
+grained structure of a data set, but it does so by sacriﬁcing the high-level organization that
+
+will be of value to the researcher in assigning coarser relations between the items. Further, it
+
+eﬀectively requires the ability to determine a local, per-item scale factor to replace
+
+in the
+
+formulation of Γ. Using the global scale factor
+
+deﬁned in Eq. (18b) prevents macrostate
+
+h
+data clustering from directly discovering the ﬁne structure that separates crescents within a
+
+d2
+0i
+
+d2
+0i
+
+h
+
+pair. Zelnik-Manor and Perona [26] have described a local scale based on the extent of an
+
+item’s k = 7 nearest neighbors, which is applied to Crescentric Mosaic in Figure 8(a). In
+
+each pair of crescents, the two items which extend from one cluster nearest the other are
+
+mis-classiﬁed. Better results were obtained using k = 2 nearest neighbors, which shows the
+
+sensitivity of the approach to proper and problem-speciﬁc choice of k.
+
+An intuitive recursive application of macrostate data clustering eﬀectively performs parti-
+
+tional clustering at each of the data set’s spatial scales. Recursive macrostate data clustering
+
+generalizes recursive bisection to allow arbitrary m-way fuzzy partitioning. After analyzing
+
+Γ at step s of the recursion to create the assignment functions ws
+
+α, any item i that is assigned
+
+with a threshold intensity to a cluster α through ws
+
+α(i) is included in a transition matrix Γα.
+Analysis then proceeds recursively on Γα to discover any potential sub-structure in cluster
+α, which is described by assignment functions ws+1
+
+(i). Two probabilities of assignment of
+
+β
+
+34
+
+ψ
+0
+ψ
+1
+ψ
+2
+ψ
+3
+ψ
+4
+ψ
+5
+
+ψ
+0
+
+ψ
+1
+
+ψ
+2
+
+ψ
+0
+
+ψ
+1
+
+γ
+γ
+7
+6
+
+γ
+γ
+γ
+5
+3
+4
+
+γ
+γ
+2
+1
+
+γ
+4
+
+γ
+3
+γ
+2
+
+γ
+1
+
+γ
+0
+
+−γ
+γ
+3
+0
+
+wα
+wβ
+wγ
+wδ
+wζ
+wη
+
+wα
+
+wβ
+
+wγ
+
+wα
+
+wβ
+
+(a)
+
+(b)
+
+(c)
+
+35
+
+FIG. 8: Crescentric Mosaic data set, consisting of three pairs of crescents. (a) Data set clustered
+
+using the local, nearest-neighbor scale factor proposed by Zelnik-Manor and Perona [26]. The
+
+induced m = 6 clustering has several misclassiﬁcations near the boundaries of the crescents and
+
+fails to capture the highest-level structure of the data set. (b) First step of recursive macrostate
+
+data clustering discovers the data set’s coarsest structure as an m = 3 problem. (c) One of the
+
+three m = 2 sub-problems that examines the ﬁne-grained structure within a pair to diﬀerentiate
+
+the crescents. This case is representative of the other two sub-problems.
+
+item i to cluster β at recursive step s + 1 are of interest: the conditional probability, given
+
+that item i has been assigned to cluster α at step s, is ws+1
+
+(i), while the unconditional
+
+β
+
+probability is ws
+
+α(i)
+
+ws+1
+β
+
+∗
+
+(i). The choice of conditional or unconditional probability aﬀects
+
+the certainties. The current implementation uses a threshold intensity of 0.5.
+
+ψ
+0
+ψ
+1
+ψ
+2
+ψ
+3
+ψ
+4
+ψ
+5
+
+ψ
+0
+
+ψ
+1
+
+ψ
+2
+
+γ
+6
+γ
+γ
+γ
+γ
+−γ
+5
+4
+3
+2
+0
+
+γ
+7
+
+γ
+4
+
+γ
+3
+
+γ
+γ
+2
+γ
+1
+0
+
+(a)
+
+(c)
+
+wα
+
+wβ
+
+wα
+
+wβ
+
+ψ
+0
+
+ψ
+1
+
+ψ
+0
+
+ψ
+1
+
+γ
+3
+
+γ
+2
+
+γ
+γ
+1
+0
+
+γ
+3
+
+γ
+2
+γ
+1
+
+γ
+0
+
+(b)
+
+(d)
+
+wα
+
+wβ
+
+wγ
+
+wδ
+
+wε
+
+FIG. 9: Clouds data set clustered by treating outliers as isolated clusters. Outliers are eﬀectively
+
+removed by the ﬁrst four iterations of recursive clustering (a) - (d), until the eigenvector ψ4 of
+
+iteration ﬁve separates the two clouds. The ﬁnal step solves an m = 14 problem, as reﬂected in
+
+the eigenspectrum; for space considerations, only ﬁve eigenvectors and assignment functions are
+
+displayed.
+
+D. Outlier Detection
+
+Data sets derived from experimentation are likely to contain noise, manifest as outliers—
+
+well-isolated clusters with few items. Outliers pose problems for data analysis because they
+
+may obfuscate more signiﬁcant clusters. As described, macrostate data clustering copes with
+
+outliers by treating them as ordinary clusters: they are detected and eﬀectively removed from
+
+the data set during recursion.
+
+Figure 9 shows how a noisy data set consisting of two clouds whose items are sampled from
+
+a Gaussian distribution is handled by recursive macrostate data clustering. Four iterations
+
+of clustering remove a total of 23 outlying items. The two clouds are diﬀerentiated by
+
+eigenvector ψ4 in the ﬁfth iteration during the solution to an m = 14 problem. For space
+
+considerations, Figure 9(e) presents only ﬁve of the 14 eigenvectors and resulting assignment
+
+functions.
+
+ψ
+0
+
+ψ
+1
+
+ψ
+2
+
+ψ
+3
+
+ψ
+4
+
+γ
+15
+γ
+14
+
+γ
+γ
+13
+γ
+12
+γ
+γ
+γ
+11
+γ
+γ
+γ
+γ
+γ
+γ
+γ
+γ
+10
+9
+8
+7
+6
+5
+4
+3
+2
+1
+0
+
+(e)
+
+wα
+wβ
+wγ
+wδ
+wε
+wζ
+
+wα
+
+wβ
+
+wγ
+
+36
+
+This approach suﬀers several shortcomings. Though the outliers could be discarded by a
+
+post-processing step, the choice of m = 14 in the ﬁnal step does not reﬂect the true bi-modal
+
+structure of the data set. Formulating the linear program of the optimization step as an
+
+m = 14 problem, rather than an m = 2 problem, introduces additional constraints, which
+
+negatively impact the spatial and temporal overhead of the constrained solver. Further,
+
+each iteration of outlier removal requires a costly recomputation of the eigensystem. Figure 9
+
+shows that the removal of a few outliers often requires several iterations. Though the removal
+
+of a small number of well-separated items intuitively has little impact on the remaining data
+
+set, these items have a strong inﬂuence on
+
+d2
+0i
+nearest neighbor is large. This results in a global aﬀect on Γij felt by all remaining items.
+
+in Eq. (18) since the distance Di< to their
+
+h
+
+An alternative scale factor to
+
+, such as one deﬁned on a per-item basis according to that
+
+d2
+0i
+
+h
+
+item’s local neighborhood [26], avoids this problem at the expense of introducing instability,
+
+as discussed in Sec. III C.
+
+These concerns motivate direct removal of the outliers during a pre-processing step. In-
+
+sofar as an outlier is an isolated cluster, it will be represented by an eigenvector with an
+
+impulse-like structure: the eigenvector will have nearly constant magnitude for the few items
+
+within the outlier and a diﬀerent nearly constant magnitude for the many items external to
+
+it. For outliers appearing within the degenerate subspace, this idealized outlier signature
+
+may be present only as a linear combination of the degenerate eigenvectors. The determi-
+
+nation of the boundary between the degenerate and non-degenerate subspaces is discussed
+
+in Appendix A.
+
+An outlier signature is characterized by the total number of items N in the data set,
+
+the number of items Noutlier in the outlier, the signed magnitude mbackground of those items
+
+external to the outlier, and the signed magnitude moutlier of the outlying items.
+
+In the
+
+non-degenerate subspace, an eigenvector ψoutlier conforming to the outlier signature must be
+
+orthogonal to 1 according to Eq. (22). Therefore,
+
+(N
+
+Noutlier) mbackground + Noutlier moutlier = 0 ,
+
+−
+
+and, assuming Noutlier ≪
+Noutlier moutlier/N. mbackground may then be
+related to moutlier through the orthonormality of ψoutlier and Eq. (23) to yield moutlier ≈
+N/Noutlier. Thus, an intuitive strategy examines a non-degenerate eigenvector to determine
+
+N, mbackground ≈ −
+
+the least set of Noutlier items whose squared magnitudes nearly sum to N. The ambiguity
+p
+
+37
+
+of this summation condition is removed by requiring that the squared magnitudes total
+
+a fraction foutlier of N. Of course, the orthonormality condition ensures that the squared
+
+magnitudes of all N items sum to N. Therefore, a maximum size N max
+
+outlier is imposed on an
+
+outlier. The present implementation ﬁxes N max
+
+outlier = 0.1
+
+N and foutlier = 0.95.
+
+∗
+
+Search for outliers is restricted to that subset of the non-degenerate eigenvectors whose
+
+eigenvalues γn precede the ﬁrst eigenspectrum gap, i.e., where n < m. An outlier detected
+
+in the low-end of the spectrum is separated from other clusters by low-frequency transitions.
+
+However, the same signature applied to the high-end of the spectrum detects small clusters
+
+of items bound so closely to one another that interaction with other items is comparatively
+
+weak, even if the the distances involved are small on a global scale. When incorrectly applied
+
+to high-frequency eigenvectors, this technique has discovered ’outliers’ within the dense core
+
+of a cloud of Gaussian items.
+
+In contrast to ψoutlier in the non-degenerate subspace, a vector ψdegenerate
+
+representing
+
+outlier
+
+an outlier signature in the degenerate subspace is not necessarily orthogonal to 1 and may
+
+not be identical to one of the eigenvectors, but rather may be constructed from a linear
+
+combination of eigenvectors
+
+The vector may be re-scaled without destroying the impulse-like structure to ensure
+
+Then, the orthonormality of the ψn constrains the summation over the expansion coeﬃcients
+
+according to
+
+(40)
+
+(41)
+
+ψdegenerate
+outlier
+
+=
+
+cnψn .
+
+n
+X
+
+ψdegenerate
+outlier
+
+ψdegenerate
+outlier
+
+= 1 .
+
+|
+
+i
+
+h
+
+c2
+n = N .
+
+n
+X
+
+Since ψdegenerate
+
+outlier
+
+is not restricted to be orthogonal to 1, the magnitudes of outlying items
+
+need not be balanced by magnitudes of opposite sign corresponding to items external to the
+
+outlier. Therefore, a perfectly idealized outlier signature with mbackground = 0 and moutlier =
+
+N/Noutlier may be realized, in principle. If item i is a member of an outlier hidden within
+
+the degenerate subspace, the outlier signature may be extracted by maximizing ψdegenerate
+p
+
+(i)
+
+outlier
+
+over the variables cn deﬁning it, according to
+
+∂
+∂cn "
+
+ψdegenerate
+outlier
+
+(i)
+
+λ
+2  
+
+−
+
+c2
+n′
+
+N
+
+−
+
+!#
+
+= 0
+
+n ,
+
+∀
+
+Xn′
+38
+
+where the Lagrange multiplier λ ﬁxes Eq. (41). Therefore, the idealized outlier signature, if
+
+one exists for item i, may be constructed by taking cn = ψn(i)/λ, where λ =
+
+n ψn(i)2
+is determined from Eq. (40). The entire procedure for determining outliers within the
+degenerate subspace is then to construct the linear combination ψdegenerate
+
+for each i and to
+
+pP
+
+outlier
+
+assign to an outlier any items j that satisfy the conditions described above with respect to
+
+a non-degenerate eigenvector.
+
+Outliers appear within both the degenerate and the non-degenerate subsets in the Clouds
+
+data set. The data set is subjected to ﬁve iterations of outlier removal in Figure 10 before an
+
+m = 2 problem involving the two clouds emerges in the ﬁnal iteration. Direct outlier removal
+
+was thus successful in reﬂecting the subjective bi-clustering and in reducing the complexity
+
+of the problem posed as a linear program. In each of the ﬁrst ﬁve iterations, outliers are
+
+removed and the remaining data are recursively analyzed. Outliers are detected within
+
+the non-degenerate subspace in iterations (c) and (e) and within the degenerate subspace
+
+in iterations (a), (b), and (d). For these latter cases, the constructed linear combinations
+ψdegenerate
+outlier
+
+are displayed. As expected, an identical linear combination results for items
+
+belonging to the same outlier.
+
+Direct treatment of outliers did not reduce the number of invocations of the eigensystem
+
+solver on nearly identical data sets. Evidently, the outlier search is too conservative in
+
+discovering outliers when prevented from crossing the ﬁrst eigenspectrum gap. This policy
+may be relaxed such that outliers are detected within the ﬁrst frange ∗
+frange = 0.1, for example. Unfortunately, this may lead to excessive recursion since the
+
+N eigenvectors, with
+
+likelihood of detecting an outlier increases as more of the spectrum is searched and since
+
+outlier detection leads to re-analysis of the data set without an attempt to ﬁnd non-outlier
+
+clusters. Hence, outlier detection is permitted to extend beyond the ﬁrst gap, so long as all
+
+but two low-lying eigenvectors either exhibit an outlier signature or may be used to construct
+
+a linear combination that does so. If two or more low-lying eigenvectors are uninvolved in
+
+outlier detection, they may be used to deﬁne non-outlier clusters; no outliers are removed
+
+and clustering proceeds according to Eq. (26). Figure 11 shows that the procedure reduces
+
+the number of invocations of the eigensystem solver from ﬁve (see Figure 9) or six (see
+
+Figure 10) to three.
+
+39
+
+ψ
+0
+ψ
+1
+ψ
+2
+ψ
+3
+ψ
+4
+ψ
+5
+
+γ
+7
+
+γ
+6
+γ
+γ
+γ
+γ
+−γ
+5
+4
+3
+2
+0
+
+(a)
+
+(c)
+
+(e)
+
+ψ
+0
+
+ψ
+1
+
+ψ
+2
+
+ψ
+0
+
+ψ
+1
+
+ψ
+2
+
+γ
+4
+
+γ
+3
+
+γ
+γ
+2
+γ
+1
+0
+
+γ
+4
+γ
+3
+
+γ
+γ
+γ
+2
+1
+0
+
+ψ
+0
+
+ψ
+1
+
+γ
+3
+
+γ
+2
+
+γ
+γ
+1
+0
+
+ψ
+0
+
+ψ
+1
+
+ψ
+0
+
+ψ
+1
+
+γ
+3
+
+γ
+2
+γ
+1
+
+γ
+0
+
+γ
+3
+γ
+2
+
+γ
+γ
+1
+0
+
+(b)
+
+(d)
+
+(f)
+
+wα
+
+wβ
+
+FIG. 10: Clouds data set clustered with outlier removal. Five iterations of outlier removal (a)-(e)
+
+detect outliers, remove them from the data set, and re-analyze the system. A structure reﬂecting
+
+the two clouds emerges in the ﬁnal iteration (f), which is solved as an m = 2 problem. When outliers
+
+occur within the degenerate subspace, as in (a), (b), and (d), they are detected by constructing a
+
+linear combination of the degenerate eigenvectors. When two or more items are part of the same
+
+outlier, the linear combination constructed for each should be the identical. Hence, the two-member
+
+outlier in (a) and the three-member outlier in (d) give rise to redundant linear combinations.
+
+Outliers are detected within the non-degenerate subspace in (c) and (e).
+
+The Intersecting (see Figure 12) and Target (see Figure 13) data sets similarly have out-
+
+liers that may be removed directly or as isolated subsets. For both data sets, the algorithm
+
+was forced to remove outliers despite the presence of non-outlier low-lying eigenvectors. In-
+
+tersecting may be solved as an m = 4 problem, as in Figure 12(a), or as an m = 2 problem
+
+after outliers are ﬁrst removed from the non-degenerate space, as in Figure 12(b). The
+
+assignment functions wα and wβ were constructed from Eq. (26) in the former case, but
+
+directly created during outlier detection in the latter. The outliers at the corners of the
+
+Target data set are extracted from the degenerate subspace of Figure 13(a) to reveal the
+
+m = 2 clustering of Figure 13(b). The data set is analyzed as an m = 6 problem in Sec. IV.
+
+40
+
+ψ
+0
+
+ψ
+1
+
+γ
+3
+
+γ
+2
+
+γ
+γ
+1
+0
+
+wα
+
+wβ
+
+ψ
+0
+
+ψ
+1
+
+ψ
+2
+
+ψ
+3
+
+γ
+γ
+5
+4
+
+γ
+3
+γ
+γ
+2
+γ
+1
+0
+
+wα
+
+wβ
+
+wγ
+
+wδ
+
+wα
+
+wβ
+
+wγ
+
+wδ
+
+FIG. 11: Clouds data set clustered by removing outliers past the ﬁrst eigenspectrum gap. Outlier
+
+removal continues as long as at least m
+
+2 low-lying eigenvectors exhibit an outlier signature. Two
+
+−
+
+iterations remove a total of 80 items within outliers, as shown in the ﬁrst two data set plots. The
+
+ﬁnal plot shows the m = 2 clustering that becomes possible after removing the obfuscating items.
+
+The resulting eigensystem and non-outlier assignment functions are displayed.
+
+ψ
+0
+
+ψ
+1
+
+(a)
+
+γ
+γ
+3
+2
+
+γ
+γ
+1
+0
+
+(b)
+
+41
+
+FIG. 12: Intersecting data set. Outliers are manifest in eigenvectors ψ2 and ψ3, within the non-
+
+degenerate subspace. (a) Clustered as an m = 4 problem. (b) Clustered as an m = 2 problem
+
+after ﬁrst removing the outliers in a pre-processing step. The outliers are removed and the system
+
+is re-analyzed to yield the eigensystem shown in (b).
+
+For the three data sets above, analysis with and without outlier detection yields clusters
+
+of similar certainty. Figures 14–16 compare the certainties of non-outlier clusters derived
+
+using several methods for handling outliers. If outliers are not given special consideration,
+
+they are nevertheless removed as isolated subsets—small, well-deﬁned clusters. Since this
+
+ψ
+0
+ψ
+1
+ψ
+2
+ψ
+3
+ψ
+4
+ψ
+5
+
+γ
+7
+
+γ
+6
+
+−γ
+γ
+5
+0
+
+ψ
+0
+
+ψ
+1
+
+(a)
+
+γ
+3
+
+γ
+2
+
+γ
+1
+
+(b)
+
+wα
+wβ
+wγ
+wδ
+wε
+wζ
+
+FIG. 13: Target data set. Outliers are manifest in eigenvectors ψ1 −
+subspace. (a) Shown are the target data set, eigenvectors, eigenvalues, and linear combinations of
+
+ψ4, within the degenerate
+
+eigenvectors within the degenerate subspace that signal outliers. (b) The outliers reﬂected in the
+
+linear combinations from (a) are removed, yielding the displayed eigensystem. Macrostate data
+
+clustering computes assignment functions wǫ and wζ from ψ0 and ψ1; each of the wα −
+constructed for a particular outlier.
+
+wδ were
+
+method does not diﬀerentiate outliers from other clusters, it calculates outlier certainties;
+
+both conditional and unconditional certainties are reported for the one recursively-analyzed
+
+data set, Clouds, where the distinction is relevant. The two other procedures directly detect
+
+outliers using outlier signatures. The ﬁrst search is restricted from crossing the ﬁrst gap in
+the eigenspectrum, while the second is not and instead searches the ﬁrst frange ∗
+tors for outliers. Certainties for the Clouds data set show mild improvement when outliers
+
+N eigenvec-
+
+beyond the ﬁrst eigenspectrum gap are detected, likely due to the increased number of out-
+
+liers removed. For the smaller Intersecting and Target problems, the few outlying items
+
+that remain in the low-lying eigenvectors under the isolated subset approach do not result
+
+in appreciably diﬀerent certainties than those derived from eigenvectors free of outliers.
+
+42
+
+Υα(M ) Υβ(M )
+
+items
+
+Outlying
+
+removed
+
+Isolated subset (conditional)
+
+0.968706 0.973189
+
+Isolated subset (unconditional)
+
+0.970969 0.975043
+
+Outlier removal
+
+0.973572 0.974218
+
+Outlier removal beyond ﬁrst gap 0.985971 0.986599
+
+23
+
+23
+
+36
+
+80
+
+FIG. 14: Comparison of certainties for non-outlier clusters of Clouds data set. Outlying items
+
+removed refers to the total number of items belonging to an outlier that were removed either
+
+recursively or via detection.
+
+Υα(M ) Υβ(M )
+
+Isolated subset 0.942132 0.949347
+
+Outlier removal 0.944269 0.950097
+
+FIG. 15: Comparison of certainties for non-outlier clusters of Intersecting data set.
+
+E. Computational Implementation
+
+Figures 17-20 describe the clustering process as a ﬂow of execution between modules
+
+that have previously been discussed. The highest-level overview, presented by Figure 17,
+
+shows that clustering begins with a deﬁnition of Γ, whose eigenanalysis results in the (left)
+
+eigenvectors ϕn and eigenvalues γn that are subsequently used to determine the number
+
+of clusters m and the assignment functions wα. If the data set is amenable to clustering,
+
+i.e., m > 1, then any item i that is strongly identiﬁed with a cluster α is assigned to a sub-
+
+problem characterized by the transition matrix Γα. This transition matrix is then recursively
+
+clustered, as discussed in greater detail in Sec. III C. Items that are not strongly assigned to
+
+FIG. 16: Comparison of certainties for non-outlier clusters of Target data set.
+
+Υα(M ) Υβ(M )
+
+Isolated subset 0.999954 0.999959
+
+Outlier removal 0.999994 0.999994
+
+43
+
+Begin
+
+Determine Γ
+(See Figure 18)
+
+Prepare
+eigensystem: ϕn, γn
+(see Figure 19)
+
+Cluster Γ:
+Compute m, wα : α = 1, . . . , m
+(see Figure 20)
+
+No
+
+If m > 1
+
+Yes
+
+Include i in Γα
+
+Yes
+
+α, i
+
+∀
+
+If wα(i) > 0.5
+
+No
+
+End
+
+FIG. 17: Overview of recursive macrostate data clustering with hard, majority-based assignments.
+
+a single cluster are not recursively examined: their fuzzy, relative assignment probabilities
+
+are described by those wα already constructed. Figures 18-20 provide additional detail
+
+concerning the ﬁrst three steps in the clustering process.
+
+Computation and conditioning of Γ is outlined in Figure 18. For data sets described
+
+in terms of measurements X, the dissimilarity matrix D is computed from the data after
+
+the dimensions are scaled by the problem-speciﬁc metric tensor g. In many domains, dis-
+
+similarities are not a simple function of the input and so are not readily computed via Eq.
+
+44
+
+Begin
+
+No
+
+Input X
+Input g
+
+Compute Γ
+
+No
+
+End
+
+Yes
+
+If D is supplied
+
+Input D
+
+Compute D
+
+Yes
+
+If Γ is symmetric
+and not using Arnoldi
+
+Γ
+
+→
+
+Γ + ∆ 1
+
+1
+
+⊗
+
+FIG. 18: Preparation of Γ.
+
+(1). For example, the raw protein sequences input to a sequence alignment problem may
+
+be compared using dynamic programming techniques to produce pairwise similarities. This
+
+processing is best performed externally to the clustering algorithm, which directly uses the
+
+D matrix computed oﬄine. Regardless of how D is deﬁned, Γ is computed from it via Eq.
+
+(18) and then shifted by the outer product of 1 with itself to guarantee that ϕ0 = 1. This
+
+last step is only valid when Γ is symmetric. The algorithm may be conﬁgured to use the
+
+Arnoldi method [56] to compute a subset of the eigenspectrum. In this case it is best not
+
+to shift Γ, as this will artiﬁcially introduce a gap between γ0 and the other low-lying eigen-
+
+values that would complicate convergence. When the Arnoldi method is used or when Γ is
+
+not symmetric, ϕ0 = 1 may be forced by a subsequent phase using the method described in
+
+Sec. II D.
+
+The potentially iterative process of computing the eigensystem of the Γ computed by Fig-
+
+45
+
+ure 18 and removing its outliers is shown in Figure 19. After the eigensystem is computed
+
+the procedures discussed in Sec. III D are used to remove outliers detected in the degenerate
+
+and non-degenerate subspaces. If any outliers are removed, the eigensystem is recomputed.
+Outlier detection in the degenerate subspace examines a linear combination ψdegenerate
+
+of
+
+outlier
+
+the degenerate eigenvectors created for each of the O(N) items i. In contrast, within the
+
+non-degenerate subspace the vectors examined are the non-degenerate eigenvectors whose
+
+corresponding eigenvalues precede the ﬁrst eigenspectrum gap or whose index is less than
+frange ∗
+subspace. In particular, its O(N) squared components are collected and sorted, requiring
+
+N. Once the candidate vector is determined, it is processed similarly within each
+
+O(N log N) operations, so that the largest N max
+and compared to the threshold foutlier ∗
+ate subspace requires O(N 2 log N) operations, while within the non-degenerate subspace it
+requires O(frange ∗
+
+outlier squared components may be summed
+N. Therefore, outlier detection within the degener-
+
+N 2 log N) = O(N log N), assuming that frange ∗
+
+N is a small constant.
+
+Computing the eigensystem of Γ is the most computationally expensive step in the clus-
+
+tering process. Approaches to computing the entire eigenspectrum of a dense matrix require
+
+O(N 3) operations, though the constant prefactors may vary considerably between algo-
+
+rithms. For dense, symmetric systems, the current implementation uses LAPACK’s [57]
+
+dsyev, which reduces Γ to tridiagonal form before using the implicit QR algorithm to de-
+
+termine its eigensystem (see Sec. 8.3 of Ref. [54]). dsyevr [58] is a more eﬃcient alter-
+
+native, but requires additional memory. The implementation solves asymmetric systems
+
+using dgeev [59], which reduces Γ to upper Hessenberg form, computes a Schur decompo-
+
+sition using the implicit QR algorithm, and ﬁnally computes the eigenvectors of an upper
+
+quasi-triangular matrix (see Sec. 7.5.6 of Ref. [54]).
+
+Greater eﬃciency may be achieved by using the Arnoldi method, which reduces to the
+
+Lanczos method for symmetric matrices, to compute only the small, relevant subset of the
+
+eigenspectrum near the zero eigenvalues. The Arnoldi method is an iterative process for
+
+computing the tridiagonalization of Γ and is attractive because extremal eigenvalues and
+
+their associated eigenvectors often emerge long before tridiagonalization is complete (see
+
+Ref. [60] and Chapter 9 of Ref. [54]). Computation within an iterative step is dominated by
+
+a matrix-vector multiplication involving Γ, which requires O(N 2) operations if Γ is dense,
+
+but only O(i
+
+N) if Γ has a sparse representation and on average i non-zeros per row.
+
+∗
+
+Unfortunately, the Arnoldi method has poor convergence properties for the small, densely-
+
+46
+
+Begin
+
+Yes
+
+Compute eigenvalues
+and left eigenvectors: ϕn, γn
+
+Find outliers in
+degenerate subspace
+
+Find outliers in
+non-degenerate subspace
+
+Remove outliers from Γ
+
+Yes
+
+If outliers found
+
+No
+
+End
+
+FIG. 19: Outlier removal and preparation of eigensystem.
+
+packed eigenvalues required for macrostate data clustering. The related eigenvalue problem
+
+σ I)−1 ϕn = νn ϕn ,
+
+(Γ
+
+−
+
+where νn = (γn−
+aids convergence of those eigenvalues near σ, which will have an eigenvalue νn of large
+
+σ)−1, deﬁnes a shift-and-invert spectral transformation [61]. This procedure
+
+magnitude in the transformed problem. The current implementation uses a near-zero σ of
+
+√ǫ, where ǫ is machine precision. It is based on the ARPACK++ [62] package that provides
+
+C++ wrappers around ARPACK [63] routines.
+
+The core of the recursive clustering algorithm is the construction of the assignment func-
+
+tions via Eq. (26), where the orthogonal vectors ˆϕn generalize the use of eigenvectors ψn
+
+in the symmetric case. The process depicted in Figure 20 replaces the original brute-force
+
+method for performing macrostate data clustering used by Korenblum and Shalloway [5].
+
+When Γ is asymmetric or the Arnoldi method is used to compute only the low-lying end of
+
+the eigenspectrum, ϕ0 will not have been forced to 1 in Figure 18. In fact, if Γ is asymmet-
+
+47
+
+ric, the left eigenvectors will not be mutually orthogonal, but are instead bi-orthogonal with
+
+respect to the right eigenvectors. In these cases, the procedure described in Sec. II D is used
+
+to compute an orthogonal subspace spanned by a set of vectors ˆϕn, with ˆϕ0 = 1. Otherwise,
+
+the (left) eigenvectors are used directly as the ˆϕn. Forming the orthogonal subspace requires
+
+the singular value decomposition of an N
+
+m matrix A of the m low-lying eigenvectors,
+
+which may be computed in O(Nm2 + m3) operations (see Sec. 5.4.5 of Ref. [54]). The
+
+×
+
+current implementation computes the SVD using dgesvd.
+
+An approximate solution µ is computed from the m orthogonal vectors ˆϕn by a process
+
+schematically represented in Figure 21. A linear program imposes the constraints of Eqs. (27)
+
+and (28) on µ to determine the exact solution M, whose elements serve as the expansion
+
+coeﬃcients used to deﬁne the wα. The constrained linear program is solved using the
+
+GLPK [64] implementation of the simplex method. As discussed in Sec. III B, the simplex
+
+method is theoretically exponential, but eﬃcient in practice. In particular, it has proven to
+
+be considerably more eﬃcient than the eigensystem solver, such that the latter remains the
+
+computational bottleneck.
+
+Determining the approximate solution µ requires ﬁnding m representatives and then
+
+setting their assignment intensities to zero or unity by solving m linear systems, as discussed
+
+in Sec. III A. Representative selection uses O(N 2 + m3N) operations: an O(N 2) comparison
+
+is used to determine the two mutually furthest representatives, which seed the set; the
+
+remaining m
+
+2 representatives are chosen from the O(N) items that have not already been
+
+−
+
+selected as representatives by comparing and computing the distance and sign structure of
+
+each, using O(m) operations, with respect to the O(m) existing representatives. Each of the
+
+m linear systems is computed using the O(m2) dgesv algorithm. It computes the solution
+
+to a real system of linear equations A
+
+X = B by using an LU decomposition with partial
+
+∗
+
+pivoting and row interchange to factor A as A = P L U, where P is a permutation matrix,
+Rm×m, then factorizing A
+
+L is unit lower triangular, and U is upper triangular.
+
+If A
+
+requires O(m2) operations (see Sec. 3.4.3 of Ref. [54]). Forward and backward substitution
+
+then reduce the factored form to a solution using O(m2) additional operations each (see Sec.
+
+∈
+
+3.1 of Ref. [54]).
+
+48
+
+Begin
+
+Find m s.t. γm/γm−1 > ργ
+
+Yes
+
+If m > 1
+
+If Γ is asymmetric
+or using Arnoldi
+
+Yes
+
+Force ˆϕn to span orthogonal
+subspace with ˆϕ0 = 1
+
+No
+
+ˆϕn = ϕn
+
+Compute µ via
+approximate solver
+(see Figure 21)
+
+Compute M via
+constrained solver
+
+wα =
+
+m−1
+n=0 Mαn ˆϕn
+
+P
+
+End
+
+No
+
+FIG. 20: Fuzzy macrostate data clustering.
+
+IV. RESULTS
+
+In their evaluation of macrostate data clustering, Korenblum and Shalloway presented
+
+a series of problems that had challenged traditional clustering methods, such as k-means
+
+and agglomerative clustering. To show that macrostate data clustering does not rely on low
+
+dimensionality, they further considered, and successfully clustered, items embedded in a 20
+
+dimensional space. The present evaluation extends these results by considering data sets
+
+from the Fundamental Clustering Problems Suite (FCPS) [2] in Sec. IV A. Macrostate data
+
+clustering reproduces the author’s results for all but the Engy Time data set, though the
+
+49
+
+Begin
+
+Find representatives
+
+Solve linear systems to
+compute µ
+
+End
+
+FIG. 21: Approximate solver.
+
+proposed diﬀerentiation into two clusters appears debatable. The scalability of macrostate
+
+data clustering is demonstrated in Sec. IV B, which varies N and m to consider problems as
+
+large as 20,000 items grouped in nine clusters.
+
+The problems analyzed in this section, and throughout Sec. III, deﬁne the dissimilarity
+
+matrix D directly from the raw coordinate data using Eq. (1) with gab = δab. The minimum
+
+gap parameter ργ was set to 3.
+
+The current implementation is written in C++, though it makes use of libraries written
+
+in C and Fortran. Access to low-level LAPACK [57] routines was provided by version 2.3.0
+
+of the LAPACK++ [65] C++ wrappers. The Arnoldi eigensystem solver was implemented
+
+via ARPACK [63] routines and exposed through the ARPACK++ [62] C++ wrappers.
+
+The implementation of the simplex method for solving constrained linear programs was
+
+provided by GLPK [64] version 4.9. The clustering application and its dependences were
+
+compiled using gcc/g++ version 4.1.2 and gfortran version 4.1.2; both were passed the
+
+-O3 optimization ﬂag. The scaling results of Sec. IV B were executed on a dedicated quad
+
+CPU 3.46 GHz Pentium 4 node, conﬁgured with 4GB of RAM and 4GB of swap space, and
+
+running a 64-bit version of SuSE Linux.
+
+50
+
+A. Bi- and Tri-variate Test Cases
+
+The Fundamental Clustering Problem Suite (FCPS) [2] was developed as a benchmark
+
+for clustering algorithms and is distributed with known classiﬁcations. The suite contains
+
+problems that can not be clustered by k-means and agglomerative methods. Since Sec. I
+
+presents the Crescentric data set [4] as one problematic to complete linkage and k-means, its
+
+proper classiﬁcation by macrostate data clustering is presented here as well. The analysis
+
+of Crescentric and nine of the ten FCPS data sets are displayed in Figures 22 and 23, which
+
+show that macrostate data clustering reproduces the subjective clustering for each of them.
+
+The ﬁnal FCPS data set, Engy Time, is considered separately in Figure 24 since the results
+
+diﬀer from those suggested by Ultsch [2].
+
+The data sets consist of two or three measurements NM on each of the N items. Therefore,
+
+the items may be represented as N points in an NM -dimensional space. For example,
+
+the items of the Atom data set of Figure 22(e) have NM = 3 measurements and so are
+
+embedded in a three-dimensional space. Half of the N = 800 are tightly grouped within
+
+the core of a globe comprised of the remaining items, so that the variance within the core
+
+is signiﬁcantly smaller than that on the surface of the globe. The data set can not be
+
+clustered by k-means since it is not linearly separable. The ﬁgure shows the two low-lying
+
+eigenvectors corresponding to the eigenvalues preceding the ﬁrst eigenspectrum gap that
+
+separates eigenvalues γ1 and γ2. Through this gap the algorithm infers that the data set is
+
+properly dissected into m = 2 clusters; there is no gap, for example, between eigenvalues γ2
+
+and γ3 and an m = 3 clustering would overdissect the space. As expected, ψ0 is constant
+
+since Eq. (25) is enforced through the procedure of Appendix B, when Γ is symmetric,
+
+or Sec. II D, when Γ is asymmetric. Since the items were arranged according to their
+
+subjective cluster, the presence of the two equally-sized clusters is clearly recognizable in
+
+the step-function form of ψ1.
+
+The degeneracy of the zero eigenvalue indicates isolated subsets, which leads to the per-
+
+fectly level structure of ψ1. This allows construction of level assignment functions, through
+
+which items are assigned to clusters with probabilities strictly equal to zero or unity. There-
+
+fore, there is no uncertainty and the fuzzy clustering approach has determined a hard clus-
+
+tering. For each problem, Figure 23 displays the number of clusters m, the magnitude of
+
+the spectral gap γm/γm−1, and the certainty Υα(M) and range of assignment intensities for
+
+51
+
+each cluster within the problem. The assignment intensities are the values of the wα(i) for
+
+those items i subjectively assigned to cluster α. An interesting cluster requires m > 1 so
+
+that the denominator of the spectral gap ratio is generally non-zero and the ratio is ﬁnite.
+
+However, for degenerate problems, such as Atom, the denominator is always zero and the
+
+ratio is reported as
+
+. Such degenerate problems lead to hard clusterings, in which each
+
+∞
+
+cluster enjoys absolute certainty and all of the assignment intensities are unity. To avoid re-
+
+dundancy in the ﬁgure, such m-way degenerate problems have only a single entry indicating
+
+that the certainties of all clusters are unity; the assignment intensities are not individually
+
+listed for each cluster either, but are indicated as arising from a hard clustering.
+
+The Tetra data set, depicted in Figure 22(c), has four clusters arranged at the corners
+
+of a tetrahedron such that they nearly overlap. Despite their relative proximity, the m =
+
+4 clusters are recognizable from the gap in the eigenspectrum. However, unlike Atom,
+
+the problem is not degenerate. The result is a perturbation in the level structure of the
+
+eigenvectors, as discussed in Sec. II C, which is translated to fuzziness in the assignment
+
+functions. Figure 23 indicates that perturbation leads to assignment intensities as low as
+
+0.55 and markedly lower certainties, though the corresponding clusters remain subjectively
+
+correct.
+
+Of the remaining problems, Hepta, Lsun, Chainlink, and Target induce hard clusterings,
+
+though the solution to Wing Nut is near certain. Hepta has seven well-deﬁned clusters, six of
+
+which surround, in three dimensions, a smaller seventh cluster. The three two-dimensional
+
+clusters of Lsun, two of which are rectangular and nearly perpendicular, were designed to
+
+test an algorithm’s ability to cope with diﬀerent intra-cluster variances and inter-cluster
+
+separations. Like Atom, a proper solution to Chainlink requires diﬀerentiating clusters that
+
+are not linearly separable: its two rings interlock in three dimensions. Target consists of six
+
+clusters, two of which are concentric circles and the remainder of which are outliers scattered
+
+to the four extreme corners of its two-dimensional space. Target is solved in Figure 22(f) as
+
+an m = 6 problem, in which the outliers are handled analogously to the two larger clusters;
+
+the four outliers were detected and removed directly in Sec. III D.
+
+Only Two Diamonds and Crescentric exhibit a level of uncertainty commensurate to
+
+the fuzziness of Tetra. The two clusters of the Two Diamonds data set abut such that
+
+items near the interface separating the two diamonds are assigned relatively low intensities.
+
+Similar ambiguity exists in the Crescentric data set, in which two crescents are closely
+
+52
+
+juxtaposed: an item projecting out towards an opposing cluster has some aﬃnity for that
+
+cluster, which detracts from its probability of assignment to its own subjective cluster. This
+
+reﬂects the expectation that assignment functions will be most fuzzy near the boundary
+
+between clusters. The described weakly-assigned items have a strong correlation with those
+
+misclassiﬁed by distance-based clustering schemes in Figure 1.
+
+Golf Ball is a compact sphere of items that can not be subjectively clustered. Hence,
+
+its eigenvectors are unstructured and the only spectral gap separates γ0 from γ1, indicating
+
+that there is only a single monolithic cluster. Korenblum and Shalloway found a similar
+
+result when analyzing a random data set: macrostate data clustering is not mislead into
+
+suggesting a spurious clustering when none exists.
+
+The ﬁnal FCPS data set, Engy Time, is a two-dimensional mixture of two Gaussian distri-
+
+butions. A clustering approach based on self-organizing maps [2] used distance and density
+
+relationships to diﬀerentiate the two Gaussian structures. While the diﬀerent distribution
+
+widths make two clusters subjectively visible, their strong connectivity mean that items
+
+along the boundary, but subjectively assigned to diﬀerent clusters, will be highly correlated.
+
+Therefore, the determination by macrostate data clustering that no clustering is possible
+
+appears to be valid, if not preferable.
+
+B. Scaling Benchmarks
+
+Macrostate data clustering scales to problem sizes of biological interest: it solves a prob-
+
+lem with N = 20, 000 items in under an hour and a half. The scaling results obtained from
+
+applying macrostate data clustering to synthetic data sets are shown in Figure 25. Each of
+
+the curves corresponds to a diﬀerent number of clusters m, while the x-axis describes the
+
+total number of items N across all clusters. The y-axis gives the time in seconds to cluster
+
+the corresponding data set, which is composed of m two-dimensional clusters surrounding
+
+a common center of mass. Optimization times are dominated by the time spent in the nu-
+
+merical eigensystem solver. Our use of an iterative Arnoldi solver, whose execution time is
+
+dependent on both the size and conﬁguration of the data set, likely explains the spikes in the
+
+53
+
+wα
+
+wβ
+
+wγ
+
+wα
+
+wβ
+
+wα
+wβ
+wγ
+wδ
+wε
+wζ
+
+wα
+
+wβ
+
+ψ
+0
+
+ψ
+1
+
+ψ
+2
+
+−γ
+γ
+3
+2
+
+−γ
+γ
+1
+0
+
+ψ
+0
+ψ
+1
+ψ
+2
+ψ
+3
+ψ
+4
+ψ
+5
+
+ψ
+0
+
+ψ
+1
+
+γ
+4
+
+γ
+γ
+−γ
+3
+2
+0
+
+γ
+γ
+−γ
+5
+4
+0
+
+γ
+7
+
+γ
+6
+
+γ
+γ
+3
+2
+
+γ
+γ
+1
+0
+
+wα
+
+wβ
+
+ψ
+0
+
+ψ
+1
+
+(b)
+
+(d)
+
+(f)
+
+(h)
+
+ψ
+0
+
+ψ
+1
+
+γ
+3
+γ
+2
+
+γ
+1
+
+γ
+0
+
+ψ
+0
+ψ
+1
+ψ
+2
+ψ
+3
+ψ
+4
+ψ
+5
+ψ
+6
+
+γ
+8
+
+γ
+7
+
+−γ
+γ
+6
+0
+
+ψ
+0
+
+ψ
+1
+
+ψ
+2
+
+ψ
+3
+
+ψ
+0
+
+ψ
+1
+
+γ
+γ
+5
+4
+
+γ
+γ
+γ
+γ
+3
+2
+1
+0
+
+γ
+γ
+3
+2
+
+−γ
+γ
+1
+0
+
+ψ
+0
+
+ψ
+1
+
+(a)
+
+(c)
+
+(e)
+
+(g)
+
+(i)
+
+γ
+γ
+3
+2
+
+γ
+γ
+1
+0
+
+ψ
+0
+
+ψ
+1
+
+γ
+γ
+−γ
+3
+2
+1
+
+γ
+0
+
+wα
+wβ
+wγ
+wδ
+wε
+wζ
+wη
+
+wα
+
+wβ
+
+wγ
+
+wδ
+
+wα
+
+wβ
+
+wα
+
+wβ
+
+54
+
+(j)
+
+FIG. 22: Bi- and tri-variate test cases. (a) Hepta (b) Lsun (c) Tetra (d) Chainlink (e) Atom (f)
+
+Target (g) Two Diamonds (h) Wing Nut (i) Golf Ball (j) Crescentric.
+
+curves. Each problem was solved ﬁve times, with little variance between runs. The ﬁgure
+
+shows a clear power-law relation between N and execution time. The average exponent of
+
+the three smoothest curves—those for m = 7, 8, and 9—is 3.1, consistent with the expected
+
+N 3 scaling of a numerical eigensolver.
+
+Problem m γm
+
+γm−1 Υα(M ) Assignment
+
+Problem
+
+m γm
+
+γm−1 Υα(M ) Assignment
+
+Hepta
+
+Lsun
+
+7
+
+3
+
+∞
+
+∞
+
+Hard Clustering
+
+Target
+
+6
+
+1.00
+
+Hard Clustering
+
+Hard Clustering
+
+Two Diamonds 2
+
+29.31 0.93
+
+0.59-1.00
+
+Tetra
+
+4 17.21 0.87
+
+0.74-1.00
+
+0.93
+
+0.53-1.00
+
+0.77-1.00
+
+Wing Nut
+
+2 245.95 1.00
+
+0.99-1.00
+
+0.87-1.00
+
+0.99
+
+0.99-1.00
+
+0.55-1.00
+
+Golf Ball
+
+Hard Clustering
+
+Crescentric
+
+1
+
+2
+
+Hard Clustering
+
+0.71
+
+0.71
+
+0.75-1.00
+
+0.51-1.00
+
+FIG. 23: Analysis of bi- and tri-variate test cases.
+
+Chainlink 2
+
+Atom
+
+2
+
+∞
+
+∞
+
+1.00
+
+1.00
+
+0.90
+
+0.91
+
+0.93
+
+1.00
+
+1.00
+
+ψ
+0
+
+ψ
+1
+
+ψ
+2
+
+ψ
+3
+
+γ
+5
+
+γ
+4
+γ
+3
+γ
+2
+γ
+1
+γ
+0
+
+FIG. 24: Engy Time.
+
+m = 9
+m = 8
+m = 7
+m = 6
+m = 5
+m = 4
+
+i
+
+)
+c
+e
+s
+(
+ 
+e
+m
+T
+ 
+d
+e
+s
+p
+a
+E
+
+l
+
+ 
+l
+a
+t
+o
+T
+
+5000
+
+4500
+
+4000
+
+3500
+
+3000
+
+2500
+
+2000
+
+1500
+
+1000
+
+500
+
+0
+
+0
+
+55
+
+0.5
+
+1
+
+1.5
+
+2
+
+N
+
+2.5
+4
+x 10
+
+FIG. 25: Scaling results for synthetic benchmarks with N varied from 1, 000 to 20, 000 in steps of
+
+1, 000 and with m varied from 4 to 9.
+
+V. DISCUSSION
+
+Macrostate data clustering has been developed as a fuzzy, partitional, and recursive
+
+method that performs well on problems that have challenged traditional, distance-based
+
+approaches, such as k-means and agglomerative clustering. Like other spectral methods, it
+
+succeeds where traditional methods have failed by exploiting global inter-item connectivity
+
+information preserved in the structure of eigenvectors of a system derived from a dissimilarity
+
+matrix D. The appropriate number of clusters is determined directly from the eigenspectrum
+
+gaps γm/γm−1 and need not be speciﬁed a priori. The corresponding acceptance parameter
+
+ργ was determined empirically by Korenblum and Shalloway [5] and has given good results
+
+for a broad range of test cases. The number of clusters m determines the number of low-
+
+lying eigenvectors to be used as a basis for the linear expansion wα that probabilistically
+
+describes membership of cluster α.
+
+Practitioners have long understood that the number of clusters could be ascertained from
+
+a gap in the eigenspectrum [7, 10, 22, 23, 24, 25, 33, 34]. However, prior to the gap condition
+
+suggested by Korenblum and Shalloway [5], they have resorted to manual inspection. Zelnik-
+
+Manor and Perona [26] instead determine m as the number of low-lying eigenvectors of a
+
+normalized aﬃnity matrix, which, when rotated, best approximate a block-diagonal matrix.
+
+Eigenvectors have previously been used in the clustering process. The most straightfor-
+
+ward approaches, such as recursive spectral bipartitioning [13], threshold the single Fiedler
+
+vector at each stage and do not require knowledge of the number of clusters. However, several
+
+experimental [10, 66] and theoretical [29] studies have shown that direct m-way partitioning
+
+may yield better results than recursive bipartitioning. Occasionally these non-hierarchical,
+
+partitional schemes decouple the number of clusters m from the number of eigenvectors
+
+used to determine them, e.g., using as many eigenvectors as practically possible [9]. How-
+
+ever, in most cases, m determines both the number of clusters and the number of low-lying
+
+eigenvectors used to express them.
+
+m-way partitioning schemes frequently make use of an eigenspace representation, wherein
+
+item i takes the form of an m-vector −→ψ i comprised of the ith components of the ﬁrst m
+
+low-lying eigenvectors. A hard clustering of these item vectors may be obtained using k-
+
+means [7, 24], based on the sign of each component [23, 25], or according to the vector’s
+
+direction [10, 22] and magnitude [9]. The wα may also take on real values. In a bipartitioning
+
+56
+
+context, the Fiedler vector assigns a continuous weight within a bounded interval to an
+
+item, which associates it with one of the two clusters [67]. Drineas et al. [68] have used the
+
+eigenvectors as the wα directly, though the interpretation as intensities is loosely deﬁned.
+
+The primary feature distinguishing macrostate data clustering, as developed by Koren-
+
+blum and Shalloway [5], from other real-valued, m-way partitioning approaches is the in-
+
+terpretation of the wα(i) as the probability that item i is assigned to cluster α. This
+
+probabilistic interpretation requires that the assignment functions be expressed as a linear
+
+combination of low-lying eigenvectors, which generalizes the eigenspace representation −→ψ i
+
+of item i. The inherent fuzziness of the resulting wα introduces cluster overlap and an
+
+attendant uncertainty, which leads naturally to an information-theoretic objective function
+
+and the principle of uncertainty minimization. It is this principle, absent in related work
+
+lacking a probabilistic interpretation, that ultimately determines the expansion coeﬃcients
+
+of the linear combination.
+
+Components of the macrostate data clustering solver may be valuable even for those
+
+domains in which a hard clustering suﬃces, such as molecular dynamics. The validity of a
+
+probabilistic interpretation is ensured by the constrained solver. However, as discussed in
+
+Sec. III B, the solution M determined by the constrained solver is expected to be a small
+
+perturbation of the solution µ found by the approximate solver. Therefore, thresholding the
+
+assignment functions wα computed from µ is likely to produce the same subjective clustering
+
+as that computed from M, without the additional algorithmic and run-time overhead of the
+
+constrained solver.
+
+Hard clustering has recently been used to improve the computational eﬃciency of molec-
+
+ular dynamics studies of protein folding [69]. Characterizing folding rates and trajectories
+
+through conﬁguration space is informative in elucidating pathways and in studying diseases
+
+caused by misfolded proteins. Unfortunately, experimental observations frequently can not
+
+isolate individual protein states, but instead present ensemble averages. While in silico
+
+studies oﬀer atomistic detail of a single trajectory, the system’s fast vibrational modes re-
+
+strict integration time steps to femtoseconds and hence severely limit the study of signiﬁcant
+
+folding events occurring at microsecond granularity [70]. Since it is the transitions between
+
+the metastable conformations that are of physical interest, rather than the high-frequency,
+
+intra-macrostate ﬂuctuations, Chodera et al. [69] have proposed coarse graining conﬁgu-
+
+ration space to a set of macrostates and then initiating short simulation trajectories from
+
+57
+
+each in order to establish a Markov model. As the model describes the transitions between
+
+the physically-related states, the authors suggest that it provides a practical alternative to
+
+long, ﬁne-grained simulations for deriving properties such as state lifetimes [71] and mean
+
+ﬁrst-passage times [72].
+
+Shalloway [43] has previously described an analytic approach for dissecting conﬁguration
+
+space based on the Gibbs-Boltzmann distribution that could provide the required coarse
+
+graining. This was tersely summarized in Sec. II A. Sch¨utte et al. [73] have proposed an
+
+alternative approach that eﬀectively constructs the transition matrix Γ from Monte Carlo
+
+simulation. A variant of parallel tempering [74] allows eﬃcient sampling of conﬁguration
+
+space in the presence of energy barriers. Eigenanalysis of Γ and clustering of the resulting
+
+−→ψ i according to sign structure [23] lead to a characterization of macrostates suitable for the
+
+kinetic model of Chodera et al.
+
+Macrostate data clustering has beneﬁted from the sign structures described by Deuﬂ-
+
+hard et al. [23] and there are strong parallels between this work and theirs. However, as
+
+discussed in Sec. III A, the sign structures used to segregate microstates into macrostates
+
+may have ambiguities caused by numerical imprecision. Deuﬂhard et al. resolved this is-
+
+sue by assigning ambiguous microstates to macrostates using a least squares procedure. As
+
+discussed in Appendix C, the use of sign structures within macrostate data clustering is
+
+restricted to diﬀerentiating (potential) representatives, whose sign structure should be well
+
+deﬁned. Therefore, the approximate solver may provide a more robust and straightforward
+
+alternative to determining the macrostates of a Γ matrix deﬁned from molecular dynamics
+
+experiments. Since the macrostates are necessarily a non-fuzzy partition of the state space,
+
+the constrained solver need not be invoked; rather, the fuzzy assignment functions derived
+
+from the approximate solver should be thresholded to determine the macrostates.
+
+When an individual is the ultimate consumer of the clustering results, a fuzzy approach is
+
+more informative than a hard clustering. In this case, relatively low assignment probabilities
+
+indicate that the corresponding items deserve special attention, while those assigned with
+
+high probability may be quickly veriﬁed or trusted outright. Manually-curated databases,
+
+such as the structural classiﬁcation of proteins (SCOP) database [39], are a compelling
+
+application for fuzzy clustering. Using structural and evolutionary information, domain
+
+experts locate a protein domain within the SCOP hierarchy describing, from least to most
+
+constraining, its class, fold, superfamily, and family. Domains within the same superfamily
+
+58
+
+are believed to be related evolutionarily.
+
+The consideration aﬀorded each domain leads to a signiﬁcant lag time between the ad-
+
+dition of a structure to the the PDB [75] and its classiﬁcation within SCOP. The manual
+
+curation process [76] is aided by automatic methods. Nevertheless, as of February 20, 2007,
+
+the PDB contained 41,814 entries, while the most recent distribution of SCOP contained
+
+only 27,599 PDB entries. This release fully captured the PDB as of January 18, 2005– a
+
+lag of nearly two years at the time of its distribution in October, 2006. In general, SCOP
+
+distributions occur at most every several months and, often, much less frequently. There-
+
+fore, researchers may be forced to wait a considerable amount of time until a structure
+
+classiﬁcation is made available.
+
+Fuzzy clustering may be able to alleviate the lengthy curation process. Paccanaro et al. [3]
+
+have already shown that a spectral clustering method can faithfully reproduce many of the
+
+superfamily classiﬁcations from a subset of SCOP. Macrostate data clustering provides the
+
+additional beneﬁt of indicating the conﬁdence of a particular classiﬁcation. Thus, misclassi-
+
+ﬁcations should be reﬂected by relatively low assignment probabilities, which would signal,
+
+either to a curator or to a researcher attempting to extend SCOP with a new structure,
+
+that a structure deserves manual consideration. Additionally, the ability of macrostate data
+
+clustering to recursively analyze clusters should aid it in discovering the families constituting
+
+a superfamily.
+
+Applying macrostate data clustering to SCOP requires a suitable notion of dissimilarity.
+
+Paccanaro et al. deﬁned distances in terms of the E-values returned by the BLAST [49]
+
+sequence comparison algorithm. Other sensible options include the more sensitive values
+
+returned by PSI-BLAST [51] or the tm-scores [77] resulting from direct structural alignments.
+
+When distances are derived from the measurement matrix X, this freedom is reﬂected in
+
+the deﬁnition of the metric tensor g, which may be used to scale data dimensions. Whether
+
+computed directly or derived from X, determining D requires domain expertise.
+
+APPENDIX A: NUMERICAL PRECISION OF EIGENVALUES
+
+Macrostate data clustering requires that an eigenspectrum be reliably partitioned into
+
+a degenerate space of zero eigenvalues, a low-lying, non-degenerate range of eigenvalues
+
+lying beneath the ﬁrst spectral gap, and the remaining high-frequency end of the spectrum.
+
+59
+
+Where the distinction between degenerate and low-lying, non-degenerate eigenvalues is not
+
+necessary, all are referred to as low-lying eigenvalues. Diﬀerentiation between degenerate
+
+and non-degenerate spaces depends on accurately determining a zero eigenvalue despite
+
+numerical imprecision. When there are multiple degeneracies, the boundary between the
+
+two spaces determines the number of clusters m. Therefore, applying the gap condition
+
+within the degenerate subspace would result in an improper determination of m. Similarly,
+
+a conservative approach to outlier detection must locate the gap separating degenerate and
+
+non-degenerate eigenvalues, beyond which outlier removal should not proceed.
+
+Numerical routines frequently provide accuracy bounds that would allow, in principle,
+
+for proper determination of zero eigenvalues [57]. However, an implementation-independent
+
+approach is preferable. A robust approach is to compare the magnitudes of approximations
+
+to the same eigenvalue, computed using two diﬀerent methods.
+
+If the eigenvalue is zero
+
+analytically, the magnitude of its approximations will be dominated by noise. Hence, each
+
+will eﬀectively be a small random number and their normalized diﬀerence will be large.
+
+The eigenvalue γn satisfying Γ ψn = γn ψn is approximated by the γ′
+
+eigensystem solver. For a symmetric Γ, Γ2 ψn = γ2
+return γ′′
+
+n. Given inﬁnite numerical precision, the analytic identity γ′
+
+n returned by the
+n ψn, for which a numerical solver would
+n would hold.
+
+n = √γ′′
+
+If γn = 0, both γ′
+
+n and γ′′
+
+n will be dominated by noise, but their intended approximation of
+
+zero will be signaled by their large relative diﬀerence
+
+The above approach doubles the number of invocations to the numerical eigensystem
+
+solver and may be impractical for large systems. A variant of this approach takes the
+
+second approximation γ′′
+
+n to be the numerical value of the analytic identity
+
+γ′
+n −
+(cid:16)
+min(γ′
+p
+n,
+
+|
+
+γ′′
+n|
+(cid:17)
+) (cid:12)
+γ′′
+(cid:12)
+n|
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+|
+p
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+0 .
+
+≫
+
+ψn|
+
+h
+
+Γ
+
+ψni
+
+|
+
+= γn ,
+
+ϕn|
+
+h
+
+Γ
+
+ψni
+
+|
+
+= γn ,
+
+60
+
+for symmetric Γ, or
+
+for asymmetric Γ.
+
+APPENDIX B: DEGENERATE “ZERO” EIGENVALUES
+
+Korenblum and Shalloway have shown that 1 is the sole stationary eigenvector of Γ in
+
+a (numerically) non-degenerate system (see Appendix B of Ref. [5]). If the system is truly
+
+degenerate, Γ will be reducible such that it may be brought to a block diagonal form through
+
+permutation. Each block along the diagonal represents an isolated subset or “invariant
+
+aggregate” [23]
+
+, with Γij = 0 if i
+
+and j
+
+. If the system is comprised of nearly
+
+S
+
+∈ S
+
+6∈ S
+
+isolated subsets, numerical inaccuracies may prevent distinction between zero and the small
+
+eigenvalues that represent transitions between the subsets. The system will again appear to
+
+be degenerate and the ψ0 returned by a numerical eigensystem solver will not satisfy Eq.
+
+(25), though a linear combination of the approximately degenerate eigenvectors will sum to
+
+1.
+
+One resolution to this issue is the generalization of the equality constraints, as expressed
+
+in terms of ˆε0 rather than e1. A more elegant solution is to enforce Eq. (25) by breaking
+
+the degeneracy such that the eigenvector of the shifted eigenvalue is set to be 1. Since Γ is
+
+symmetric, updating it by the outer product of 1 with itself, according to
+
+Γ
+
+→
+
+Γ + ∆ 1
+
+1 ,
+
+⊗
+
+eﬀectively separates 1 from the degenerate subspace by shifting its eigenvalue from zero to
+
+∆. ∆ is chosen to be positive so that the eigenvalue is shifted into the vacant end of the
+
+eigenspectrum, where it is easily identiﬁed and reset to zero. However, ∆ must not be so
+
+far separated from the negative eigenvalues that it causes the system to be ill conditioned.
+
+To avoid this, ∆ should be on the same order as a “typical” eigenvalue. For most cases, a
+
+suitable shift should be the sign-inverted average eigenvalue. Since the trace of an N
+
+N
+
+×
+
+matrix is the sum of its N eigenvalues, ∆ may be taken as
+
+∆
+
+≡ −
+
+N −1 Tr(Γ) .
+
+APPENDIX C: STABILITY OF SIGN STRUCTURES
+
+Deuﬂhard et al. [23] describe an item’s sign structure σ in terms of a cutoﬀ ǫ, which
+
+determines if a component is suﬃciently large so as to have a reliable sign or if the sign
+
+61
+
+should be instead represented as zero
+
+σ(−→ψ i, ǫ) = (σ1, . . . , σm) with σj =
+
+if
+
+ψj(i)
+
+|
+
+ǫ
+
+| ≤
+
+.
+
+sign(ψj(i)) otherwise
+
+0
+
+
+
+
+
+
+The authors describe an iterative procedure for tuning this parameter so as to best decom-
+
+pose the eigenvectors into m partitions. Clustering is sensitive to this parameter since the
+
+sign structure may be used, in principle, to assign each item to a partition. The approximate
+
+solver uses sign structure in a much more restricted context: sign structures are used only
+
+to ensure that a candidate representative deemed to be the furthest item from the existing
+
+set of representatives belongs to a diﬀerent cluster. That is, sign structures are used only
+
+for those items having eigenspace representations with large components. As such, the sign
+
+of a component is set to zero unless its magnitude is less than ǫ of the maximum amplitude
+
+in that eigenvector
+
+σ(−→ψ i, ǫ) = (σ1, . . . , σm) with σj =
+
+if
+
+ψj(i)
+
+< ǫ
+
+maxk |
+
+∗
+
+ψj(k)
+
+|
+
+.
+
+|
+sign(ψj(i)) otherwise
+
+|
+
+0
+
+
+
+
+ǫ is determined using the iterative algorithm similar to that described in Sec. 5 of Ref. [23].
+
+
+
+[1] B. S. Everitt, S. Landau, and M. Leese, Cluster Analysis (Arnold, London, 2001).
+
+[2] A. Ultsch, in Workshop on Self-Organizing Maps (Paris, 2005), pp. 75–82.
+
+[3] A. Paccanaro, J. A. Casbon, and M. A. S. Saqi, Nucl. Acids Res. 34, 1571 (2006).
+
+[4] M. A. Wong and T. Lane, Journal of the Royal Statistical Society B 45, 362 (1983).
+
+[5] D. Korenblum and D. Shalloway, Phys. Rev. E 67 (2003), cited in appendix and available
+
+online at http://prola.aps.org/pdf/PRE/v67/i5/e056704.
+
+[6] S. D. Kamvar, D. Klein, and C. D. Manning, in Proc. International Joint Conference on
+
+[7] A. Y. Ng, M. I. Jordan, and Y. Weiss, in Proceedings of the 14th Neural Information Processing
+
+Artiﬁcial Intelligence (2003).
+
+Systems Conference (2002).
+
+New York, NY, 1993), pp. 743–748.
+
+[8] C. J. Alpert and A. B. Kahng, in ACM IEEE Design Automation Conference (ACM Press,
+
+[9] C. J. Alpert, A. B. Kahng, and S.-Z. Yao, Discrete Applied Mathematics 90, 3 (1999).
+
+62
+
+[10] P. K. Chan, M. D. F. Schlag, and J. Y. Zien, in ACM IEEE Design Automation Conference
+
+(ACM Press, New York, NY, 1993), pp. 749–754.
+
+[11] L. Hagen and A. Kahng, IEEE Trans. on CAD 11, 1074 (1992).
+
+[12] J. Shi and J. Malik, in Proceedings of IEEE Conference on Computer Vision and Pattern
+
+Recognition (1997), pp. 731–737.
+
+[13] S. T. Barnard and H. D. Simon, Concurrency: Practice and Experience 6, 101 (1994).
+
+[14] B. Hendrickson and R. Leland, SIAM J. Scientiﬁc Computing 16, 452 (1995).
+
+[15] E. R. Barnes, SIAM J. Alg. Disc. Meth. 3, 541 (1982).
+
+[16] M. R. Garey, D. S. Johnson, and L. Stockmeyer, in Proc. ACM Symposium on Theory of
+
+Computing (1974), pp. 47–63.
+
+[17] M. Fiedler, Czechoslovak Mathematical Journal 25, 619 (1975).
+
+[18] B. Mohar, in Graph Theory, Combinatorics, and Applications, edited by Y. Alavi, G. Char-
+
+trand, O. R. Oellermann, and A. J. Schwenk (Wiley, 1991), vol. 2, pp. 871–898.
+
+[19] N. Cristianini, J. Shawe-Taylor, and J. Kandola, in Proc. Neural Information Processing Sys-
+
+tems Conference (2001).
+
+[20] F. Rendl and H. Wolkowicz, Annals of Operations Research 58, 155 (1995).
+
+[21] K. M. Hall, Management Science 17, 219 (1970).
+
+[22] G. L. Scott and H. C. Longuet-Higgins, in Proceedings of British Machine Vision Conference
+
+(1990), pp. 103–108.
+
+[23] P. Deuﬂhard, W. Huisinga, A. Fischer, and C. Sch¨utte, Lin. Alg. Appl. 315, 39 (2000).
+
+[24] M. Meil˘a and J. Shi, in Proc. International Workshop on Artiﬁcial Intelligence and Statistics
+
+[25] C. Sch¨utte and W. Huisinga, Handbook of Numerical Analysis X, 699 (2003).
+
+[26] L. Zelnik-Manor and P. Perona, in Proc. Neural Information Processing Systems Conference
+
+(2001).
+
+(2004).
+
+[27] S. Guattery and G. L. Miller, in Proc. ACM-SIAM Symposium on Discrete Algorithms (SIAM,
+
+Philadelphia, PA, 1995), pp. 233–242.
+
+[28] D. A. Spielman and S.-H. Teng, in Proc. Annual Symposium on Foundations of Computer
+
+Science (IEEE Computer Society, Washington, DC, 1996), pp. 96–105.
+
+[29] H. D. Simon and S.-H. Teng, SIAM J. Scientiﬁc Computing 18, 1436 (1997).
+
+[30] R. Kannan, S. Vempala, and A. Vetta, in Proc. Annual Symposium on Foundations of Com-
+
+63
+
+puter Science (IEEE Computer Society, Washington, DC, 2000), pp. 367–377.
+
+[31] M. Belkin and P. Niyogi, Neural Computation 15, 1373 (2003).
+
+[32] D. Harel and Y. Koren, in Proc. Conference on Foundations of Software Technology and
+
+Theoretical Computer Science (Springer-Verlag, London, UK, 2001), pp. 18–41.
+
+[33] B. Nadler, S. Lafon, R. R. Coifman, and I. G. Kevrekidis, in Proc. Neural Information Pro-
+
+[34] B. Nadler, S. Lafon, R. R. Coifman, and I. G. Kevrekidis, Applied and Computational Har-
+
+cessing Systems Conference (2005).
+
+monic Analysis 21, 113 (2006).
+
+[35] N. Tishby and N. Slonim, in Proc. Neural Information Processing Systems Conference (2000).
+
+[36] L. Yen, D. Vanvyve, F. Wouters, F. Fouss, M. Verleysen, and M. Saerens, in Proc. European
+
+Symposium on Artiﬁcial Neural Networks (2005), pp. 317–324.
+
+[37] M. B. Eisen, P. T. Spellman, P. O. Brown, and D. Botstein, Proc. Natl. Acad. Sci. USA 95,
+
+14863 (1998).
+
+(2005), pp. 845–850.
+
+[38] W. Pentney and M. Meila, in Proceedings of the National Conference on Artiﬁcial Intelligence
+
+[39] A. G. Murzin, S. E. Brenner, T. Hubbard, and C. Chothia, J. Mol. Biol. 247, 536 (1995).
+
+[40] R. Kubo, M. Toda, and N. Hashitsume, Statistical Physics II: Nonequilibrium Statistical Me-
+
+chanics (Springer-Verlag, New York, 1985).
+
+[41] J.-P. Ryckaert and A. Bellemans, Chem. Phys. Lett. 30, 123 (1977).
+
+[42] S. Chandrasekhar, Rev. Mod. Phys. 15, 1 (1943).
+
+[43] D. Shalloway, J. Chem. Phys. 105, 9986 (1996).
+
+[44] A. Ulitsky and D. Shalloway, J. Chem. Phys. 109, 1670 (1998).
+
+[45] M. Meil˘a and J. Shi, in Proc. Neural Information Processing Systems Conference (2000).
+
+[46] G. W. Stewart, in Mathematical Computer Performance and Reliability, edited by G. Iazeolla,
+
+P. J. Courtois, and A. Hordijk (Elsevier, North Holland, 1984), pp. 287–302.
+
+[47] Y. Weiss, in Proceedings of IEEE International Conference on Computer Vision (1999), pp.
+
+975–982.
+
+[48] G. W. Stewart, SIAM Review 15, 727 (1973).
+
+[49] S. F. Altschul, W. Gish, E. W. Meyers, and D. J. Lipman, J. Mol. Biol. 215, 403 (1990).
+
+[50] P. Pipenbacher, A. Schliep, S. Schneckener, A. Sch¨onhuth, D. Schomburg, and R. Schrader,
+
+Bioinformatics 1, 1 (2002).
+
+64
+
+[51] S. F. Altschul, T. L. Madden, A. A. Schaﬀer, J. Zhang, Z. Zhang, W. Miller, and D. J. Lipman,
+
+Nucl. Acids Res. 25, 3389 (1997).
+
+[52] A. J. Enright, S. Van Dongen, and C. A. Ouzounis, Bioinformatics 30, 1575 (2002).
+
+[53] A. J. Enright and C. A. Ouzounis, Bioinformatics 16, 451 (2000).
+
+[54] G. H. Golub and C. F. Van Loan, Matrix Computations (John Hopkins U. Press, Baltimore,
+
+Md., 1996), 3rd ed.
+
+[55] D. A. Spielman and S. Teng, Journal of the ACM 51, 385 (2004).
+
+[56] D. C. Sorensen, SIAM J. Matrix Anal. Appl. 13, 357 (1992).
+
+[57] E. Anderson, Z. Bai, S. Blackford, J. Demmel, J. Dongarra, J. Du Croz, A. Greenbaum,
+
+S. Hammarling, A. McKenney, and D. Sorensen, LAPACK Users’ Guide (SIAM, Philadelphia,
+
+PA, 1999).
+
+[58] I. Dhillon, Tech. Rep. UCB/CSD-97-971, UC Berkeley (1997).
+
+[59] Z. Bai, J. Demmel, J. Dongarra, J. Langou, and J. Wang, in CRC Handbook of Linear Algebra,
+
+edited by L. Hogben (CRC Press, 2006), pp. 75–1–75–24.
+
+[60] R. Lehoucq and D. Sorensen, in Templates for the Solution of Algebraic Eigenvalue Problems:
+
+A Practical Guide, edited by Z. Bai, J. Demmel, J. Dongarra, A. Ruhe, and H. van der Vorst
+
+[61] R. Lehoucq and D. Sorensen, in Templates for the Solution of Algebraic Eigenvalue Problems:
+
+A Practical Guide, edited by Z. Bai, J. Demmel, J. Dongarra, A. Ruhe, and H. van der Vorst
+
+(SIAM, Philadelphia, 2000).
+
+(SIAM, Philadelphia, 2000).
+
+[62] F. A. M. Gomes and D. C. Sorensen, Tech. Rep. TR97729, Rice University (1997).
+
+[63] R. B. Lehoucq, D. C. Sorensen, and C. Yang, ARPACK Users’ Guide: Solution of Large-Scale
+
+Eigenvalue Problems with Implicitly Restarted Arnoldi Methods (SIAM, Philadephia, 1998).
+
+[64] A.
+
+Makhorin,
+
+GNU
+
+linear
+
+programming
+
+kit:
+
+Reference
+
+manual
+
+http://www.gnu.org/software/glpk (2006).
+
+[65] C. Stimming, Lapack++ (http://lapackpp.sourceforge.net) (2006).
+
+[66] D. Verma and M. Meil˘a, Tech. Rep. UW CSE 03-05-01, University of Washington (2003).
+
+[67] A. Pothen, H. D. Simon, and K.-P. Liou, SIAM Journal on Matrix Analysis 11, 430 (1990).
+
+[68] P. Drineas, A. Frieze, R. Kannan, S. Vempala, and V. Vinay, in Proc. ACM-SIAM Symposium
+
+on Discrete Algorithms (SIAM, Philadelphia, PA, 1999), pp. 291–299.
+
+[69] J. D. Chodera, W. C. Swope, J. W. Pitera, and K. A. Dill, Multiscale Model. Simul. 5, 1214
+
+65
+
+(2006).
+
+[70] J. Kubelka, J. Hofrichter, and W. A. Eaton, Curr. Opin. Struct. Biol. 14, 76 (2004).
+
+[71] W. C. Swope, J. W. Pitera, and F. Suits, J. Phys. Chem. B 108, 6571 (2004).
+
+[72] N. Singhal, C. D. Snow, and V. S. Pande, J. Chem. Phys. 121, 415 (2004).
+
+[73] C. Sch¨utte, A. Fischer, W. Huisinga, and P. Deuﬂhard, J. Comput. Phys. 151, 146 (1999).
+
+[74] Y. Sugita and Y. Okamoto, Chem. Phys. Lett. 314, 141 (1999).
+
+[75] H. M. Berman, J. Westbrook, Z. Feng, G. Gilliland, T. N. Bhat, H. Weissig, I. N. Shindyalov,
+
+and P. E. Bourne, Nucleic Acids Research 28, 235 (2000).
+
+[76] S. E. Brenner, C. Chothia, T. J. P. Hubbard, and A. G. Murzin, Methods in Enzymology
+
+266, 635 (1996).
+
+[77] Y. Zhang and J. Skolnick, Proteins: Structure, Function, and Bioinformatics 57, 702 (2004).
+
+66
+
+

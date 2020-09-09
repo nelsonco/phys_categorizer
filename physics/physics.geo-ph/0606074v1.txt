@@ -1,0 +1,5313 @@
+6
+0
+0
+2
+ 
+n
+u
+J
+ 
+7
+ 
+ 
+]
+h
+p
+-
+o
+e
+g
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+4
+7
+0
+6
+0
+6
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+COMPUTATION OF A COMBINED SPHERICAL-ELASTIC AND
+VISCOUS-HALF-SPACE EARTH MODEL FOR ICE SHEET SIMULATION
+
+ED BUELER1, CRAIG S. LINGLE2, AND JED A. KALLEN-BROWN1
+
+Abstract. This report starts by describing the continuum model used by Lingle & Clark
+(1985) to approximate the deformation of the earth under changing ice sheet and ocean
+loads. That source considers a single ice stream, but we apply their underlying model to
+continent-scale ice sheet simulation. Their model combines Farrell’s (1972) elastic spherical
+earth with a viscous half-space overlain by an elastic plate lithosphere. The latter half-space
+model is derivable from calculations by Cathles (1975). For the elastic spherical earth we
+use Farrell’s tabulated Green’s function, as do Lingle & Clark. For the half-space model,
+however, we propose and implement a signiﬁcantly faster numerical strategy, a spectral
+collocation method (Trefethen 2000) based directly on the Fast Fourier Transform. To
+verify this method we compare to an integral formula for a disc load. To compare earth
+models we build an accumulation history from a growing similarity solution from (Bueler,
+et al. 2005) and and simulate the coupled (ice ﬂow)-(earth deformation) system.
+In the
+case of simple isostasy the exact solution to this system is known. We demonstrate that the
+magnitudes of numerical errors made in approximating the ice-earth system are signiﬁcantly
+smaller than pairwise diﬀerences between several earth models, namely, simple isostasy, the
+current standard model used in ice sheet simulation (Greve 2001, Hagdorn 2003, Zweck
+& Huybrechts 2005), and the Lingle & Clark model. Therefore further eﬀorts to validate
+diﬀerent earth models used in ice sheet simulations are, not surprisingly, worthwhile.
+
+1. Two linear earth models and their Green’s functions
+
+Lingle & Clark (1985) use as their fundamental tools the Green’s functions of two diﬀerent
+linear earth models. The Green’s functions for these models are convolved with the load to
+compute (vertical) displacements of the earth’s surface. One ﬁnds an elastic displacement
+uE and a viscous displacement uV given a current load and a load history, respectively, as
+we will explain. The total displacement is then the sum u = uE + uV at any time. That is,
+the two linear models are superposed.
+
+The partial diﬀerential equations (PDEs) behind these Green’s functions are linear. In
+this report we state these PDEs, which is, in the case of the second model, a nontrivial
+accomplishment (see section 3). We then approximately solve these PDEs in a demonstra-
+bly eﬃcient manner. First, however, we describe the two models and their sources in the
+literature.
+
+Draft February 2, 2008.
+1Dept. of Mathematics and Statistics, Univ. of Alaska, Fairbanks AK 99775-6660. Email ffelb@uaf.edu.
+2Geophysical Institute, Univ. of Alaska, Fairbanks AK 99775-6660.
+
+2
+
+BUELER AND OTHERS
+
+An elastic, self-gravitating spherical earth. The main equations of this model are
+labeled (27) in (Farrell 1972):
+
+τ
+
+(ρg s
+
+∇ ·
+
+− ∇
+
+·
+
+er)
+−
+2φ =
+
+∇
+
+ρ
+
+φ + g
+
+∇
+4πG
+
+−
+
+∇ ·
+
+∇ ·
+
+(ρ s)
+
+(ρ s) er + ρ¨s = 0,
+
+Here ρ = ρ(r) is the density of the earth. (We restrict to only radial dependence because
+the densities used by (Farrell 1972) are for “stratiﬁed” earths.) Also, g is the acceleration
+of gravity, τ is the full stress tensor, and s is the displacement vector ﬁeld (i.e. the strain
+ﬁeld) which we seek. The gravitational potential φ is described below. Note that ˙s = u is
+the velocity ﬁeld and that ¨s is just the acceleration.
+
+The ﬁrst equation comes from formally linearizing the equation of conservation of momen-
+tum. The second equation is for the gravitational potential. The ﬁeld φ is the additional
+gravitational potential “on top of” that caused by the undeformed earth and also additional
+to the potential of any masses outside the earth (including the load).
+In Farrell’s words
+“. . . φ is the perturbation in the ambient graviational potential φ1 plus the potential of any
+externally applied graviational force ﬁeld φ2.”
+
+Actually, equation (27) in (Farrell 1972) has “
+
+ω2ρ s” where we have “ρ¨s” because Farrell
+only states the Fourier-transformed-in-time equations. We will only be interested in the
+¨s = 0, equivalently ω = 0 case, however, because we are interested in phenomena on the
+scale of years or centuries, unlike Farrell who was interested in tides.
+
+−
+
+Consider point forces or disk loads at the surface. For such loads it is natural to use
+spherical coordinates (r, θ, ϕ) where the z-axis is along the line between the center of the
+earth and the center of the load. Here θ is the angle between the position vector and the
+z-axis (i.e. the colatitude) and ϕ is the longitude. The load is at the “north pole.”
+
+For the resulting stratiﬁed problem we seek the components of s which do not vanish,
+namely sr and sθ in s = sr(r, θ)er +sθ(r, θ)eθ. By symmetry the “toroidal” component of the
+strain, sϕ, vanishes everywhere. Also we seek the potential φ = φ(r, θ). The functions sr, sθ, φ
+are expanded in spherical harmonics with radially-dependent coeﬃcients; see equation (28)
+in (Farrell 1972). The radially-dependent coeﬃcients, for each degree in the expansion, solve
+a system of ODEs in the radial coordinate r. Using a radially-dependent density for the
+earth these can be solved numerically by standard ODE means. Note that (Farrell 1972) and
+(Lingle & Clark 1985) choose the “Gutenberg-Bullen A” model. For the Green’s function
+corresponding to a point load, Farrell has done this using a Runge-Kutta method, and we
+accept and use the tabulated result.
+
+Following (Lingle & Clark 1985) we are only interested in the vertical displacement of the
+surface of the earth, and therefore the vertical displacement u(θ) corresponding to a point
+load is the Green’s function we seek.
+In terms of the spherical harmonics expansion the
+relevant equation is equation (37) in (Farrell 1972). Farrell computes this Green’s function
+and reports its values at particular distances in his table A3. Table 1 in (Lingle & Clark 1985)
+also reports this data. One must be clear on normalization so a plot is in order here. Let
+GE(r) be the vertical displacement caused by a 1 kg mass at the north pole and evaluated at
+a distance r along the surface of the earth. (The coordinate r here has a diﬀerent meaning
+from the spherical coordinate of the same name. Speciﬁcally, the new variable r = aθ if a
+is the radius of the earth and θ is the spherical coordinate, the radian colatitude.) Figure 1
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+3
+
+shows GE(r). There is a 1/r singularity to this elastic Green’s function, in contrast to the
+Green’s function for the ﬂat, viscous model which follows.
+
+10
+
+0
+
+−10
+
+−20
+
+−30
+
+)
+r
+(
+
+E
+G
+
+ 
+ 
+r
+ 
+ 
+
+2
+1
+
+0
+1
+
+−40
+10
+
+−2
+
+−12
+
+x 10
+
+1
+
+0
+
+−1
+
+)
+
+m
+
+(
+ 
+ 
+ 
+)
+r
+(
+
+E
+G
+
+−2
+
+−3
+
+−4
+10
+
+−2
+
+0
+10
+
+2
+10
+
+4
+10
+
+r  (km)
+
+0
+10
+
+2
+10
+
+r  (km)
+
+4
+10
+
+Figure 1. Two views of the vertical surface displacement Green’s function
+GE (r) for the elastic spherical self-gravitating earth model (Farrell 1972).
+Here r is the distance along the surface of the earth from the point of applica-
+tion of the load. Left: the smooth normalized form rGE(r). Right: the same
+data without normalization, suggesting the actual 1/r singularity. Note log
+scale on the horizontal axes.
+
+This elastic Green’s function is used as described in equation (20) in (Lingle & Clark 1985)
+and as follows. Suppose we seek the vertical displacement uE = uE(x, y, t), caused by elastic
+deformation of the spherical earth. Suppose the load at time t is given by the function
+Ψ(x, y, t), with units of mass per unit area. Then
+
+uE(x, y, t) =
+
+GE(
+r
+|
+
+−
+
+r′
+
+)Ψ(x′, y′, t) dx′dy′,
+|
+
+(1)
+
+Z ZR
+x′)2 + (y
+
+y′)2, of course, and where R denotes a map-plane
+where we deﬁne
+region containing the load. Clearly the displacement uE depends on time only through the
+changing load; elastic changes are instantaneous.
+
+2 = (x
+|
+
+r
+|
+
+−
+
+−
+
+−
+
+r′
+
+In using (1) we necessarily project the earth’s geoid into a ﬁxed plane. This projection
+means our results are limited to an appropriately small region of the earth’s surface. We do
+integral (1) numerically as explained in section 2.
+
+A viscous, ﬂat earth overlain by an elastic plate. Next we describe the time-dependent
+Green’s function for a model which comes from (Cathles 1975). The PDE actually solved by
+this Green’s function is given in section 3.
+
+Cathles’ sub-subsection III.A.2.e, pp. 50–55, describes a viscous half-space asthenosphere
+overlain by an elastic plate lithosphere. An important point about this model, which partly
+explains the superposition “uE + uV ” used by (Lingle & Clark 1985), is that the elastic plate
+lithosphere used here deﬂects but does not compress in the vertical. Therefore all vertical
+motion in this model is really asthenosphere motion, though the elastic plate spreads the
+inﬂuence of any load. The just-described spherical elastic earth exhibits elastic compression,
+however.
+
+4
+
+BUELER AND OTHERS
+
+Unfortunately, all we are given in (Cathles 1975) are the Hankel transforms of the actual
+equations. Roughly speaking, from (Cathles 1975) we use equation (III-35) along with the
+deﬁnitions of “α” and “D” contained in the footnote on page 52 (Lingle 2005, personal
+communication). Precisely speaking, however, our source is (Lingle & Clark 1985), from
+which we use equations (4), (7), and (8)–(14). We will also use the particular choices of layer
+thickness, viscosity, and ﬂexural rigidity for the “two-layer” model from that source. We now
+repeat some equations from (Lingle & Clark 1985) as needed for clarity.
+
+Let uV (r, t) be the vertical displacement of the surface supposing a point load at the origin
+
+r = 0 applied at time t = 0 and held. Consider the Hankel transform of this function
+∞
+
+¯uV (κ, t) =
+
+uV (r, t)J0(κr)r dr,
+
+0
+
+Z
+
+where J0 is the Bessel function of zero order (see Appendix A). The Hankel transform is
+self-inverse, so uV can be recovered from ¯uV by the same integral.
+
+The half-space model hypothesizes (Lingle & Clark 1985) that ¯uV solves the equation
+
+where
+
+∂ ¯uV
+∂t
+
++
+
+ρrgα(κ)
+2ηκ
+
+¯uV =
+
+¯σzz(κ, t)
+2ηκ
+
+α(κ) = 1 +
+
+and D =
+
+Dκ4
+ρrg
+
+ET 3
+
+12(1
+
+−
+
+.
+
+ν2)
+
+¯σzz(κ, t) =
+
+H(t),
+
+g
+2π
+
+−
+
+We denote by ¯σzz the Hankel transform of the normal stress from a point load applied at the
+origin
+
+in units of N m−2, corresponding to a point mass of 1 kg. Here H(t) is the Heaviside function
+(H(t) = 1 for t
+0 and H(t) = 0 otherwise). Note ¯σzz(κ, t) is the Hankel transform of
+σzz(r, t) =
+gδ0(r)H(t) where δ0(r) is the Dirac delta function at the origin which acts on
+functions on the plane.1 The initial condition to (2) is the condition of zero displacement
+
+−
+
+≥
+
+¯uV (κ, 0) = 0.
+
+That is, ¯uV (κ, t) is the Hankel transform of the Heaviside Green’s function of an as yet
+unstated PDE of which (2) is the Hankel-transformed version; see section 3 for clariﬁcation
+of this description.
+
+Poisson’s ratio and Young’s modulus for the elastic plate lithosphere are assumed to be
+1010 M/m2, respectively. The lithosphere thickness T is assumed to
+ν = 0.5 and E = 6.6
+1024 N m. The density and viscosity of
+be 88 km. The resulting ﬂexural rigidity is D = 5.0
+the ﬂuid in the underlying half-space are assumed to be ρr = 3300 kg/m3 and η = 1021 Pa s,
+respectively.
+
+×
+
+×
+
+Equation (2) is an uncoupled set of linear ﬁrst order ODEs in time. That is, the spatial
+Hankel transform has done its job and turned a PDE into a solvable system. Let2 β(κ) =
+ρrgα(κ) = ρrg + Dκ4. The solution of (2) and (3) is
+
+¯uV (κ, t) =
+
+g
+2πβ(κ)
+
+−
+
+(cid:16)
+
+1
+
+exp [
+
+β(κ)t/(2ηκ)]
+
+−
+
+−
+
+(cid:17)
+
+1See Appendix A and especially equation (42) for the deﬁning property of δ0(r).
+2Use of β instead of α represents an admittedly minor simpliﬁcation of the notation in (Lingle & Clark
+
+1985).
+
+(2)
+
+(3)
+
+(4)
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+5
+
+−
+
+−
+
+g
+2π
+
+−
+
+0
+Z
+
+for t > 0 and ¯uV (κ, t) = 0 for t
+transform, we have the following integral formula for the Green’s function:
+∞
+
+≤
+
+0. Because of the self-inverse property of the Hankel
+
+GV (r, t) = uV (r, t) =
+
+β(κ)−1
+
+1
+
+exp [
+
+β(κ)t/(2ηκ)]
+
+J0(rκ) κ dκ,
+
+(5)
+
+(cid:16)
+for t > 0 and GV (r, t) = 0 for t < 0. This formula is equation (14) in (Lingle & Clark 1985).
+Note GV has units m kg−1; see formula (6) below.
+
+(cid:17)
+
+As far as we know the integral (5) must be computed numerically. Furthermore there
+seems to be no one-dimensional procedure analogous to the Fast Fourier Transform (FFT)
+(Bracewell 1978) to do the job quickly. Our strategy for the similar disc load integral (Ap-
+pendix B) is to break up the oscillatory integral into more than 100 subintervals and call
+an adaptive quadrature routine for each subinterval. This strategy is essentially the same as
+that described on page 1104 of (Lingle & Clark 1985) for (5).
+
+Unlike the elastic case, the Green’s function GV is time-dependent. A graph of GV for
+several t values is shown in ﬁgure 2. The viscous behavior is clear, as is the role of the
+elastic plate lithosphere in removing any singularity at r = 0. Note that the peripheral bulge
+develops only at large times; compare the “standard” model in section 4.
+
+−15
+
+x 10
+
+)
+
+m
+
+(
+ 
+ 
+
+V
+G
+
+0.5
+
+0
+
+−0.5
+
+−1
+
+−1.5
+
+−2
+
+−2.5
+
+−3
+
+−3.5
+10
+
+−2
+
+0
+10
+
+2
+10
+
+4
+10
+
+r  (km)
+
+Figure 2. Green’s function GV (r, t) for the viscous ﬂat earth model. The
+curves are from times given in table 1 in (Lingle & Clark 1985); compare
+ﬁgure ﬁgure 5(a) there. The top curve is at t = 20 years and the bottom at
+105 years. Not log scale on the horizontal axis.
+
+A method for using GV to compute the response to arbitrary load is described in equations
+(19) and (22) in (Lingle & Clark 1985), and as follows. Suppose there is a load function
+Ψ(x, y, t), with units of mass per unit area, on some region R of our map-plane. The time rate
+of change of this load function, or, equivalently, the incremental changes in this load function,
+are what we sum using GV to ﬁnd the general (viscous) displacement uV = uV (x, y, t) of the
+surface. In fact, let
+
+λ(x, y, t) =
+
+(x, y, t).
+
+∂Ψ
+∂t
+
+6
+
+BUELER AND OTHERS
+
+Then Lingle & Clark assert (with a heuristic motivation; pp. 1105–1106) that:
+
+uV (x, y, t) =
+
+t
+
+GV (
+r
+|
+
+−
+
+r′
+
+, t
+|
+
+−
+
+−∞ Z ZR
+Z
+
+t′)λ(x′, y′, t′) dx′ dy′ dt′.
+
+(6)
+
+Note that the right side of (6) has units of length because GV has units m kg−1, as noted,
+and λ has units kg m−2 s−1.
+
+Lingle & Clark (1985) describe the function λ discretely, thereby incorporating an approx-
+imation of the rate of change of the load. Some such approximation is essential in practice,
+of course. They suppose a ﬁxed sequence of past times
+
+and deﬁne
+
+Λ(x, y, ti) =
+
+λ(x, y, t) dt = Ψ(x, y, ti)
+
+Ψ(x, y, ti−1),
+
+ti
+
+ti−1
+
+Z
+
+ti}
+{
+
+−
+
+so
+
+uV (x, y, t)
+
+≈
+
+Xi Z ZR
+
+GV (
+r
+|
+
+−
+
+r′
+
+, t
+|
+
+−
+
+ti)Λ(x′, y′, ti) dx′ dy′;
+
+(7)
+
+compare equations (16) and (17) in (Lingle & Clark 1985).
+
+2. The load response matrix method
+
+×
+
+−
+
+−
+
+[
+−
+
+Lx + (j
+
+Lx, Lx]
+
+1/2)∆x,
+j
+
+Suppose now that the map-plane region R is divided into a grid of rectangular elements of
+area ∆x∆y. Concretely, suppose R = [
+Ly, Ly] is a rectangular region, suppose
+Nx, Ny are positive integers, and let ∆x = (2Lx)/Nx, ∆y = (2Ly)/Ny. Center each element
+at (xj, yk) = (
+1/2)∆y). There are M = NxNy elements, each
+−
+−
+k
+denoted by a pair (j, k) for 1
+≤
+
+Ny.
+We deﬁne the elastic load response matrix (LRM)
+
+, j, m = 1, . . . , Nx, k, n =
+1, . . . , Ny, as the vertical displacement of element (j, k) caused by a unit change in ice thick-
+ness within element (m, n); compare (Lingle & Clark 1985) page 1106. This displacement is
+assumed constant within element (j, k). (As it stands, this description applies only to the
+elastic spherical model in the previous section. Slightly diﬀerent conventions apply to the
+LRM for the viscous earth model; see below.)
+
+Ly + (k
+Nx, 1
+
+Γ(jk)(mn)
+
+−
+≤
+
+≤
+
+≤
+
+(cid:8)
+
+(cid:9)
+
+We compute
+
+Γ(jk)(mn)
+
+by integrating over element (m, n):
+
+(cid:8)
+Γ(jk)(mn) = ρi
+
+(cid:9)
+yn+∆y/2
+
+xm+∆x/2
+
+yn−∆y/2 Z
+Z
+
+xm−∆x/2
+
+(cid:18)q
+
+GE
+
+(xj −
+
+x)2 + (yk −
+
+y)2
+
+(cid:19)
+
+dx dy,
+
+(8)
+
+where ρi = 910 kg m−3 is the density of ice. Note that the load per unit area (i.e. Ψ in the
+last section) for a unit (i.e. one meter) change in ice thickness on a rectangle of area ∆x∆y
+is
+
+Ψ =
+
+mass
+area
+
+=
+
+ρi(1
+
+∆x
+·
+·
+∆x∆y
+
+∆y)
+
+= ρi.
+
+That is, equation (8) is a special case of equation (1).
+
+Γ(jk)(mn)
+
+The matrix
+
+M if we linearly order all elements; alternatively Γ could
+be regarded as a “4-tensor” with indices j, k, m, n. There are symmetries in this object, and
+we may exploit them to compute roughly (2Nx)(2Ny) = 4M integrals (8) rather than doing
+
+is M
+
+×
+
+(cid:9)
+
+(cid:8)
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+7
+
+an integral for each of the M 2 entries of Γ(jk)(mn). In fact, if we change variables in (8) by
+x = xm −
+
+ξ, y = yn −
+
+ζ then we get
+
+Γ(jk)(mn) = ρi
+
+∆y/2
+
+∆x/2
+
+−∆y/2 Z
+Z
+
+−∆x/2
+
+I E(p, q) =
+
+∆y/2
+
+∆x/2
+
+(cid:16)p
+
+GE
+
+Let
+
+for
+
+Nx + 1
+
+−
+
+p
+
+≤
+
+≤
+
+−∆y/2 Z
+Z
+1,
+Nx −
+−
+
+GE
+
+((j
+
+m)∆x
+
+ξ)2 + ((k
+
+n)∆y
+
+ζ)2
+
+dξ dζ.
+
+−
+
+−
+
+−
+
+−
+
+(cid:17)
+
+−∆x/2
+
+≤
+
+≤
+
+(cid:16)p
+Ny −
+Ny + 1
+q
+Γ(jk)(mn) = ρiI E(j
+1)(2Ny −
+
+(p∆x
+
+ξ)2 + (q∆y
+
+ζ)2
+
+dξ dζ
+
+(9)
+
+−
+1. Then
+
+−
+
+(cid:17)
+
+m, k
+
+n).
+
+−
+
+−
+1) entries of I E.
+
+Integral (9) can be done
+) by interpolation between the values
+
+We need only compute the (2Nx −
+numerically, getting values for the integrand GE(
+computed by Farrell.
+
+· · ·
+
+Now let H(mn) be the average value of the ice thickness H(x, y, t) over element (m, n).
+Nx,Ny
+m,n=1 the load vector. (Technically it is a thickness
+Following Lingle & Clark we call
+vector, actually; if the load is actually liquid water one computes the equivalent thickness
+to give values H(mn).) Integral (1), which gives the elastic displacement from the load, is
+approximated by
+
+H(mn)
+
+(cid:9)
+
+(cid:8)
+
+uE(xj, yk, t)
+
+Γ(jk)(mn)H(mn) =
+
+ρi I E(j
+
+m, k
+
+n) H(mn).
+
+−
+
+−
+
+(10)
+
+Nx
+
+Ny
+
+≈
+
+m=1
+X
+
+n=1
+X
+
+Nx
+
+Ny
+
+m=1
+X
+
+n=1
+X
+
+Note that as a straightforward matrix-vector product, (10) requires M = NxNy scalar mul-
+tiplications to compute the elastic displacement in the (j, k) element, and thus M 2 multipli-
+cations are required to update uE at each timestep.
+
+A comparable LRM approximation applies to the viscous model. Let
+
+Nt
+i=1 be a de-
+creasing sequence of Nt positive times. These values are time intervals before the present
+time; table 3 in (Lingle & Clark 1985) gives a list of 26 values. Let Φi
+(jk)(mn) be the displace-
+ment in element (j, k) caused by a change in ice thickness of 1 meter in element (m, n) at
+time ∆ti before the current time. From (7),
+
+∆ti}
+{
+
+yn+∆y/2
+
+xm+∆x/2
+
+Φi
+
+(jk)(mn) = ρi
+
+(xj −
+yn−∆y/2 Z
+Compare to equation (8) for the elastic case. Let Λi
+in ice thickness H(x, y, t
+
+H(x, y, t
+
+xm−∆x/2
+
+(cid:18)q
+
+∆ti+1)
+
+Z
+
+GV
+
+x)2 + (yk −
+
+y)2, ∆ti
+
+dx dy.
+
+(11)
+
+(cid:19)
+
+(mn) be the average value of the change
+
+∆ti) over element (m, n). Then
+
+−
+
+−
+
+uV (xj, yk, t)
+
+≈
+
+−
+Nx
+
+Ny
+
+Nt
+
+Xm=1
+As it stands, matrix-vector product (12) requires NtM = NtNxNy scalar multiplications to
+compute the (j, k) element, thus NtM 2 multiplications to update uV .
+
+Xn=1
+
+Xi=1
+
+As noted at the beginning, we superpose the results from these elastic and viscous LRM
+
+Φi
+
+(jk)(mn)Λi
+
+(mn).
+
+(12)
+
+approximations:
+
+u(xj, yk, t)
+
+Γ(jk)(mn)H(mn) +
+
+Φi
+
+(jk)(mn)Λi
+
+(mn).
+
+(13)
+
+≈
+
+m,n
+X
+
+m,n
+Xi X
+
+Compare equation (25) in (Lingle & Clark 1985).
+
+8
+
+BUELER AND OTHERS
+
+We are concerned with computability in reasonable time. By using (13) to update every
+
+element at a given simulation timestep requires
+
+(1 + Nt)
+
+M
+
+·
+
+·
+
+M = O(NtM 2) = O(NtN 2
+
+x N 2
+y )
+
+(14)
+
+scalar multiplications. Lingle & Clark (1985) used M = 38, as this was the number of 50 km
+long elements into which the ﬂowline—a single ice stream and included ocean—was divided.
+For Antarctica simulations with ∆x on the order of 50 km or so, the minimum reasonable
+number of elements is Nx = Ny at least 80 so M
+6400. Note that Nt is roughly independent
+of the nature of the problem, as long as it involves large amounts of polar ice. Thus by (14)
+an Antarctica problem is roughly a factor of
+
+≥
+
+(64002)/(382)
+
+3
+
+≈
+
+×
+
+104
+
+times more expensive in computation than the problem addressed in (Lingle & Clark 1985) if
+one directly implements the load response matrix method using matrix multiplication. Such
+poor scaling of this numerical method clearly represents a danger when using it in an ice
+sheet simulation.
+
+A major speedup is possible if one uses the convolution sum form of the multiplication,
+as in equation (10) when I E is used. (An obvious corresponding construction of a function
+I V (p, q, t) is needed to make the viscous LRM computations above into convolutions. As it
+turns out, we will not need that construction.) Convolutions sums can be quickly computed
+by the Fast Fourier Transform (FFT). Using standard estimates on the time for the FFT
+(Briggs & Henson 1995), we can reduce the time to
+
+(1 + Nt)
+
+M log M = O(NtNxNy log Nx log Ny).
+
+(15)
+
+·
+
+Compare this with (14) above. One must still, however, precompute the LRMs, which turns
+out to be more expensive than solving the whole problem (over quite long time scales) if one
+uses the method of the next section. In addition, the method of the next section eliminates
+a factor of Nt work in a time-dependent simulation. The method of the next section also
+signiﬁcantly reduces memory usage.
+
+3. The straight-from-the-PDE method
+
+Derivation. We now reverse engineer some of the Green’s function and Hankel transform
+“thinking” in the previous sections. We recover the PDE underlying the half-space viscous
+model (2). Actually, the resulting equation is not, technically, a partial diﬀerential equation.
+It is a linear pseudo-diﬀerential equation easily understood through the Fourier transform.
+We have already computed solutions of this PDE by the Hankel transform, by the indirect
+method of Green’s functions. In any case, analyzing the new PDE will lead to a much more
+eﬃcient method for computing deformation in the half-space model. We must still use, for
+now, the Green’s function and LRM for the elastic response computed from the Farrell (1972)
+spherical earth model; we will implement the convolution sum (10) by the FFT.
+
+Returning to equation (2), we apply the inverse Hankel transform. In fact (2) is equivalent
+
+to
+
+∂
+∂t
+
+(2ηκ¯u) + ρrg¯u + Dκ4 ¯u = ¯σzz,
+
+(16)
+
+denoting u = uV for the rest of this section, and with the Hankel transform ¯u = ¯uV . As
+shown in Appendix A, the multiplication by κ1 and κ4 which appear in equation (16) can be
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+9
+
+regarded as the action of operators which are powers of the Laplacian operator. In particular,
+
+=
+
+△
+
+−∇
+
+2 =
+
+∂2
+∂x2 +
+
+∂2
+∂y2
+
+(cid:19)
+
+−
+
+(cid:18)
+
+f (κ) = κ2 ¯f (κ).
+
+△
+
+acts on the Hankel transform of a radial function f = f (r) by multiplication by κ2:
+
+In fact
+factor. The inverse Hankel transform of (16) is
+
+△
+
+is the positive Laplacian as we see it is equivalent to multiplication by a nonnegative
+
+1/2 u
+(cid:17)
+for u(r, t). Equation (17) is the “underlying PDE” for equation (2). The symbol
+for the standard biharmonic fourth-order diﬀerential operator
+
++ ρrgu + D
+
+2u = σzz
+
+2η
+
+△
+
+△
+
+(cid:16)
+
+(17)
+
+2 stands
+
+△
+
+∂
+∂t
+
+1/2 is not a diﬀerential operator but is deﬁnable
+(Sneddon 1951, section 20). The operator
+via the Fourier transform in general; see Appendix A. One can also write equation (17) as
+
+△
+
+2f = fxxxx + 2fxxyy + fyyyy
+
+△
+
+∂
+∂t
+
+|∇|
+
+(2η
+
+u) + ρrgu + D
+
+4u = σzz
+
+∇
+
+if the meaning
+
+= √
+
+2 is understood.
+
+|∇|
+
+−∇
+
+GV (r, t) deﬁned by (5) satisﬁes
+
+To conﬁrm the equivalence of (2) and (17) the reader may verify that the Green’s function
+
+∂
+∂t
+
+(cid:16)
+
+△
+
+(cid:17)
+
+2η
+
+1/2GV
+
++ ρrgGV + D
+
+2GV =
+
+gδ0(r)H(t).
+
+△
+
+−
+
+From now on we remove the assumption of radial load, and suppose equation (17) applies
+for any load σzz(x, y, t). The solution u(x, y, t) is a function of three variables; it is no longer
+radial.
+
+Note that the equilibrium of (17) is a standard rigid plate equation with a bouyant restor-
+
+ing force:
+
+D
+
+4u = σzz −
+
+∇
+
+ρrgu.
+
+(18)
+
+For example, this is equation (8.7.3) in (van der Veen 1999).
+
+The interesting part of (17) is the time-derivative term. This term accounts for viscous
+ﬂow within the mantle. It is not completely clear to the author at the present time why the
+1/2 appears or why it represents the correct diﬀusive behavior. The units
+particular power
+in equation (17) are consistent only with the 1/2 power of the Laplacian, however.
+
+△
+
+The Fourier transform of (17) is worth noting, because, as in the special case of a radial
+load wherein we may use the Hankel transform, we can write the solution as an integral.
+Namely, if ˜u(ξ, ζ, t) is the two-variable, spatial Fourier transform of u(x, y, t),
+∞
+
+∞
+
+˜u(ξ, ζ, t) =
+
+1
+2π
+
+−∞ Z
+Z
+
+−∞
+
+u(x, y, t)e−i(xξ+yζ) dx dy,
+
+then (17) is equivalent to
+
+∂
+∂t
+
+2η
+
+ξ2 + ζ 2
+
+1/2
+
+˜u
+
++ ρrg˜u + D
+
+ξ2 + ζ 2
+
+2
+
+˜u = ˜σzz.
+
+(19)
+
+(cid:16)
+
+(cid:0)
+
+(cid:1)
+
+(cid:17)
+
+(cid:0)
+
+(cid:1)
+
+10
+
+BUELER AND OTHERS
+
+As with equation (2), this is a decoupled system of ﬁrst order ODEs in time. Using initial
+condition u(x, y, t0) the solution is
+
+˜u(ξ, ζ, t) =
+
+t0
+
+Z
+
+t
+
+exp
+
+β(ξ, ζ)(t
+
+s)/(2η(ξ2 + ζ 2)1/2)
+
+−
+
+2η(ξ2 + ζ 2)1/2
+
+(cid:3)
+
+−
+
+(cid:2)
++ exp
+
+β(ξ, ζ)(t
+
+−
+
+h
+
+−
+
+t0)/(2η(ξ2 + ζ 2)1/2)
+i
+
+˜u(ξ, ζ, t0)
+
+˜σzz(ξ, ζ, s) ds
+
+(20)
+
+where β(ξ, ζ) = ρrg + D(ξ2 + ζ 2)2. To ﬁnd u itself one needs to do the inverse Fourier
+transform, and this could, potentially, be done by the FFT. In fact we will compute more
+directly with (17), and we will avoid the integral over time in (20).
+
+Appendix C illustrates the relationship of formula (20) to the Hankel transform formulas
+
+in section 1.
+
+Implementation. We now treat PDE (17) numerically by discretizing using a ﬁnite diﬀer-
+2 using the FFT. Our
+ence method in time and then computing the action of
+method produces a “whole new ball game” numerically relative to integral formulations (the
+LRM method). The resulting new method can be called a Fourier spectral collocation method
+(Trefethen 2000).
+
+1/2 and
+
+△
+
+△
+
+We discretize in time by the trapezoid rule—analogous to the Crank-Nicolson method
+for the heat equation (Morton & Mayers 1994)—and get an unconditionally stable O(∆t2)
+method for equation (17). In particular, let tn = n∆t for n = 0, 1, 2, 3, . . . and let U n(x, y)
+be our approximation of u(x, y, tn). Equation (17) is approximated by
+∆t
+2
+
+(ρrgU n+1 + D
+
+1/2 U n+1
+
+2U n+1)
+
+(21)
+
+2η
+
++
+
+△
+
+(cid:16)
+
+=
+
+2η
+
+△
+
+(cid:16)
+
+(cid:17)
+1/2 U n
+
+∆t
+2
+
+−
+
+(cid:17)
+
+△
+(ρrgU n + D
+
+△
+
+2U n) + ∆t σzz(x, y, t∗).
+
+Here either σzz(x, y, t∗) = σzz(x, y, (n + 1/2)∆t) if the load is known at the time t∗ =
+(n + 1/2)∆t or σzz(x, y, t∗) = 1
+2 (σzz(x, y, tn) + σzz(x, y, tn+1)) if the load is only known at
+the times tn, tn+1; both choices preserve O(∆t2) accuracy and unconditional stability.
+
+Equation (17) needs boundary conditions and, in fact, we assume u(x, y, t)
+
+0, and
+. We also assume that the
+similarly for a suﬃcient number of its derivatives, as (x, y)
+support of the continuous function σzz(x, y, t) is bounded for each t. That is, we assume
+there is a zero boundary condition at inﬁnity for the rigid plate and that the load is zero at
+suﬃcient distance from the origin.
+
+→ ∞
+
+→
+
+With careful attention to the boundary condition at inﬁnity, our PDE in its time-discretized
+form, namely equation (21), can be well-approximated by its discrete Fourier transform
+(DFT) version.3 A very reasonable way to incorporate the DFT is to assume periodicity
+in the spatial variables.4 For convenience we will also assume a square region. In fact, we
+assume L is the half-length of a computational domain (x, y)
+L, L]. This
+domain may be substantially larger in practice than the desired region of physical interest
+[
+L and we want
+[
+Lx, Lx]
+−
+×
+−
+L to act like
+∞
+
+Ly, Ly]. We will apply periodic boundary conditions at x, y =
+
+when we do this. See ﬁgure 3.
+
+Ω = [
+
+L, L]
+
+[
+−
+
+−
+
+×
+
+±
+
+∈
+
+3The discrete Fourier transform is the name of the mathematical operation; the FFT is an algorithm for
+
+computing the DFT (Briggs & Henson 1995).
+
+4Other boundary conditions could be applied along the boundary of Ω—e.g. a clamped condition—but
+
+none of the easily implementable choices are obviously superior.
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+11
+
+periodic boundary
+condition applied here
+
+−L
+
+−L
+x
+
+ L
+x
+
+ L
+
+region of 
+physical 
+interest
+
+L
+
+ L
+y
+
+−L
+y
+
+−L
+
+Figure 3. Fast Fourier Transform methods require periodicity. We impose
+periodic boundary conditions signiﬁcantly far outside the region of modelled
+load changes or signiﬁcant deformation.
+
+The PDE problem to which we apply the DFT is, therefore, Equation (21) on the interior
+L, L] with periodic boundary conditions on the boundary of Ω, and with
+
+L, L]
+
+of Ω = [
+the initial condition that U 0(x, y) is known on Ω.
+
+[
+−
+
+×
+
+−
+
+Note that from (21), if L =
+
+then the (non-discrete) Fourier transform ˜U n =
+
+satisﬁes iteration
+
+∞
+
+˜U n+1(ξ, ζ) =
+
+−
+
+2ηκ
+
+(∆t/2)
+
+ρrg + Dκ4
+
+˜U n(ξ, ζ) + ∆t ˜σzz(ξ, ζ, t∗)
+
+(cid:2)
+
+2ηκ + (∆t/2) (ρrg + Dκ4)
+(cid:0)
+(cid:1)(cid:3)
+
+where κ2 = ξ2 + ζ 2. This is an easily-computed iteration if one can do the (non-discrete)
+Fourier transform
+
+To use the DFT we transform the problem to a standard region ¯Ω = [
+
+π, π]
+
+F2 exactly.
+
+−
+
+π, π]. Let
+
+[
+−
+
+×
+
+X = πx/L, Y = πy/L. Then (21) is equivalent to
+
+2ηµ ¯
+△
+(cid:16)
+
+=
+
+1/2 U n+1
+
++
+
+(cid:17)
+1/2 U n
+
+2ηµ ¯
+△
+(cid:16)
+
+∆t
+2
+
+−
+
+(cid:17)
+
+(ρrgU n+1 + Dµ4 ¯
+△
+
+2U n+1)
+
+∆t
+2
+
+(ρrgU n + Dµ4 ¯
+△
+
+2U n) + ∆t σzz(X, Y, t∗)
+
+on ¯Ω, where U n = U n(X, Y ), µ = π/L, and ¯
+△
+
+=
+Let N be an integer; typically N is a power of 2 for eﬃciency in the FFT. Let h = 2π/N
+π + kh, j, k = 1, . . . , N . On ¯Ω we use the DFT, as normalized
+and let Xj =
+by Trefethen (2000), in variables X, Y . If f (X, Y ) is some function on ¯Ω with grid values
+fjk = f (Xj, Yk) then the DFT (forward, inverse) pair is
+
+∂2/∂X 2 + ∂2/∂Y 2
+
+π + jh, Yk =
+
+−
+
+−
+
+−
+
+(cid:0)
+
+(cid:1)
+
+.
+
+F2U n
+
+(22)
+
+(23)
+
+ˆfpq = h2
+
+e−i(pXj+qYk)fjk,
+
+fjk =
+
+ei(pXj +qYk) ˆfpq.
+
+(24)
+
+N
+
+Xj,k=1
+
+N/2
+
+1
+(2π)2
+
+Xp,q=−N/2+1
+
+12
+
+Let
+
+BUELER AND OTHERS
+
+¯f (X, Y ) =
+
+1
+(2π)2
+
+N/2
+
+ei(pX+qY ) ˆfpq
+
+Xp,q=−N/2+1
+
+(25)
+
+be the “band-limited trigonometric interpolant” of f (X, Y ) (Trefethen 2000); note the rela-
+tion to the inverse DFT (24). We see that
+
+¯f (X, Y ) =
+
+¯
+△
+
+1
+(2π)2
+
+N/2
+
+Xp,q=−N/2+1
+
+(p2 + q2)ei(pX+qY ) ˆfpq.
+
+That is, the Laplacian ¯
+△
+¯
+△
+
+on ¯Ω corresponds to multiplying the p, q mode by (p2 +q2). Thereby
+1/2 and ¯
+2 are also deﬁned, respectively, by multiplication by (p2 + q2)1/2 and (p2 + q2)2.
+△
+It now follows that (23) is very easy to compute if we approximate U n(X, Y ) by its band-
+limited interpolant ¯U n(X, Y ) and compute the action of the powers of the Laplacian by
+the multipliers above. This describes a Fourier spectral collocation method. That is, one
+time-step in solving PDE (17) by our method is the sequence
+
+(i) compute the DFT ˆU n
+
+pq by FFT from values U n
+
+U n(Xj, Yk) = U n(xj, yk); also
+
+compute the DFT of the load (ˆσzz)pq at t = t∗ from values σzz(xj, yk, t∗),
+
+jk ≈
+
+(ii) compute
+
+ˆU n+1
+
+pq =
+
+(cid:2)
+
+where µ = π/L and
+
+2ηµ(p2 + q2)1/2
+
+(∆t/2)
+
+ρrg + Dµ4(p2 + q2)2
+
+ˆU n
+
+pq + ∆t (ˆσzz)pq
+
+−
+
+2ηµ(p2 + q2)1/2 + (∆t/2) (ρrg + Dµ4(p2 + q2)2)
+
+(cid:1)(cid:3)
+
+(cid:0)
+
+,
+
+(26)
+
+(iii) undo the DFT (i.e. do the inverse FFT and make sure the result is real) to get
+
+U n+1
+
+jk ≈
+
+U n+1(Xj, Yk) = U n+1(xj, yk).
+
+Compare equation (26) to equation (22) which applies for the non-discrete Fourier transform
+˜U n.
+
+Full Matlab implementations of the methods in this report are given in Appendix D.
+
+Only a few lines of Matlab are needed to implement the core sequence above, however:
+
+for n=0:M-1
+
+[computations using current displacement uun = U n(xj, yk)]
+uun=uun1;
+[get H = H(xj, yk, t∗)]
+sszz=-rhoi*g*H;
+frhs=right.*fft2(uun) + fft2(dt*sszz);
+uun1=real(ifft2( frhs./left ));
+
+end
+
+Here “right” and “left” are pre-computed grid values of the expressions 2ηµk
+(∆t/2)B
+and 2ηµk + (∆t/2)B which appear in (26), respectively, where k2 = p2 + q2 and B =
+ρrg + Dµ4k4.
+
+−
+
+We call the iteration (i), (ii), (iii) the “PDE method” in contrast to the load response
+matrix method (“LRM method”) of the previous section. With standard estimates on the
+speed of the FFT when Nx, Ny are powers of two (Briggs & Henson 1995), the “PDE method”
+requires
+
+O(NxNy(log2 Nx)(log2 Ny))
+
+(27)
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+13
+
+scalar operations to update the vertical displacement. This compares directly to equations
+(14) and (15) for the “LRM method.” In particular, relative to the O(NtNxNy(log2 Nx)(log2 Ny))
+estimate (15) for the “LRM method” using the FFT for convolution we note a factor of Nt
+less work. Furthermore, the “PDE method” avoids the entire stage of computing the LRM
+integrals, which turn out to be quite expensive, though totally uninteresting, computations.
+Relative to the “LRM method” without the FFT, using representative values of Nt = 25
+and Nx = Ny = 80, and assuming that the constants in the “big O notation” are about the
+same, we get a speed up of about
+
+(25
+
+802
+
+802)/(802(log2 80)2)
+
+·
+
+·
+
+4
+
+≈
+
+×
+
+103.
+
+This ratio is roughly what we observe in practice. For instance, on the same computer
+we compared Fortran 77 codes running the “LRM method” sans FFT using Nt = 101 and
+Nx = Ny = 31 with Matlab codes (Appendix D) implementing the “PDE method” using
+Nx = Ny = 32. We used ∆t = 500 years and bed deformations were computed for 50k years
+in both cases. The former method took about 10 hours while the later took about 4 seconds
+for an observed speedup of about 9
+
+103.
+
+×
+
+4. Discussion
+
+In the next section we describe the results of computations with the “PDE method.” It is
+
+appropriate, however, to ﬁrst directly address the apparently new feature in PDE (17),
+
+∂
+∂t
+
+(cid:16)
+
+2η
+
+1/2 u
+
+△
+
++ ρrgu + D
+
+2u = σzz,
+
+△
+
+(cid:17)
+2η
+
+△
+
+1/2u
+
+.”
+
+namely the viscosity expression “∂/∂t
+
+Within the ice sheet modeling community there is a simpliﬁed existing standard model for
+a ﬂat “elastic plate (lithosphere) that overlies a viscous asthenosphere” (Greve 2001, Hagdorn
+2003, Zweck & Huybrechts 2005). Comparison to this model illuminates the signiﬁcance of
+the viscosity expression in (17). The standard model consists of two equations
+
+(cid:1)
+
+(cid:0)
+
+ρrgw + D
+∂us
+∂t
+
+=
+
+−
+
+△
+us
+
+2w = σzz,
+w
+u0 −
+τ
+
+−
+
+,
+
+(28)
+
+(29)
+
+where us(x, y, t) is the vertical displacement of the earth’s surface, u0(x, y) is a hypothesized
+unloaded displacement state, and w(x, y, t) is the position of a notional elastic plate which
+is in equilibrium with the current load σzz(x, y, t). The essential viscous constant for the
+standard model is a characteristic time scale τ of relaxation, chosen, for example, as 3000
+years by Greve (2001) and Zweck & Huybrechts (2005). The relaxation time τ is indirectly
+related to the asthenosphere viscosity η; more on this below.
+
+We can now calculate an illuminating comparison by hand. Suppose that at time t = 0 all
+load is removed but that the vertical displacement is a y-independent sinusoidal mode with
+spatial frequency k:
+
+u(x, y, t = 0) = us(x, y, t = 0) = A0 exp(ikπx/L).
+
+(30)
+
+Here A0 is the initial amplitude and L is a characteristic length scale. We ask: how does
+such a mode decay in the two models?
+
+14
+
+BUELER AND OTHERS
+
+Note that the qth power of the Laplacian act on this mode as follows:
+
+q exp(ikπx/L) = (k2π2/L2)q exp(ikπx/L).
+
+△
+
+Thus model (17) has solution u(x, y, t) = A(t) exp(ikπx/L) where
+π/L) ˙A + ρrgA + D(k4π4/L4)A = 0.
+|
+That is, in model (17) the amplitude of the k mode satisﬁes
+
+k
+2η(
+|
+
+˙A =
+
+−
+
+ρrgL4 + Dk4π4
+
+2ηL3
+
+k
+|
+
+π
+|
+
+A,
+
+A(t = 0) = A0,
+
+(31)
+
+so a mode with frequency k decays a rate that depends upon k. By contrast, in model (28),
+(29) with u0 = 0 the same mode evolves by
+
+˙A =
+
+1
+τ
+
+−
+
+A,
+
+A(t = 0) = A0
+
+because w = 0 as the load has been removed; equation (29) reduces to ∂us/∂t =
+Here we see that all modes decay at a rate independent of the frequency.
+
+−
+
+But it is clearly the case that a viscous asthenosphere will make elastic plate modes decay
+at diﬀerent rates depending on the frequency. Indeed, Greve (1997) identiﬁes the failure of
+the standard model (28), (29) to have frequency dependent relaxation times as a deﬁciency
+of that model relative to full spherical self-gravitating models. Comparing equation (31) to
+(32) we are motivated to plot the function
+
+(32)
+
+τ −1us.
+
+(33)
+
+τ (k) =
+
+2ηL3
+
+k
+ρrgL4 + Dk4π4 ,
+|
+
+π
+|
+
+which has units of time. Supposing L = 2000 km and that ρr, g, D, η have the values given
+in section 1, we plot τ (k) in ﬁgure 4. We see that the standard choice τ = 3000 a in (32)
+corresponds to frequencies k
+10 in (31), but that no constant relaxation time is
+representative of the actual relaxation spectrum.
+
+1 and k
+
+≈
+
+≈
+
+Furthermore we see in formula (33) and ﬁgure 4 that for small k (e.g. k . 3) the relaxation
+time τ (k) is proportional to k. This behavior is identiﬁed by (Klemann & Wolf 1999)—
+see Greve (2001, section 5)—as correct for the most signiﬁcant mode in a spherical, self-
+gravitating viscoelastic earth model.
+
+The justiﬁcation for model (28), (29) is its computability, of course.
+
+Indeed, the com-
+putation of the elliptic PDE (28) is standard in all numerical paradigms (ﬁnite diﬀerence,
+ﬁnite element, spectral). At least on a rectangular spatial grid, however, the time-semi-
+discretization (21) of equation (17) is just as computable as (28).
+In particular, if an ice
+sheet simulation is performed on a rectangular grid using a ﬁnite diﬀerence or ﬁnite ele-
+ment method for the ice dynamics then equation (17) can be easily computed by the Fourier
+spectral collocation method of the previous section.
+
+Now we come to another reason to prefer equation (17) as a model for earth deformation
+in the context of ice sheet modeling. Let us suppose that at the current time the ice thickness
+H0 (and possibly water depth, giving an eﬀective ice thickness) in a region of interest has
+been well-measured. Let us suppose that a reasonably detailed map of current uplift rate
+˙u0 = ∂u/∂t is also known. This is a realistic supposition given given the state of observational
+geophysics circa 2006 because uplift can be well-constrained by GPS measurements (Larsen
+and others 2005) when bedrock is exposed. Alternatively a spherical viscoelastic earth model
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+15
+
+11000
+
+10000
+
+9000
+
+8000
+
+7000
+
+6000
+
+5000
+
+4000
+
+3000
+
+2000
+
+1000
+
+)
+a
+(
+ 
+ 
+)
+k
+(
+τ
+ 
+e
+m
+
+i
+t
+
+0
+
+0
+
+5
+
+10
+
+15
+frequency k
+
+20
+
+25
+
+30
+
+Figure 4. Frequency dependent relaxation time τ (k) (solid) for mode k in
+equation (30). The value τ = 3000 a (dashed) for the standard model is a
+reasonable constant value, but no constant provides a good ﬁt.
+
+of more-or-less arbitrary sophistication and computational expense might generate a trusted
+current uplift map (Ivins & James 2005). In either case we can then use (17) to determine the
+initial condition for the earth deformation part of an ice sheet simulation without requiring
+further reference to an assumed past load history; compare the integration over load history
+scheme used in (Lingle & Clark 1985). In fact, by (17) we may solve
+
+△
+
+△
+
+2η
+
+(34)
+
+1/2 ˙u0
+
+ρrgu0 + D
+
+2u0 = ρigH0 −
+for u0 to get the starting displacement. In other words we ask for the “pre-bent” position of
+the elastic plate in the half space model which accounts for the current uplift rate using the
+current load (i.e. current eﬀective ice thickness). Solving (34) numerically is no harder than,
+in fact it amounts to, one step of the numerical method already described. If the load does
+not change in the simulation, an uninteresting case for ice sheets of course, then the elastic
+plate overlying the viscous half space will start at the current time with the current uplift
+but will then relax to the state satisfying equation (18) for equilibrium with the load and
+bouyant force, and there will no more uplift. Note that the presence of bed topography is
+completely irrelevant here because of the linear nature of the model; see comments in (Lingle
+& Clark 1985) to the eﬀect that bed topography represents a irregular “thin veneer of zero
+strength” atop an elastic plate lithosphere of (signiﬁcant) ﬂexural rigidity D.
+
+The mechanism described in the previous paragraph is, we believe, a more principled
+replacement for the hypothesized “unloaded surface elevation” u0(x, y) used in the standard
+model (28), (29). Use of that standard model seems to require an assumption of present
+day isostatic equilibrium with the current load (Zweck & Huybrechts 2005) or other artiﬁcial
+assumption which is in conﬂict with observed spatially-varying current uplift.
+
+An entirely diﬀerent class of viscoelastic earth models exists in the literature, of course.
+These are the layered, spherical, self-graviating viscoelastic models which typically descend
+
+16
+
+BUELER AND OTHERS
+
+from the work of Cathles (1975) and/or Peltier (1974). The numerical implementation of
+these models typically involves computing a high degree spherical harmonic expansion of the
+strain ﬁeld for the entire three-dimensional geoid. The traditional diﬃculty with these models
+is their computational cost (Fastook 1999, Greve 2001). Furthermore there is only modest
+beneﬁt because results from the standard model (28), (29) above, in particular, are regarded
+by the ice sheet modeling community as reasonably close to those from the spherical models
+(Greve 2001). Equation (17) is promising because it is just as computationally inexpensive as
+the standard model but incorporates at least one important feature of the spherical models,
+namely frequency dependent relaxation times.
+
+Speaking mathematically, an interesting additional possibility exists within the same class
+of computationally inexpensive “PDE methods.” Namely, one should be able to modify
+equation (17) to take spherical eﬀects into account. In particular, equation (17) would be
+computable at essentially the same speed if it were replaced by a non-constant coeﬃcient
+version, for instance
+
+∂
+∂t
+
+(cid:16)
+
+2η(x, y)
+
+1/2u
+
+△
+
+(cid:17)
+
++ ρrgα(x, y)u + D(x, y)
+
+(β(x, y)
+
+u) = σzz.
+
+(35)
+
+△
+
+△
+
+We do not currently know that a set of non-constant coeﬃcients η, D, α, β exist which cor-
+rectly account for spherical geometry. It seems, however, that classical continuum mechanics
+and diﬀerential geometry must produce such a form because the standard model for a spheri-
+cal self-gravitating earth is a linear model. That is, it has linear response to load. Abstractly,
+this linearity is all that is necessary to make it inevitable5 that a two (spatial) dimension, non-
+constant coeﬃcient linear equation for the vertical displacement of the earth’s surface must
+exist for each patch of the earth’s surface. It may well involve additional pseudo-diﬀerential
+operators not present in the putative form (35), however.
+
+5. Numerical results
+
+A “tweak” to the procedure. It turns out that a small error can be avoided if the “PDE
+method” is modiﬁed slightly. In fact, in verifying the “PDE method” below, using an exact
+integral formula for a disc load, we observed that there was a uniform a error of several
+meters. This uniform error decayed slowly as the distance at which the periodic boundary
+condition was applied went to inﬁnity.
+
+The following simple modiﬁcation eliminates this error. Using the notation of section 3,
+consider U n(xj, yk) on the grid at timestep n. Let ¯U n
+L be the average value of U n along the
+L, L]; recall Ω is typically larger
+L, L]
+boundary of the computational domain Ω = [
+×
+−
+Ly, Ly]. Let u∞
+than the physical region [
+H0,R0(r) be the vertical displacement
+at distance r from the center of an ice disc load of thickness H0 and radius R0 of an elastic
+plate in equilibrium with the bouyant restoring force. That is, let u∞
+H0,R0(r) be the value
+from formula (44) in Appendix B. Choose the values H0, R0 so that the volume πR2
+0H0 of the
+disc load matches the current (timestep n) load volume, or rather its ice equivalent volume
+if appropriate.
+
+Lx, Lx]
+
+[
+−
+
+[
+−
+
+−
+
+×
+
+Our “tweak” replaces the solution U n(xj, yk) at each timestep n with values to which a
+
+constant shift has been applied:
+
+U n,◦(xj, yk) = U n(xj, yk)
+
+¯U n
+L + u∞
+
+H0,R0(L).
+
+−
+
+(36)
+
+5See the discussion of distributions in (Reed & Simon 1980), for instance.
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+17
+
+That is, we want the “far-ﬁeld value” produced by the original “PDE method” to be thrown
+out and replaced by the equilibrium plate value with an equivalent disc load. Though the
+volume of the equivalent disc is determined by the current load, one obviously has some free-
+dom in choosing its thickness and radius. We presume that an eﬀort is made to approximate
+the aspect ratio of the actual load, but close matching is not essential. In fact the Green’s
+function value would work reasonably well, too.
+
+Veriﬁcation. The ﬁrst concern regarding computations with our earth deformation model
+is veriﬁcation. In particular, we want to know if numerical results from the “PDE method”,
+with the just-mentioned “tweak,” are close to highly-accurate solutions of the continuum
+equation (17).
+In seeking such solutions we inevitably come to disc loads. Appendix B
+addresses this case by the Hankel transform. It yields equation (43), an integral formula for
+the time-dependent radially-symmetric deﬂection uV (r, t) resulting from the application (at
+time zero) of a disc load; see ﬁgure 16. The integral must be computed numerically, but
+numerical quadrature is an approximation completely independent of the cartesian-grid- and
+FFT-based “PDE method.” We use integral formula (43) as an “exact” solution, believing
+the accuracy of our numerical integration of (43) to exceed that of the “PDE method” for
+any achievable grid.
+
+Our Matlab implementation of the “PDE method” is the function fastearth.m listed
+in Appendix D. Also listed are implementations of the LRM method for the spherical elastic
+earth model (geforconv.m) and the numerical integration of equation (43) (viscdisc.m).
+
+×
+
+Let us deﬁne a particular numerical experiment. Suppose we use the parameters speciﬁed
+1024 N m, ρr = 3300 kg m−3, and η = 1021 Pa s. Suppose the disc of ice
+in section 1: D = 5.0
+(density ρi = 910 kg m−3) has radius 1000 km and thickness 1000 m. We seek the deﬂection
+on a square region R, centered on the disc load, of side length 4000 km (Lx = Ly = 2000
+km). Suppose that at time zero the deﬂection is identically zero, and suppose that the load
+is applied at that time. We calculate the deﬂection at t = 20k years as computed by the
+“PDE method” and by formula (43).
+
+There are three numerical parameters of importance for the “PDE method”:
+
+•
+•
+
+•
+
+N , the number of grid points in each direction,
+Z, the factor by which the computational domain Ω = [
+than the physical domain [
+∆t, the time step used in approximating the time derivative which occurs in equation
+(17).
+
+×
+Ly, Ly]; here Lx = Ly, and
+
+L, L] is larger
+
+Lx, Lx]
+
+L, L]
+
+[
+−
+
+[
+−
+
+−
+
+−
+
+×
+
+→
+
+, Z
+
+, ∆t
+
+→ ∞
+
+Our veriﬁcation involves showing that as these parameters go to their continuum limits
+0) we approach the “exact” solution (43).
+(N
+→ ∞
+For veriﬁcation we ﬁrst ﬁxed ∆t = 100 years and considered the eﬀect of grid reﬁnement
+and of changes to the distance at which the periodic boundary condition was applied. Re-
+garding grid reﬁnement we considered N ranging over powers of two from 23 = 8 to 28 = 256.
+Regarding the distance to the periodic boundary condition we imposed the periodic bound-
+= L, where L = Z Lx = Z Ly, and we used Z = 1, 2, 4, 8, but we
+ary condition at
+quickly discovered that with the above-mentioned “tweak” any value Z
+2 works ﬁne; not
+shown.
+
+,
+x
+|
+|
+
+y
+|
+
+≥
+
+|
+
+The result for maximum error under grid reﬁnement is shown in ﬁgure 5. This maximum
+error is not the only reasonable measure. As shown in ﬁgure 6, for ﬁne grids errors greater
+
+18
+
+BUELER AND OTHERS
+
+than one meter are highly localized to certain points just at the edge of the disc load. Note
+realistic ice loads do not have margins as sharp as this disc load. For these reasons among
+others it is reasonable to consider average errors, and we see in ﬁgure 7 that the average
+errors are less than 20 cm for N = 256, or roughly 0.07% of the compensation depth.
+
+trend O(N−1.3)
+
+)
+
+m
+
+ 
+
+(
+ 
+r
+o
+r
+r
+e
+m
+u
+m
+x
+a
+m
+
+i
+
+100
+
+10
+
+2
+
+2000
+
+1500
+
+1000
+
+500
+
+0
+
+−500
+
+−1000
+
+−1500
+
+)
+
+m
+k
+(
+ 
+ 
+y
+
+8
+
+16
+
+32
+
+64
+
+128
+
+256
+
+N
+
+Figure 5. Maximum error made by the “PDE method” relative to the Hankel
+transform integral (43). Grid reﬁnement (increasing N ) reduces the max error
+to below 3 m when N = 256. Here Z = 2 and ∆t = 100 a.
+
+0
+.
+1
+5
+
+edge of R=1000 km
+disc load
+
+1
+
+2
+
+0
+
+.
+
+5
+
+2
+
+1
+
+0.5
+
+2
+
+2
+
+0.5
+1
+
+−2000−1500−1000 −500
+
+500 1000 1500 2000
+
+0
+x  (km)
+
+Figure 6. Spatial distribution of the error when N = 256, Z = 2, and
+∆t = 100 a. Contours of the error
+at 0.5,
+1, 2 m. The error is concentrated where the edge of the disc load meets the
+coordinate axes.
+
+(equation (43))
+|
+
+(PDE method)
+|
+
+−
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+19
+
+trend O(N−1.5)
+
+8
+
+16
+
+32
+
+64
+
+128
+
+256
+
+N
+
+Figure 7. Same as ﬁgure 5 but now average error. Grid reﬁnement (increas-
+ing N ) reduces the average error to below 20 cm when N = 256.
+
+Next we compare the eﬀects of spatial grid reﬁnement, increasing N , to reduction of time
+stepsize ∆t on the error. See ﬁgure 8. We see that any value of ∆t less than 500 years is
+ﬁne; this is great news for ice sheet simulation. It is not, however, surprising because of the
+relative timescales of ice versus asthenosphere ﬂow.
+
+)
+
+m
+
+ 
+
+(
+ 
+r
+o
+r
+r
+e
+e
+g
+a
+r
+e
+v
+a
+
+10
+
+1
+
+0.1
+
+100
+
+)
+
+m
+
+(
+ 
+r
+o
+r
+r
+e
+ 
+e
+g
+a
+r
+e
+v
+a
+
+10
+
+1
+
+N=32
+N=64
+N=128
+N=256
+
+0.1
+
+100
+
+500
+
+2000
+
+5000 10000
+
+∆ t  (a)
+
+Figure 8. Average error as in ﬁgure 7 but with ∆t varying, and for several
+values of N . There is no need for ∆t < 500 a. Spatial grid reﬁnement (in-
+creasing N ) is more important to reducing error than is temporal reﬁnement
+(decreasing ∆t).
+
+20
+
+BUELER AND OTHERS
+
+Ice sheet modeling. Earth deformation used in the context of ice sheet modeling is our
+actual interest. Earth deformation is obviously eﬀected by ice sheet ﬂow—the load moves
+around. Conversely, as the bed deforms the surface slope of the ice sheet changes and this
+eﬀects ﬂow. There is non-trivial coupling.
+
+The reasonable simplest ice sheet model is the isothermal model with Glen rheology
+(Paterson 1994, Nye 2000). Let h(x, y, t) be the surface elevation of the ice and let H(x, y, t)
+be the ice thickness. The frozen-base isothermal ice sheet equation is the single nonlinear
+diﬀusive partial diﬀerential equation
+
+∂H
+∂t
+
+= M +
+
+Γ H n+2
+
+n−1
+h
+|
+
+∇
+
+h
+
+|∇
+
+∇ ·
+
+(37)
+
+where n is the Glen exponent, e.g. n = 3, and Γ is a constant (typically Γ = 2(ρig)nA0/(n+2)
+where A0 is a softness parameter). If b(x, y, t) is the ice sheet bed elevation—a slight change
+of notation from the rest of the paper—then of course h = b + H.
+
+(cid:0)
+
+(cid:1)
+
+As we now show, exact similarity solutions to this equation which incorporate simple
+isostasy (Nye 2000, Bueler et al. 2005; compare Halfar 1983) provide a very nice tool to
+examine coupling to the earth model. They help illuminate the diﬀerences among earth
+models. By “simple isostasy” we mean the rule which speciﬁes
+
+−
+where f is a ﬁxed fraction of the ice thickness (Nye 2000); we will let f = ρi/ρr = 0.27576
+f )H.
+in our numerical experiments. Since h = b + H, if equation (38) applies then h = (1
+We will compare numerical results for three coupled ice sheet ﬂow/earth deformation
+
+−
+
+b =
+
+f H
+
+(38)
+
+models:
+
+Simple:
+Standard:
+Lingle&Clark:
+
+equations (37) and (38),
+equations (37), (28), (29), and b = us,
+equations (37), (1), (17), and b = uE + uV .
+
+Figure 9 shows a result of a coupled simulation for these three models. A detail near the
+margin is shown in ﬁgure 10.
+
+In fact, the result shown in ﬁgure 9 came from starting with H = 0 and b = 0 at t = 0 and
+using an accumulation history corresponding to the simlarity solution illustrated by ﬁgure 11.
+That is, the accumulation M (x, y, t) comes from equations (9) and (10) in (Bueler et al. 2005),
+10−13
+using f = 910/3300, λ = 5, α =
+m−3 s−1, and with the additional statement M = 5t−1Hλ. Note t0 = 40034 years.
+In
+addition, at time t = t0 the accumulation is turned oﬀ and so for t > t0 the exact behavior
+of the solution to Simple is a Halfar-type (Halfar 1983) accumulation-free solution. Thus
+the accumulation history is from a similarity solution to equation (37), incorporating simple
+isostasy, which grows from zero at t = 0 to maximum height at t0 = 40034 years and spreads
+out from then on, with no loss of volume.
+
+1, β = 2, H0 = 3600 m, R0 = 750 km, Γ = 9.0177
+
+−
+
+×
+
+The importance of such a similarity solution is that it forms an exact continuum solution
+to the Simple model. Therefore we can answer with some precision the question “how
+do diﬀerences resulting from coupling to various earth deformation models compare to the
+numerical errors which occur in ice sheet modeling? ” This is an important question.
+If
+numerical ice sheet errors demonstrably exceed the earth model diﬀerences then we should
+be skeptical of any expenditure of eﬀort in the earth modeling direction. Conversely, even
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+21
+
+2000
+
+1500
+
+1000
+
+500
+
+)
+
+m
+
+(
+ 
+n
+o
+i
+t
+a
+v
+e
+e
+
+l
+
+−500
+
+−1000
+
+0
+
+ice
+
+0
+
+standard (dotted)
+
+simple isotasy (dashed)
+
+Lingle & Clark (solid)
+
+earth
+
+500
+
+1000
+
+1500
+
+x (km)
+
+Figure 9. Ice sheet on deforming bed, at time 60k years, from three earth
+models Simple, Standard, and Lingle&Clark. View of gridded numerical
+values (Nx = Ny = 192) along the positive x-axis of the grid.
+
+simple isostasy (exact)
+
+standard
+
+simple isotasy (numerical)
+
+Lingle & Clark
+
+600
+
+500
+
+400
+
+300
+
+200
+
+100
+
+0
+
+)
+
+m
+
+(
+ 
+
+n
+o
+
+i
+t
+
+a
+v
+e
+e
+
+l
+
+−100
+
+−200
+
+−300
+
+−400
+
+750
+
+800
+
+850
+
+950
+
+1000
+
+1050
+
+900
+x (km)
+
+Figure 10. See ﬁgure 9; detail near the grounded margin. Exact similarity
+solution to the simple isostasy model is added (solid).
+
+if the diﬀerences among earth models are signiﬁcant, one should report these diﬀerences
+relative to the actual magnitude of numerical ice modeling errors.
+
+22
+
+BUELER AND OTHERS
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+)
+
+3
+m
+k
+ 
+
+6
+
+0
+1
+(
+ 
+e
+m
+u
+o
+v
+
+l
+
+1000
+
+500
+
+)
+
+i
+
+m
+k
+(
+ 
+s
+u
+d
+a
+r
+ 
+n
+g
+r
+a
+m
+
+i
+
+4000
+
+2000
+
+)
+
+m
+
+(
+ 
+s
+s
+e
+n
+k
+c
+h
+t
+ 
+e
+m
+o
+d
+
+i
+
+−1
+
+0
+
+t (ka)
+
+20
+
+40
+
+60
+
+0
+
+0
+
+20
+
+t (ka)
+
+40
+
+0
+60
+
+Figure 11. Views of a similarity solution to equation (37). Left: volume
+over time. Right: margin radius (solid) and dome height (dashed) over time.
+At time t0 = 40034 a the solution switches from growing (λ = 5) to Halfar
+(λ = 0), in both cases with simple isostasy (f = 910/3300).
+
+Figure 9 indeed suggests diﬀerences among the coupled models. We ran each model to ﬁnal
+time t = 60k a. As shown in ﬁgure 12, however, all of the models produce the same volume
+at the ﬁnal time, and indeed at all times; this follows from using the same ﬁnite diﬀerence
+approach for the ice ﬂow (as described in (Bueler et al. 2005)) and, of course, the same
+accumulation history M (x, y, t). So the diﬀerences can be described by the distributions of ice
+thickness. In ﬁgure 13 we show the maximum and average of the pairwise absolute thickness
+diﬀerences
+(The average diﬀerences are over the H > 0 grid
+points under Simple.) We see average thickness diﬀerences greater than 10 m between each
+pair. We see that the greatest pairwise diﬀerence is between Simple and Lingle&Clark;
+compare ﬁgure 9.
+
+HSimple
+|
+
+HStandard
+
+, etc.
+|
+
+−
+
+We see a similar picture for bed elevation diﬀerences, with Simple versus Standard
+showing somewhat smaller diﬀerences, and the comparison Simple versus Lingle&Clark
+again being largest.
+
+Now, are these diﬀerences signiﬁcant? The answer shown in ﬁgure 15 is yes. With a
+caveat. As noted in (Bueler et al. 2005), ice sheet ﬂow simulations on grids inevitably make
+large thinkness errors near the margin. These errors decay only slowly under grid reﬁnement,
+as can be seen in ﬁgure 15.
+
+6. Conclusions
+
+We have seen several modeling and computational issues and numerous equations. So let
+
+us identify our major point: Equation (17)
+
+∂
+∂t
+
+(cid:16)
+
+2η
+
+1/2 u
+
+△
+
++ ρrgu + D
+
+2u = σzz,
+
+△
+
+where
+
+is the positive Laplacian
+
+=
+
+∂2/∂y2, is both
+
+△
+−
+a better model for a viscous half space overlain by an elastic plate than the standard
+model (28), (29) which is widely used in the ice sheet modeling literature,
+
+△
+
+•
+
+(cid:17)
+∂2/∂x2
+−
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+23
+
+16
+
+32
+
+128
+
+192
+
+64
+
+N
+
+Figure 12. All models have identical convergence of numerical volume at
+t = 60k a; they share the same accumulation history.
+
+exact volume 
+= 3.997940 (106 km3)
+
+Simple vs Standard
+Simple vs Lingle&Clark
+Standard vs Lingle&Clark
+
+)
+
+3
+m
+k
+ 
+
+6
+
+ 
+
+0
+1
+(
+ 
+
+l
+
+e
+m
+u
+o
+v
+ 
+e
+c
+
+i
+
+4.25
+
+4.2
+
+4.15
+
+4.1
+
+4.05
+
+4
+
+3.95
+
+maximum
+differences
+
+average
+differences
+
+)
+
+m
+
+(
+ 
+s
+e
+c
+n
+e
+r
+e
+f
+f
+i
+d
+ 
+s
+s
+e
+n
+k
+c
+h
+
+i
+
+t
+
+3
+10
+
+2
+10
+
+1
+10
+
+16
+
+32
+
+128
+
+192
+
+64
+
+N
+
+Figure 13. Maximum and average ice thickness diﬀerences in pairwise comparison.
+
+•
+
+and is very computationally tractable on a rectangular grid using a Fourier spectral
+collocation method.
+
+In brief, one derives equation (17) by starting with equation (4) in (Lingle & Clark 1985),
+clearing denominators, and then taking the inverse Hankel transform by recognizing powers
+. That is, equation (17) is equivalent to equation (4) in (Lingle
+of the positive Laplacian
+& Clark 1985).
+
+△
+
+24
+
+BUELER AND OTHERS
+
+maximum
+differences
+
+Simple vs Standard
+Simple vs Lingle&Clark
+Standard vs Lingle&Clark
+
+average
+differences
+
+3
+10
+
+2
+10
+
+1
+10
+
+3
+10
+
+2
+10
+
+1
+10
+
+)
+
+m
+
+(
+ 
+s
+e
+c
+n
+e
+r
+e
+
+f
+f
+i
+
+ 
+
+d
+n
+o
+
+i
+t
+
+l
+
+a
+v
+e
+e
+d
+e
+b
+
+ 
+
+)
+
+m
+
+(
+ 
+s
+e
+c
+n
+e
+r
+e
+f
+f
+i
+d
+ 
+s
+s
+e
+n
+k
+c
+h
+
+i
+
+t
+
+16
+
+32
+
+128
+
+192
+
+64
+
+N
+
+Figure 14. Maximum and average bed elevation diﬀerences in pairwise comparison.
+
+max numerical error
+(for Simple)
+
+average numerical error
+(for Simple)
+
+16
+
+32
+
+128
+
+192
+
+64
+
+N
+
+Figure 15. Ice thickness diﬀerences in pairwise comparison as in ﬁgure 13
+but with numerical errors for the simple isostasy case superimposed. Dif-
+ferences among coupled ice-earth models signiﬁcantly exceed numerical error
+except for localized numerical errors within a couple of grid points of the
+margin.
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+25
+
+Of course, equation (17) fails to incorporate spherical or self-gravitating eﬀects. Following
+Lingle & Clark (1985) we have, however, chosen to superpose upon the result of (17) a
+purely-elastic, but spherical and self-gravitating (Farrell 1972), displacement from equation
+(1). This is an admittedly ad hoc way to incorporate spherical and self-gravitating eﬀects
+into an earth deformation model.6 We note that the eﬀects of equation (1) are “longer
+range” than those of equation (17) at large times, so in some sense it is more important to
+incorporate “sphericalness” into the purely elastic part of the earth model.
+
+7. Acknowledgements and a Dedication
+
+Praveena Muthyala and Chris Larsen contributed to its practical and conceptual develop-
+ment, respectively. It is dedicated to the students in Math 611 in Fall 2005, who suﬀered
+from the ﬁrst author’s need to be thorough on the subject of Hankel transforms.
+
+References
+
+Bracewell, R. N. (1978), The Fourier Transform and Its Applications, 2nd edn, McGraw-Hill Book Company,
+
+Briggs, W. L. & Henson, V. E. (1995), The DFT: An Owner’s Manual for the Discrete Fourier Transform,
+
+New York.
+
+SIAM Press, Philadelphia.
+
+Bueler, E., Lingle, C. S., Kallen-Brown, J. A., Covey, D. N. & Bowman, L. N. (2005), ‘Exact solutions and
+
+numerical veriﬁcation for isothermal ice sheets’, J. Glaciol. 51(173), 291–306.
+
+Cathles, L. M. (1975), The Viscosity of the Earth’s Mantle, Princeton University Press, Princeton, NJ.
+Farrell, W. E. (1972),
+10(3), 761–797.
+
+‘Deformation of the earth by surface loads’, Rev. Geophysics and Space Physics
+
+Fastook, J. L. (1999), A computationally eﬃcient bedrock isostacy model. unpublished.
+Greve, R. (1997), ‘A continuum–mechanical formulation for shallow polythermal ice sheets’, Phil. Trans. Royal
+
+Soc. London A 355, 921–974.
+
+Greve, R. (2001), Glacial isostasy: Models for the response of the Earth to varying ice loads, in B. Straughan
+et al., eds, ‘Continuum Mechanics and Applications in Geophysics and the Environment’, Springer,
+pp. 307–325.
+
+Hagdorn, M. K. M. (2003), Reconstruction of the past and forecast of the future European and British ice
+
+sheets and associated sealevel change, PhD thesis, The University of Edinburgh.
+
+Halfar, P. (1983), ‘On the dynamics of the ice sheets 2’, J. Geophys. Res. 88(C10), 6043–6051.
+Ivins, E. R. & James, T. S. (2005), ‘Antarctic glacial isostatic adjustment: a new assessment’, Antarctic
+
+Science 17(4), 537–549.
+
+Klemann, V. & Wolf, D. (1999), ‘Implications of a ductile crustal layer for the deformation caused by the
+
+fennoscandian ice sheet’, Geophys. J. Int. 139, 216–226.
+
+Larsen, C. F., Motyka, R. J., Freymuller, J. T., Echelmeyer, K. A. & Ivins, E. R. (2005), ‘Rapid viscoelastic
+uplift in southeast Alaska caused by post-Little Ice Age glacial retreat’, Earth and Planetary Science
+Letters 237, 548–560.
+
+Lingle, C. S. & Clark, J. A. (1985), ‘A numerical model of interactions between a marine ice sheet and the
+
+solid earth: Application to a West Antarctic ice stream’, J. Geophys. Res. 90(C1), 1100–1114.
+
+Morton, K. W. & Mayers, D. F. (1994), Numerical Solutions of Partial Diﬀerential Equations: An Introduc-
+
+tion, Cambridge University Press.
+
+Nye, J. F. (2000), ‘A ﬂow model for the polar caps of Mars’, J. Glaciol. 46(154), 438–444.
+Paterson, W. S. B. (1994), The Physics of Glaciers, 3rd edn, Pergamon.
+Peltier, W. R. (1974), ‘The impulse response of a Maxwell earth’, Rev. Geophys. Space Phys. 12, 649–669.
+Reed, M. & Simon, B. (1980), Methods of Modern Mathematical Physics I, 2nd edn, Academic Press.
+Sneddon, I. N. (1951), Fourier Transforms, McGraw-Hill Book Company, New York.
+
+6The ad hoc combination “u = uE + uV ” could perhaps be replaced by some other linear combination
+
+u = αuE + βuV , α, β > 0, however.
+
+¯f (κ) =
+
+f (r)J0(κr)r dr.
+
+∞
+
+0
+Z
+
+J0(z) =
+
+1)k
+(
+22k (k!)2 z2k,
+−
+
+∞
+
+Xk=0
+
+J0(z) =
+
+e−iz cos θ dθ.
+
+2π
+
+1
+2π
+
+0
+
+Z
+
+26
+
+BUELER AND OTHERS
+
+Trefethen, L. N. (2000), Spectral Methods in MATLAB, SIAM Press.
+van der Veen, C. J. (1999), Fundamentals of Glacier Dynamics, Balkema.
+Zweck, C. & Huybrechts, P. (2005), ‘Modeling of the northern hemisphere ice sheets during the last glacial
+cycle and glaciological sensitivity’, J. Geophysical Research 110. D07103, doi:10.1029/2004JD005489.
+
+Appendix A. On the Hankel transform and powers of the Laplacian
+
+A reasonable ﬁrst reference for the Hankel transform is Chapter 12 of (Bracewell 1978).
+Sneddon (1951) is much more complete, however. Sneddon addresses the application of
+Hankel transforms to elasticity problems, in particular.
+
+Deﬁnition. Suppose f (r) is deﬁned on (0,
+Hankel transform ¯f (κ) , κ > 0, is
+
+∞
+
+) and suppose that
+
+∞
+0
+
+f (r)
+|
+|
+
+r dr <
+
+. The
+
+∞
+
+R
+
+This is the transform as normalized by (Sneddon 1951), (Cathles 1975), and (Lingle &
+Clark 1985); Bracewell (1978) is slightly diﬀerent.
+
+Here J0 is the zeroth-order Bessel function of ﬁrst kind
+
+an entire function; note
+value problem
+
+J0(r)
+|
+
+| ≤
+
+1 for all r. J0(z) is the unique solution to the ODE initial
+
+z2y′′(z) + zy′(z) + (z2
+
+0)y(z) = 0,
+
+y(0) = 1,
+
+y′(0) = 0
+
+(40)
+
+−
+
+and it has integral formula
+
+Both (40) and (41) will be used below.
+
+The most natural source of the Hankel transform is as the Fourier transform of a radial
+function on the plane. In particular, suppose f (x, y) is a bounded and integrable function on
+the plane which is actually radial f = f (r). Suppose one computes the two-variable Fourier
+transform
+
+F2[f ] = ˜f by converting the integral to polar coordinates:
+f (r)e−i(xξ+yζ) dx dy =
+
+f (r)
+
+2π
+
+∞
+
+∞
+
+∞
+
+e−irκ cos(θ−φ) dθ
+
+r dr
+
+˜f (ξ, ζ) =
+
+1
+2π
+
+1
+2π
+
+(cid:20)
+
+0
+Z
+
+0
+Z
+
+∞
+
+(cid:21)
+
+Z
+∞
+
+−∞ Z
+f (r)
+
+−∞
+1
+2π
+
+(cid:20)
+
+2π
+
+0
+Z
+
+=
+
+0
+Z
+
+e−irκ cos θ dθ
+
+r dr =
+
+f (r)J0(κr)r dr
+
+(cid:21)
+
+0
+Z
+
+where κ2 = ξ2 + ζ 2. We have used (41) above. Concretely, we have substituted x = r cos θ,
+y = r sin θ, ξ = κ cos φ, and ζ = κ sin φ. Thus xξ + yζ = rκ cos(θ
+φ), and for ﬁxed φ
+the function ϕ(θ) = e−irκ cos(θ−φ) is periodic with period 2π. We conclude that in these
+circumstances ˜f is also radial.
+
+−
+
+The Hankel transform (39) is evidently linear. The general two-variable Fourier transform,
+
+which we have normalized to be unitary, has the property
+
+˜˜g(x, y) = g(
+
+x,
+
+y).
+
+−
+
+−
+
+(39)
+
+(41)
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+27
+
+Therefore the map g
+so ¯¯f (r) = ˜˜f (r) = f (r) and the Hankel transform is self-inverse.
+
+7→
+
+˜˜g is the identity when restricted to the subspace of radial functions,
+
+For f = f (x, y) suﬃciently smooth, deﬁne the positive Laplacian of f to be
+
+f =
+
+△
+
+−∇
+
+2f =
+
+∂2f
+∂x2 −
+
+∂2f
+∂y2 .
+
+−
+
+We have chosen the sign of the Laplacian to be positive as an operator, which is to say
+that the eigenvalues/spectrum of this operator are nonnegative. In particular, the Fourier
+transform of the Laplacian is multiplication by a nonnegative function
+
+For a radial function f (r) we recall that
+
+−
+Consider the Hankel transform of the Laplacian.
+
+△
+
+f (r) =
+
+g
+
+f ′′
+
+r−1f ′.
+
+−
+
+f (ξ, ζ) = (ξ2 + ζ 2) ˜f (ξ, ζ).
+
+△
+
+Lemma. If f ′(r) is bounded as r
+→
+the Hankel transform formula holds:
+
+0+ and if max
+
+r,
+f (r)
+|
+
+{|
+
+f ′(r)
+r
+|
+|
+
+} →
+
+0 as r
+
++
+
+→
+
+∞
+
+then
+
+Proof. Letting prime denote ∂/∂r, two integrations-by-parts do the job:
+
+f (κ) = κ2 ¯f (κ).
+
+△
+
+∞
+
+0
+Z
+
+−
+
+(cid:0)
+
+f ′′(r)
+
+r−1f ′(r)
+
+J0(κr)r dr
+
+−
+
+= f ′(r)J0(κr)r
+
+(cid:1)
+
+∞
+
+0
+
++
+
+∞
+
+f ′(r)
+
+∂
+∂r
+
+(J0(κr)r) dr
+
+∞
+
+f ′(r)J0(κr) dr
+
+∞
+
+i
+f ′(r)
+
+0
+
+Z
+J ′
+0(κr)κr
+
+dr = f (r)J ′
+
+0(κr)κr
+
+f (r)
+
+J ′
+0(κr)κr
+
+′
+
+dr
+
+= 0 +
+
+0
+
+Z
+
+∞
+
+∗
+= 0
+
+= κ2
+
+−
+
+0
+Z
+∞
+
+0
+Z
+
+f (r)
+r
+
+(cid:2)
+
+z2J ′′
+
+(cid:3)
+0 (z) + zJ ′
+
+0(z)
+
+†
+=
+
+dr
+
+(cid:1)
+f (r)J0(κr)r dr = κ2 ¯f (κ).
+
+(cid:0)
+
+−
+
+0
+Z
+
+−
+
+0
+Z
+∞
+
+∞
+
+i
+∞
+
+0
+
+Z
+
+0 −
+f (r)
+r
+
+−
+
+(cid:0)
+
+(cid:0)
+z2J0(z)
+
+dr
+
+(cid:1)
+
+(cid:1)
+
+.
+†
+
+We substituted z = κr in step
+
+to recognize Bessel’s equation (40) in step
+
+(cid:3)
+
+∗
+
+It follows that also for powers of the Laplacian we can give nice Hankel transform formulae.
+
+In particular, if
+
+∂4
+∂x4 + 2
+denotes the biharmonic operator (Sneddon 1951), and if f (r) is radial and has appropriate
+boundedness, then
+
+∂4
+∂x2∂y2 +
+
+∂4
+∂y4
+
+2 =
+
+4 =
+
+△
+
+∇
+
+△
+Now we deﬁne the positive square root
+
+Deﬁnition. Deﬁne (
+
+1/2f )(x, y) by
+
+△
+
+2f (κ) = κ4 ¯f (κ).
+
+1/2 of the Laplacian
+
+via the Fourier transform:7
+
+△
+
+△
+
+^
+△
+
+1/2f (ξ, ζ) =
+
+ξ2 + ζ 2
+
+1/2 ˜f (ξ, ζ).
+
+7The Fourier transform gives a spectral resolution of the positive operator △ acting on the plane, subject
+to appropriate boundedness at inﬁnity (Reed & Simon 1980). Thus we are using the functional calculus to
+deﬁne △1/2.
+
+(cid:0)
+
+(cid:1)
+
+28
+
+BUELER AND OTHERS
+
+△
+
+Note that
+
+1/2 acts on scalar functions to produce scalar functions but that it is not a
+It
+true diﬀerential operator.
+can, however, be easily calculated using the Hankel transform because the following formula
+applies for radial functions f = f (r):
+
+In particular, it is neither the gradient nor the divergence.
+
+1/2f )(κ) = κ ¯f (κ).
+
+(
+△
+
+Finally we consider the Hankel transform of the Dirac delta “function.” Care must be
+taken because the delta function we need is a function only of the radial coordinate while
+its deﬁning property applies to functions in the plane. In fact, let δ(x0,y0)(x, y) be deﬁned by
+the integral
+
+∞
+
+∞
+
+−∞ Z
+Z
+
+−∞
+
+f (x, y)δ(x0,y0)(x, y) dx dy = f (x0, y0)
+
+for all continuous f (x, y). Let δ0 = δ(0,0) denote the delta function at the origin. In polar
+coordinates, and for radial functions f = f (r), δ0 has the property
+
+which simpliﬁes to
+
+because δ0 is independent of θ. Thus
+∞
+
+∞
+
+2π
+
+0 Z
+0
+Z
+
+∞
+
+0
+Z
+
+0
+Z
+
+f (r)δ0(r, θ)r dr dθ = f (0),
+
+f (r)δ0(r)r dr =
+
+f (0)
+2π
+
+¯δ0(κ) =
+
+δ0(r)J0(κr)r dr =
+
+J0(0)
+2π
+
+=
+
+1
+2π
+
+.
+
+Appendix B. The disc load case
+
+(42)
+
+As an exercise and for veriﬁcation purposes we describe a solution to the viscous half-space
+ﬂat earth equation (2). The inverse Hankel transform of this solution is a solution to equation
+(17).
+
+Consider a disc load centered at the map-plane origin, of radius R0 and thickness H0. In
+
+this case
+
+ρigH0, 0 < r < R0,
+
+σzz(r) =
+
+−
+0,
+
+(
+
+R0 < r
+
+where ρi is the density of the load; we might as well suppose it is ice. Actually, let’s suppose
+this load is applied at time zero and is held in place: σzz(r, t) = σzz(r)H(t). Because this
+load is radial, the Hankel-transformed equation (2) is useful. We will assume an undeformed
+state ¯uV = 0 at time t = 0.
+
+We need the Hankel transform ¯σzz:
+
+¯σzz(κ) =
+
+ρigH0
+
+J0(κr)r dr =
+
+−
+
+R0
+
+0
+
+Z
+
+κR0
+
+ρigH0
+κ2
+
+−
+
+0
+
+Z
+
+using the change-of-variable s = κr and the identity d
+Appendix A of (Sneddon 1951)).
+
+J0(s)s ds =
+
+ρigH0R0κ−1J1(κR0),
+
+−
+
+ds (sJ1(s)) = sJ0(s) (formula (8) in
+
+Now, we can solve (2) because it is simply a collection of decoupled ﬁrst-order linear ODE
+
+problems in time:
+
+¯uV (κ, t) = ρigH0R0 {
+
+exp(
+
+−
+
+β(κ)t/(2ηκ))
+κ β(κ)
+
+1
+}
+
+−
+
+J1(κR0)
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+29
+
+0, where β(κ) = ρrg + Dκ4. The displacement can be
+
+for t > 0 and ¯uV (κ, t) = 0 for t
+found by an (inverse) Hankel transform
+
+≤
+
+uV (r, t) = ρigH0R0
+
+∞
+
+β(κ)−1
+
+exp(
+{
+
+−
+
+0
+
+Z
+
+β(κ)t/(2ηκ))
+
+J1(κR0) J0(κr) dκ.
+
+(43)
+
+1
+}
+
+−
+
+This integral can be computed numerically, but care must be taken because the integrand
+100) subintervals and call Mat-
+is quite oscillatory. We break up the integrand into many (
+lab’s quadl on each subinterval. The code viscdisc in Appendix D implements equation
+(43). In particular, we believe that computing (43) for geophysically reasonable parameter
+values is quite accurate, and that the result can be used to verify the result from the Fourier
+spectral collocation method described in section 3. See section 5 for results. The displace-
+ment for a particular disc load is graphed in ﬁgure 16. This solution looks rather like the
+Green’s function GV plotted in ﬁgure 2, as expected, but with a wider depressed area.
+
+≥
+
+The equilibrium limit of this disc load solution is of interest:
+
+u∞(r) = lim
+t→∞
+
+−
+
+uV (r, t) =
+
+ρigH0R0
+
+β(κ)−1 J1(κR0) J0(κr) dκ.
+
+(44)
+
+2u∞ = σzz. It appears in ﬁgure 16, and we see
+This function satisﬁes the PDE ρrgu∞ + D
+the peripheral “dip” and “bulge” which occur at the edge of the disc. Note that the central
+part of disc load of thickness H0 and large radius descends to the “compensation depth”
+
+△
+
+∞
+
+0
+Z
+
+(ρi/ρr)H0.
+
+−
+
+t=2000 (a)
+t=∞
+
+50
+
+0
+
+−50
+
+)
+
+m
+
+(
+ 
+u
+
+−100
+
+−150
+
+−200
+
+−250
+
+−300
+
+0
+
+compensation depth
+−275.76 (m)
+
+500
+
+1000
+
+1500
+
+2000
+
+2500
+
+r (km)
+
+Figure 16. Vertical displacement at 2000 years, and the equilibrium position
+at time
+, for a disc load of ice with thickness 1000 (m) and radius 1000 (km).
+“Compensation depth” corresponding to ρi = 910, ρr = 3300 (kg m−3) also
+shown. Note log scale on horizontal axis.
+
+∞
+
+Appendix C. On “Green’s function thinking” for PDE (17)
+
+Here we make some comments on formula (6) in section 1 which relate it to results in
+to avoid requiring precise knowledge
+
+section 3. The time integral in (6) starts from
+
+−∞
+
+30
+
+BUELER AND OTHERS
+
+of the displacement uV (x, y, t0) at any particular past time t0. That is, (6) computes the
+displacement at time t caused by a load history known so far into the past that prior displace-
+ment states are irrelevant. This is reasonable because the underlying PDE, equation (17) in
+section 3, is diﬀusive and thus the inﬂuence of any displacement state decays exponentially
+in time.
+
+If, on the other hand, an initial displacement u(x, y, t0) is known at a relatively recent past
+time then we must adjust (6). As a start, integrating (6) by-parts in the time variable and
+assuming Ψ(x, y,
+
+) is zero gives the formula
+
+−∞
+uV (x, y, t) =
+
+t
+
+Z
+
+−∞ Z ZR
+
+∂GV
+∂t
+
+r
+(
+|
+
+−
+
+r′
+
+, t
+|
+
+−
+
+t′)Ψ(x′, y′, t′) dx′ dy′ dt′.
+
+(45)
+
+(46)
+
+(47)
+
+Our assumption that there is no load at t =
+is equivalent to assuming Ψ(x, y, t) =
+t
+−∞ λ(x, y, x) ds. The signiﬁcance of (45) is that the load function Ψ reappears and that we
+are motivated to examine ∂Gv/∂t.
+R
+
+−∞
+
+From (5) note that
+
+∂GV
+∂t
+
+(r, t) =
+
+∞
+
+g
+2π
+
+−
+
+0
+Z
+
+(2ηκ)−1 exp [
+
+β(κ)t/(2ηκ)] J0(κr) κ dκ.
+
+−
+
+In fact, formula (46) can also be extracted from equation (20) in section 3:
+
+∂GV
+∂t
+
+(x, y, t) =
+
+g
+−1
+2
+2π F
+
+−
+
+(
+
+∞
+
+=
+
+g
+2π
+
+exp
+
+β(ξ, ζ)t/(2η(ξ2 + ζ 2)1/2)
+
+−
+
+(cid:2)
+
+2η(ξ2 + ζ 2)1/2
+
+)
+
+(cid:3)
+
+(2ηκ)−1 exp [
+
+β(κ)t/(2ηκ)] J0(
+
+x2 + y2 κ) κ dκ.
+
+−
+
+0
+Z
+
+−
+F2 stands for the two-variable Fourier transform and β(κ) = ρrg + Dκ4 as in section
+F2 becomes the
+gΨ(x, y, t)
+
+Here
+1. The second equality in (47) is explained by noting (Appendix A) that
+Hankel transform on radial functions. Comparing to section 1, σzz(x, y, t) =
+(N m−2) if Ψ (kg m−3) is the load function.
+
+p
+
+−
+
+Returning now to equation (45), we can see from (20) how to modify (45) to include
+
+knowledge of displacement at a ﬁnite time t0. In fact, the convolution theorem
+
+−1
+2
+F
+
+˜f ˜g
+
+=
+
+n
+
+o
+
+1
+2π
+
+(f
+
+g) =
+
+∗
+
+1
+2π
+
+Z ZR2
+
+f (x
+
+x′, y
+
+y′)g(x′, y′) dx′ dy′
+
+−
+
+−
+
+now allows us to write the inverse Fourier transform of (20) as
+
+uV (x, y, t) =
+
+t
+
+t0 Z ZR2
+
+Z
+
+∂GV
+∂t
+
+r
+(
+|
+
+−
+
+r′
+
+, t
+|
+
+−
+
+s)Ψ(x′, y′, s) dx′ dy′ ds
+
+(48)
+
++
+
+Z ZR2
+
+r
+γ(
+|
+
+−
+
+r′
+
+, t
+|
+
+−
+
+t0)u(x′, y′, t0) dx′ dy′
+
+where
+
+γ(r, t) =
+
+exp [
+
+β(κ)t/(2ηκ)] J0(r κ) κ dκ.
+
+∞
+
+1
+2π
+
+0
+Z
+
+−
+
+In our view equation (48) proves equation (6). We have justiﬁed the heuristic Green’s
+function thinking in section 1 by a standard linear analysis of PDE (17). Note that as
+the last term in (48) disappears. The decaying
+t
+
+, γ(r, t)
+
+→ ∞
+
+0. Thus as t0 → −∞
+
+→
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+31
+
+kernel γ describes the rate at which information held in the previous displacement u(x, y, t0)
+is eliminated.
+
+Appendix D. Matlab codes
+
+This section gives Matlab implementations of the numerical strategies outlined in sections
+
+2, 3, and Appendix B. Here is a synopsis of the three codes:
+
+•
+
+geforconv precomputes the spherical elastic load response matrix I E, given by equa-
+tion (9), which is the computational form of the Green’s function GE. It numeri-
+cally computes integrals (9) by using Matlab’s dblquad with the default settings,
+where the integrand comes from linearly interpolating the tabular data given by
+If geforconv has been run on the given grid, fastearth (below)
+(Farrell 1972).
+then convolves I E with the load, as noted, using Matlab’s conv2 for now because it
+seems suﬃciently fast; an FFT-based alternative is reasonable. The precomputation
+is much more expensive than running the viscous deformation model or convolving
+I E with the load. For instance, in the Matlab run
+
+tic, I = geforconv(256,256,2000,2000); toc
+save I256 I
+tic, fastearth(256,100000,500,4,’testC’); toc
+
+•
+
+the call to geforconv requires about 4 hours while only 10 minutes is required to
+run fastearth; the machine is a 3 GHz Pentium IV.
+fastearth computes the viscous model using fft2 to compute equation (26). It also
+convolves I E with the load for the spherical elastic model as noted. In this example
+implementation the load is either a standard disc load or a modiﬁcation to Test C
+from (Bueler et al. 2005).
+viscdisc implements formula (43) in Appendix B.
+
+•
+geforconv.m:
+
+Computes matrix I=I(p,q), a form of the elastic "load response
+
+I(p,q)= |
+
+computes (2 NX + 1) by (2 NY + 1)
+
+I=GEFORCONV(NX,NY,LX,LY)
+matrix I with entries
+/dx/2
+/dy/2
+|
+/-dx/2
+
+function II=geforconv(Nx,Ny,Lx,Ly);
+% GEFORCONV
+% matrix" described in Lingle & Clark (1985) and in the technical report
+% Bueler (2005).
+Matrix I(p,q) is used by FASTEARTH.
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+% Example:
+%
+%
+% See also FASTEARTH.
+% ELB 12/11/05.
+
+where dx=2 LX/NX, dy=2 LY/NY.
+extends from x=-LX to x=LX and y=-LY to y-LY.
+dblquad to do integral.
+
+G^E(sqrt((pdx-xi)^2+(qdy+eta^2))) dxi deta
+
+I=geforconv(16,16,2000,2000);
+
+Input LX,LY in km.
+
+Assumes region
+
+Uses Matlab’s
+
+/-dy/2
+
+rm=[ 0.011
+
+0.111
+
+1.112
+
+2.224
+
+3.336
+
+4.448
+
+6.672
+
+8.896
+
+11.12 17.79 ...
+
+32
+
+BUELER AND OTHERS
+
+22.24
+222.4
+
+111.2
+889.6 1001.0 1112.0 ...
+1334.0 1779.0 2224.0 2780.0 3336.0 4448.0 5560.0 6672.0 7784.0 8896.0 ...
+
+133.4 177.9 ...
+
+27.80
+278.0
+
+33.36
+333.6
+
+66.72
+667.2
+
+44.48
+444.8
+
+55.60
+556.0
+
+88.96
+778.4
+
+10008.0] * 1e3;
+
+% converted to meters
+
+% GE /(10^12 rm) is vertical displacement in meters
+GE=[-33.64 -33.56 -32.75 -31.86 -30.98 -30.12 -28.44 -26.87 -25.41 ...
+-21.80 -20.02 -18.36 -17.18 -15.71 -14.91 -14.41 -13.69 -13.01 ...
+-12.31 -10.95 -9.757 -8.519 -7.533 -6.131 -5.237 -4.660 -4.272 ...
+-3.999 -3.798 -3.640 -3.392 -2.999 -2.619 -2.103 -1.530 -0.292 ...
+1.643];
+
+1.676
+
+0.848
+
+2.083
+
+2.057
+
+% linearly extrapolate GE to r=0;
+GE=[interp1(rm(1:2),GE(1:2),0.0,’linear’,’extrap’) GE];
+% length(rm)=length(GE)=42
+rm=[0.0 rm];
+
+GE(0) := -33.6488
+
+dy=2*Ly*1000/Ny;
+
+dx=2*Lx*1000/Nx;
+II=zeros(2*Nx-1,2*Ny-1);
+% compute entries of II by dblquad, using quad method and default TOL=1e-6
+for p=-Nx+1:Nx-1
+
+% dimensions of load element
+
+II(p+Nx,q+Ny)=dblquad(@integrand,-dx/2,dx/2,-dy/2,dy/2);
+
+for q=-Ny+1:Ny-1
+
+end
+
+end
+
+% nested function which is integrand in I(p,q)
+
+function z=integrand(xi,eta)
+
+r=sqrt((p*dx-xi).^2+(q*dy-eta).^2);
+z=zeros(length(r));
+for jj=1:length(r)
+
+if r(jj)==0.0
+
+% treat normalization r as 11 m
+
+z(jj)=GE(1)/(rm(2)*1e12);
+
+elseif r(jj)>=rm(end), z(jj)=0;
+else
+
+% linearly interpolate to get GE value; then normalize
+
+ii=find(rm>r(jj),1);
+z(jj)=interp1(rm(ii-1:ii),GE(ii-1:ii),r(jj))/(r(jj)*1e12);
+
+2 <= ii <= 42
+
+%
+
+end
+
+end
+
+end
+
+end
+
+fastearth.m:
+
+Bueler (2006) "Computation of a viscoelastic deformable earth
+model for ice sheet simulation."
+
+function [uv,ue,H,xs,ys]=fastearth(Nin,tf,dtyear,Z,type,graphflag)
+% FASTEARTH
+Use the elastic-viscous earth model from
+%
+%
+% to simulate the deformation of the earth under a disc load or under an
+% artificial ice sheet load history.
+% matrix" approach for the elastic component.
+% method (Trefethen 2000) for the flat-earth, elastic plate over viscous
+% half-space model.
+%
+% Time discretization of this PDE is Crank-Nicolson.
+% model is
+%
+%
+%
+
+Lingle & Clark (1985) "A numerical model of interactions between a
+marine ice sheet and the solid earth: Application to a West Antarctic
+ice stream," J. Geophysical Research 90 (C1) 1100--1114.
+
+d/dt(2 eta Lap^{1/2} u) + rho g u + D Lap^2 u = sigma_zz.
+
+The PDE for this latter model is
+
+Uses a modified "load response
+
+Uses a Fourier spectral
+
+The source of the
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+33
+
+A
+
+N must be
+
+FASTEARTH
+
+computes and plots
+
+Z is a small whole number
+
+Namely, Omega is a square
+
+Uses N grid points in each direction on
+
+[UV,UE,HH,XX,YY]=FASTEARTH(N,TF,DTYEAR,Z,’disc’)
+
+TF is
+Elastic deformation is
+
+[UV,UE,HH,XX,YY]=FASTEARTH(N,TF,DTYEAR,Z)
+deformation of the earth’s surface under an ice disc load of radius
+1000km and thickness 1000m.
+a square 4000 km by 4000 km region R of physical interest.
+even; best choices are powers of 2.
+(Z=2 recommended) which determines the size of the computational
+region Omega for the flat viscous model.
+with side 4000*Z km, discretized by N*Z points in each direction.
+periodic boundary condition is applied at the edge of Omega.
+# of years of the run with timestep DTYEAR.
+performed on R and is only done if a file "I{N}.mat" can be found;
+this can be generated using GEFORCONV; see examples.
+returns the gridded flat viscous deformation UV, the gridded elastic
+deformation UE, the thickness HH--all at the final time---and the
+grid itself in XX,YY (as from MESHGRID); all outputs in meters.
+
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+%
+% Example I; generate I for 16 x 16 case, store and use:
+%
+%
+%
+% Example II; to see ice cap on bed; needs "I128.mat":
+%
+%
+%
+% See also GEFORCONV, VISCDISC, TESTFAST.
+% ELB 1/12/06
+
+[UV,UE,HH,XX,YY]=FASTEARTH(N,TF,DTYEAR,Z,’testC’)
+that the ice load is essentially test C, but with simple isostacy
+added, from
+
+[uv,ue,H,x,y]=fastearth(128,40000,500,2,’testC’); % 15 secs
+figure, mesh(x/1000,y/1000,H+uv+ue)
+hold on, mesh(x/1000,y/1000,uv+ue), hold off
+
+Bueler, et al. (2005) "Exact solutions and the verification of
+numerical models for isothermal ice sheets," J. Glaciol. 51 (173)
+291--306.
+
+Thickness evolution is stopped at 40033 years and the last thickness
+held.
+
+tic, I = geforconv(16,16,2000,2000); toc
+save ’I16’ I
+fastearth(16,100000,500,2); % 2 secs
+
+[UV,UE,HH,XX,YY]=FASTEARTH(N,TF,DTYEAR,Z,’...’,false)
+
+is the same except
+
+% about a minute
+
+Same as above.
+
+No graphing.
+
+if nargin<5, Cflag=false; type=’disc’; end
+if nargin<6, graphflag=true; end
+if strcmp(type,’testC’), Cflag=true;
+else, Cflag=false; end
+if ((floor(Z)~=ceil(Z)) || (Z<1)), error(’Z must be positive integer’), end
+
+g=9.81;
+rhoi=0.910e3;
+rhor=3.300e3;
+D=5.0e24;
+eta=1.0e21;
+
+spera=3.1556926e7;
+
+% seconds per year
+
+% density of ice; kg/m^3
+% density of mantle; kg/m^3
+% flexural rigidity of lithosphere as an elastic plate
+% viscosity of mantle
+
+L0=2000e3;
+
+% half-length of actual domain in each direction; m
+
+% compute flat-earth, viscous half-space model on extended grid:
+L=Z*2000e3;
+N=Z*Nin;
+
+% half-length of computational domain
+% computational N
+
+34
+
+BUELER AND OTHERS
+
+h=2*L/N;
+x=-L+h:h:L;
+[xx,yy]=meshgrid(x,x);
+M=ceil(tf/dtyear);
+
+rr=sqrt(xx.^2+yy.^2);
+
+dt=(tf/M)*spera;
+
+% Fourier coefficients of powers of Laplacian
+cx=(pi/L)*[0:N/2 N/2-1:-1:1];
+[ccxx,ccyy]=meshgrid(cx,cx);
+cclap=ccxx.^2+ccyy.^2;
+cchalf=sqrt(cclap);
+ccbih=cclap.^2;
+
+% lap^{1/2} coeffs
+% biharmonic coeffs
+
+% coefficients in transformed PDE
+part1=2*eta*cchalf;
+part2=(dt/2)*( rhor*g*ones(size(ccbih)) + D*ccbih );
+right = part1 - part2;
+left = part1 + part2;
+
+% Fourier-transformed operator on right of eqn (19)
+% ... on left of eqn
+
+computing flat viscous deformation ...’)
+
+disp(’
+uun1=zeros(size(xx));
+for n=0:M-1
+
+uun=uun1;
+if Cflag, H=getTestC(xx,yy,(n+1/2)*dt);
+else, H=1000*(rr<1e6); end
+% apply Fourier spectral method:
+sszz=-rhoi*g*H;
+frhs=right.*fft2(uun) + fft2(dt*sszz);
+uun1=real(ifft2( frhs./left ));
+
+end
+% tweak: find average value along "distant" bdry of [-ZL,ZL]X[-ZL,ZL],
+% remove it and add back result for equivalent disc load
+uun1=uun1-( sum(uun1(1,:))+sum(uun1(:,1)) )/(2*N);
+if Cflag % assume equiv disc load has R0=1000km
+
+H0=h*h*sum(sum(H))/(pi*1e6^2);
+
+% trapezoid rule
+
+else, H0=1000; end
+uun1=uun1+viscdisc(H0,1000,tf,L/1000);
+
+sh=(N/2)-(N/(2*Z))+1:(N/2)+(N/(2*Z));
+xs=xx(sh,sh);
+
+ys=yy(sh,sh);
+
+uv=uun1(sh,sh);
+
+H=H(sh,sh);
+
+% extract central/actual part
+
+% get and use (w. convolution) elastic LRM if available; plot things
+filename=[’I’ num2str(Nin) ’.mat’];
+doGE=(exist(filename)==2);
+if doGE, disp(’
+else, disp(’
+if doGE
+
+[elastic load response matrix NOT found]’), end
+
+[elastic load response matrix FOUND]’)
+
+disp([’
+
+computing spherical elastic deformation using I’ ...
+
+num2str(Nin) ’.mat ...’])
+
+S=load(filename);
+ue=rhoi*conv2(H,S.I,’same’);
+if graphflag
+
+clf,
+
+subplot(2,1,2),
+
+figure(1),
+xlabel(’x (km)’),
+ylabel(’y (km)’)
+zlabel(’vertical displacement (m)’)
+title(’spherical, self-gravitating elastic model’)
+subplot(2,1,1),
+
+mesh(xs/1000,ys/1000,uv);
+
+mesh(xs/1000,ys/1000,ue);
+
+end
+
+else
+
+disp(’
+
+skipping spherical elastic deformation ...’)
+
+COMPUTATION OF A VISCOELASTIC DEFORMABLE EARTH MODEL
+
+35
+
+viscdisc.m:
+
+ue=zeros(size(uv)); % for return value only
+if graphflag, figure(1),
+
+clf,
+
+mesh(xs/1000,ys/1000,uv); end
+
+end
+if graphflag
+
+end
+
+xlabel(’x (km)’),
+ylabel(’y (km)’)
+zlabel(’vertical displacement (m)’)
+title(’elastic plate over viscous half-space model’)
+
+% seconds per year
+
+Stops growth at time
+
+function H=getTestC(x,y,t)
+% compute exact H from test C (with simple isostacy added) in Bueler et al
+% "Exact solutions ... isothermal ice sheets".
+% t0=40033 years.
+spera=3.1556926e7;
+H0=3600;
+% see "Exact solutions ..." eqn (9):
+% t0=(2/9.0177e-13)*(7/((1-(910/3300))*4))^3*(R0^4/H0^7) is 40034 years
+t0=40034*spera;
+ts=t/t0;
+rscl=(ts^(-2))*(sqrt(x.^2+y.^2)/R0);
+H=H0*ts*max(0, 1-rscl.^(4/3) ).^(3/7);
+
+if ts>1, ts=1.0; end
+
+R0=750000;
+
+Solution of viscous half-space overlain by rigid lithosphere in
+
+computes the equilibrium
+
+computes the displacement U at
+
+RKM may be a vector; U will be a
+
+Computed by Hankel transform means for
+
+Bueler (2005), "Computation of a viscoelastic
+
+[R,U]=VISCDISC(H0,R0KM,’INF’,RKM)
+displacement.
+
+[R,U]=VISCDISC(H0,R0KM,TYRS,RKM)
+time TYRS (years) at radii RKM (km) caused by a disc of radius
+R0KM (km) and thickness H0 (m).
+vector of the same length.
+
+function u=viscdisc(H0,R0km,tyrs,rkm)
+% VISCDISC
+% case of disc load at origin.
+% comparison to Lingle & Clark (1985) and to new numerical method in
+% technical report:
+% deformable earth model for ice sheet simulation."
+%
+%
+%
+%
+%
+%
+%
+%
+%
+% Example I; for disc 1000 m thick with 1000km radius at t=10^2,10^4,inf
+% years; plotted on range 0.01 km to 10000 km.
+% viscdisc requires more than a minute on my machine.
+%
+%
+%
+%
+%
+%
+%
+%
+% Example II; continues the above.
+% 5(a) in Lingle & Clark (1985), but at fewer times.
+%
+%
+%
+%
+%
+
+r=10.^(-2:.01:4);
+u1=viscdisc(1000,1000,100,r);
+u2=viscdisc(1000,1000,2000,r);
+u3=viscdisc(1000,1000,’inf’,r);
+semilogx(r,u1,r,u2,r,u3), xlabel(’r (km)’),
+u3(1)/1000, -910/3300
+
+tt=[20 200 500 2000 5000 20000 50000 100000];
+R0=0.001;
+for j=1:8,
+figure,
+
+uu(:,j)=viscdisc(H0,0.001,tt(j),r);
+
+% compensation depth comparison
+
+for j=1:8, semilogx(r,uu(:,j)),
+
+% small disc with mass 1 kg
+
+Each evaluation of
+
+ylabel(’u (m)’)
+
+% 601 r values
+
+H0=1/(pi*910);
+
+hold on,
+
+end
+
+end
+
+Plots the Green’s function as in figure
+Takes a minute or so.
+
+36
+
+BUELER AND OTHERS
+
+hold off,
+axis([r(1) r(end) -3.5e-15 0.5e-15]), grid on
+
+xlabel(’r (km)’),
+
+%
+%
+%
+% See also GHV, FASTEARTH, TESTFAST.
+% ELB (12/7/05)
+
+ylabel(’displacement (m)’)
+
+% kg/m^3
+
+g=9.81; % m/s^2
+rhoi=910; % kg/m^3
+rhor=3300;
+rg=rhor*g; % combined constant
+D=5.0e24; % N m; flexural rigidity of lithosphere
+eta=1.0e21;
+spera=3.1556926e7;
+
+% Pa s; viscosity of mantle
+
+% seconds per year
+
+R0=R0km*1000;
+TOL=eps;
+pts=[10.^(-3:-0.05:-10) 1.0e-14];
+
+if (isstr(tyrs)&&strcmp(tyrs,’inf’))
+
+for k=1:length(rkm)
+rk=rkm(k)*1000;
+result=quadl(@equilgrand,pts(1),100.0*pts(1),TOL); %kap->infty tail
+for j=1:length(pts)-1
+
+result=result+quadl(@equilgrand,pts(j+1),pts(j),TOL);
+
+end
+u(k)=-rhoi*g*H0*R0*result;
+
+t=tyrs*spera;
+for k=1:length(rkm)
+rk=rkm(k)*1000;
+result=quadl(@integrand,pts(1),100.0*pts(1),TOL); % kap->infty tail
+for j=1:length(pts)-1
+
+result=result+quadl(@integrand,pts(j+1),pts(j),TOL);
+
+end
+u(k)=rhoi*g*H0*R0*result;
+
+function y=integrand(kap)
+% integrand of inverse Hankel transform
+beta=rg + D*kap.^4;
+expdiff=exp(-beta*t./(2*eta*kap))-ones(size(kap));
+y=expdiff.*besselj(1.0,kap*R0).*besselj(0.0,kap*rk)./beta;
+end
+
+function y=equilgrand(kap)
+% integrand of inverse Hankel transform when t-->infty
+y=besselj(1.0,kap*R0).*besselj(0.0,kap*rk)./(rg + D*kap.^4);
+end
+
+end
+
+else
+
+end
+
+end
+
+end
+
+

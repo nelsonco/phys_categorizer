@@ -1,0 +1,6534 @@
+A Sub-Cell Based Indicator for Troubled Zones in RKDG Schemes and 
+
+a Novel Class of Hybrid RKDG+HWENO Schemes 
+
+By 
+
+ 
+
+ 
+
+Dinshaw S. Balsara 
+
+(dbalsara@nd.edu) 
+
+Notre Dame, IN 46556 
+
+Center for Astrophysics, Department of Physics, University of Notre Dame, 
+
+ 
+
+ 
+
+ 
+
+ 
+
+Abstract 
+
+Runge  Kutta  Discontinuous  Galerkin  (RKDG)  schemes  can  provide  highly 
+
+accurate  solutions  for  a  large  class  of  important  scientific  problems.  Using  them  for 
+
+problems  with  shocks  and  other  discontinuities  requires  that  one  has  a  strategy  for 
+
+detecting the presence of these discontinuities. Strategies that are based on total variation 
+
+diminishing  (TVD)  limiters  can  be  problem-independent  and  scale-free  but  they  can 
+
+indiscriminately  clip  extrema,  resulting  in  degraded  accuracy.  Those  based  on  total 
+
+variation  bounded  (TVB)  limiters  are  neither  problem-independent  nor  scale-free.  In 
+
+order to get past these limitations it was realized that the solution in RKDG schemes can 
+
+carry meaningful sub-structure within a zone that may not need to be limited. To make 
+
+this  sub-structure  visible,  we  take  a  sub-cell  approach  to  detecting  zones  with 
+
+discontinuities,  known  as  troubled  zones.  A  monotonicity  preserving  (MP)  strategy  is 
+
+applied  to  distinguish  between  meaningful  sub-structure  and  shocks.  The  strategy  does 
+
+not  indiscriminately  clip  extrema  and  is,  nevertheless,  scale-free  and  problem-
+
+independent.  It,  therefore,  overcomes  some  of  the  limitations  of  previously-used 
+
+strategies  for  detecting  troubled  zones.  The moments  of  the  troubled  zones  can  then  be 
+
+corrected  using  a  weighted  essentially  non-oscillatory  (WENO)  or  Hermite  WENO 
+
+(HWENO)  approach.  These  advances  are  catalogued  in  this  paper  and  illustrated  with 
+
+several stringent test problems. In the course of doing this work it was also realized that 
+
+the  most  significant  variation  in  the  solution  is  contained  in  the  solution  variables  and 
+
+1
+
+their first moments. Thus the additional moments can be reconstructed using the variables 
+
+and their first moments, resulting in a very substantial savings in computer memory. We 
+
+call such schemes hybrid RKDG+HWENO schemes. It is shown that such schemes can 
+
+attain the same formal accuracy as RKDG schemes, making them attractive, low-storage 
+
+alternatives to RKDG schemes. Hybrid RKDG+WENO schemes of third and fourth order 
+
+are  explicitly  catalogued  in  this  paper  and  their  utility  has  been  illustrated  with  several 
+
+stringent  test  problems.  It  is  shown  that  their  accuracy  is  usually  competitive  with  the 
+
+accuracy of RKDG schemes of the same order. Because of their compact stencils and low 
+
+storage,  hybrid  RKDG+HWENO  schemes  could  be  very  useful  for  large-scale  parallel 
+
+adaptive mesh refinement calculations. 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+2
+
+1 Introduction 
+
+Discontinuous  Galerkin  (DG)  methods  were  first  introduced  by  Reed  and  Hill 
+
+[22]  for  solving  linear  hyperbolic  problems  associated  with  neutron  transfer.  Cockburn 
+
+and Shu [7], Cockburn, Lin and Shu [8] formulated the method for nonlinear hyperbolic 
+
+problems  and  its  application  to  the  case  of  systems  of  conservation  laws  in  one  and 
+
+multiple  dimensions  was  carried  out  in  Cockburn,  Hou  and  Shu  [9]  and  Cockburn  and 
+
+Shu [10]. The basic idea  of Cockburn, et al was a  simple yet elegant one. They used a 
+
+DG  discretization  in  space  along  with  the  total  variation  diminishing  (TVD)  preserving 
+
+Runge-Kutta time discretization from Shu and Osher [24] to arrive at a methodology they 
+
+called Runge-Kutta Discontinuous Galerkin (RKDG). The method was explicit and non-
+
+linearly  stable.  Exact  or  approximate  Riemann  solvers  were  used  to  obtain  interface 
+
+fluxes and a limiting strategy that was based on total variation bounded (TVB) limiters 
+
+was used to achieve non-linear stability in the presence of strong shocks. A recent review 
+
+of RKDG methods is available in Cockburn, Karniadakis and Shu [11]. 
+
+The  RKDG  method  has  several  desirable  features.  All  the  moments  of  the 
+
+solution are explicitly carried, thus making a well-defined solution available at any point 
+
+in  the  computational  domain.  It  provides  a  simple  strategy  for  obtaining  the  update 
+
+equations for all the moments, making it easy to arrive at a computer implementation of 
+
+the method. The RKDG method can be formulated on logically rectangular meshes or on 
+
+triangular and tetrahedral meshes using a constructive strategy that is independent of the 
+
+mesh used. It can be formulated for all orders, a fact that has been used to advantage by 
+
+Biswas, Devine and Flaherty [5] to design hp-adaptive RKDG formulations for the Euler 
+
+equations and by Hesthaven and Warburton [14] to achieve very high orders of accuracy 
+
+for Maxwell’s equations.  
+
+A potential advantage of RKDG schemes stems from the fact that the high order 
+
+of accuracy of RKDG schemes can be achieved by using rather small stencils. The small 
+
+stencils  give  RKDG  methods  an  advantage  over  the  essentially  non-oscillatory  (ENO) 
+
+schemes  of  Shu  and  Osher  [24],  [25]  and the weighted ENO (WENO) schemes of Liu, 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+3
+
+Osher  and  Chan  [18],  Jiang  and  Shu  [16],  Balsara  and  Shu  [2]  and  Hu  and  Shu  [15]. 
+
+Recently Qiu and Shu [19], [20] formulated Hermite WENO (HWENO) schemes which 
+
+also rely on smoothness indicators to pick the best stencil, just like the WENO schemes. 
+
+The  WENO  schemes  all  have  stencil  widths  that  increase  with  increasing  order,  which 
+
+might  be  held  to  be  a  disadvantage  of  the  WENO  schemes.  Because  WENO  schemes 
+
+reconstruct all the moments of the solution, they, however, have the advantage of having 
+
+a low storage requirement. RKDG schemes, on the other hand, have storage requirements 
+
+that increase dramatically with increasing orders, especially in multiple dimensions. The 
+
+RKDG and WENO methods have complementing strengths even when one assesses their 
+
+performance on practical problems. RKDG formulations can be very robust even in the 
+
+presence  of  problems  with  strong  shocks.  WENO  schemes  offer  high  formal  accuracy 
+
+and yet some of the higher order WENO schemes can lose robustness and even display 
+
+spurious oscillations that need to be controlled, as was discussed in Balsara and Shu [2] 
+
+and  Shi,  Hu  and  Shu  [22].  It  is,  therefore,  interesting  to  ask  whether  there  might  be 
+
+schemes that draw on the strengths of both approaches? In the course of carrying out this 
+
+work  it  was  realized  that  an  affirmative  answer  could  be  found  for  the  above  question. 
+
+We  call  such  schemes  hybrid  RKDG+HWENO  schemes.  The  hybrid  RKDG+HWENO 
+
+schemes  have  the  intrinsic  robustness  and  smaller  stencils  of  RKDG  schemes  and  yet 
+
+they  draw  on  ideas  from  WENO  schemes  to  reconstruct  some  of  the  higher  moments, 
+
+thus enhancing the order of accuracy of the underlying RKDG scheme. The schemes rely 
+
+on evolving the lower moments with sufficiently high accuracy while reconstructing the 
+
+higher  moments.  The  utilitarian justification  of  such  a  division stems from the fact that 
+
+the majority of the variation of the flow is contained in the first few moments. Since only 
+
+the  lower  moments  require  fixed  storage  in  computer  memory,  the  new  schemes  might 
+
+have some attractive features for large-scale, high-performance parallel computations. In 
+
+this  work  we  give  explicit  formulae  for  reconstructing  the  second  and  third  moments 
+
+using  the  zeroth  and  first  moments,  thus  making  it  possible  to  formulate  hybrid 
+
+RKDG+HWENO schemes of third and fourth order accuracy. 
+
+Despite  their  many  attractive  features,  the  development  of  limiters  for  RKDG 
+
+schemes  has  presented  something  of  a  challenge.  Several  approaches  have  been  tried. 
+
+ 
+
+ 
+
+ 
+
+4
+
+Early  attempts  by  Cockburn  and  Shu  [10]  consisted  of  using  a  TVB  strategy  to  detect 
+
+troubled  zones.  The  TVB  strategy  suffers  from  the  fact  that  it  is  neither  scale-free  nor 
+
+problem-independent. Biswas, Devine and Flaherty [5] designed a limiter that adaptively 
+
+limited the moments, going from the highest moment to the lowest. Burbeau, Sagaut and 
+
+Bruneau [6] formulated a problem-independent limiter that limits not just the variable but 
+
+also  its  successive  moments,  while  making  some  allowance  for  the  existence  of  local 
+
+extrema. Krivodonova et al (2004) presented a limiting strategy that is based on a strong 
+
+superconvergence at the outflow boundaries for the Euler equations. Despite their success 
+
+on practical problems, the above two approaches present a conceptual difficulty because 
+
+the TVD property only holds for the solution itself, not its moments. Qiu and Shu [19] 
+
+showed  that  the  problem  of  non-linear  limiting  can  be  broken  up  into  two  conceptual 
+
+parts.  The  first  part  consisted  of  using  a  TVB  limiter  to  detect  zones  that  could  be 
+
+classified as troubled zones because they had a discontinuity passing through them. The 
+
+second  part  consisted  of  using  WENO  schemes  to  supply  the  moments  in  the  troubled 
+
+zones.  In  subsequent  work,  Qiu  and  Shu  [20],  [21]  replaced  the  second  part  with  a 
+
+HWENO scheme for supplying the moments in the troubled zones. The formulation by 
+
+Qiu  and  Shu  furnishes  a  logical  strategy  for  rebuilding  the  moments  in  zones  that  are 
+
+already  identified  as  troubled.  It  can  even  be  used  in  the  hybrid  RKDG+HWENO 
+
+schemes  mentioned  in  the  previous  paragraph.  However,  their  strategy  for  detecting 
+
+troubled zones is still based on the TVB limiter, which suffers from the dual defects that 
+
+it is neither scale-free nor problem-independent.  
+
+In order to ensure the end-to-end success of RKDG schemes and the previously 
+
+mentioned  hybrid  RKDG+HWENO  schemes  we  still  need  a  scale-free,  problem-
+
+independent  strategy  for  detecting  troubled  zones.  Such  a  strategy  has  to  be  built  very 
+
+carefully because it should be able to tell the difference between a genuine discontinuity 
+
+in the solution and a smoothly varying extremum. Higher order RKDG schemes can carry 
+
+a considerable amount of meaningful sub-structure within each zone. A good detector of 
+
+troubled zones should be able to tell apart this meaningful sub-structure from a genuine 
+
+discontinuity.  If  a  bad  detector  is  used,  a  great  many  zones  will  be  flagged  as  troubled 
+
+zones and the WENO scheme will be needlessly called upon to supply moments in those 
+
+ 
+
+ 
+
+5
+
+zones.  Practical  experimentation  has  shown  that  while  this  will  not  degrade  the  formal 
+
+order  of  the  RKDG  scheme  it  will,  nevertheless,  degrade  the  intrinsic  accuracy  of  the 
+
+scheme. For very higher order RKDG schemes, this degradation of intrinsic accuracy can 
+
+be by several orders of magnitude. We realize, therefore, that as the order of accuracy of 
+
+the RKDG scheme is increased we have to be willing to carefully examine the solution 
+
+for  meaningful  sub-scale  structure  and  distinguish  between smooth local extrema at  the 
+
+subscale level within each zone and gross discontinuities in the flow. A good detector of 
+
+troubled  zones  should  also  have  free  parameters  that  allow  us  to  decide  how  large  and 
+
+rapidly-varying a local extremum we are willing to tolerate before labeling it a spurious 
+
+oscillation associated, for example, with an upstream shock. Experience has shown that 
+
+such  parameters  are  usually  determined  by  the  intrinsic  properties  of  the  hyperbolic 
+
+system  being  considered.  To  give  an  example,  because  the  Euler  system  has  a  convex 
+
+flux and does not generate any compound shocks, it will permit such parameters to be set 
+
+liberally.  The  magnetohydrodynamic  (MHD)  system,  which  has  a  non-convex  flux  and 
+
+can  generate  compound  shocks,  will  begin  to  show  spurious  oscillations  if  the  same 
+
+parameters are set too liberally. In their examination of very high order WENO schemes, 
+
+Balsara and Shu [2] found that the monotonicity preserving (MP) limiter of Suresh and 
+
+Huynh  [27]  provided  such  a  scale-free,  problem-independent  strategy  for  stabilizing 
+
+WENO schemes. The MP limiter uses a five-point stencil to detect local extrema, instead 
+
+of  a  three-point  stencil  that  is  used  by  a  TVD  limiter.  In  this  work  we  make  two 
+
+extensions:  a)  We  reformulate  the  MP  limiter,  showing  that  there  are  some  further 
+
+opportunities  for  providing  extra  space  at  well-defined  extrema.  b)  We  use  the 
+
+reformulated MP limiter to suitably chosen sub-cells of a cell that is undergoing update 
+
+via  an  RKDG  or  hybrid  RKDG+HWENO  scheme.  The  above-mentioned  advances 
+
+enable us to efficiently detect troubled zones. The detector of troubled zones described in 
+
+this  paper  is  scale-free  and  problem-independent  in  the  following  sense:  For  a  given 
+
+hyperbolic system and a chosen order of the RKDG or hybrid RKDG+HWENO scheme 
+
+we choose the free parameters in the MP limiter once and once only. Once that choice is 
+
+made,  we  require  that  all  problems  with  any  shock  strength  can  be  treated  without 
+
+changing the parameters. 
+
+ 
+
+ 
+
+6
+
+In this paper we focus on developing the present ideas very thoroughly for one-
+
+dimensional  problems.  Extensions  to  multiple  dimensions  will  be  the  topic  of  a  later 
+
+paper. In Section 2 we briefly catalogue RKDG  schemes  and  then introduce the hybrid 
+
+RKDG+HWENO schemes. In Section 3 present our strategy for flagging troubled zones. 
+
+In section 4 we provide an extensive accuracy analysis. In Section 5 we present several 
+
+test problems. Conclusions are presented in Section 5. 
+
+2 RKDG and hybrid RKDG+HWENO Schemes 
+
+We divide this section into two sub-sections. In the first sub-section we provide a 
+
+very  brief  introduction  to  RKDG  schemes  with  the  intent  of  setting  up  a  common 
+
+notation. In the second sub-section we present the hybrid RKDG+HWENO schemes. 
+
+2.a Introduction to RKDG Schemes 
+
+The  RKDG  schemes  have  been  presented  in  detail  in  Cockburn  and  Shu  [10]. 
+
+Following Cockburn and Shu [10], we present just enough detail here to set up a common 
+
+notation for the rest of this paper. Thus consider the system of conservation laws: 
+
+ 
+u
+∂
+ t
+∂
+
+ 
+
++
+
+ div 
+
+f(u)
+
+ = 0
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+(2.1) 
+
+Any specific component of the vector of conserved variables  u  can be denoted by u (x,t). 
+
+Eqn.  (2.1)  is  discretized  over  the  physical  domain  Ω  using  the  discontinuous  Galerkin 
+
+method.  The  approximate  solution  to  u  (x,t)  is  sought  in  the  finite  element  space  of 
+
+discontinuous functions 
+
+V = { v  
+h
+
+∞∈
+
+ L  (
+
+Ω
+
+) : v |
+h K
+
+ 
+
+∈
+
+ V(K), 
+
+  }T
+∀ ∈ h
+
+ K 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+(2.2) 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+7
+
+where 
+
+hT
+
+  is  a  triangulation  of  the  domain  Ω  and  V(K)  is  the  local  space.  To  take  an 
+
+example, consider subdividing the real line into intervals labeled by “i” so that each such 
+
+zone has a local coordinate that goes from [-1/2, 1/2] . Then, for a fourth order accurate 
+
+representation, u (x,t) can be written in a set of modal bases, P
+
+0 (x), P1 (x), P2 (x) and P4 
+
+(x)  as: 
+
+u (x, t) = u  (t) P  (x) + u  (t) P  (x) + u  (t) P  (x) + u  (t) P  (x)
+1
+
+0
+
+4
+
+4
+
+1
+
+0
+
+2
+
+2
+where P  (x) = 1 ; P  (x) = x ; P  (x) = x  
+1
+
+0
+
+2
+
+−
+
+3
+ ; P  (x) = x  
+
+−
+
+ x
+
+4
+
+2
+1
+12
+
+ 
+
+(2.3) 
+
+3  
+20
+
+The  modal  bases  in  eq.  (2.3)  are  just  the  Legendre  polynomials,  suitably  scaled  to  the 
+
+local  coordinates  of  the  zone  being  considered.  For  logically  rectangular  meshes  in 
+
+multiple dimensions, one can use tensor products of the above bases. The bases used in 
+
+eq. (2.3) are orthogonal but not orthonormal and result in the mass matrix: 
+
+M = diag [ 1, 
+
+ , 
+
+ ]
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+(2.4) 
+
+1
+12
+
+1
+180
+
+ , 
+
+1
+2800
+
+The terms in eqn. (2.3) can also be viewed as the modes in a functional expansion. One 
+
+can  also  take  the  view  that  they  represent  the  zeroth  through  third  moments  of  the 
+
+solution  u  (x,t)  within  the  zone.  Since  it  will  be  useful  to  be  able  to  calculate  these 
+
+moments, we briefly explicit that in the Appendix. The equations for the evolution of ui(t) 
+
+can be obtained by using a smooth test function v(x) to make a weak formulation of eqn. 
+
+(2.1) over the domain K as follows: 
+
+d
+dt
+
+∫
+  u (x,t) v (x) dx + 
+K
+
+∑
+
+e K
+∈
+
+∫
+
+e
+
+f
+
+ ( u (x,t))   n
+
+i
+
+ v (x) d  
+
+Γ −
+
+  
+
+f
+
+ ( u (x,t))   grad v ( x) dx = 0
+
+i
+
+ 
+
+e,K
+
+∫
+
+K
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+(2.5) 
+
+Here 
+
+e,Kn
+
+ denotes the outward unit normal to the edge “e” of the domain K. The smooth 
+
+test  functions  v(x)  are  usually  drawn  from  the  set  of  bases  functions,  eqn.  (2.2).  The 
+
+integrals  in  eqn.  (2.5)  are  replaced  by  discrete  sums  using  quadrature  rules  of  the 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+8
+
+appropriate accuracy. We take our example from eqn. (2.3) and explicitly write out the 
+
+evolution equations for the zeroth through third moments as follows: 
+
+ +  f (1/2) 
+
+−
+
+ f ( 1/2)  = 0
+
+−
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+(2.6) 
+
+]
+
+ +  P (1/2) f (1/2) 
+
+−
+
+[
+
+1
+
+]
+ P ( 1/2) f ( 1/2)  
+
+−
+
+−
+
+1
+
+/
+f (u (x,t)) P (x) dx  = 0
+1
+
+ 
+
+⎡
+ 
+− ⎢
+⎣
+
+1/ 2
+
+∫
+
+−
+
+1/ 2
+
+⎡
+ 
+− ⎢
+⎣
+
+1/ 2
+
+∫
+
+−
+
+1/ 2
+
+⎡
+ 
+− ⎢
+⎣
+
+1/ 2
+
+∫
+
+−
+
+1/ 2
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+⎤
+⎥
+⎦
+
+(2.7) 
+
+⎤
+⎥
+⎦
+
+⎤
+⎥
+⎦
+
+(2.8) 
+
+(2.9) 
+
+ +  P (1/2) f (1/2) 
+
+−
+
+[
+
+2
+
+]
+ P ( 1/2) f ( 1/2)  
+
+−
+
+−
+
+2
+
+/
+f (u (x,t)) P (x) dx  = 0
+2
+
+ 
+
+1
+2800
+
+ 
+
+d u (t)
+3
+d t
+
+ +  P (1/2) f (1/2) 
+
+−
+
+[
+
+3
+
+]
+ P ( 1/2) f ( 1/2)  
+
+−
+
+−
+
+3
+
+/
+f (u (x,t)) P (x) dx  = 0
+3
+
+ 
+
+The fluxes f(1/2) and f(−1/2) can be obtained by solving a Riemann problem at the zone 
+
+boundaries.  Notice  that  because  of  our  choice  of  a  one-dimensional  formulation  the 
+
+surface  integrals  at  the  zone  boundaries  have  been  much  simplified.  Typically,  simple 
+
+flux  functions  such  as  the  ones  by  Harten,  Lax  and  van  Leer  flux  or  (local)  Lax-
+
+Friedrichs flux are used. The integrals in eqns. (2.7) to (2.9) are evaluated using Gauss 
+
+quadrature points of the appropriate order and such quadrature points and their weights 
+
+are catalogued in texts by Stroud and Secrest [26] or Abromowitz and Stegun [1]. Notice 
+
+that eqn. (2.6) is our familiar expression of a conservation law while the higher moments 
+
+in  eqns.  (2.7)  to  (2.9)  represent  evolutionary  equations  for  the  moments  and  so  do  not 
+
+have  to  be  in  a  conservation  law  form.  This  completes  our  description  of  the  RKDG 
+
+scheme. 
+
+0d u (t)
+d t
+
+[
+
+1 d u (t)
+12
+
+1
+d t
+
+ 
+
+1
+180
+
+ 
+
+d u (t)
+2
+d t
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+9
+
+2.b Hybrid RKDG+HWENO Schemes 
+
+We  now  describe  the  hybrid  RKDG+HWENO  schemes.  We  preface  our 
+
+description  by  pointing  out  that  if  the  application  scientist  has  sufficient  amount  of 
+
+computer memory to retain all the moments up to the desired level of accuracy then s/he 
+
+should do so. In that case, RKDG schemes will serve the purpose optimally because none 
+
+of the data associated with the higher moments will need to be destroyed at the end of a 
+
+timestep  and  reconstructed  at  the  start  of  the  next  timestep.  However,  most  large 
+
+applications  almost  never  have  a  sufficient  amount  of  computer  memory.  Furthermore, 
+
+large parallel applications usually use a certain style of processing the computation where 
+
+the  computation  is  domain-decomposed  into  a  large  number  of  sub-domains  that  are 
+
+processed  using  a  substantially  smaller  number  of  processors.  A  prominent  example  of 
+
+such an application could be large, parallel adaptive mesh refinement calculations where 
+
+the  solution  is  stored  over  many  thousands  of  sub-domains  and  those  sub-domains  are 
+
+processed using a few hundred to a thousand processors, see Balsara and Norton [3]. In 
+
+such calculations, one wants to store a small amount of solution-specific data in each of 
+
+the sub-domains. However, one can assign a substantially larger amount of local data on 
+
+each  processor  that  is  processing  each  of  the  sub-domains.  We  build  the  hybrid 
+
+RKDG+HWENO algorithm around the premise that we are willing to store the variables 
+
+as well as their slopes for each of the sub-domains. However, for the third order hybrid 
+
+RKDG+HWENO scheme we would like to reconstruct the second moment in eqn. (2.3) 
+
+and use the third order quadratures in eqns. (2.6) to (2.8) to evolve the terms for an entire 
+
+timestep, after which we store just the variables and their slopes back to the computer’s 
+
+main memory. Similarly, for the fourth order hybrid RKDG+HWENO scheme we would 
+
+like  to  reconstruct  the  second and  third  moments  in  eqn.  (2.3)  and  use  the  fourth  order 
+
+quadratures in eqns. (2.6) to (2.9) to evolve the terms for an entire timestep, after which 
+
+we store just the variables and their slopes back to the computer’s main memory. In the 
+
+next two sub-sections we describe our reconstruction strategy for third and fourth order 
+
+hybrid RKDG+HWENO schemes. 
+
+ 
+
+ 
+
+ 
+
+ 
+
+10
+
+2.b.i Reconstruction Strategy for Third Order Hybrid RKDG+HWENO 
+
+Scheme 
+
+In  this  sub-section  we  reconstruct  the  second  moment  in  the  zone  “i”  where  we 
+
+take ui as representing the mean value in that zone and vi as representing the first moment 
+
+in  the  same  zone.  In  terms  of  eqn.  (2.3),  ui  and  vi  are  the  first  two  coefficients  in  the 
+
+modal  expansion.  If  the  zone  “i”  has  been  identified  as  being  a  troubled  zone  then  we 
+
+assume  that  we  have  used  the  strategy  given  in  Qiu  and  Shu  [19]  to  obtain  a  corrected 
+
+value for the first moment vi . We also base our scheme on using the values ui−1 , ui , vi 
+
+and  ui+1  to  reconstruct  the  second  moment  in  the  zone  “i”.  Following  the  HWENO 
+
+philosophy of Qiu and Shu [20], we wish to find two quadratic polynomials : The first 
+
+quadratic,  p0(x),  covers  the  stencil  formed  by  zones  “i”  and  “i−1”  and  reproduces  the 
+
+zeroth  and  first  moments,  ui  and  vi  ,  in  zone  “i”  and  the  zeroth  moment  “ui−1”  in  zone 
+
+“i−1”. The second quadratic, p1(x), covers the stencil formed by zones “i” and “i+1” and 
+
+reproduces the zeroth and first moments, ui and vi , in zone “i” and the zeroth moment 
+
+“ui+1” in zone “i+1”. We wish to obtain the solution at preferred Gauss quadrature points 
+
+within the zone “i” so that we can use the value of the solution at those quadrature points 
+
+to  obtain  the  second  moment,  i.e.  the  third  coefficient  in  the  modal  expansion  that  is 
+
+given in  eqn. (2.3). The Gauss quadrature points for third order accurate integration in 
+
+the  local  coordinates  of  zone  “i”  that  span  [-0.5,  0.5]  are  given  by 
+
+Gx  = 
+
+−
+
+3 20
+
+  , 
+
+Gx  = 0
+
+  and 
+
+Gx  =  3 20   .  The  corresponding  weights  can  be  found  from  Stroud  and 
+
+Secrest  [26].  (Note  that  the  standard  Gauss  formulae  use  the  domain  [-1,1]  so  a 
+
+normalization  by  a  factor  of  0.5  is  needed  for  the  weights.)  Following  the  HWENO 
+
+philosophy of Qiu and Shu [20], we choose the large stencil formed by zones “i−1”, “i” 
+
+and  “i+1”  and  find  the  cubic  polynomial  Q(x)  which  reproduces  the  zeroth  and  first 
+
+moments, ui and vi , in zone “i” , the zeroth moment “ui−1” in zone “i−1” and the zeroth 
+
+moment  “ui+1”  in  zone  “i+1”.  The  HWENO  strategy  consists  of  trying  to  find  positive 
+
+linear weights,  G
+
+k  γ  ( also known as optimal weights) for each Gauss quadrature point xG 
+
+that satisfy the condition: 
+
+ 
+
+ 
+
+ 
+
+ 
+
+11
+
+Q(x ) = 
+G
+
+G  
+ p (x )
+
+k
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+(2.10) 
+
+1
+
+γ∑
+
+G
+k
+
+k=0
+
+For the third order hybrid RKDG+WENO we come up with the extremely simple result 
+
+that: 
+
+G
+γ
+k
+
+ = 
+
+1
+2
+
+ for all Gauss quadrature points "G" and both polynomials "k".
+
+ 
+
+ 
+
+(2.11) 
+
+Once the optimal weights are known, we combine the solution from the each of the two 
+
+small  stencils  at  each  of  the  Gauss  quadrature  points  using  smoothness  measures  that 
+
+keep  track  of  how  rapidly  the  solution  is  varying  in  that  stencil.  The  smoothness 
+
+measures for each stencil evaluate the quality of the data available on that stencil and are, 
+
+therefore, used to determine the fraction of the solution that will be used from that stencil. 
+
+Since  the  procedure  favors  the  stencil  with  the  smoothest  solution,  it  introduces  an 
+
+upwind bias into the scheme. The construction of the smoothness measures follows Jiang 
+
+and  Shu  [16].  To  complete  the  present  scheme  we  simply  need  to  provide  closed-form 
+
+expressions  for  the  smoothness  measures  and  explicit  evaluations  of  the  polynomials 
+
+p0(x) and p1(x) at each of  the Gauss quadrature points xG . The smoothness measure for 
+
+the stencil spanned by the polynomial p0(x) is given by: 
+
+β
+0
+
+ = ( 13 ( u
+
+u
+−−
+
+j 1
+
+j
+
+−
+
+v )  + 3 v  ) / 3
+
+ 
+
+2
+
+2
+j
+
+j
+
+β
+1
+
+ = ( 13 ( u
+
+−
+
+u
+
+j
+
+j+1
+
+−
+
+v )  + 3 v  ) / 3
+
+ 
+
+2
+
+2
+j
+
+j
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+(2.12) 
+
+(2.13) 
+
+The smoothness measure for the stencil spanned by the polynomial p1(x) is given by: 
+
+We only need to provide explicit evaluations of the polynomials p0(x) and p1(x) at two of  
+
+the  three  Gauss  quadrature  points,  since  the  third  can  be  obtained  by  symmetry 
+
+considerations. Thus at 
+
+Gx  = 0
+
+ the polynomials, with coefficients that are evaluated with 
+
+16 digit accuracy, are: 
+
+ 
+
+ 
+
+12
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+0
+
+G
+
+p (x ) =1.0833333333333333 u  
+j
+p (x ) =1.0833333333333333 u  
+1
+j
+ 
+
+G
+
+−
+
+−
+
+ 0.08333333333333333 u  
+j 1
+−
+ 0.08333333333333333 u  + 0.08333333333333333 v
+j+1
+
+ 0.08333333333333333 v
+
+−
+
+j
+
+j
+
+At 
+
+Gx  =  3 20   the  polynomials,  with  coefficients  that  are  evaluated  with  16  digit 
+
+accuracy, are: 
+
+p (x ) =0.9333333333333333 u  + 0.0666666666666666 u  + 0.4539650012874083 v
+
+0
+
+G
+
+j 1
+−
+
+j
+
+p (x ) =0.9333333333333333 u  + 0.0666666666666666 u  + 0.3206316679540702 v
+1
+
+j+1
+
+G
+
+j
+
+j
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+The solution 
+
+u ( x )
+G
+
+ at a Gauss quadrature point x
+
+G can be constructed by first building 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+(2.14) 
+
+j  
+
+(2.15) 
+
+(2.16) 
+
+(2.17) 
+
+ 
+
+ 
+
+ 
+
+We take  ε = 10−12 in eqn. (2.16). The solution 
+
+u ( x )
+G
+
+ is then given by: 
+
+u ( x ) = 
+G
+
+G  
+ p  ( x )
+
+k
+
+ 
+
+ 
+
+ω∑
+ 
+
+G
+k
+
+k
+
+the non-linear weights, 
+
+G
+
+kω , as follows: 
+
+G
+ω
+k
+
+ = 
+
+ ;     
+
+G
+ω
+k
+
+ 
+
+=
+
+ 
+
+G
+γ
+k
+)
+ + 
+ 
+β ε
+
+k
+
+(
+
+  
+
+2
+
+G
+ω
+k
+∑
+
+G
+ω
+k
+
+k
+
+The solution at all the Gauss quadrature points can then be used in conjunction with the 
+
+modal basis to reconstruct the second moment, as shown in the Appendix. This completes 
+
+our description of the third order hybrid RKDG+HWENO scheme. 
+
+We make several observations below: 
+
+1)  It  is  known  that  for  schemes  that  are  better  than  second  order  the  best  flagging 
+
+strategies  for  detecting  troubled  zones  rely  on  characteristic  variables.  The  hybrid 
+
+ 
+
+ 
+
+ 
+
+13
+
+RKDG+HWENO schemes are well-matched with such a flagging strategy because for a 
+
+small addition to the cost of the flagging strategy one can also obtain an additional one or 
+
+two  orders  of  accuracy.  Moreover,  this  advantage  is  obtained  without  any  significant 
+
+2)  For  multiple  dimensions  we  can  still  obtain  the  quadratic  terms  using  this  strategy. 
+
+However,  for  the  cross  terms  we  might  need  to  use  ideas  like  the  ones  in  Qiu  and  Shu 
+
+increase in storage. 
+
+[21]. 
+
+3)  While  the  method  is  described  here  as  if  it  is  being  applied  to  a  scalar  problem,  it 
+
+extends naturally to systems as long as characteristic variables are used. We have found it 
+
+worthwhile to use characteristic variables in all the tests reported here. 
+
+4) Qiu and Shu [20] suggested that one can correct the first moment in the central zone 
+
+“i” using a HWENO scheme that uses the uncorrected first moments in zones “i+1” and 
+
+“i−1”. We favor the WENO correction strategies for obtaining the slopes from Qiu and 
+
+Shu  [19].  In  this  work  we  always  use  the  corrected  first  moment  vi  to  reconstruct  the 
+
+higher  moments.  Once  such  a  corrected  first  moment  is  available  we  can  use  the 
+
+approach in this section to reconstruct the second moment. 
+
+5) When using Runge-Kutta timestepping there are two ways in which this reconstruction 
+
+can be used on a sub-domain. In the first way we reconstruct the second moment in each 
+
+fractional  timestep.  In  the  second,  we  reconstruct  the  second  moment  at  the  start  of  a 
+
+timestep  on  a  sub-domain  and  evolve  it  for  the  current  timestep.  The  latter  requires  a 
+
+larger  layer  of  ghost  boundaries  than  the  former.  Experimentation  has  shown  that  both 
+
+strategies produce comparable results, hence we reconstruct the second moment in each 
+
+fractional timestep for all the test problems shown here. 
+
+6) The ADER approaches that were first developed by Titarev and Toro [29] and applied 
+
+to DG schemes by Dumbser and Munz [12] would prove especially useful here because 
+
+they  would  ameliorate  the  problems  associated  with  Runge-Kutta  timestepping  that  are 
+
+mentioned in the previous point. 
+
+7)  When  the  slopes  are  available,  the  present  method  has  a  small  advantage  over  the 
+
+WENO-based limiters in Qiu and Shu [19] because it generates positive weights for the 
+
+Gauss quadrature points instead of the Gauss-Lobatto points. This advantage also extends 
+
+to the fourth order hybrid RKDG+HWENO scheme described in the next sub-section. 
+
+ 
+
+14
+
+8) Notice that in a well-resolved calculation most zones will have smooth flow. Thus the 
+
+first moment will not go through any limiting and the scheme described above will be a 
+
+third order scheme with a compact stencil that extends over just the immediate neighbors 
+
+of the zone being considered. 
+
+9) The present set of ideas has some parallels with the work of Takewaki, Nishiguchi and 
+
+Yabe  [28]  though  the  underlying  RKDG  scheme  is  different  as  is  the  reconstruction 
+
+strategy for higher moments. The present schemes are also upwind and conservative. 
+
+10) The ideas described here are also potentially very useful for unstructured meshes. 
+
+11)  Because  the  second  moment  is  reconstructed,  it  is  possible  that  the  present  scheme 
+
+might  permit  a  higher  Courant  number  than  the  limiting  Courant  numbers  cataloged  in 
+
+Cockburn,  Karniadakis  and  Shu  [11]  for  the  corresponding  RKDG  scheme  of  the  same 
+
+order.  In  this  work  though,  we  use  Courant  numbers  for  the  third  order  hybrid 
+
+RKDG+HWENO scheme that are the same as those used for p=2 RKDG. 
+
+12)  For  notational  consistency  we  will  also  refer  to  the  third  order  accurate  hybrid 
+
+RKDG+HWENO scheme as the p=2 RKDG+HWENO scheme. 
+
+2.b.ii  Reconstruction 
+
+Strategy 
+
+for  Fourth  Order  Hybrid 
+
+RKDG+HWENO Scheme 
+
+In this sub-section we reconstruct the second and third moments in the zone “i” 
+
+where we take ui as representing the mean value in that zone and vi as representing the 
+
+first  moment  in  the  same  zone.  If  the  zone  “i”  has  been  identified  as  being  a  troubled 
+
+zone then we assume that we have used the strategy given in Qiu and Shu [19] to obtain a 
+
+corrected value for the first moment vi . We also base our scheme on using the values ui−2 
+
+, ui−1 , ui , vi , ui+1 and ui+2  to reconstruct the second and third moments in the zone “i”. 
+
+Again  following  the  HWENO  philosophy  of  Qiu  and  Shu  [20],  we  wish  to  find  three 
+
+cubic polynomials : The first cubic, p0(x), covers the stencil formed by zones “i”, “i−1” 
+
+and “i−2” and reproduces the zeroth and first moments, ui and vi , in zone “i” , the zeroth 
+
+moment  “ui−1”  in  zone  “i−1”  and  the  zeroth  moment  “ui−2”  in  zone  “i−2”.  The  second 
+
+cubic, p1(x), covers the stencil formed by zones “i−1”, “i” and “i+1” and reproduces the 
+
+ 
+
+ 
+
+ 
+
+ 
+
+15
+
+zeroth and first moments, ui and vi , in zone “i” , the zeroth moment “ui−1” in zone “i−1” 
+
+and  the  zeroth  moment  “ui+1”  in  zone  “i+1”.  The  third  cubic,  p2(x),  covers  the  stencil 
+
+formed by zones “i”, “i+1” and “i+2” and reproduces the zeroth and first moments, ui and 
+
+vi , in zone “i” , the zeroth moment “ui+1” in zone “i+1” and the zeroth moment “ui+2” in 
+
+zone “i+2”. We wish to obtain the solution at preferred Gauss quadrature points within 
+
+the  zone  “i”  so  that  we  can  use  the  value  of  the  solution  at  those  quadrature  points  to 
+
+obtain the second and third moments, i.e. the  third and fourth coefficients in the modal 
+
+expansion  that  is  given  in    eqn.  (2.3).  The  Gauss  quadrature  points  for  fourth  order 
+
+accurate integration in the local coordinates of the zone “i” that span [-0.5, 0.5] are given 
+
+by 
+
+Gx  =  0.43056815579702623
+
+−
+
+ 
+
+, 
+
+Gx  =  0.1699905217924281
+
+−
+
+ 
+
+, 
+
+Gx  = 0.1699905217924281
+
+  and 
+
+Gx  = 0.43056815579702623
+
+ 
+
+.  The  corresponding 
+
+weights can be found from Stroud and Secrest [26] and can be used after normalizing by 
+
+a factor of 0.5. Following the HWENO philosophy of Qiu and Shu [20], we choose the 
+
+large  stencil  formed  by  zones  “i−2”,  “i−1”,  “i”,  “i+1”  and  “i+2”  and  find  the  quintic 
+
+polynomial Q(x) which reproduces the zeroth and first moments, u
+
+i and vi , in zone “i” , 
+
+the  zeroth  moment  “ui−2”  in  zone  “i−2”  ,  the  zeroth  moment  “ui−1”  in  zone  “i−1”,  the 
+
+zeroth  moment  “ui+1”  in  zone  “i+1”  and  the  zeroth  moment  “ui+2”  in  zone  “i+2”.  The 
+
+HWENO  strategy  consists  of  trying  to  find  the  optimal  weights, 
+
+G
+
+k  γ   for  each  Gauss 
+
+quadrature  point  xG  that  satisfy  the  condition  in  eqn.  (2.10).  For  the  third  order  hybrid 
+
+RKDG+WENO we find the optimal weights for 
+
+Gx  = 0.1699905217924281
+
+ to be: 
+
+ = 0.1086206894023039 ; 
+
+ = 0.5497704011732130 ;
+
+G
+γ
+1
+
+ = 0.3416089094244832
+
+The corresponding optimal weights for 
+
+Gx  = 0.43056815579702623
+
+ are: 
+
+ = 0.1493553825751190 ; 
+
+ = 0.6186539367058337 ;
+
+G
+γ
+1
+
+ = 0.2319906807190475
+
+   
+
+   
+
+ 
+
+ 
+
+ 
+
+ 
+
+(2.18) 
+
+(2.19) 
+
+G
+γ
+0
+G
+γ
+2
+
+G
+γ
+0
+G
+γ
+2
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+16
+
+The  optimal  weights  at  the  two  other  Gauss  quadrature  points  can  be  obtained  by 
+
+symmetry.  The  smoothness  measure  for  the  stencil  spanned  by  the  polynomial  p0(x)  is 
+
+given by: 
+
+β
+0
+
+2
+2
+ = (170995 u  + 274900 u  
+j
+j 1
+−
+
+−
+
+ 117196 u  u
+
+j 1
+−
+
+j 2
+−
+
+         + 13291 u
+
+ + u  ( 432604 u  + 90614 u
+
+−
+
+2
+j 2
+−
+
+j
+
+j 1
+−
+
+ 
+
+−
+
+ 252060 v )
+j
+
+j 2
+−
+
+         + 316320 u  v  
+j
+
+j 1
+−
+
+−
+
+ 64260 u
+
+j 2
+−
+
+j
+
+ v  + 98460 v ) / 4332
+
+2
+j
+
+The smoothness measure for the stencil spanned by the polynomial p1(x) is given by: 
+
+β
+1
+         
+
+2
+ = (6292 u  + 13291 u  
+ 20290 u  u  + 13291 u
+j 1
+j+1
+−
+ 6292 u  (u  + u ) + 46740 u  v  
+j+1
+j
+
+−
+
+−
+
+−
+
+j 1
+−
+
+j 1
+−
+
+j 1
+−
+
+2
+j
+
+j
+
+ 46740 u  v
+
+2
+j+1
+
+j+1
+
+ 
+
+j
+
+         + 48060 v ) / 1452
+
+2
+j
+
+The smoothness measure for the stencil spanned by the polynomial p2(x) is given by: 
+
+β
+2
+
+ = (170995 u  + 274900 u  + 13291 u
+
+2
+j+1
+
+2
+j
+
+2
+j+2
+
+ + 64260 u
+
+ v
+
+j
+
+j+2
+
+2
+         + 98460 v  
+j
+
+−
+
+ 4 u  (29299 u
+
+j+1
+
+j+2
+
+         + u  ( 432604 u  + 90614 u
+
+−
+
+j+1
+
+j
+
+ + 79080 v )
+j
+ + 252060 v ) ) / 4332
+
+ 
+
+j
+
+j+2
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+(2.20) 
+
+(2.21) 
+
+(2.22) 
+
+At 
+
+Gx  = 0.1699905217924281
+
+ the polynomials, with coefficients that are evaluated with 
+
+16 digit accuracy, are: 
+
+p (x ) = 1.117962827992853 u  
+j
+
+G
+
+0
+
+−
+
+ 0.1391382520457803 u  + 0.02117542405292723 u
+
+j 1
+−
+
+j 2
+−
+
+−
+
+ 0.017860823379015234 u  
+j 1
+−
+
+−
+
+ 0.03657573245505612 u
+
+j
+
++1
+
+p (x ) = 1.0854579859134137 u  
+j
+
+G
+
+2
+
+−
+
+ 0.09579846260652769 u  
+j 1
++
+
++
+
+ 0.010340476693114081 u
+
+ 
+
+j+2
+
+           + 0.07320311785250228 v
+
+j
+p (x ) = 1.0544365558340714 u  
+1
+j
+           + 0.188705430868469 v
+
+G
+
+j
+
+           + 0.2451080310127276 v
+
+j
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+17
+
+(2.23) 
+
+(2.24) 
+
+At 
+
+Gx  = 0.43056815579702623
+
+  the  polynomials,  with  coefficients  that  are  evaluated 
+
+with 16 digit accuracy, are: 
+
+p (x ) = 0.7972876757209407 u  + 0.23626456455437267 u  
+j 1
+j
+−
+
+G
+
+0
+
+−
+
+ 0.03355224027531344 u
+
+j 2
+−
+
+           + 0.599728239800772 v
+
+j
+p (x ) = 0.897944396546881 u  + 0.044101733886668416 u  
+1
+j 1
+j
+−
+           + 0.4167160201172442 v
+
+G
+
+G
+
+j
+           + 0.27744738679092285 v
+
+j
+
+j
+
+p (x ) = 0.8213466482174043 u  + 0.2041859345590879 u  
+j 1
+
++ −
+
+2
+
+ 0.02553258277649225 u
+
+ 
+
+j+2
+
++
+
+ 0.057953869566450496 u
+
+j
+
++1
+
+The polynomials at the two other Gauss quadrature points can be obtained by symmetry. 
+
+The  solution  can  be  obtained  at  the  Gauss  quadrature  points  by  using  eqns.  (2.16)  and 
+
+(2.17).  The  second  and  third  moments  can  be  reconstructed  using  the  Appendix.  This 
+
+completes our description of the fourth order hybrid RKDG+HWENO scheme. 
+
+We make a few observations below: 
+
+1) Notice that there is a difference in the way eqns. (2.6) and (2.7) are used in the third 
+
+and fourth order RKDG+WENO schemes. For the third order scheme we use third order 
+
+accurate  spatial  quadrature  and  third  order  accurate  Runge-Kutta  timestepping.  For  the 
+
+fourth  order  scheme  the  spatial  quadrature  and  timestepping  have  to  be  upgraded  to 
+
+fourth order accuracy. 
+
+2) It is tempting to try and use both the variable and slope in each of the zones “i−1”, “i” 
+
+and “i+1” to obtain a RKDG+HWENO scheme that has an even more compact stencil. 
+
+Such  an  effort  results  in  negative  values  for  the  optimal  weights  and  is,  therefore, 
+
+unproductive. Following the idea of Friedrichs [13], we even tried assigning equal linear 
+
+weights of 0.5 to each of the stencils and used the smoothness measures to combine the 
+
+two stencils non-linearly. The resulting scheme was still found to be unstable. Thus there 
+
+seems to be a limit to the level of compactness that can be achieved. 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+18
+
+3)  For  notational  consistency  we  will  also  refer  to  the  fourth  order  accurate  hybrid 
+
+RKDG+HWENO scheme as p=3 RKDG+HWENO scheme. 
+
+3 A Sub-Cell Based Algorithm for Flagging Troubled Zones 
+
+Both  RKDG  and  hybrid  RKDG-HWENO  schemes  really  do  not  need  a  lot  of 
+
+limiting.  For  smooth  portions  of  the  flow  the  schemes  are  very  stable  and  the  higher 
+
+moments do not need any limiting. Some practitioners have even reported that they have 
+
+successfully  solved  problems  with  mild  shocks  by  using  RKDG  schemes  without  any 
+
+resort  to  limiting.  However,  for  most  problems  with  strong  shocks,  some  amount  of 
+
+limiting will be needed. The MP limiter which we develop here follows the philosophy of 
+
+Suresh  and  Huynh  [27]  but  is  a  little  different  in  details.  It  permits  a  monotonicity 
+
+property to be applied in a controlled way and does not clip all local extrema, as would a 
+
+TVD limiter. It parametrizes the amount of solution-dependent curvature we permit in a 
+
+bonafide local extremum and the rapidity with which this curvature may vary. Both these 
+
+features  are  very  desirable  when  it  comes  to  preserving  some  forms  of  local  extrema, 
+
+especially when used with RKDG schemes that do not seem to need as much limiting as 
+
+comparable TVD schemes. 
+
+It is important to realize two important features associated with local extrema in 
+
+RKDG  schemes:  1)  The  higher  order  RKDG  schemes  can  retain  meaningful  sub-cell 
+
+structure that may not need to be limited. 2) It is also important to realize that spurious 
+
+extrema  in  second  order  finite  volume  schemes  with  piecewise-linear  slopes  only  show 
+
+up at the zone boundaries. In contrast, when dealing with higher order RKDG schemes 
+
+we have to realize that such spurious extrema will not necessarily show up only at a zone 
+
+boundary but may also manifest themselves within the interior of a zone. Applying any 
+
+form  of  discontinuity  detector  at  just  the  zone  boundary,  as  is  done  by  Biswas,  Devine 
+
+and Flaherty [5] and Burbeau, Sagaut and Bruneau [6], would fail to distinguish between 
+
+the two types of extrema catalogued earlier in this paragraph. A higher order scheme that 
+
+retains higher moments simply forces us to take a sub-cell based approach to limitng. The 
+
+schemes  presented  in  this  paper  have  all  been  formulated  in  a  modal  basis  set.  We 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+19
+
+observe though that a nodal formulation of RKDG schemes makes it even easier to see 
+
+the need for a sub-cell based limiting strategy. 
+
+The  number  of  sub-cells  that  each  zone  should  be  divided  into  is  not  rigidly 
+
+determined but should be sufficient to distinguish between the different types of extrema 
+
+that may form. The number of sub-cells used will not determine the cost of the scheme 
+
+because  all  limiters  for  higher  order  schemes  operate  in  characteristic  variables  and  the 
+
+cost  of  building  eigenvectors  and  projecting  the  solution  and  its  moments  into 
+
+characteristic  variables  far  outweighs  the  cost  of  taking  a  sub-cell  approach.  As  a 
+
+practical  matter,  we  do  not  divide  the  piecewise  linear  representation  of  second  order 
+
+RKDG schemes into subcells at all because we know from the above discussion that the 
+
+extrema  will  show  up  at  the  zone  boundaries.  For  third  order  schemes,  which  retain 
+
+piecewise parabolic data, we subdivide each zone into three sub-cells of equal size and 
+
+apply the modified MP algorithim within each of them. For fourth order schemes, which 
+
+retain piecewise cubic data, we subdivide each zone into four sub-cells of equal size and 
+
+apply the modified MP algorithim within each of them. The entire zone being considered 
+
+is  flagged  as  a  troubled  zone  if  the  MP  algorithm  finds  that  the  upwinded  boundary  of 
+
+any sub-cell lies outside the monotonicity preserving limits given by the MP algorithm at 
+
+that boundary. The MP algorithm also requires two more sub-cells on either side of the 
+
+sub-cell  to  which  it  is  applied.  As  a  result,  for  the  second  order  schemes  the  MP 
+
+algorithm requires us to project the zone averages from the two neighboring zones to the 
+
+left  and  right  into  the  characteristic  space  of  the  zone  being  considered.  For  third  and 
+
+higher order schemes, the MP algorithm only requires us to project all the moments from 
+
+each  of  the  neighboring  zones  to  the  immediate    left  and  right  of  the  zone  being 
+
+considered  into  the  characteristic  space  of  that  zone.  Using  all  these  moments  we  can 
+
+build sub-cell averaged characteristic variables for all the sub-cells within each zone as 
+
+well as in the two sub-cells to the right and left of the zone being considered. Thus say 
+
+that 
+
+jw   is  a  sub-cell  averaged  characteristic  variable  in  sub-cell  “j”  that  is  being 
+
+considered. To apply the MP algorithm we need 
+
+j 2w −  , 
+
+j 1w −  , 
+
+jw  , 
+
+j+1w  and 
+
+j+2w  . If the 
+
+waves associated with this characteristic variable are flowing to the right within the zone 
+
+ 
+
+ 
+
+20
+
+being  considered  then  we  also  need 
+
+  which  is  easily  available  because  in  RKDG 
+
+j+1/2w
+
+schemes the solution is available at any point within the zone. 
+
+Our first step is to apply a very coarse test. Thus we form a TVD bound using the 
+
+interval 
+
+I [ w  , w
+j
+
+TVD
+j+1/2
+
+]   where   
+
+TVD
+
+j+1/2w
+
+  is  a  TVD  limiter-based  representation  of    the 
+
+characteristic  variable  “w”  at  the  sub-cell  boundary  “j+1/2”  .  If 
+
+j+1/2w
+
+  lies  within  the 
+
+interval 
+
+I [ w  , w
+j
+
+]  we forgo any further MP construction and say that the sub-cell “j” 
+
+TVD
+j+1/2
+
+is  trouble-free. 
+
+TVD
+
+j+1/2w
+
+  is  constructed  using  a  modification  of  van  Leer’s  MC  limiter  as 
+
+ = w  + 0.5 MC _Limiter [ w  
+β
+j+1
+
+j
+
+−
+
+ w ,  w  
+j
+j
+
+−
+
+ w ]
+j 1−
+
+   
+
+ 
+
+ 
+
+(3.1) 
+
+MC _Limiter [ a, b] = sgn ( a) min ( 0.5  a+b , 
+
+β
+
+  a , 
+β β
+
+  b )         if a b > 0
+
+                  = 0                                                                                  otherwise
+
+ 
+
+(3.2) 
+
+Setting 
+
+ 
+β ∈
+
+ [1, 2]
+
+  in  the  MCβ_Limiter  produces  a  TVD  limiter,  with  β=1  being  the 
+
+non-compressive minmod limiter and β=2 being the maximally compressive MC limiter. 
+
+The inclusion of β in eqn. (3.2) allows us to pick all limiters between these two extremes. 
+
+If  the  sub-zone  does  not  pass  the  above  coarse  test  then  we  go  through  the  MP 
+
+limiter.  The  MP  algorithm  consists  of  realizing  that  the  TVD  condition  only  requires 
+
+  to  lie  within  the  intersection  of  the  intervals 
+
+I [ w  , w ]   and 
+
+j+1
+
+j
+
+I [ w  , w
+j
+
+UL
+j+1/2
+
+]  
+
+ = w  + 
+j
+
+α
+
+ ( w  
+j
+
+−
+
+j 1  
+ w )
+−
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+(3.3) 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+follows: 
+
+TVD
+
+j+1/2w
+
+where 
+
+j+1/2w
+
+where: 
+
+UL
+
+j+1/2w
+
+21
+
+Here  all  values 
+
+ 
+α ∈
+
+ [0.5, 1.0]
+
+  will  yield  a  TVD  scheme  that  will  function  well  with  a 
+
+CFL condition that is less than or equal to 0.5 . To make allowance for local extrema we 
+
+need  to  include  curvatures  into  the  above  equations  and  we  do  that  next.  We  first 
+
+construct curvatures dj and dj+1 as follows: 
+
+d  = w  
+j+1
+
+−
+
+ 2 w  + w     ; d  = w  
+j+2
+
+j 1
+−
+
+j
+
+−
+
+ 2 w  + w
+j+1
+
+ 
+
+j
+
+ 
+
+j+1
+
+j
+
+(3.4) 
+
+We then use these curvatures to approximate a curvature at the “j+1/2” sub-cell boundary 
+
+as follows: 
+
+d
+
+j+1/2
+
+ = 
+
+τ
+
+ minmod ( 
+
+κ
+
+ d  
+j
+
+−
+
+ d  , 
+j+1
+
+κ
+
+ d  
+j+1
+
+−
+
+ d  , d  , d  )
+j
+
+j+1
+
+j
+
+ 
+
+ 
+
+(3.5) 
+
+ 
+
+ 
+
+ 
+
+ 
+
+The ratio κ in eqn. (3.5) ensures that the curvature 
+
+d
+
+ is zeroed out when the ratio of 
+
+j+1/2
+
+curvatures 
+
+d
+
+d  lies outside the range  [1
+
+]κ κ  , i.e. when the curvature varies rapidly 
+
+,  
+
+j+1
+
+j
+
+from one sub-cell to the next. The variable τ in eqn. (3.5) should be set greater than or 
+
+equal  to  unity,  where  values  larger  than  unity  provide  space  for  additional  curvature  to 
+
+develop  provided  the  curvatures  do  not  fluctuate  too  rapidly  from  one  sub-cell  to  the 
+
+next.  Using  an  equation  that  is  entirely  analogous  to  eqn.  (3.5)  we  also  construct  the 
+
+curvature 
+
+d −
+
+j 1/2
+
+  .  Having  constructed  the  curvature  at  the  “j+1/2”  sub-cell  boundary  we 
+
+wish to find a parabola with the following three conditions: a) its sub-cell averaged value 
+
+in sub-cell “j” is 
+
+jw  , b) its sub-cell averaged value in sub-cell “j+1” is 
+
+j+1w  and c) its 
+
+curvature is 
+
+d
+
+ . The value of such a parabola at the “j+1/2” sub-cell boundary is given 
+
+j+1/2
+
+w
+
+MD
+j+1/2
+
+ = 
+
+ ( w  + w ) 
+
+j+1
+
+j
+
+−
+
+ 
+
+ d
+
+   
+
+j+1/2
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+(3.6) 
+
+1
+2
+
+1
+3
+
+We  also  want  to  find  a  parabola  with  the  following  three  conditions:  a)  its  sub-cell 
+
+averaged value in sub-cell “j” is 
+
+jw  , b) its sub-cell averaged value in sub-cell “j−1” is 
+
+22
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+by: 
+
+j 1w −  and c) its curvature is 
+
+ . The value of such a parabola at the “j+1/2” sub-cell 
+
+d −
+
+j 1/2
+
+boundary is given by: 
+
+w
+
+LC
+j+1/2
+
+ = w  + 
+j
+
+ ( w  
+j
+
+−
+
+ w ) + 
+j 1
+−
+
+ d
+
+ 
+
+j 1/ 2
+−
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+(3.7) 
+
+1
+2
+
+2
+3
+
+The  parabolic  values  built  up  in  eqns.  (3.6)  and  (3.7)  are  used  to  enhance  the  intervals 
+
+mentioned  above  so 
+
+that  we  now  seek 
+
+the 
+
+intersection  of 
+
+the 
+
+intervals 
+
+I [ w  , w  , w
+
+j+1
+
+j
+
+ ]  and 
+
+I [ w  , w
+j
+
+MD
+j+1/2
+
+UL
+j+1/2
+
+ , w
+
+LC
+j+1/2
+
+ ] . By including the parabolic profiles we 
+
+make  allowance  for  well-formed  extrema.  The  intersection  is  given  by  the  interval 
+
+I [ w
+
+min
+j+1/2
+
+ , w
+
+max
+j+1/2
+
+ ]
+
+ where: 
+
+w
+
+min
+j+1/2
+
+ = max [ min ( w  , w  , w
+
+j+1
+
+j
+
+ ), min ( w  , w
+
+j
+
+MD
+j+1/2
+
+UL
+j+1/2
+
+, w
+
+LC
+j+1/2
+
+ )]   
+
+(3.8) 
+
+w
+
+min
+j+1/2
+
+ = min [ max ( w  , w  , w
+
+j+1
+
+j
+
+ ), max ( w  , w
+
+j
+
+MD
+j+1/2
+
+UL
+j+1/2
+
+, w
+
+LC
+j+1/2
+
+ )]  
+
+(3.9) 
+
+A  sub-cell  is  said  to  satisfy  the  MP  constraint  if 
+
+j+1/2w
+
+  lies  within  the  interval 
+
+I [ w
+
+min
+j+1/2
+
+ , w
+
+max
+j+1/2
+
+ ]
+
+ . A zone is said to be free of trouble if all its sub-cells “j” satisfy the 
+
+MP  constraint.  Zones  that  are  not  free  of  trouble  are  said  to  be  troubled  zones  and  the 
+
+appropriate WENO scheme is used to construct the slope, as shown in Qiu and Shu [19]. 
+
+The second and higher moments can be constructed using the formulation in sub-sections 
+
+2.b.i and 2.b.ii. 
+
+are given below: 
+
+For  typical  problems  associated  with  the  Euler  equations  we  use  the  following 
+
+values  for  the  free  parameters  defined  in  this  section.  The  values  change  for  differing 
+
+RKDG schemes and the preferred values for Euler flows, obtained after extensive testing, 
+
+23
+
+and  
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+p=1 RKDG : β = 1.3; α = 0.7; κ = 4.0; τ = 1.3. 
+
+p=2 RKDG : β = 1.3; α = 0.7; κ = 4.0; τ = 1.3. 
+
+ 
+
+ 
+
+ 
+
+ 
+
+(3.10) 
+
+p=3 RKDG : β = 1.1; α = 0.6; κ = 3.0; τ = 1.1. 
+
+Hybrid RKDG+WENO : β = 1.3; α = 0.8; κ = 4.0; τ = 1.3. 
+
+For Hybrid RKDG+WENO schemes we take each zone to be a sub-cell, just as we do for 
+
+p=1  RKDG.  This  is  so  because  we  only  have  the  variable  and  its  first  moment  in  that 
+
+case. The parameters given above were optimized for use with the (local) Lax-Friedrichs 
+
+flux,  which  we  use  all  through  this  work.  The  above  choice  of  parameters  represents 
+
+conservatively defined sets of choices. For many Euler flow problems the parameters can 
+
+assume  much  larger  values.  Even  with  the  conservatively  defined  choices  for  the 
+
+parameters  given  above,  we  find  the  flagging  to  be  minimal  on  most  applications 
+
+including ones with very strong shocks, as will be shown in the subsequent section. The 
+
+conservatively defined choices for the parameters given above still provide enough space 
+
+to  ensure  that  most  of  the  accuracy  tests  with  smooth  solutions  run  through  without 
+
+triggering  any  flagging  at  all,  as  will  be  shown  in  the  next  section.  This  completes  our 
+
+description of the sub-cell based algorithm for flagging troubled zones. 
+
+We make several observations below: 
+
+1)  Eqns.  (3.5)  to  (3.7)  are  different  from  the  corresponding  ones  in  Suresh  and  Huynh 
+
+[27]. They are truer to the volume-averaged approach that we use in the sub-cells. 
+
+2) Notice that the flagging algorithm described here does not increase the stencil by too 
+
+many zones on either side. For second order schemes it only increases the stencil by two 
+
+zones on either side. For RKDG schemes that are of third and higher orders the present 
+
+flagging algorithm only increases the stencil by one zone on either side. 
+
+3) The major cost of the current algorithm is the cost of producing the eigenvectors and 
+
+projecting  all  the  moments  of  the  current  zone  and  its  neighbors  into  characteristic 
+
+variables. This is a fixed cost that cannot be avoided for all higher order schemes because 
+
+limiting  strategies  don’t  seem  to  work  well  when  applied  to  primitive  or  conserved 
+
+variables.  The  cost  of  the  sub-cell  flagging  algorithm  as  well  as  the  WENO 
+
+ 
+
+ 
+
+ 
+
+ 
+
+24
+
+reconstruction  in  flagged  zones  is  modest.  Likewise,  the  cost  of  transforming  the 
+
+moments  in  the  flagged  zones  back  to  characteristic  variables  is  indeed  modest  by 
+
+comparison. Thus the present algorithm is cost-competitive with any other that carries out 
+
+limiting in characteristic variables. 
+
+4)  The  present  algorithm  is  capable  of  identifying  trouble  in  individual  characteristic 
+
+fields  within  a  zone.  Unlike  Qiu  and  Shu  [19],  [20]  we  did  not  see  the  worth  of  using 
+
+WENO or HWENO to reconstruct all the characteristic fields in zones that are flagged. 
+
+Instead we only used WENO or HWENO to reconstruct the troubled characteristic fields. 
+
+This permits us to preserve more information about the solution. 
+
+5) Balsara [4] has found that the MHD system seems to need a somewhat more restrictive 
+
+limiting than the Euler system. The present MP algorithm, with its adjustable parameters, 
+
+provides that flexibility. 
+
+6) When formulating RKDG schemes for unstructured meshes, it is more natural to use a 
+
+nodal  basis  set.  Since  nodal  basis  sets  make  it  easier  to  motivate  a  sub-cell  based 
+
+algorithm  for  detecting  troubled  zones,  it  may  prove  easy  to  extend  this  algorithm  to 
+
+7)  The  present  strategy  might  also  prove  useful  for  residual  distribution  schemes  that 
+
+unstructured meshes. 
+
+have sub-structure within each zone. 
+
+4 Accuracy Analysis 
+
+We  present  an  accuracy  analysis  for  the  RKDG  and  hybrid  RKDG+HWENO 
+
+schemes  described  here.  In  all  instances  the  local  Lax-Friedrichs  flux  was  used.  The 
+
+Courant  numbers  were  set  to  be  0.9  times  the  maximum  permissible  values  from 
+
+Cockburn,  Karniadakis  and  Shu  [11].  For  each  test  problem  the  spatial  and  temporal 
+
+accuracy  were  kept  the  same.  For  all  tests  the  MP  algorithm  used  the  settings  that  we 
+
+have found to be beneficial for the Euler equations. All the problems used in this section  
+
+involve smooth solutions. Thus we present the accuracy analysis with the limiter and the 
+
+flagging  strategy  described  in  the  previous  section  and  also  the  same  accuracy  analysis 
+
+without  any  WENO  limiting.  If  the  detector  for  troubled  zones  operated  optimally,  it 
+
+should not flag any zones as troubled. In that case the accuracy should be the same with 
+
+ 
+
+ 
+
+ 
+
+ 
+
+25
+
+and without the flagging algorithm. In practice, some of the more stringent test problems 
+
+do trigger flagging in some zones. In that case, the WENO algorithm is invoked to limit 
+
+the first and higher moments in that zone. As a result the solutions with limiting will be 
+
+less  accurate  than  the  ones  without.  We  should,  nevertheless,  expect  to  see  the  same 
+
+formal order of accuracy. We have also advanced the viewpoint that higher moments can 
+
+be  reconstructed  without  substantial  loss  of  accuracy  for  the  hybrid  RKDG+HWENO 
+
+schemes.  Thus  we  expect  the  hybrid  RKDG+HWENO  schemes  to  meet  their  design 
+
+orders  of  accuracy.  Moreover,  on  large  enough  meshes  we  might  expect  the  hybrid 
+
+RKDG+HWENO schemes to have intrinsic accuracies that are in the same range as the 
+
+intrinsic accuracies of the corresponding RKDG schemes.  
+
+We also point out that the first three accuracy analyses have also been done for 
+
+WENO schemes in Balsara and Shu [2]. As a general observation we find that for most of 
+
+the  cases  considered  here  the  RKDG  schemes  start  out  by  having  intrinsically  better 
+
+accuracy  on  smaller  meshes.  Thus  while  WENO  schemes  have  higher  formal  order  of 
+
+accuracy,  the  RKDG  schemes  have  better  resolution  on  smaller  meshes.  The  present 
+
+observation led Torrilhon and Balsara [30] to conclude that RKDG schemes might have 
+
+some  advantages  over  WENO  schemes  in  overcoming  the  pseudo-convergence  that  is 
+
+observed in the MHD system. 
+
+ 
+
+The  problems  in  this  and  the  next  section  were  all  run  with  the  (local)  Lax-
+
+Friedrichs flux function. Flagging of troubled zones was done with the sub-cell based MP 
+
+algorithm  using  the  parameters  given  in  eqn.  (3.10)  in  all  cases,  except  when  noted 
+
+otherwise.  In  all  instances  we  were  able  to  run  all  the  test  problems  with  Courant 
+
+numbers that were set to be 0.9 times the maximum permissible values from Cockburn, 
+
+Karniadakis  and  Shu  [11].  The  temporal  accuracy  in  the  Runge-Kutta  time-update  was 
+
+set to have the same order as the spatial order of accuracy for the scheme. Here we take ( 
+
+ρ, v, p) to be the density, velocity and pressure variables in the Euler equations. 
+
+4.a First Test with Advection Equation 
+
+26
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+We solve the advection equation, ut + ux = 0 , with initial condition u ( x, 0) = sin 
+
+(2  π x)  on  the  domain  [-0.5,  0.5].  Periodic  boundary  conditions  were  used  and  the 
+
+simulation was stopped at a time of 0.5. The accuracy analysis is given in Table 1. The 
+
+sinusoidal function is very smooth. As a result, we see that the solution with the limiter 
+
+has the same value as the solution without the limiter in all instances, showing us that the 
+
+zones  were  never  flagged  as  troubled.  This  is  the  desired  result,  indicating  that  our 
+
+flagging  algorithm  is  sophisticated  enough  to  realize  that  for  this  problem  there  are  no 
+
+troubled zones. We also notice that the hybrid RKDG+HWENO schemes have intrinsic 
+
+accuracies  that  are  in  the  same  range  as  the  intrinsic  accuracies  of  the  corresponding 
+
+RKDG  schemes,  indicating  that  our  strategy  for  reconstructing  the  higher  moments  is 
+
+indeed an effective one for very smooth flows.  
+
+4.b Second Test with Advection Equation 
+
+We solve the advection equation, ut + ux = 0 , with initial condition u ( x, 0) = sin4 
+
+(2  π x)  on  the  domain  [-0.5,  0.5].  Periodic  boundary  conditions  were  used  and  the 
+
+simulation was stopped at a time of 0.5. The accuracy analysis is given in Table 2. The 
+
+present  initial  conditions  have  a  very  rapidly  varying  curvature.  As  a  result,  we  expect 
+
+that there will be instances where the flagging algorithm will falsely flag zones as being 
+
+troubled.  Thus  we  see  that  on  some  of  the  smaller  meshes  the  solution  with  the  limiter 
+
+has  accuracy  that  differs  from  the  accuracy  of  the  solution  without  the  limiter.  We  do, 
+
+however,  expect  that  as  the  mesh  is  refined  fewer  zones  will  be  flagged  as  troubled.  
+
+Table  2  shows  us  that  this  is  indeed  the  case.  Thus  on  larger  meshes  we  find  that  the 
+
+accuracy  of  the  solution  with  the  limiter  becomes  comparable  to  the  accuracy  of  the 
+
+solution  without  the  limiter.  In  all  instances  we  see  that  the  schemes  meet  their  design 
+
+orders of accuracy. On the larger meshes we also observe that the p=2 RKDG+HWENO 
+
+scheme  has  accuracy  that  is  almost  the  same  as  the  corresponding  p=2  RKDG  scheme. 
+
+This shows that our strategy of reconstructing the second moments was an effective one. 
+
+The p=3 RKDG+HWENO scheme reconstructs the second and third moments. On large 
+
+meshes we see that it is less accurate than the p=3 RKDG scheme by a couple of orders 
+
+of  magnitude.  Thus,  because  a  larger  number  of  moments  are  reconstructed  in  the  p=3 
+
+ 
+
+ 
+
+ 
+
+ 
+
+27
+
+RKDG+HWENO  scheme,  the  p=3  RKDG  scheme  retains  an  advantage  over  the  p=3 
+
+RKDG+HWENO  scheme.  Both  schemes  do,  however,  meet  their  designed  order  of 
+
+accuracy. 
+
+4.c Burgers Equation Test 
+
+We  solve  the  nonlinear  scalar  Burgers  equation,  ut  +  u  ux  =  0  ,  with  initial 
+
+condition u ( x, 0) = 0.25 + 0.5 sin (2 π x) on the domain [-0.5, 0.5]. Periodic boundary 
+
+conditions  were  used  and  the  simulation  was  stopped  at  a  time  of  0.5/π  which 
+
+corresponds to a time before any shocks form. The accuracy analysis is given in Table 3. 
+
+The initial condition is very smooth. As a result, we see that the solution with the limiter 
+
+has the same value as the solution without the limiter in all instances, showing us that the 
+
+zones  were  never  flagged  as  troubled.  We  also  notice  that  the  hybrid  RKDG+HWENO 
+
+schemes have intrinsic accuracies that are in the same range as the intrinsic accuracies of 
+
+the  corresponding  RKDG  schemes,  indicating  that  our  strategy  for  reconstructing  the 
+
+higher moments is indeed an effective one for very smooth flows. 
+
+4.d Test with Euler Equations 
+
+We solve the Euler equations with density profile ρ ( x, 0) = 1.0 + 0.25 sin (2 π x) 
+
+and  pressure  and  velocity  set  to  unity.  The  problem  was  run  on  the  domain  [-0.5,  0.5] 
+
+with periodic boundaries and stopped at a time of 1.0. The results are shown in Table 4. 
+
+Since the initial condition is very smooth, we see that the solution with the limiter has the 
+
+same  value  as  the  solution  without  the  limiter  in  all  instances.  This  shows  us  that  the 
+
+zones  were  never  flagged  as  troubled,  indicating  that  our  flagging  algorithm  is 
+
+sophisticated enough to realize that for this problem there are no troubled zones. On the 
+
+larger meshes we also observe that the p=2 RKDG+HWENO scheme has accuracy that is 
+
+almost the same as the corresponding p=2 RKDG scheme. On large meshes we see that 
+
+the  p=3  RKDG+HWENO  scheme  is  less  accurate  than  the  p=3  RKDG  scheme  by  a 
+
+couple of orders of magnitude. Thus as larger numbers of moments are reconstructed the 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+28
+
+p=3  RKDG  scheme  retains  an  advantage  over  the  p=3  RKDG+HWENO  scheme  for 
+
+some test problems. Both schemes do, however, meet their designed order of accuracy. 
+
+5 Test Problems 
+
+In these tests we emphasize the third and fourth order schemes. The p=1 RKDG 
+
+scheme  also  works  well  on  these  test  problems  but  it  produces  results  that  are  not  so 
+
+much better than a very, very good TVD scheme. As a result, it is not shown here. 
+
+For each of the last three tests in this section we also provide a table that gives us 
+
+the percentage of flagged zones for each of the schemes tested as a function of increasing 
+
+number of zones. We should expect that for the same physical problem the percentage of 
+
+flagged  zones  decreases  with  increasing  number  of  zones.  We  will  see  that  the 
+
+expectation is borne out in practically all cases. For RKDG schemes this implies that as 
+
+the mesh is refined, most of the zones will have moments from the more accurate RKDG 
+
+formulation  rather 
+
+than 
+
+the 
+
+less  accurate  WENO  reconstruction.  For  hybrid 
+
+RKDG+HWENO  schemes  this  implies  that  the  higher  moments  will  be  reconstructed 
+
+using the more accurate first moments from the more accurate RKDG formulation rather 
+
+than the less accurate WENO reconstruction. Thus we see that as the mesh is refined the 
+
+intrinsic accuracy of the schemes presented here is closer to the intrinsic accuracy of the 
+
+RKDG  scheme.  In  some  scientific  problems,  such  as  the  pseudo-convergence  of  MHD 
+
+Riemann problems that was explored in Torrilhon and Balsara [30], the intrinsic accuracy 
+
+of  the  scheme  is  more  important  than  its  formal  order  of  accuracy.  For  this  reason, 
+
+Torrilhon  and  Balsara  [30]  concluded  that  RKDG  schemes  that  respect  the  divergence-
+
+free  evolution  of  the  magnetic  field  might  have  some  special  advantages  for  numerical 
+
+MHD. 
+
+5.a Advection Test 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+29
+
+Our first test problem consists of testing the behavior of the scheme on a rather 
+
+stringent scalar advection test problem. It is the same test problem that was catalogued in 
+
+Jiang and Shu [16]. Thus we solve the problem 
+
+t
+
+x
+
+u   +  u   =  0                                    1  < x  < 1
+b
+ 
+u   x,  0   =  u   x                            periodic
+with 
+
+b g
+
+g
+
+−
+
+0
+
+ 
+
+ 
+
+ 
+
+ 
+
+(5.1) 
+
+)
+(
+u   x  = 
+
+0
+
+ G 
+
+ 
+
+⎡
+⎣
+
+(
+
+1
+6
+
+ x, 
+
+φ
+
+ , z 
+
+−
+
+ 
+ 
+δ
+
+ + G 
+
+ x, 
+
+φ
+
+ , z 
+
++
+
+ 
+ 
+δ
+
+ + 4 G 
+
+ x, 
+
+φ
+
+ , z 
+
+      0.8 
+−
+
+≤
+
+ x 
+
+≤ −
+
+  0.6
+
+)
+
+(
+
+           = 1                                                                                                   
+
+       0.4 
+−
+
+≤
+
+ x 
+
+≤ −
+
+  0.2
+
+           = 1 
+
+−
+
+   10 
+
+ x 
+
+−
+
+ 0.1                                                                                0.0 
+
+≤
+
+ x 
+
+≤
+
+ 0.2
+
+(
+
+)
+
+           = 
+
+ x, 
+
+ψ
+
+ , a 
+
+−
+
+ 
+ 
+δ
+
+ + F 
+
+ x, 
+
+ψ
+
+ , a 
+
++
+
+ 
+ 
+δ
+
+ + 4 F 
+
+x, 
+
+ψ
+
+ , a 
+
+         0.4 
+
+≤
+
+ x 
+
+≤
+
+ 0.6
+
+)
+
+(
+
+1
+6
+
+ F 
+
+ 
+
+⎡
+⎣
+
+(
+
+           =  0                                                                                                            otherwise
+(5.2) 
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+)
+
+)
+
+(
+
+(
+
+)
+
+⎤
+⎦
+
+)
+
+⎤
+⎦
+
+G 
+
+(
+
+ x, 
+
+φ
+
+)
+ , z  = e
+
+−
+
+ 
+φ
+
+(
+   x 
+
+−
+
+ z
+
+2
+
+)
+
+F 
+
+(
+
+ x, 
+
+ψ
+
+)
+ , a  = 
+
+ max 
+
+ 1 
+
+−
+
+2
+ 
+ψ
+
+ 
+
+(
+
+ x 
+
+−
+
+ a
+
+2
+
+)
+
+  , 0
+
+(
+
+ 
+
+ 
+
+)
+
+ 
+
+(5.3) 
+
+ 
+
+ 
+
+ 
+
+ 
+
+The constants in eqs (5.2) and (5.3) are given by 
+
+a = 0.5  ;  z =  0.7  ;  
+
+−
+
+δ
+
+ = 0.005  ;  
+
+ψ
+
+ = 10  ;  
+
+φ
+
+ = 
+
+(5.4) 
+
+log 2
+2
+36 
+δ
+
+   
+
+The  problem  has  several  shapes  that  are  difficult  to  advect  with  fidelity.  The  shapes 
+
+consist of : 1) a combination of Gaussians, 2) a square wave, 3) a sharply peaked triangle 
+
+and  4)  a  half  ellipse  arranged  initially  from  left  to  right.  The  reasons  that  make  it  a 
+
+stringent test problem are catalogued in Balsara and Shu [2]. The problem was initialized 
+
+on a mesh of 200 zones. It was run for a simulation time of 20 which corresponds to ten 
+
+traversals  around  the  mesh.  In  doing  so,  the  features  catalogued  in  eqs  (5.2)  and  (5.3) 
+
+were advected over 2000 mesh points.  
+
+Figs  1a  to  1d  show  the  solutions  obtained  from  the  p=2  RKDG,  p=2 
+
+RKDG+HWENO,  p=3  RKDG  and  p=3  RKDG+HWENO  schemes  respectively.  The 
+
+reference solution is also shown as an overlaid solid line. We see that the p=2 RKDG and 
+
+p=2  RKDG+HWENO  have  done  equally  well  in  advecting  the  profile  without  much 
+
+ 
+
+ 
+
+ 
+
+30
+
+distortion  of  the  shape  or  clipping  of  extrema.  Also  notice  that  both  these  schemes  are 
+
+just third order schemes. Nevertheless, on comparing the results from Figs. 1a and 1b to 
+
+the result from the ninth order accurate r=5 WENO scheme from Balsara and Shu [2] we 
+
+see that the results from p=2 RKDG and p=2 RKDG+HWENO are entirely competitive. 
+
+Thus the third order accurate RKDG family of schemes have performed just as well as a 
+
+ninth  order  accurate  WENO  scheme.  The  advantage  of  the  RKDG  family  of  schemes 
+
+stems  from  their  smaller  stencil  and  their  substantially  lower  dissipation  on  smaller 
+
+meshes.  Fig  1c  shows 
+
+that 
+
+the  fourth  order  accurate  p=3  RKDG  and  p=3 
+
+RKDG+HWENO  schemes  perform  even  better  than  their  third  order  counterparts. 
+
+Moreover,  the  p=3  RKDG  scheme  clearly  outperforms  the  ninth  order  accurate  r=5 
+
+WENO scheme. We also see that the p=3 RKDG scheme has a slight edge over the p=3 
+
+RKDG+HWENO  scheme,  as  expected.  Note  though  that  the  r=5  WENO  scheme  lends 
+
+itself  to  easy  modification  so  that  we  can  include  the  artificial  compression  method 
+
+(ACM) from Yang [32] to steepen the profile of the square pulse. The RKDG algorithm 
+
+has not been similarly modified in the currently available literature. 
+
+5.b The Lax Problem 
+
+The Lax Riemann problem consists of the following specification: 
+
+( , v, p) = ( 0.445, 0.698, 3.528)           for  0.5 
+ρ
+
+−
+
+≤
+
+ x 
+
+≤
+
+ 0.0
+
+              = ( 0.5, 0, 0.571)                      for 0.0 
+
+≤
+
+ x 
+
+≤
+
+ 0.5
+
+ 
+
+ 
+
+ 
+
+(5.5) 
+
+The problem was run on a 200 zone mesh to a time of 1.3. Figs 2a, 2b, 2c and 2d show 
+
+the  resulting  density  for  the  p=2  RKDG,  p=2  RKDG+HWENO,  p=3  RKDG  and  p=3 
+
+RKDG+HWENO  schemes  respectively.  The  reference  solution  is  also  shown  as  an 
+
+overlaid  solid  line.  Figs.  2e,  2f,  2g  and  2h  show  the  history  of  flagged  points  in  space-
+
+time for the above four schemes. All schemes show exceptional treatment of the contact 
+
+discontinuity, owing to the fact that they are all better than second order and have small 
+
+stencils. We also see that the sub-cell based flagging algorithm has always been effective 
+
+at detecting the shock and both ends of the rarefaction fans. In some instances the contact 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+31
+
+discontinuity is also flagged. Figs. 2e to 2h also show us that the maximal flagging occurs 
+
+towards  the  end  of  the  simulation.  Table  5  provides  the  percentage  of  zones  that  were 
+
+flagged  in  the  last  timestep  for  each  of  the  schemes  tested  as  a  function  of  increasing 
+
+number  of  zones.  We  see  that,  in  keeping  with  our  expectations,  the  percentage  of 
+
+flagged zones decreases as a function of increasing number of zones. 
+
+5.c The Shock-Entropy Wave Interaction Problem 
+
+This problem was first presented in Shu and Osher [25]. A moving Mach 3 shock 
+
+is made to interact with a sinusoidal density fluctuation. The initial conditions are given 
+
+( , v, p) = ( 3.857143, 2.629369, 10.333333)       for  5 
+ρ
+
+−
+
+≤
+
+ x 
+
+≤ −
+
+  4
+
+              = (1 + 0.2 sin ( 5 x), 0, 1)                        for  4 
+
+−
+
+≤
+
+ x 
+
+≤
+
+ 5
+
+ 
+
+ 
+
+(5.6) 
+
+The  problem  provides  an  example  of  the  interaction  of  a  shock  with  a  smooth  flow 
+
+having oscillations. The simulation was run on a 200 zone mesh and stopped at a time of 
+
+1.8.  Figs  3a,  3b,  3c  and  3d  show  the  resulting  density  for  the  p=2  RKDG,  p=2 
+
+RKDG+HWENO,  p=3  RKDG  and  p=3  RKDG+HWENO  schemes  respectively.  The 
+
+reference solution is also shown as an overlaid solid line. Figs 3e, 3f, 3g and 3h show the 
+
+history  of  flagged  points  in  space-time  for  the  above  four  schemes.  We  see  that  the 
+
+density  profile  from  the  p=2  RKDG  scheme  is  very  marginally  better  than  the  p=2 
+
+RKDG+HWENO, but that is strongly dependent on the choice of parameters in the sub-
+
+cell  based  algorithm  for  detecting  troubled  zones.  The  p=3  RKDG  and  p=3 
+
+RKDG+HWENO  schemes  perform  comparably  well.  In  all  cases  the  post-shock 
+
+oscillations  are  well  resolved,  showing  that  our  algorithm  does  not  unduly  destroy 
+
+structures. Figs. 3e through 3h show that the flagging algorithm has accurately detected 
+
+the  Mach  3  shock  and  also  the  smaller  shocks  that  form  behind  it.  Figs.  3e  to  3h  also 
+
+show  us  that  the  maximal  flagging  occurs  towards  the  end  of  the  simulation.  Table  6 
+
+provides  the  percentage  of  zones  that  were  flagged  in  the  last  timestep  for  each  of  the 
+
+schemes tested as a function of increasing number of zones. We see that, in keeping with 
+
+32
+
+by: 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+our  expectations,  the  percentage  of  flagged  zones  decreases  as  a  function  of  increasing 
+
+number of zones. 
+
+5.d Interaction of Blast Waves 
+
+The present problem was suggested by Woodward and Colella [31] and considers 
+
+the interaction of blast waves. The initial conditions are : 
+
+( , v, p) = (1, 0, 1000)            for  0.5 
+ρ
+
+−
+
+≤
+
+ x 
+
+≤ −
+
+  0.4
+
+              = (1, 0, 0.01)            for  0.4 
+              = (1, 0, 100)             for     0.4 
+
+−
+
+≤
+≤
+
+ x 
+ x 
+
+≤
+≤
+
+ 0.4
+ 0.5
+
+ 
+
+ 
+
+ 
+
+ 
+
+(5.7) 
+
+Reflecting boundary conditions are used at both ends of the computational domain with 
+
+400 zones and the problem was run to a time of 0.038. Figs 4a, 4b, 4c and 4d show the 
+
+resulting  density  for  the  p=2  RKDG,  p=2  RKDG+HWENO,  p=3  RKDG  and  p=3 
+
+RKDG+HWENO  schemes  respectively.  Figs  4e,  4f,  4g  and  4h  show  the  history  of 
+
+flagged points in space-time for the above four schemes. All the schemes were run with 
+
+the  parameters  from  eqn.  (3.10)  in  the  sub-cell  based  algorithm  for  detecting  troubled 
+
+zones with the exception of the p=3 RKDG+HWENO scheme. The latter was run with β 
+
+= 1.1; α = 0.7; κ = 3.0; τ = 1.15 . For just this problem we preferred to use the third-order 
+
+accurate  Runge-Kutta  time-stepping  strategy  for  all  the  runs  because  of  its  good  TVD 
+
+preserving properties. We see that in all instances the density profile compares well with 
+
+the  reference  solution,  which  is  shown  with  a  solid  line.  The  p=2  RKDG  and  p=2 
+
+RKDG+HWENO schemes seem to require minimal amount of flagging and closely track 
+
+the strong shocks. The p=3 RKDG scheme uses only slightly more flagging. Because of 
+
+the reduced parameters in the flagging algorithm, we see that the p=3 RKDG+HWENO 
+
+scheme produces a somewhat larger number of flagged points. Figs. 4e to 4h also show 
+
+us that the flagging that occurs towards the end of the simulation is representative of the 
+
+amount  of  flagging  that  occurs  all  through  the  run.  Table  7  provides  the  percentage  of 
+
+zones that were flagged in the last timestep for each of the schemes tested as a function of 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+33
+
+increasing  number  of  zones.  We  see  that,  in  keeping  with  our  expectations,  the 
+
+percentage of flagged zones decreases as a function of increasing number of zones. 
+
+6 Conclusions 
+
+We arrive at the following conclusions: 
+
+1) An effective indicator of troubled zones in RKDG schemes should be based on a sub-
+
+cell algorithm for detecting troubled zones. This is so because RKDG schemes can retain 
+
+meaningful sub-cell structure that does not need to be limited. 
+
+2) We have recast the MP algorithm of Suresh and Huynh [27] so that it detects troubled 
+
+zones  by  examining  the  sub-cells  of  a  zone.  This  makes  it  an  effective,  scale-free, 
+
+problem-independent  detector  of  troubled  zones.  Our  algorithm  for  detecting  troubled 
+
+zones has been applied successfully to several stringent test problems. 
+
+3) We have also realized that in most situations, the variable and its first moment carry a 
+
+majority  of  the  information  in  the  flow.  Building  on  that,  we  have  designed  hybrid 
+
+RKDG+HWENO  schemes  that  reconstruct  the  second  and  third  moments  by  using  the 
+
+information  contained  in  the  variable  and  its  first  moment.  The  resulting  schemes  have 
+
+the same order of accuracy as the corresponding RKDG schemes. 
+
+4)  The  hybrid  RKDG+HWENO  schemes  are  low-storage  alternatives  to  the  RKDG 
+
+schemes that usually perform almost as well as the RKDG schemes. This has been shown 
+
+via several accuracy analyses and stringent test problems. 
+
+Acknowledgements 
+
+DMS-0204640. 
+
+DSB  acknowledges  support  via  NSF  grants  R36643-7390002,  AST-005569-001  and 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+34
+
+ 
+
+ 
+
+ 
+
+35
+
+References 
+
+[1]  M.  Abromowitz  and  I.E.  Stegun,  Handbook  of  Mathematical  Functions,  National 
+
+Bureau of Standards, Applied Mathematics Series No. 55, (1964). 
+
+[2]  D.S.  Balsara  and  C.-W.  Shu,  Monotonicity  preserving  weighted  essentially  non-
+
+oscillatory schemes with increasingly high order of accuracy,  Journal of Computational 
+
+Physics, 160 (2000), 405-452. 
+
+[3]  D.S.  Balsara  and  C.  Norton,  Highly  Parallel  Structured  Adaptive  Mesh  Refinement 
+
+Using Parallel Language-Based Approaches, Journal of Parallel Computation, 27 (2001), 
+
+[4]  D.S.  Balsara,  Second  Order  Accurate  Schemes  for  Magnetohydrodynamics  With 
+
+Divergence-Free  Reconstruction,  Astrophysical  Journal  Supplement,  151  (2004),  149-
+
+[5] R. Biswas, K.D. Devine and J. Flaherty, Parallel adaptive finite element methods for 
+
+conservation laws, Applied Numerical Mathematics, 14 (1994), 255-283. 
+
+[6]  A.  Burbeau,  P.  Sagaut  and  C.H.  Bruneau,  A  problem-independent  limiter  for  high-
+
+order  Runge-Kutta  discontinuous  Galerkin  methods,  Journal  of  Computational  Physics, 
+
+169 (2001), 111-150. 
+
+[7]  B.  Cockburn  and  C.-W.  Shu,  TVB  Runge-Kutta  local  projection  discontinuous 
+
+Galerkin 
+
+finite  element  method 
+
+for  conservation 
+
+laws  II:  general 
+
+framework, 
+
+Mathematics of Computation, 52 (1989) 411-435. 
+
+[8]  B.  Cockburn,  S.-Y.  Lin  and  C.-W.  Shu,  TVB  Runge-Kutta  local  projection 
+
+discontinuous Galerkin finite element method for conservation laws III: one dimensional 
+
+systems, Journal of Computational Physics, 84 (1989), 90-113. 
+
+36
+
+37-70. 
+
+184. 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+50. 
+
+212. 
+
+[9]  B.  Cockburn,  S.  Hou  and  C.-W.  Shu,  TVB  Runge-Kutta  local  projection 
+
+discontinuous  Galerkin 
+
+finite  element  method 
+
+for  conservation 
+
+laws  IV: 
+
+the 
+
+multidimensional case, Mathematics of Computation, 54 (1990), 545-581. 
+
+[10]  B.  Cockburn  and  C.-W.  Shu,  TVB  Runge-Kutta  local  projection  discontinuous 
+
+Galerkin  finite  element  method  for  conservation  laws  V:  multidimensional  systems, 
+
+Journal of Computational Physics, 141, (1998), 199-224. 
+
+[11]  B.  Cockburn,  G.  Karniadakis  and  C.-W.  Shu,  The  development  of  discontinuous 
+
+Galerkin  Methods,  in  Discontinuous  Galerkin  Methods:  Theory,  Computation  and 
+
+Applications,  B.  Cockburn,  G.  Karniadakis  and  C.-W.  Shu,  editors,  Lecture  Notes  in 
+
+Computational Science and Engineering, volume 11, Springer, 2000, Part I: Overview, 3-
+
+[12]  M.  Dumbser  and  C.-D.  Munz,  Arbitrary  high  oreder  discontinuous  Galerkin 
+
+methods, Journal of Computational Physics, to appear (2004). 
+
+[13] O. Friedrichs, Weighted essentially non-oscillatory schemes for the interpolation of 
+
+mean values on unstructured grids , Journal of Computational Physics, 144 (1998), 194-
+
+[14] J.S. Hesthaven and T. Warburton, Nodal high-order methods on unstructured grids 
+
+I. Time-domain solution of Maxwell’s equations, Journal of Computational Physics, 181 
+
+(2002), 186-221. 
+
+[15]  C.  Hu  and  C.-W.  Shu,  Weighted  essentially  non-oscillatory  schemes  on  triangular 
+
+meshes, Journal of Computational Physics, 150 (1999), 97-127. 
+
+[16] G. Jiang and C.-W. Shu, Efficient implementation of weighted ENO schemes, Journal 
+
+of Computational Physics, 126 (1996), 202-228. 
+
+37
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+[17]  L.  Krivodonova,  J.  Xin,  J.-F.  Remacle  and  J.E.  Flaherty,  Shock  detection  and 
+
+limiting with discontinuous Galerkin methods for hyperbolic conservation laws , Applied 
+
+Numerical Mathematics, 48 (2004), 323-338. 
+
+[18] X. Liu, S. Osher and T. Chan, Weighted essentially non-oscillatory schemes, Journal 
+
+of Computational Physics, 115 (1994), 200-212. 
+
+[19]  J.  Qiu  and  C.-W.  Shu,  Runge-Kutta  discontinuous  Galerkin  method  using  WENO 
+
+limiters, submitted, SIAM Journal on Scientific Computing,  (2004a) 
+
+[20] J. Qiu and C.-W. Shu, Hermite WENO schemes and their application as limiters for 
+
+Runge-Kutta  discontinuous  Galerkin  method:  one  dimensional  case,  Journal  of 
+
+Computational Physics, 193,  (2004b), 115-135 
+
+[21] J. Qiu and C.-W. Shu, Hermite WENO schemes and their application as limiters for 
+
+Runge-Kutta  discontinuous  Galerkin  method:  two  dimensional  case,  Computers  and 
+
+Fluids, to appear,  (2004c) 
+
+[22] W.H. Reed and T.R. Hill, Triangular mesh methods for neutron transport equation, 
+
+Tech. Report LA-UR-73-479, Los Alamos Scientific Laboratory, 1973. 
+
+[23]  J.  Shi,  C.  Hu  and  C.-W.  Shu,  A  technique  for  treating  negative  weights  in  WENO 
+
+schemes, Journal of Computational Physics, 175 (2002), 108-127. 
+
+[24]  C.-W.  Shu  and  S.  Osher,  Efficient  implementation  of  essentially  non-oscillatory 
+
+shock-capturing schemes, Journal of Computational Physics, 77, (1988), 439-471. 
+
+[25]  C.-W.  Shu  and  S.  Osher,  Efficient  implementation  of  essentially  non-oscillatory 
+
+shock-capturing schemes, Journal of Computational Physics, 83 (1989), 32-78. 
+
+38
+
+[26]  A.H.  Stroud  and  D.  Secrest,  Gaussian  Quadrature  Formulas,  Prentice-Hall  Inc. 
+
+(1966). 
+
+261-268. 
+
+[27] A. Suresh and H.T. Huynh, Accurate monotonicity preserving scheme with Runge-
+
+Kutta time-stepping, Journal of Computational Physics, 136 (1997), 83-99. 
+
+[28] H. Takewaki, A. Nishiguchi and T. Yabe, Cubic interpolated pseudoparticle method 
+
+(CIP)  for  solving  hyperbolic  equations,  Journal  of  Computational  Physics,  61  (1985), 
+
+[29]  V.A.  Titarev  and  E.F.  Toro,  ADER:  Arbitrary  high  order  Godunov  approach, 
+
+Journal of Scientific Computing, 17 (2002), 609-618. 
+
+[30] M. Torrilhon and D.S. Balsara, High Order WENO Schemes: Investigations on Non-
+
+Uniform Convergence for MHD Riemann Problems, to appear Journal of Computational 
+
+Physics, (2004). 
+
+[31]  P.  Woodward  and  P.  Colella,  The  numerical  simulation  of  two-dimensional  fluid 
+
+flow with strong shocks, Journal of Computational Physics, 54 (1984), 115-173. 
+
+[32] H. Yang, An artificial compression method for ENO schemes, the slope modification 
+
+method, Journal of Computational Physics, 89 (1990), 125. 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+39
+
+Appendix 
+
+The  coefficients  in  eqn.  (2.3)  can  be  obtained  in  any  zone  by  using  the  mass 
+
+matrix  and  the  orthogonality  of  the  modal  bases.  We  assume  that  a  zone  has  local 
+
+coordinates that span [-0.5,0.5]. The zeroth moment is given by: 
+
+u  (t) = 
+
+0
+
+u (x, t) dx
+
+ 
+
+1/ 2
+
+∫
+
+−
+
+1/ 2
+
+The first moment is given by: 
+
+u  (t) = 12 
+
+1
+
+u (x, t) x dx
+
+ 
+
+1/ 2
+
+∫
+
+−
+
+1/ 2
+
+   
+
+The second moment is given by: 
+
+u  (t) = 180 
+
+2
+
+2
+u (x, t)  x  
+
+−
+
+ 
+
+ dx
+
+ 
+
+⎛
+⎜
+⎝
+
+1
+12
+
+⎞
+⎟
+⎠
+
+1/ 2
+
+∫
+
+−
+
+1/ 2
+
+The third moment is given by: 
+
+u  (t) = 2800 
+
+3
+
+3
+u (x, t)  x  
+
+−
+
+ x
+
+ dx
+
+ 
+
+⎛
+⎜
+⎝
+
+3
+20
+
+⎞
+⎟
+⎠
+
+1/ 2
+
+∫
+
+−
+
+1/ 2
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+Gauss or Gauss-Lobatto quadrature points can be used from Stroud and Secrest [26] to 
+
+evaluate  these  integrals  numerically.  This  can  be  used  to  initialize  the  solution  on  the 
+
+mesh  with  the  desired  level  of  accuracy  and  it  can  also  be  used  for  reconstructing  the 
+
+moments for the RKDG and hybrid RKDG+HWENO schemes when that is needed. 
+
+40
+
+Tables 
+
+Table 1: Advection equation ut + ux = 0 with u ( x, 0) = sin (2 π x) profile. The problem 
+
+was run on the domain [-0.5, 0.5] with periodic boundaries and stopped at a time of 0.5. 
+
+Comparing  DG  with  and  without  limiter.  The  MP  detection  algorithm  with  the  settings 
+
+for Euler equations was used. 
+
+N 
+
+10 
+
+20 
+
+40 
+
+80 
+
+10 
+
+20 
+
+40 
+
+80 
+
+10 
+
+20 
+
+40 
+
+10 
+
+20 
+
+80 
+
+10 
+
+ 
+
+DG or DG+HWENO With WENO Limiter 
+
+DG or DG+HWENO Without Limiter 
+
+ 
+
+L1 err 
+
+order 
+
+L∞  err 
+
+order 
+
+L1 err 
+
+order 
+
+L∞  err 
+
+order 
+
+1.51e-2 
+
+ 
+
+2.34e-2 
+
+ 
+
+1.51e-2 
+
+ 
+
+2.34e-2 
+
+ 
+
+3.29e-3 
+
+2.20 
+
+5.19e-3 
+
+2.17 
+
+3.29e-3 
+
+2.20 
+
+5.19e-3 
+
+2.17 
+
+RKDG 
+
+7.76e-4 
+
+2.08 
+
+1.22e-3 
+
+2.09 
+
+7.76e-4 
+
+2.08 
+
+1.22e-3 
+
+2.09 
+
+1.89e-4 
+
+2.04 
+
+2.97e-4 
+
+2.04 
+
+1.89e-4 
+
+2.04 
+
+2.97e-4 
+
+2.04 
+
+1.58e-4 
+
+ 
+
+2.44e-4 
+
+ 
+
+1.58e-4 
+
+ 
+
+2.44e-4 
+
+ 
+
+1.79e-5 
+
+3.14 
+
+2.80e-5 
+
+3.13 
+
+1.79e-5 
+
+3.14 
+
+2.80e-5 
+
+3.13 
+
+RKDG 
+
+2.16e-6 
+
+3.05 
+
+3.40e-6 
+
+3.04 
+
+2.16e-6 
+
+3.05 
+
+3.40e-6 
+
+3.04 
+
+2.68e-6 
+
+3.01 
+
+4.22e-7 
+
+3.01 
+
+2.68e-6 
+
+3.01 
+
+4.22e-7 
+
+3.01 
+
+8.97e-7 
+
+ 
+
+1.38e-6 
+
+ 
+
+8.97e-7 
+
+ 
+
+1.38e-6 
+
+ 
+
+4.58e-8 
+
+4.29 
+
+7.16e-8 
+
+4.27 
+
+4.58e-8 
+
+4.29 
+
+7.16e-8 
+
+4.27 
+
+2.93e-9 
+
+3.97 
+
+4.59e-9 
+
+3.96 
+
+2.93e-9 
+
+3.97 
+
+4.59e-9 
+
+3.96 
+
+RKDG  80 
+
+1.83e-10  3.99 
+
+2.88e-10  3.99 
+
+1.83e-
+
+3.99 
+
+2.88e-
+
+3.99 
+
+10 
+
+10 
+
+1.06e-3 
+
+ 
+
+2.07e-3 
+
+ 
+
+1.06e-3 
+
+ 
+
+2.07e-3 
+
+ 
+
+RKDG 
+
+3.51e-5 
+
+4.92 
+
+6.54e-5 
+
+4.98 
+
+3.51e-5 
+
+4.92 
+
+6.54e-5 
+
+4.98 
+
+HWEN 
+
+40 
+
+2.58e-6 
+
+3.76 
+
+4.09e-6 
+
+4.00 
+
+2.58e-6 
+
+3.76 
+
+4.09e-6 
+
+4.00 
+
+2.65e-7 
+
+3.29 
+
+4.17e-7 
+
+3.29 
+
+2.65e-7 
+
+3.29 
+
+4.17e-7 
+
+3.29 
+
+2.10e-4 
+
+ 
+
+4.37e-4 
+
+ 
+
+2.10e-4 
+
+ 
+
+4.37e-4 
+
+ 
+
+RKDG  
+
+20 
+
+2.61e-6 
+
+6.33 
+
+6.09e-6 
+
+6.17 
+
+2.61e-6 
+
+6.33 
+
+6.09e-6 
+
+6.17 
+
+HWEN 
+
+40 
+
+4.85e-8 
+
+5.75 
+
+1.48e-7 
+
+5.35 
+
+4.85e-8 
+
+5.75 
+
+1.48e-7 
+
+5.35 
+
+O 
+
+80 
+
+1.13e-9 
+
+5.41 
+
+4.04e-9 
+
+5.20 
+
+1.13e-9 
+
+5.41 
+
+4.04e-9 
+
+5.20 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+P1-
+
+ 
+P2-
+
+ 
+
+ 
+P3-
+
+P2-
+
+O 
+P3-
+
+41
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+P1-
+
+ 
+P2-
+
+ 
+
+ 
+P3-
+
+P2-
+
+O 
+P3-
+
+O 
+
+ 
+
+ 
+
+ 
+Table 2: Advection equation ut + ux = 0 with u ( x, 0) = sin4 (2 π x) profile. The problem 
+
+was run on the domain [-0.5, 0.5] with periodic boundaries and stopped at a time of 0.5. 
+
+Comparing  DG  with  and  without  limiter.  The  MP  detection  algorithm  with  the  settings 
+
+for Euler equations was used. 
+
+N 
+
+40 
+
+80 
+
+40 
+
+80 
+
+40 
+
+80 
+
+40 
+
+80 
+
+ 
+
+DG or DG+HWENO With WENO Limiter 
+
+DG or DG+HWENO Without Limiter 
+
+ 
+
+L1 err 
+
+order 
+
+L∞  err 
+
+order 
+
+L1 err 
+
+order 
+
+L∞  err 
+
+order 
+
+9.39e-3 
+
+ 
+
+1.73e-2 
+
+ 
+
+7.17e-3 
+
+ 
+
+1.43e-2 
+
+ 
+
+1.67e-3 
+
+2.48 
+
+3.49e-3 
+
+2.31 
+
+1.67e-3 
+
+2.48 
+
+3.49e-3 
+
+2.31 
+
+RKDG 
+
+160 
+
+4.02e-4 
+
+2.06 
+
+8.09e-4 
+
+2.11 
+
+4.02e-4 
+
+2.06 
+
+8.09e-4 
+
+2.11 
+
+320 
+
+9.91e-5 
+
+2.02 
+
+2.00e-4 
+
+2.01 
+
+9.91e-5 
+
+2.02 
+
+2.00e-4 
+
+2.01 
+
+5.05e-4 
+
+ 
+
+2.44e-3 
+
+ 
+
+8.11e-5 
+
+ 
+
+1.52e-4 
+
+ 
+
+3.45e-5 
+
+3.87 
+
+2.35e-4 
+
+3.38 
+
+9.08e-6 
+
+3.16 
+
+1.74e-5 
+
+3.13 
+
+RKDG 
+
+160 
+
+1.88e-6 
+
+4.19 
+
+1.71e-5 
+
+3.78 
+
+1.10e-6 
+
+3.04 
+
+2.13e-6 
+
+3.03 
+
+320 
+
+1.51e-7 
+
+3.65 
+
+1.02e-6 
+
+4.06 
+
+1.37e-7 
+
+3.01 
+
+2.64e-7 
+
+3.01 
+
+2.14e-4 
+
+ 
+
+1.44e-3 
+
+ 
+
+3.65e-7 
+
+ 
+
+6.19e-7 
+
+ 
+
+1.07e-5 
+
+4.32 
+
+1.56e-4 
+
+3.21 
+
+2.34e-8 
+
+3.96 
+
+3.99e-8 
+
+3.96 
+
+160 
+
+4.76e-7 
+
+4.49 
+
+1.09e-5 
+
+3.84 
+
+1.47e-9 
+
+3.99 
+
+2.51e-9 
+
+3.99 
+
+RKDG  320 
+
+9.23e-11  12.33 
+
+1.57e-10  16.07 
+
+9.23e-
+
+4.00 
+
+1.57e-
+
+4.00 
+
+11 
+
+10 
+
+5.14e-4 
+
+ 
+
+1.22e-3 
+
+ 
+
+4.89e-4 
+
+ 
+
+1.05e-3 
+
+ 
+
+RKDG 
+
+3.41e-5 
+
+3.91 
+
+1.21e-4 
+
+3.34 
+
+3.32e-5 
+
+3.89 
+
+1.34e-4 
+
+2.97 
+
+HWEN 
+
+160 
+
+2.42e-6 
+
+3.82 
+
+1.36e-5 
+
+3.15 
+
+2.39e-6 
+
+3.79 
+
+1.49e-5 
+
+3.16 
+
+320 
+
+1.96e-7 
+
+3.62 
+
+1.46e-6 
+
+3.22 
+
+1.97e-7 
+
+3.60 
+
+1.57e-6 
+
+3.24 
+
+40 
+
+3.04e-4 
+
+ 
+
+1.47e-3 
+
+ 
+
+1.84e 
+
+ 
+
+7.35e-4 
+
+ 
+
+RKDG  
+
+80 
+
+1.45e-5 
+
+4.39 
+
+1.41e-4 
+
+3.38 
+
+1.00e-5 
+
+4.19 
+
+6.81e-5 
+
+3.43 
+
+HWEN 
+
+160 
+
+6.99e-7 
+
+4.38 
+
+9.12e-6 
+
+3.95 
+
+5.32e-7 
+
+4.24 
+
+4.99e-6 
+
+3.77 
+
+320 
+
+2.79e-8 
+
+4.65 
+
+5.71e-7 
+
+3.99 
+
+2.36e-8 
+
+4.49 
+
+4.95e-7 
+
+3.33 
+
+42
+
+Table 3: Burgers equation ut + u ux = 0 with u ( x, 0) = 0.25 + 0.5 sin (2 π x) profile. The 
+
+problem was run on the domain [-0.5, 0.5] with periodic boundaries and stopped at a time 
+
+of 0.5/π . Comparing DG with and without limiter. The MP detection algorithm with the 
+
+settings for Euler equations was used. 
+
+N 
+
+10 
+
+20 
+
+40 
+
+80 
+
+10 
+
+20 
+
+40 
+
+80 
+
+10 
+
+20 
+
+40 
+
+10 
+
+20 
+
+80 
+
+10 
+
+ 
+
+DG or DG+HWENO With WENO Limiter 
+
+DG or DG+HWENO Without Limiter 
+
+ 
+
+L1 err 
+
+order 
+
+L∞  err 
+
+order 
+
+L1 err 
+
+order 
+
+L∞  err 
+
+order 
+
+7.40e-4 
+
+ 
+
+4.08e-3 
+
+ 
+
+4.34e-4 
+
+ 
+
+1.82e-3 
+
+ 
+
+9.17e-5 
+
+3.01 
+
+4.42e-4 
+
+3.20 
+
+9.17e-5 
+
+2.24 
+
+4.42e-4 
+
+2.04 
+
+RKDG 
+
+1.96e-5 
+
+2.22 
+
+1.12e-4 
+
+1.98 
+
+1.96e-5 
+
+2.22 
+
+1.12e-4 
+
+1.98 
+
+4.45e-6 
+
+2.14 
+
+2.90e-5 
+
+1.95 
+
+4.45e-6 
+
+2.14 
+
+2.90e-5 
+
+1.95 
+
+1.82e-5 
+
+ 
+
+1.26e-4 
+
+ 
+
+1.82e-5 
+
+ 
+
+1.26e-4 
+
+ 
+
+1.44e-6 
+
+3.65 
+
+8.57e-6 
+
+3.88 
+
+1.44e-6 
+
+3.65 
+
+8.57e-6 
+
+3.88 
+
+RKDG 
+
+1.10e-7 
+
+3.72 
+
+6.28e-7 
+
+3.77 
+
+1.10e-7 
+
+3.72 
+
+6.28e-7 
+
+3.77 
+
+1.00e-8 
+
+3.46 
+
+6.09e-8 
+
+3.37 
+
+1.00e-8 
+
+3.46 
+
+6.09e-8 
+
+3.37 
+
+4.98e-7 
+
+ 
+
+4.05e-6 
+
+ 
+
+4.98e-7 
+
+ 
+
+4.05e-6 
+
+ 
+
+2.83e-8 
+
+4.14 
+
+3.45e-7 
+
+3.56 
+
+2.83e-8 
+
+4.14 
+
+3.45e-7 
+
+3.56 
+
+1.10e-9 
+
+4.68 
+
+2.96e-8 
+
+3.54 
+
+1.10e-9 
+
+4.68 
+
+2.96e-8 
+
+3.54 
+
+RKDG  80 
+
+3.35e-11  5.04 
+
+1.64e-9 
+
+4.17 
+
+3.35e-
+
+5.04 
+
+1.64e-9 
+
+4.17 
+
+3.25e-5 
+
+ 
+
+1.81e-4 
+
+ 
+
+3.25e-5 
+
+ 
+
+1.81e-4 
+
+ 
+
+RKDG 
+
+3.23e-6 
+
+3.33 
+
+3.09e-5 
+
+2.55 
+
+3.23e-6 
+
+3.33 
+
+3.09e-5 
+
+2.55 
+
+HWEN 
+
+40 
+
+2.64e-7 
+
+3.61 
+
+2.49e-6 
+
+3.63 
+
+2.64e-7 
+
+3.61 
+
+2.49e-6 
+
+3.63 
+
+2.17e-8 
+
+3.61 
+
+1.90e-7 
+
+3.71 
+
+2.17e-8 
+
+3.61 
+
+1.90e-7 
+
+3.71 
+
+1.08e-5 
+
+ 
+
+9.98e-5 
+
+ 
+
+1.08e-5 
+
+ 
+
+9.98e-5 
+
+ 
+
+RKDG  
+
+20 
+
+2.78e-7 
+
+5.29 
+
+3.49e-6 
+
+4.84 
+
+2.78e-7 
+
+5.29 
+
+3.49e-6 
+
+4.84 
+
+HWEN 
+
+40 
+
+4.58e-9 
+
+5.92 
+
+5.26e-8 
+
+6.05 
+
+4.58e-9 
+
+5.92 
+
+5.26e-8 
+
+6.05 
+
+O 
+
+80 
+
+2.25e-10  4.35 
+
+3.39e-9 
+
+3.96 
+
+2.25e-
+
+4.35 
+
+3.39e-9 
+
+3.96 
+
+11 
+
+10 
+
+ 
+
+ 
+
+ 
+
+ 
+P1-
+
+ 
+P2-
+
+ 
+
+ 
+P3-
+
+P2-
+
+O 
+P3-
+
+ 
+
+ 
+
+43
+
+Table  4:  Euler  equations  with  density  profile  ρ  (  x,  0)  =  1.0  +  0.25  sin  (2  π x)  and 
+
+pressure and velocity set to unity. The problem  was  run  on  the  domain  [-0.5,  0.5]  with 
+
+periodic  boundaries  and  stopped  at  a  time  of  1.0.  Comparing  DG  with  and  without 
+
+limiter. The MP detection algorithm with the settings for Euler equations was used. 
+
+N 
+
+10 
+
+20 
+
+40 
+
+80 
+
+10 
+
+20 
+
+40 
+
+80 
+
+10 
+
+20 
+
+10 
+
+20 
+
+80 
+
+10 
+
+ 
+
+DG or DG+HWENO With WENO Limiter 
+
+DG or DG+HWENO Without Limiter 
+
+ 
+
+L1 err 
+
+order 
+
+L∞  err 
+
+order 
+
+L1 err 
+
+order 
+
+L∞  err 
+
+order 
+
+1.84e-3 
+
+ 
+
+3.11e-3 
+
+ 
+
+1.84e-3 
+
+ 
+
+3.11e-3 
+
+ 
+
+3.25e-4 
+
+2.50 
+
+5.23e-4 
+
+2.57 
+
+3.25e-4 
+
+2.50 
+
+5.23e-4 
+
+2.57 
+
+RKDG 
+
+7.17e-5 
+
+2.18 
+
+1.17e-4 
+
+2.16 
+
+7.17e-5 
+
+2.18 
+
+1.17e-4 
+
+2.16 
+
+1.71e-5 
+
+2.07 
+
+2.75e-5 
+
+2.09 
+
+1.71e-5 
+
+2.07 
+
+2.75e-5 
+
+2.09 
+
+2.71e-5 
+
+ 
+
+4.72e-5 
+
+ 
+
+2.71e-5 
+
+ 
+
+4.72e-5 
+
+ 
+
+1.46e-6 
+
+4.21 
+
+2.65e-6 
+
+4.15 
+
+1.46e-6 
+
+4.21 
+
+2.65e-6 
+
+4.15 
+
+RKDG 
+
+1.08e-7 
+
+3.76 
+
+1.84e-7 
+
+3.85 
+
+1.08e-7 
+
+3.76 
+
+1.84e-7 
+
+3.85 
+
+1.10e-8 
+
+3.30 
+
+1.78e-8 
+
+3.37 
+
+1.10e-8 
+
+3.30 
+
+1.78e-8 
+
+3.37 
+
+4.97e-8 
+
+ 
+
+9.03e-8 
+
+ 
+
+4.97e-8 
+
+ 
+
+9.03e-8 
+
+ 
+
+5.68e-10  6.45 
+
+9.57e-10  6.56 
+
+5.68e-
+
+6.45 
+
+9.57e-
+
+6.56 
+
+RKDG 
+
+40 
+
+4.66e-11  3.61 
+
+7.35e-11  3.70 
+
+4.66e-
+
+3.61 
+
+7.35e-
+
+3.70 
+
+80 
+
+2.93e-12  3.99 
+
+4.70e-12  3.97 
+
+2.93e-
+
+3.99 
+
+4.70e-
+
+3.97 
+
+10 
+
+11 
+
+12 
+
+5.43e-4 
+
+ 
+
+8.12e-4 
+
+ 
+
+5.43e-4 
+
+ 
+
+8.12e-4 
+
+ 
+
+RKDG 
+
+1.47e-5 
+
+5.20 
+
+2.37e-5 
+
+5.10 
+
+1.47e-5 
+
+5.20 
+
+2.37e-5 
+
+5.10 
+
+HWEN 
+
+40 
+
+8.69e-7 
+
+4.09 
+
+1.34e-6 
+
+4.15 
+
+8.69e-7 
+
+4.09 
+
+1.34e-6 
+
+4.15 
+
+5.32e-8 
+
+4.03 
+
+8.37e-8 
+
+4.00 
+
+5.32e-8 
+
+4.03 
+
+8.37e-8 
+
+4.00 
+
+1.41e-4 
+
+ 
+
+2.35e-4 
+
+ 
+
+RKDG  
+
+20 
+
+1.20e-6 
+
+6.87 
+
+3.34e-6 
+
+6.13 
+
+HWEN 
+
+40 
+
+1.78e-8 
+
+6.07 
+
+8.10e-8 
+
+5.37 
+
+O 
+
+80 
+
+3.23e-10  5.78 
+
+2.09e-9 
+
+5.28 
+
+1.41e-4 
+
+ 
+
+1.20e-6 
+
+6.87 
+
+1.78e-8 
+
+6.07 
+
+3.23e-
+
+5.78 
+
+10 
+
+2.35e-4 
+
+3.34e-6 
+
+8.10e-8 
+
+2.09e-9 
+
+10 
+
+11 
+
+12 
+
+10 
+
+20 
+
+40 
+
+80 
+
+ 
+
+ 
+
+ 
+
+ 
+P1-
+
+ 
+P2-
+
+ 
+
+ 
+P3-
+
+P2-
+
+O 
+P3-
+
+ 
+
+ 
+
+ 
+
+44
+
+Table 5: Percentage of zones that were flagged in the final timestep of the Lax problem 
+
+for meshes with increasing number of zones: 
+
+Table 6: Percentage of zones that were flagged in the final timestep of the shock-entropy 
+
+wave interaction problem for meshes with increasing number of zones: 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+P=2 RKDG  P=2 RKDG 
+
+P=3 RKDG P=3 RKDG
+
++HWENO 
+
++HWENO 
+
+200  9.16 
+
+400  3.65 
+
+800  2.66 
+
+16.83 
+
+4.16 
+
+2.13 
+
+8.75 
+
+3.38 
+
+1.81 
+
+12.13 
+
+9.62 
+
+7.59 
+
+P=2 RKDG  P=2 RKDG 
+
+P=3 RKDG P=3 RKDG
+
++HWENO 
+
++HWENO 
+
+200  28.33 
+
+400  13.75 
+
+800  4.99 
+
+26.33 
+
+13.00 
+
+7.08 
+
+33.00 
+
+12.25 
+
+4.81 
+
+25.75 
+
+14.44 
+
+8.09 
+
+P=2 RKDG  P=2 RKDG 
+
+P=3 RKDG P=3 RKDG
+
++HWENO 
+
++HWENO 
+
+200  8.33 
+
+400  4.00 
+
+800  2.16 
+
+7.16 
+
+4.33 
+
+2.92 
+
+13.00 
+
+13.50 
+
+6.08 
+
+3.54 
+
+5.75 
+
+5.50 
+
+45
+
+Table  7:  Percentage  of  zones  that  were  flagged  in  the  final  timestep  of  the  interacting 
+
+blast waves problem for meshes with increasing number of zones: 
+
+Figure Captions 
+
+Figs 1a, 1b, 1c and 1d show the results for the advection test problem for the p=2 RKDG, 
+
+p=2 RKDG+HWENO, p=3 RKDG and p=3 RKDG+HWENO schemes respectively. The 
+
+reference solution is shown as a solid line. The problem was solved on a 200 zone mesh 
+
+and the diamonds show the solution from that mesh. The reference solution is shown as a 
+
+solid line. 
+
+Figs 2a, 2b, 2c and 2d show the results for the Lax test problem for the p=2 RKDG, p=2 
+
+RKDG+HWENO,  p=3  RKDG  and  p=3  RKDG+HWENO  schemes  respectively.  The 
+
+reference solution is shown as a solid line. The problem was solved on a 200 zone mesh 
+
+and  the  diamonds  show  the  solution  from  that  mesh.  Figs  2e,  2f,  2g  and  2h  show  the 
+
+history of flagged points in space-time for the above four schemes. 
+
+Figs 3a, 3b, 3c and 3d show the results for the shock-entropy wave test problem for the 
+
+p=2  RKDG,  p=2  RKDG+HWENO,  p=3  RKDG  and  p=3  RKDG+HWENO  schemes 
+
+respectively. The reference solution is shown as a solid line. The problem was solved on 
+
+a 200 zone mesh and the diamonds show the solution from that mesh. Figs 3e, 3f, 3g and 
+
+3h show the history of flagged points in space-time for the above four schemes. 
+
+Figs 4a, 4b, 4c and 4d show the results for the blast wave interaction test problem for the 
+
+p=2  RKDG,  p=2  RKDG+HWENO,  p=3  RKDG  and  p=3  RKDG+HWENO  schemes 
+
+respectively. The reference solution is shown as a solid line. The problem was solved on 
+
+a 400 zone mesh and the diamonds show the solution from that mesh. Figs 4e, 4f, 4g and 
+
+4h show the history of flagged points in space-time for the above four schemes. 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+46
+
+

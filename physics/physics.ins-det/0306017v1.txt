@@ -1,0 +1,818 @@
+3
+0
+0
+2
+ 
+n
+u
+J
+ 
+2
+ 
+ 
+]
+t
+e
+d
+-
+s
+n
+i
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+7
+1
+0
+6
+0
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+CHEP03 La Jolla, California, March 24-28, 2003
+
+1
+
+FPGA Co-processor for the ALICE High Level Trigger
+
+G. Grastveit1, H. Helstrup2, V. Lindenstruth3, C. Loizides4, D. Roehrich1, B. Skaali5,
+T. Steinbeck3, R. Stock4, H. Tilsner3, K. Ullaland1, A. Vestbo1 and T. Vik5
+for the ALICE Collaboration
+
+1 Department of Physics, University of Bergen, Allegaten 55, N-5007 Bergen, Norway
+2 Bergen University College, Postbox 7030, N-5020 Bergen, Norway
+3 Kirchhoff Institut f ¨ur Physik, Im Neuenheimer Feld 227, D-69120 Heidelberg, Germany
+4 Institut f ¨ur Kernphysik Frankfurt, August-Euler-Str. 6, D-60486 Frankfurt am Main, Germany and
+5 Department of Physics, University of Oslo, P.O.Box 1048 Blindern, N-0316 Oslo, Norway
+
+The High Level Trigger (HLT) of the ALICE experiment requires massive parallel computing. One of the main
+tasks of the HLT system is two-dimensional cluster ﬁnding on raw data of the Time Projection Chamber (TPC),
+which is the main data source of ALICE. To reduce the number of computing nodes needed in the HLT farm,
+FPGAs, which are an intrinsic part of the system, will be utilized for this task. VHDL code implementing
+the fast cluster ﬁnder algorithm, has been written, a testbed for functional veriﬁcation of the code has been
+developed, and the code has been synthesized.
+
+1. Introduction
+
+The central detectors of the ALICE experiment [1],
+mainly its large Time Projection Chamber (TPC) [2],
+will produce a data size of up to 75 MByte/event at
+an event rate of up to 200 Hz resulting in a data rate
+of ∼15 GByte/sec. This exceeds the foreseen mass
+storage bandwidth of 1.25 GByte/sec by one order
+of magnitude. The High Level Trigger (HLT), a mas-
+sive parallel computing system, processes the data on-
+line doing pattern recognition and simple event recon-
+struction almost in real-time, in order to select inter-
+esting (sub)events, or to compress data eﬃciently by
+modeling techniques [3], [4]. The system will consist
+of a farm of clustered SMP-nodes based on oﬀ-the-
+shelf PCs connected with a high bandwidth low la-
+tency network. The system nodes will be interfaced to
+the front-end electronics via optical ﬁbers connecting
+to their internal PCI-bus, using a custom PCI receiver
+card for the detector readout (RORC) [5].
+
+Such PCI boards, carrying an ALTERA APEX
+FPGA, SRAM, DRAM and a CPLD and FLASH for
+conﬁguration have been produced and are operational.
+Most of the local pattern recognition is done using the
+FPGA co-processor while the data is being transferred
+to the memory of the corresponding nodes.
+
+Focusing on TPC tracking, in the conventional way
+of event reconstruction one ﬁrst calculates the clus-
+ter centroids with a Cluster Finder and then uses a
+Track Follower on these space points to extract the
+track parameters [6], [7]. Conventional cluster ﬁnding
+reconstructs positions of space points from raw data,
+which are interpreted as the crossing points between
+tracks and the center of padrows. The cluster cen-
+troids are calculated as the weighted charge mean in
+pad and time direction. The algorithm typically is
+suited for low multiplicity data, because overlapping
+clusters are not properly handled. By splitting clus-
+
+THHT001
+
+ters into smaller clusters at local minima in time or
+pad direction a simple deconvolution scheme can be
+applied and the method becomes usable also for higher
+multiplicities of up to dN/dy of 3000 [3].
+
+To reduce data shipping and communication over-
+head in the HLT network system, most of the cluster
+ﬁnding will be done locally deﬁned by the readout
+granularity of the readout chambers. The TPC front-
+end electronic deﬁnes 216 data volumes, which are
+being read out over single ﬁbers into the RORC.
+
+We therefore implement the Cluster Finder directly
+on the FPGA co-processor of these receiving nodes
+while reading out the data. The algorithm is highly
+local, so that each sector and even each padrow can
+be processed independently, which is another reason
+to use a circuit for the parallel computation of the
+space points.
+
+2. The Cluster Finder Algorithm
+
+The data input to the cluster ﬁnder is a zero sup-
+pressed, time-ordered list of charge values on succes-
+sive pads and padrows. The charges are ADC values
+in the range 0 to 1023 drawn as squares in ﬁgure 1.
+By the nature of the data readout and representation,
+they are placed at integer time, pad and padrow co-
+ordinates.
+
+Finding the particle crossing points breaks down
+into two tasks: Determine which ADC values belong
+together, forming a cluster, and then calculate the
+center of gravity as the weighted mean using
+
+GP =
+
+qipi
+
+Q
+
+GT =
+
+X
+
+qiti
+
+.
+
+Q ,
+
+(1)
+
+(2)
+
+X
+where GT is the center of gravity in the time-direction,
+
+.
+
+2
+
+CHEP03 La Jolla, California, March 24-28, 2003
+
+Figure 1: Input charge values in the time-pad plane
+
+Figure 3: Finished clusters in the time-pad plane, where
+the black dots in the middle mark the centroid. a and b
+specify the absolute position of the cluster, ai are the
+time positions of the sequences that form the cluster.
+
+Figure 2: Grouping input data into sequences, and
+merging neighboring sequences into clusters.
+
+GP in the pad direction, Q =
+of the cluster.
+
+qi is the total charge
+
+P
+
+2.1. Grouping charges into sequences
+
+Because of the ALTRO data format, we choose to
+order the input data ﬁrst along the time direction into
+sequences, before we merge sequences on neighboring
+pads into clusters.
+
+A sequence is regarded as a continuous (vertical)
+stack of integer numbers. They are shown in ﬁgure 2.
+For each sequence the center of gravity is calculated
+using eqn. (2). The result is a decimal number. This
+is illustrated by the horizontal black lines.
+
+2.2. Merging neighboring sequences
+
+Searching along the pad direction (from left to right
+in the ﬁgures), sequences on adjacent pads are merged
+into a starting cluster if the diﬀerence in the center of
+gravity is less than a selectable match distance param-
+eter1. The center of gravity value of the last appended
+(rightmost) sequence is kept and used when searching
+
+1Typically we set the match distance parameter to 2.
+
+THHT001
+
+Figure 4: The deﬁnition of a general cluster used to
+simplify the algorithm for the FPGA
+
+for matches on the following pad, also shown in ﬁg-
+ure 2.
+
+A cluster that has no match on the next pad is
+regarded as ﬁnished. If it is above the noise thresh-
+old (requirements on size and total charge), the ﬁ-
+nal center of gravities in time and pad according to
+eqns. (1) and (2) are calculated. This is –besides other
+deﬁnitions– illustrated in ﬁgure 3. The space-point,
+given by these two values transformed into real space,
+and the total charge of the cluster are then used for
+tracking [reference to tracking papers].
+
+3. Algorithm adaptions for VHDL
+
+To transform the algorithm into a version which
+is suitable for a computation in hardware, we deﬁne
+a general cluster as a matrix in the time-pad plane
+according to ﬁgure 4.
+
+Of course, clusters can be any size and shape and
+can be placed anywhere within the time-pad plane.
+The upper left corner is chosen as the reference point
+
+CHEP03 La Jolla, California, March 24-28, 2003
+
+3
+
+since this charge will enter the cluster ﬁnder circuit
+ﬁrst. The values a and b deﬁne the absolute placement
+of the corner, the size of the cluster is given by m and
+n. Allowing charge values to be zero covers varying
+shapes, but since only one sequence per pad is merged,
+zero charge values in the interior of the clusters can
+not occur.
+
+Using the general cluster deﬁnition, the total charge
+Q is the sum of the total sequence charges Qj accord-
+ing to
+
+Q =
+
+Qj
+
+where Qj =
+
+qij
+
+(3)
+
+4.1. Decoder
+
+b+n
+
+j=b
+X
+
+m
+
+i=a−m
+X
+
+and the formulas for the center of gravity change into
+
+Figure 5: The block diagram of the FPGA cluster ﬁnder
+
+P
+
+The Decoder handles the format of the incoming
+data and computes properties of the sequences. We
+see from (7) that two parts are “local” to every se-
+m
+k=0 kq(aj −k)j , where the
+quence. These are Qj and
+total charge of the sequence is also used in (6). Calcu-
+lation of these two sequence properties need the indi-
+vidual charges qij but does not involve computations
+that require several clock cycles. The two properties
+are therefore computed as the charges enter the cir-
+cuit, so that the charges have not to be stored. Ad-
+ditionally, as required by the algorithm, the center
+of gravity of the sequences needs to be calculated.
+Only calculating the geometric middle, which is ac-
+complished by a subtraction and a left shift of an in-
+herent counter, is suﬃciently precise and faster than
+the exact computation.
+
+When all information about a sequence is assem-
+bled, it will be sent to the second part, the Merger.
+That way the narrow, ﬁxed-rate data stream is con-
+verted into wide data words of varying rate. That rate
+is dependent on the length of the sequences. Long se-
+quences give low data rate and vice versa. Because
+of this, and also because of varying processing speed
+of the Merger, a small FIFO is used to buﬀer the se-
+quence data. Since the Decoder handles data in real
+time as they come the sequences will also be ordered
+by ascending row, ascending pad and descending time.
+
+4.2. Merger
+
+The Merger decides which sequences belong to-
+gether and merges them. The merging in eﬀect in-
+creases the k index of (6) and j index of (7) by one,
+adding one more sequence to the sums in the numer-
+ators. It also updates the total charge of the cluster
+Q.
+
+Since the Merger is processing the data in arriving
+order, merging will be done with sequences on the pre-
+ceding pads. And more precisely, since by deﬁnition a
+cluster does not have holes, only the immediately pre-
+ceding pad needs to be searched. Therefore we need
+only two lists in memory (see ﬁgure 6). One list con-
+tains the started cluster of the previous pad; the other
+list contains started clusters already processed at the
+
+(4)
+
+(5)
+
+(6)
+
+GP =
+
+GT =
+
+b+n
+
+j=b
+X
+b+n
+
+jQj
+
+Q
+
+,
+
+a
+
+iqij
+
+Q
+
+,
+
+j=b
+X
+
+i=a−m
+X
+
+By calculating the center of gravity relative to the
+upper left corner of the cluster, the multiplicands i
+and j in (4) and (5), which start counting from a and
+b respectively, are exchanged by indexes starting at 0.
+Using the deﬁnitions (3) and ﬁgure 3, we get for the
+center of gravities the following two equations:
+
+GP = b +
+
+kQb+k
+
+Q
+
+,
+
+n
+
+k=0
+X
+b+n
+
+m
+
+j=b
+X
+
+k=0
+X
+
+GT = a −
+
+kq(aj−k)j + (a − aj)Qj
+
+Q(7)
+
+,
+
+These formulas are better suited for the FPGA im-
+plementation, because we have reduced the number of
+multiplications and the range of one of the multipli-
+cands k and (a − aj) is restricted. It is kept within
+the range of the height and width of a cluster. When
+the relative centroid has been determined, it has to be
+transformed to the absolute coordinate system (using
+a and b). Thus, the FPGA implementation has to
+calculate a, b, Q and the result of the two sums. Per
+cluster these 5 integer values will be sent to the host,
+which in turn uses (6) and (7) for the ﬁnal result.
+
+4. VHDL implementation
+
+The FPGA implementation has four components as
+shown in ﬁgure 5. The two main parts are the Decoder,
+which groups the charges into sequences (section 2.1),
+and the Merger, which merges the sequences into clus-
+ters (section 2.2).
+
+THHT001
+
+4
+
+CHEP03 La Jolla, California, March 24-28, 2003
+
+&(cid:13)
+
+new data(cid:13)
+
+&(cid:13)
+
+next pad(cid:13)
+
+new row or(cid:13)
+skip pad(cid:13)
+
+send(cid:13)
+all(cid:13)
+
+send(cid:13)
+many(cid:13)
+
+&(cid:13)
+
+new search range(cid:13)
+
+idle(cid:13)
+
+split(cid:13)
+cluster(cid:13)
+W(cid:13)
+
+deconv(cid:13) on and(cid:13)
+local minima(cid:13)
+
+insert(cid:13)
+seq(cid:13)
+W(cid:13)
+
+&(cid:13)
+
+empty(cid:13)
+
+send(cid:13)
+one(cid:13)
+
+old is above(cid:13)
+
+old is below(cid:13)
+
+&(cid:13)
+
+within match distance(cid:13)
+
+calc(cid:13)
+dist(cid:13)
+- -(cid:13)
+
+merge(cid:13)
+store(cid:13)
+W(cid:13)
+
+merge(cid:13)
+add(cid:13)
++ +(cid:13)
+
+merge(cid:13)
+mult(cid:13)
+* * +(cid:13)
+
+Figure 7: The state machine of the Merger. The
+undertaken arithmetical operations and write accesses
+are marked.
+
+In the merge mult state the last part in (7),
+is
+computed for the lower of the unﬁnished cluster and
+the incoming sequence. The rest of the calculations
+are done unconditionally. They are ﬁnished in the
+merge add state. After merging the resulting cluster
+is inserted into the current list (merge store), at the
+same time the old unﬁnished cluster is removed from
+the search range by incrementing the begin pointer.
+
+If a match is not found in the calc dist state the
+ordering of data is crucial: The ﬁrst cluster in the
+search range is always the one of highest time value,
+so if it is below the incoming, the rest of the clusters
+in the search range will also be below. Hence there
+can be no matches for the incoming sequence and it
+can be inserted into the current list (insert seq). In
+the opposite case, if the cluster in the search range is
+higher than the incoming, all subsequent incoming se-
+quences will be below or on other pads, so the cluster
+in search range must be ﬁnished. The cluster is out-
+put, and the begin pointer is incremented (send one).
+The same procedure happens in three other states.
+By deﬁnition, on a change of row there will be no
+more matches neither in the search range nor the cur-
+rent list. Therefore all the clusters are sent (send all ).
+As described above, motivating the ring buﬀer: when
+there is a change of the pad, clusters in the search
+range are sent and the lists are renamed (send many).
+The last case ﬁnishing a cluster occurs if convolution is
+turned on and a local minima in a cluster is detected.
+The split cluster state is combination of send one and
+insert seq. The old cluster is sent to the output and
+the incoming is inserted into the search range.
+
+4.3. SmartMult
+
+Both the Decoder and the Merger do multiplica-
+tions where the range of one of the multiplicands is
+limited to the size of the cluster as intended by (6)
+and (7). To save resources (logic cells) on the FPGA
+and increase the clock speed, we replace the standard
+
+Figure 6: The ring buﬀer storing clusters of the previous
+and the actual pad.
+
+current pad. Clusters are removed from the search
+range when a match is found or when the cluster is
+ﬁnished. Clusters are inserted in the input range af-
+ter merging or when starting a new cluster. The list
+of clusters on the current pad, the input range, will
+be searched when a sequence on the next pad arrives.
+When that happens, there will be no matches for the
+remaining clusters on the preceding pad. Hence we
+output clusters in the old search range and exchange
+the lists. The old list becomes free memory, the cur-
+rent list becomes the old, and a new current list with
+no entries is created. At the end of a row or when a
+pad is skipped the clusters in both the lists must be
+ﬁnished. All the clusters are sent and both the lists
+are emptied. The two lists are implemented as a ring
+buﬀer stored in a dual-port RAM. The beginning and
+ending of the lists is marked by three memory pointers
+(begin, end and insert pointer).
+
+The state machine of the Merger is shown in ﬁg-
+ure 7. To prevent overﬂowing the FIFO, the number
+of states the Merger machine needs to visit for each
+sequence is kept as low as possible. At the same time
+every state must be as simple as possible to enable
+a high clock rate. The ring buﬀer causes systematic
+memory accesses; read and write addresses are either
+unchanged or incremented. To keep the number of
+states down, the computations of merging are done in
+parallel, thereby using more of the FPGA resources.
+The resources needed are two adders (signed), and two
+“smart multipliers” (see 4.3).
+
+There are three diﬀerent types of states: States that
+remove a cluster from the search range sending it to
+the output (or discarding it if it is a noise cluster
+or overﬂow occurred), states that do arithmetic and
+states that insert a new cluster into the list of the
+current pad.
+
+Arithmetic is done in three cases. When a new se-
+quence on the current row and pad enters, the dis-
+tance between starting times, (a − aj), is calculated.
+Because the data type is unsigned, a is kept at the
+top of the cluster by assigning it the highest of the
+starting times. The roles of the unﬁnished cluster and
+sequence are interchangeable. The distance between
+the middle of the incoming and the middle of the ﬁrst
+in the search range is also calculated (calc dist ).
+If
+the result is within match distance, merging occurs.
+
+THHT001
+
+CHEP03 La Jolla, California, March 24-28, 2003
+
+5
+
+time vs pad
+
+390
+
+380
+
+370
+
+360
+
+350
+
+25
+
+30
+
+35
+
+40
+
+45
+
+50
+
+Figure 8: A part of a time-pad plane. Colored patches
+are input charges, squares mark the geometric middle of
+the sequences, points and circles mark the centroids
+found by the FPGA and the C code resp.
+
+Table I Distribution of clock cycles spent in the various
+states of the Merger, corresponding to dN/dy of 2500 and
+1000 and with/without deconvolution
+
+state
+
+2500-n 2500-de 1000-n 1000-de
+
+idle
+merge mult
+merge add
+merge store
+send all
+send many
+send one
+calc dist
+insert seq
+split cluster
+
+26,0
+6,5
+6,5
+6,5
+0,5
+5,4
+9,3
+26,9
+12,6
+0,0
+
+25,2
+11,2
+11,2
+11,2
+0,4
+4,2
+5,4
+23,7
+7,3
+0,3
+
+31,0
+9,1
+9,1
+9,1
+0,5
+5,6
+5,6
+22,9
+8,2
+0,0
+
+30,0
+9,0
+9,0
+9,0
+0,5
+5,6
+5,7
+21,4
+8,5
+0,2
+
+multipliers by SmartMult, which takes the two mul-
+tiplicands as arguments and uses left shifts and one
+adder for the calculations. One argument, the short
+multiplicand, is be limited to reduce the number of
+shifts needed. The limit for the short multiplicand
+determines the highest sequence that is allowed and
+the highest number of merges possible. Clusters larger
+than this are ﬂagged as overﬂowed and ignored when
+ﬁnished.
+
+4.4. Veriﬁcation
+
+For veriﬁcation purposes the system is stimulated
+by a testbench. The testbench reads an ASCII ﬁle
+containing simulated ALIROOT raw data in an AL-
+TRO like back-linked list, which is sent to the Decoder.
+Operation of the circuit is then studied in a simulator
+for digital circuits. Found clusters of the Merger cir-
+cuit are directed back to the testbench which writes
+
+THHT001
+
+120
+
+100
+
+80
+
+60
+
+40
+
+20
+
+0
+
+the results to a ﬁle. That ﬁle is then compared to a
+result ﬁle made by a C++ program running nearly
+the HLT C++ algorithm on the same simulated in-
+put data. Since the number of clusters is in the or-
+der of thousands and to eliminate human error, an-
+other C++ program compares the two result ﬁles.
+The found clusters agree as is graphically shown in
+ﬁgure 8.
+
+4.5. Timing
+
+The circuit has been synthesized and currently uses
+1937 logic cells. That are 12% of the available re-
+sources on the APEX20KE-400, which we are using
+for prototyping. The clock speed is 35 MHz. For the
+diﬀerent input data sets taken for the veriﬁcation, the
+Merger has been in the idle state more than 25% of
+the time. For two diﬀerent data sets the distribution
+of the clock cycles is shown in table I for dN/dy of
+2500 and 1000 and with/without deconvolution. As
+merging is the time critical part of the circuit, there
+is a safety margin for higher multiplicity data.
+
+5. Conclusion
+
+The fast cluster ﬁnder algorithm has been adapted
+for a hardware implementation. The synthesized cir-
+cuit currently uses 12% (1937) of the logic cells on the
+APEX20KE-400 FPGA with a clock speed of 35 MHz.
+The time critical Merger circuit is idle more than 25%
+of the time, which implies a safety margin for higher
+multiplicity input data.
+
+References
+
+[1] ALICE
+
+Collab.,
+
+Technical
+
+Proposal,
+
+CERN/LHCC/95-71 (1995).
+
+[2] ALICE Collab., Technical Design Report of the
+Time Projection Chamber, CERN/LHCC 2000-
+001 (2000).
+
+[3] V. Lindenstruth et. al., Online Pattern Recognition
+for the ALICE High Level Trigger , Proceedings of
+13th IEEE-NPSS RealTime Conference, Montreal,
+Canada, May, 2003
+
+[4] J. Berger et. al., TPC Data Compression, Nucl. In-
+
+str. Meth. A 489 (2002) 406
+
+[5] A. Vestbø et. al., High Level Trigger System for the
+LHC ALICE Experiment, ACAT’2002 Workshop
+Proceedings, Moskow, June 2002.
+
+[6] P. Yepes, A Fast Track Pattern Recognition,
+
+Nucl. Instr. Meth. A380 (1996) 582
+
+[7] C. Adler et. al., The STAR Level-3 trigger system,
+
+Nucl. Instr. Meth. A499 (2003) 778
+
+

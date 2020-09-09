@@ -1,0 +1,1669 @@
+5
+0
+0
+2
+ 
+n
+u
+J
+ 
+8
+1
+ 
+ 
+]
+n
+y
+d
+-
+u
+l
+f
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+5
+5
+1
+6
+0
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+A low-cost parallel implementation of direct
+numerical simulation of wall turbulence
+
+Paolo Luchini a,∗, Maurizio Quadrio b
+
+aDipartimento di Ingegneria Meccanica Universit`a di Salerno - Italy
+bDipartimento di Ingegneria Aerospaziale Politecnico di Milano - Italy
+
+Abstract
+
+A numerical method for the direct numerical simulation of incompressible wall tur-
+bulence in rectangular and cylindrical geometries is presented. The distinctive fea-
+ture resides in its design being targeted towards an eﬃcient distributed-memory
+parallel computing on commodity hardware. The adopted discretization is spectral
+in the two homogeneous directions; fourth-order accurate, compact ﬁnite-diﬀerence
+schemes over a variable-spacing mesh in the wall-normal direction are key to our
+parallel implementation. The parallel algorithm is designed in such a way as to
+minimize data exchange among the computing machines, and in particular to avoid
+taking a global transpose of the data during the pseudo-spectral evaluation of the
+non-linear terms. The computing machines can then be connected to each other
+through low-cost network devices. The code is optimized for memory requirements,
+which can moreover be subdivided among the computing nodes. The layout of a
+simple, dedicated and optimized computing system based on commodity hardware
+is described. The performance of the numerical method on this computing system
+is evaluated and compared with that of other codes described in the literature, as
+well as with that of the same code implementing a commonly employed strategy for
+the pseudo-spectral calculation.
+
+Key words: Navier–Stokes equations, direct numerical simulation, parallel
+computing, turbulence, compact ﬁnite diﬀerences.
+
+∗ Corresponding author. Address: Dipartimento di Ingegneria Meccanica Universit`a
+di Salerno - via Ponte don Melillo - 84084 Fisciano (SA) - Italy
+
+Email addresses: luchini@unisa.it (Paolo Luchini),
+
+maurizio.quadrio@polimi.it (Maurizio Quadrio).
+
+Preprint submitted to Journal of Computational Physics
+
+2 February 2008
+
+1 Introduction
+
+The direct numerical simulation (DNS) of the Navier–Stokes equations written
+for low-Reynolds-number, incompressible turbulent ﬂows in simple geometries
+is becoming an increasingly valuable tool for basic turbulence research [1].
+Interesting wall-bounded ﬂows span a number of simple geometries, either in
+cartesian (plane channel ﬂow, boundary layer over a ﬂat plate) or in cylindrical
+(pipe ﬂow, annular pipe ﬂow, ﬂow in curved channels) coordinate systems.
+
+For the cartesian case, an eﬀective formulation of the equations of motion
+was presented 15 years ago by Kim, Moin & Moser in their pioneering and
+widely-referenced work on the DNS of turbulent plane-channel ﬂow [2]. This
+formulation can be regarded today as a de facto standard; it has since then
+been employed in many of the DNS of turbulent wall ﬂows in planar geome-
+tries. It consists in the replacement of the continuity and momentum equations
+written in primitive variables by two scalar equations, one (second-order) for
+the normal component of vorticity and one (fourth-order) for the normal com-
+ponent of velocity, much in the same way as the Orr–Sommerfeld and Squire
+decomposition of linear stability problems. The main advantages of such an
+approach are that pressure is eliminated from the equations, and the two
+wall-parallel velocity components are recovered as the solution of a 2 × 2 alge-
+braic system (a cheap procedure from a computational point of view), when a
+Fourier expansion is adopted for the homogeneous directions. A high computa-
+tional eﬃciency can thus be achieved. The same approach can be employed to
+write the equation in cylindrical coordinates, but it appears to be much less
+popular than the primitive-variable formulation of the Navier–Stokes equa-
+tions. The formulation in terms of two scalar equations for radial velocity and
+radial vorticity can be found for example in [3].
+
+This optimally eﬃcient formulation does not prescribe any particular dis-
+cretization method for the diﬀerential operators in the wall-normal direction.
+Many researchers, including Kim et al. [2], used spectral methods (typically
+Chebyshev polynomials) in this direction too, but other possibilities exist,
+ﬁnite diﬀerences and B-splines [4] being the most popular ones. The use
+of ﬁnite diﬀerences has seen growing popularity [1], but mainly in the con-
+text of the primitive-variable formulation, and for the discretization of the
+derivatives in all three spatial directions (see for example [5]). The choice of
+spectral methods for the discretization of the wall-normal, inhomogeneous di-
+rection has a direct impact on the parallelization of a computer code, given
+the non-locality of the spectral diﬀerential operators. As a matter of fact, to
+our knowledge no fully spectral DNS code has been able to date to run in
+parallel without a large amount of communication. As a consequence, high-
+performance parallel DNS has been mostly restricted to large computing sys-
+tems with a specially-designed communication infrastructure, a.k.a. supercom-
+
+2
+
+puters, even though the ﬂoating-point computing performance of the modern,
+mass-marketed CPUs is comparable or better than those of supercomputers
+[6]. In a recent paper [7] Jim´enez draws an interesting picture of the future of
+the DNS of turbulent ﬂows in the next 30 years, and assumes that such simula-
+tions will be run on supercomputers. The work by Karniadakis and coworkers
+[8] makes no exception, in that it shows that DNS of turbulent ﬂows can be
+carried out with reasonably good performance on a cluster of PC, provided
+they are interconnected by a high-performance Myrinet network. When a Be-
+owulf cluster of PC connected with standard Fast Ethernet cards is employed
+[9] on a isotropic turbulence problem, even after extensive optimization of the
+code the parallel eﬃciency, i.e. the ratio between total time on one processor
+and p times the computing time on p processors, is as low as 0.5 already when
+two machines are used.
+
+In this paper we present a numerical method for the DNS of turbulent wall
+ﬂows that has been designed to require a limited amount of communication,
+and thereby is well suited for running on commodity hardware. The method
+is based on the standard normal velocity - normal vorticity formulation and
+hence uses Fourier discretization in the homogeneous directions, but high-
+order, compact ﬁnite diﬀerences schemes are chosen for the discretization
+of the wall-normal direction, instead of the classical expansion in terms of
+Chebyshev polynomials. It can be used with either cartesian or cylindrical
+coordinates.
+
+The outline of the paper is as follows. In §2.1 the cartesian form of the Navier–
+Stokes equations which is best suited for their numerical solution, and their
+Fourier discretization with respect to the homogeneous directions are brieﬂy
+recalled. In §2.2 time discretization is discussed, with emphasis on our strat-
+egy for data storage, which allows us to achieve an important memory opti-
+mization. In §2.3 the ﬁnite-diﬀerence discretization of the wall-normal direc-
+tion based on explicit compact schemes is introduced. §3 illustrates the par-
+allel algorithm, which takes advantage of distributed-memory (§3.1) as well
+as shared-memory (§3.2) machines; §3.3 describes how a specialized parallel
+computing system can be set up to achieve the highest eﬃciency based on com-
+modity hardware. §4 discusses the performance of the present parallel method,
+compared to the information available in the literature for similar codes. A
+comparison with a classical parallel strategy often employed in similar codes
+is used in §4.3.2 to assess the usefulness of the present method when used with
+low-bandwidth network connections. Lastly, §5 is devoted to conclusions.
+
+3
+
+f low
+
+Lx
+
+2δ
+
+y, v
+
+Lz
+
+x, u
+
+z, w
+
+Fig. 1. Sketch of the computational domain for the cartesian coordinate system.
+
+2 The numerical method
+
+2.1 Governing equations and spectral discretization
+
+Here we describe only the main aspects of the numerical method. Full details,
+including the extension to the cylindrical case, can be found in [10].
+
+Our cartesian coordinate system is illustrated in ﬁgure 1, where a sketch of a
+plane channel ﬂow is shown: x, y and z denote the streamwise, wall-normal
+and spanwise coordinates, and u, v and w the respective components of the
+velocity vector. The ﬂow is assumed to be periodic in the streamwise and
+spanwise directions. The reference length δ is taken to be one half of the
+channel height.
+
+The non-dimensional Navier–Stokes equations for an incompressible ﬂuid in
+cartesian coordinates are rewritten, following [2], in terms of two scalar diﬀer-
+ential equations, one (second order) for the wall-normal component of vorticity
+η and one (fourth-order) for the wall-normal component of velocity v, and then
+Fourier-transformed along the homogeneous directions (Fourier-transformed
+variables will be indicated with an hat sign). If the nonlinear terms are con-
+sidered to be known, as is the case when such terms are treated explicitly in
+the time discretization, these equations (supplemented by no-slip boundary
+conditions at the walls) become uncoupled and can be solved separately to
+advance the solution in time by one step. Computing the nonlinear terms and
+their spatial derivatives requires us ﬁrst to compute ˆu and ˆw from ˆv and ˆη.
+By using the deﬁnition of ˆη and the continuity equation written in Fourier
+space, a 2 × 2 algebraic system can be written and solved analytically for the
+unknowns ˆu and ˆw. Its solution is available in analytical form only when the
+variables are Fourier-transformed in the homogeneous directions. The present
+
+4
+
+method therefore enjoys its computational eﬃciency only when a Fourier dis-
+cretization is employed for these directions, which means that either periodic
+boundary conditions are suitable for the physical problem under consideration
+or a fringe-region technique [11] is adopted.
+
+The unknowns are represented in terms of truncated Fourier series in the
+homogeneous directions. For example the wall-normal velocity component v
+is represented as:
+
+v(x, z, y, t) =
+
+ˆvhℓ(y, t)eihα0xeiℓβ0z
+
+(1)
+
++nx/2
+
++nz/2
+
+Xh=−nx/2
+
+Xℓ=−nz/2
+
+where h and ℓ are integer indices corresponding to the streamwise and span-
+wise direction respectively, and α0 and β0 are the corresponding fundamental
+wavenumbers, deﬁning the streamwise and spanwise periods Lx = 2π/α0 and
+Lz = 2π/β0 of the computational domain.
+
+The numerical evaluation of the velocity products would require computa-
+tionally expensive convolutions in wavenumber space, but can be carried out
+eﬃciently by transforming the three Fourier components of velocity back
+into physical space, multiplying them in all six possible pair combinations,
+and eventually re-transforming the six results into wavenumber space. Fast-
+Fourier-Transform (FFT) algorithms are used in both directions. This tech-
+nique is often considered “pseudo-spectral”, but it should be observed that,
+when de-aliasing is performed by expanding the number of collocation points
+by a factor of at least 3/2 before going from wavenumber space into physical
+space, the velocity products become exactly identical to the “spectral” ones
+that could have been obtained, at a much higher computational cost, through
+the actual evaluation of the convolution products.
+
+2.2 Time discretization
+
+Time integration of the equations is performed by a partially-implicit method,
+implemented in such a way as to reduce the memory requirements of the
+code to a minimum, by exploiting the ﬁnite-diﬀerence discretization of the
+wall-normal direction. The use of a partially-implicit scheme is a common ap-
+proach in DNS [2]: the explicit part of the equations can beneﬁt from a higher-
+accuracy scheme, while the stability-limiting viscous part is subjected to an
+implicit time advancement, thus relieving the stability constraint on the time-
+step size ∆t. We employ an explicit third-order, low-storage Runge–Kutta
+method, combined with an implicit second-order Crank-Nicolson scheme [12,13].
+
+The procedure to solve the discrete equations for ˆvn+1
+h,ℓ at the time
+level n+1 is made by two distinct steps. In the ﬁrst step, the RHSs correspond-
+
+h,ℓ and ˆηn+1
+
+5
+
+ing to the explicit part have to be assembled. In the representation (1), at a
+given time the Fourier coeﬃcients of the variables are represented at diﬀerent y
+positions; hence the velocity products can be computed through inverse/direct
+FFT in wall-parallel planes. Their spatial derivatives are then computed: spec-
+tral accuracy can be achieved for wall-parallel derivatives, whereas the ﬁnite-
+diﬀerences compact schemes described in §2.3 are used in the wall-normal
+direction. These spatial derivatives are eventually combined with values of the
+RHS at previous time levels. The whole y range from one wall to the other
+must be considered.
+
+The second step involves, for each α, β pair, the solution of a set of two ODEs,
+derived from the implicitly integrated viscous terms, for which the RHS is now
+known. A ﬁnite-diﬀerences discretization of the wall-normal diﬀerential oper-
+ators produces two real banded matrices, in particular pentadiagonal matrices
+when a 5-point stencil is used. The solution of the resulting two linear systems
+gives ˆηn+1
+and ˆwn+1
+can be computed. For each α, β pair, the solution of the two ODEs requires
+the simultaneous knowledge of the RHS in all y positions. The whole α, β
+space must be considered. In the α − β − y space the ﬁrst step of this pro-
+cedure proceeds per wall-parallel planes, while the second one proceeds per
+wall-normal lines.
+
+, and then the planar velocity components ˆun+1
+
+and ˆvn+1
+
+hℓ
+
+hℓ
+
+hℓ
+
+hℓ
+
+To understand our memory-eﬃcient implementation of the time integration
+procedure, let us consider the following diﬀerential equation for the one-
+dimensional vector f = f(y):
+
+where N denotes non-linear operations on f, and A is the coeﬃcient matrix
+which describes the linear part. After time discretization of this generic equa-
+tion, that has identical structure to both the ˆη and ˆv equations, the unknown
+at time level n + 1 stems from the solution of the linear system:
+
+df
+dt
+
+= N (f) + A · f,
+
+(A + λI) · f = g
+
+(2)
+
+(3)
+
+where g is given by a linear combination (with suitable coeﬃcients which
+depend on the particular time integration scheme and, in the case of Runge-
+Kutta methods, on the particular sub-step too) of f, N (f) and A · f evaluated
+at time level n and at a number of previous time levels. The number of previous
+time levels depends on the chosen explicit scheme. For the present, low-storage
+Runge-Kutta scheme, only the additional level n − 1 is required.
+
+The quantities f, N (f) and A· f can be stored in distinct arrays, thus resulting
+in a memory requirement of 7 variables per point for a two-levels time integra-
+tion scheme. An obvious, generally adopted optimization is the incremental
+build into the same array of the linear combination of f, N (f) and A·f, as soon
+
+6
+
+j = 1..ny − 1
+
+IFT/FFT
+
+nl = N (f)
+
+rhs = αf + βnl + γA · f
+
+f = θ rhs + ξ rhsold
+
+rhsold = rhs
+
+solve (A + λI)f = f
+
+t = t + ∆t
+
+j = 1..ny − 1
+
+IFT/FFT
+
+rhs = αf + βN (f) + γA · f
+
+f = θ rhs + ξ rhsold
+
+rhsold = rhs
+
+solve (A + λI)f = f
+
+t = t + ∆t
+
+Fig. 2. Comparison between the standard implementation of a two-level
+time-advancement scheme (top), and the present, memory-eﬃcient implementation
+(bottom). Variables printed in bold require three-dimensional storage space, while
+italics marks temporary variables which can use two-dimensional arrays. Greek
+letters denote coeﬃcients deﬁning a particular time scheme. The present imple-
+mentation reduces the required memory space for a single equation from 3 to 2
+three-dimensional variables.
+
+7
+
+as the single addendum becomes available. The RHS can then be eﬃciently
+stored in the array f directly, thus reducing the memory requirements down
+to 3 variables per point.
+
+The additional optimization we are able to enforce here relies on the ﬁnite-
+diﬀerence discretization of the wall-normal derivatives. Referring to our simple
+example, the incremental build of the linear combination is performed contem-
+porary to the computation of N (f) and A · f, the result being stored into the
+same array which already contained f. The ﬁnite-diﬀerence discretization en-
+sures that, when dealing with a given y level, only a little slice of values of f,
+centered at the same y level, is needed to compute N (f). Hence just a small
+additional memory space, of the same size of the ﬁnite-diﬀerence stencil, must
+be provided, and the global storage space reduces to two variables per point
+for the example equation (2).
+
+The structure of the time integration procedure implemented in our DNS code
+is symbolically shown in the bottom chart of ﬁgure 2, and compared with the
+standard approach, illustrated in the top chart. Within the latter approach, in
+a main loop over the wall-parallel planes (integer index j) the velocity products
+are computed pseudo-spectrally with planar FFT, their spatial derivatives are
+taken and the result is eventually stored in the three-dimensional array nl.
+After the loop has completed, the linear combination of f, nl and A · f is
+assembled in a temporary two-dimensional array rhs, then combined into the
+three-dimensional array f with the contribution from the previous time step,
+and eventually stored in the three-dimensional array rhsold for later use. The
+RHS, which uses the storage space of the unknown itself, permits now to solve
+the linear system which yields the unknown at the future time step, and the
+procedure is over, requiring storage space for 3 three-dimensional arrays.
+
+The ﬂow chart on the bottom of ﬁgure 2 illustrates the present approach.
+In the main loop over wall-parallel planes, not only the non-linear terms are
+computed, but the RHS of the linear system is assembled plane-by-plane and
+stored directly in the three-dimensional array f, provided the value of the
+unknown in a small number of planes (5 when a 5-point ﬁnite-diﬀerence stencil
+is employed) is conserved. As a whole, this procedure requires only 2 three-
+dimensional arrays for each scalar equation.
+
+2.3 High-accuracy compact ﬁnite diﬀerence schemes
+
+The discretization of the ﬁrst, second and fourth wall-normal derivatives D1,
+D2 and D4, required for the numerical solution of the present problem is per-
+formed through ﬁnite-diﬀerences (FD) compact schemes [14]. One important
+diﬀerence with [14] is that our compact schemes are at the same time explicit
+
+8
+
+and at fourth-order accuracy. The computational molecule is composed of ﬁve
+arbitrarily spaced (with smooth stretching) grid points on a mesh of ny + 1
+points yj, with 0 ≤ j ≤ ny. We indicate here with dj
+1(i), i = −2, . . . , 2 the ﬁve
+coeﬃcients discretizing the exact operator D1 over ﬁve adjacent grid points
+centered at yj, i.e.:
+
+D1(f (y))|yj ≃
+
+dj
+1(i)f (yj+i)
+
+2
+
+Xi=−2
+where yj is the y position on the computational mesh where the derivative has
+to be evaluated. The coeﬃcients dj change with the distance from the wall
+(i.e. with the integer index j) when a non-uniform mesh is employed.
+
+Compact schemes are also known as implicit ﬁnite-diﬀerences schemes, be-
+cause they typically require the inversion of a linear system for the actual
+calculation of a derivative [14,15]: this increases the complexity and the com-
+putational cost of such an approach. For the present problem we are able how-
+ever to determine explicitly the coeﬃcients for compact, fourth-order accurate
+schemes, thanks to the absence of the D3 operator from the present equa-
+tions. This important simpliﬁcation has been highlighted ﬁrst in the original
+Gauss-Jackson-Noumerov compact formulation exploited in his seminal work
+by Thomas [16], concerning the numerical solution of the Orr-Sommerfeld
+equation.
+
+To illustrate Thomas’ method, let us consider a 4th-order ordinary diﬀerential
+equation (linear for simplicity) for a function f (y) in the following conservation
+form:
+
+D4 (a4f ) + D2 (a2f ) + D1 (a1f ) + a0f = g
+(4)
+where the coeﬃcients ai = ai(y) are arbitrary functions of the independent
+variable y, and g = g(y) is the known RHS. Let us moreover suppose that
+in frequency space a diﬀerential operator, for example D4, is approximated
+as the ratio of two polynomials, say D4 and D0. Polynomials like D4 and D0
+have their counterpart in physical space, and d4 and d0 are the corresponding
+FD operators. The key point is to impose that all the diﬀerential operators
+appearing in the example equation (4) admit a representation such as the
+preceding one, in which the polynomial D0 at the denominator remains the
+same. Eq. (4) can thus be recast in the new, equivalent discretized form:
+
+d4 (a4f ) + d2 (a2f ) + d1 (a1f ) + d0 (a0f ) = d0 (g)
+
+(5)
+
+and this allows us to use explicit FD schemes, provided the operator d0 is
+applied to the RHS of the equation and to the terms not involving y deriva-
+tives. The overhead related to the use of implicit ﬁnite diﬀerence schemes
+disappears, while the advantage of using compact schemes is retained.
+
+When compared to [16], the present approach is similar, but we decided to al-
+
+9
+
+low for variable coeﬃcients ai(y) inside the diﬀerential operators Di. Thomas’
+choice of considering diﬀerential operators of the form aiDi(f ) is equivalent
+in principle, but it would have required to solve for an auxiliary variable
+f ′ = d0(f ). The present choice moreover is better suited for a diﬀerential
+equation written in conservative form, where only 6 convolutions have to be
+evaluated.
+
+In our implementation, to obtain a formal accuracy of order 4 we have used
+a computational stencil of ﬁve grid points. To compute the ﬁnite-diﬀerence
+coeﬃcients, we have followed a standard procedure in the theory of Pad´e ap-
+proximants [17]. For each distance yj from the wall, a 10×10 linear system can
+be set up and solved for the unknown coeﬃcients. A mesh with variable size
+in the wall-normal direction is often desirable, in order to keep track of the
+increasingly smaller turbulence length scales when the wall is approached. The
+use of a non-uniform mesh together with compact schemes at high accuracy is
+known [18] to require special care when the diﬀerential equation is used as an
+additional relation which can be diﬀerentiated to eliminate higher-order trun-
+cation errors. In the present approach the use of a non-uniform mesh in such
+a way as to still keep a fourth-order accuracy simply requires the procedure
+outlined above to be performed (numerically) again for each y station, but
+only once at the beginning of the computations. The computer-based solution
+of these systems requires a negligible computing time.
+
+We end up with FD operators which are altogether fourth-order accurate;
+the sole operator D4 is discretized at sixth-order accuracy. As suggested in
+[14] and [15], the use of all the degrees of freedom for achieving the highest
+formal accuracy might not always be the optimal choice. We have therefore
+attempted to discretize D4 at fourth-order accuracy only, and to spend the
+remaining degree of freedom to improve the spectral characteristics of all the
+FD operators at the same time. Our search has shown however that no signif-
+icant advantage can be achieved: the maximum of the errors can be reduced
+only very slightly, and - more important - this reduction does not carry over
+to the entire frequency range.
+
+The boundaries obviously require non-standard schemes to be designed to
+properly compute derivatives at the wall. For the boundary points we use
+non-centered schemes, whose coeﬃcients can be computed following the same
+approach as the interior points, thus preserving by construction the formal
+accuracy of the method. Nevertheless the numerical error contributed by the
+boundary presumably carries a higher weight than interior points, albeit mit-
+igated by the non-uniform discretization. A systematic study of this error
+contribution and of alternative more reﬁned treatments of the boundary are
+ongoing work.
+
+10
+
+3 The parallel strategy
+
+3.1 Distributed-memory computers
+
+If the calculations are to be executed in parallel by p computing machines
+(nodes), data necessarily reside on these nodes in a distributed manner, and
+communication between nodes will take place. Our main design goal is to keep
+the required amount of communication to a minimum.
+
+When a fully spectral discretization is employed, a transposition of the whole
+dataset across the computing nodes is needed every time the numerical so-
+lution is advanced by one time (sub)step when non-linear terms are evalu-
+ated. This is illustrated for example in the paper by Pelz [19], where par-
+allel FFT algorithms are discussed in reference to the pseudo-spectral solu-
+tion of the Navier–Stokes equations. Pelz shows that there are basically two
+possibilities, i.e. using a distributed FFT algorithm or actually transposing
+the data, and that they essentially require the same amount of communi-
+cation. The two methods are found in [19] to perform, when suitably op-
+timized, in a comparable manner, with the distributed strategy running in
+slightly shorter times when a small number of processors is used, and the
+transpose-based method yielding an asymptotically faster behavior for large
+p. The large amount of communication implies that very fast networking hard-
+ware is needed to achieve good parallel performance, and this restrict DNS to
+be carried out on very expensive computers only.
+
+Of course, when a FD discretization in the y direction is chosen instead of
+a spectral one, it is conceivable to distribute the unknowns in wall-parallel
+slices and to carry out the two-dimensional inverse/direct FFTs locally to
+each machine. Moreover, thanks to the locality of the FD operators, the com-
+munication required to compute wall-normal spatial derivatives of velocity
+products is fairly small, since data transfer is needed only at the interface
+between contiguous slices. The reason why this strategy has not been used so
+far is simple: a transposition of the dataset seems just to have been delayed
+to the second half of the time step advancement procedure. Indeed, the linear
+systems which stem from the discretization of the viscous terms require the
+inversion of banded matrices, whose principal dimension span the entire width
+of the channel, while data are stored in wall-parallel slices.
+
+A transpose of the whole ﬂow ﬁeld can be avoided however when data are
+distributed in slices parallel to the walls, with FD schemes being used for
+wall-normal derivatives. The arrangement of the data across the machines is
+schematically shown in ﬁgure 3: each machine holds all the streamwise and
+spanwise wavenumbers for ny/p contiguous y positions. As said, the planar
+
+11
+
+wall
+
+wall
+
+slice 4
+
+slice 3
+
+slice 2
+
+slice 1
+
+y
+
+β
+
+α
+
+Fig. 3. Arrangement of data in wall-parallel slices across the channel, for a parallel
+execution with p = 4 computing nodes.
+
+FFTs do not require communication at all. Wall-normal derivatives needed for
+the evaluation of the RHSs do require a small amount of communication at
+the interface between contiguous slices. However, this communication can be
+avoided at all if, when using a 5-point stencil, two boundary planes on each
+internal slice side are duplicated on the neighboring slice. This duplication
+is obviously a waste of computing time, and translates into an increase of
+the actual size of the computational problem. However, since the duplicated
+planes are 4(p − 1), as long as p ≪ ny this overhead is negligible. When p
+becomes comparable to ny, an alternative procedure involving a small amount
+of communication becomes convenient. We will further discuss this point in
+§4.
+
+The critical part of the procedure lies in the second half of the time-step ad-
+vancement, i.e. the solution of the set of two linear systems, one for each h, ℓ
+pair, and the recovery of the planar velocity components: the necessary data
+just happen to be spread over all the p machines. It is relatively easy to avoid
+a global transpose, by solving each system in a serial way across the machines:
+adopting a LU decomposition of the pentadiagonal, distributed matrices, and
+a subsequent sweep of back-substitutions, only a few coeﬃcients at the inter-
+face between two neighboring nodes must be transmitted. The global amount
+of communication remains very low and, at the same time, local between near-
+est neighbors only. The problem here is obtaining a reasonably high parallel
+eﬃciency: if a single system had to be solved, the computing machines would
+waste most of their time waiting for the others to complete their task. In other
+words, with the optimistic assumption of inﬁnite communication speed, the
+total wall-clock time would be simply equal to the single-processor computing
+time.
+
+The key observation to obtain high parallel performance is that the num-
+ber of linear systems to be solved at each time (sub)step is very large, i.e.
+
+12
+
+(nx + 1)(nz + 1), which is at least 104 and sometimes much larger in typical
+DNS calculations [20]. This allows the solution of the linear systems to be eﬃ-
+ciently pipelined as follows. When the LU decomposition of the matrix of the
+system for a given h, ℓ pair is performed (with a standard Thomas algorithm
+adapted to pentadiagonal matrices), there is a ﬁrst loop from the top row of
+the matrix down to the bottom row (elimination of the unknowns), and then
+a second loop in the opposite direction (back-substitution). The machine own-
+ing the ﬁrst slice performs the elimination in the local part of the matrix, and
+then passes on the boundary coeﬃcients to the neighboring machine, which
+starts its elimination. Instead of waiting for the elimination in the h, ℓ sys-
+tem matrices to be completed across the machines, the ﬁrst machine can now
+immediately start working on the elimination in the matrix of the following
+system, say h, ℓ + 1, and so on. After the elimination in the ﬁrst p systems is
+started, all the computing machines work at full speed. A synchronization is
+needed only at the end of the elimination phase, and then the whole procedure
+can be repeated for the back-substitution phase.
+
+Clearly this pipelined-linear-system (PLS) strategy involves an inter-node
+communication made by frequent sends and receives of small data packets
+(typically two lines of a pentadiagonal matrix, or two elements of the RHS ar-
+ray). While the global amount of data is very low, this poses a serious challenge
+to out-of-the-box communication libraries, which are known to have a signiﬁ-
+cant overhead for very small data packets. In fact, as we will mention in §4, we
+have found unacceptably poor performance when using MPI-type libraries. On
+the other hand we have succeeded in developing an eﬀective implementation
+of inter-node communication using only the standard i/o functions provided
+by the C library. Details of this alternative implementation are illustrated in
+§3.3.
+
+3.2 Shared-memory machines
+
+The single computing node may be single-CPU or multi-CPU. In the latter
+case, it is possible to exploit an additional and complementary parallel strat-
+egy, which does not rely on message-passing communication anymore, and
+takes advantage of the fact that local CPUs have direct access to the same,
+local memory space. We stress that this is diﬀerent from using a message-
+passing strategy on a shared-memory machine, where the shared memory
+simply becomes a faster transmission medium. Using multiple CPUs on the
+same memory space may yield an additional gain in computing time, at the
+only cost of having the computing nodes equipped with more than one (typ-
+ically two) CPUs. For example the FFT of a whole plane from physical to
+Fourier-space and vice-versa can be easily parallelized this way, as well as the
+computing-intensive part of building up the RHS terms. With SMP machines,
+
+13
+
+Eth 0
+
+CPU 0
+
+Eth 1
+
+Eth 1
+
+Eth 0
+
+CPU 0
+
+CPU 1
+
+2
+
+4
+
+CPU 0
+
+CPU 1
+
+Eth 0
+
+Eth 1
+
+Eth 1
+
+Eth 0
+
+CPU 1
+
+3
+
+1
+
+CPU 0
+
+CPU 1
+
+Eth 2
+
+switch
+
+net
+
+Fig. 4. Conceptual scheme of the connection topology for a computing system made
+by 4 nodes; one machine may be connected to the local net through a switch, if the
+system has to be operated remotely.
+
+high parallel eﬃciencies can be obtained quite easily by “forking” new pro-
+cesses which read from and write to the same memory space; the operating
+system itself then handles the assignment of tasks to diﬀerent CPUs, and only
+task synchronization is a concern at the programming level.
+
+3.3 The Personal Supercomputer
+
+While a computer program based on the numerical method described hereto-
+forth can be easily used on a general-purpose cluster of machines, connected
+through a network and a switch, for maximum eﬃciency a dedicated com-
+puting system can be speciﬁcally designed and built on top of the parallel
+algorithm described above.
+
+At the CPU level, the mass-marketed CPUs which are commonly found today
+in desktop systems are the perfect choice: their performance is comparable to
+the computing power of the single computing element of any supercomputer
+[6], at a fraction of the price. The single computing node can hence be a
+standard desktop computer; SMP mainboards with two CPUs are very cheap
+and easily available.
+
+The present PLS parallel strategy allows an important simpliﬁcation in the
+
+14
+
+connection topology of the machines. Since the transposition of the whole
+dataset is avoided, communications are always of the point-to-point type; more-
+over, each computing machine needs to exchange data with and only with two
+neighboring machines only. This can be exploited with a simple ring-like con-
+nection topology among the computing machines, sketched in ﬁgure 4, which
+replicates the logical exchange of information and the data structure previ-
+ously illustrated in ﬁgure 3: each machine is connected through two network
+cards only to the previous machine and to the next. The necessity of a switch
+(with the implied additional latency in the network path) is thus eliminated,
+in favor of simplicity, performance and cost-eﬀectiveness.
+
+Concerning the transmission protocol, the simplest choice is the standard,
+error-corrected TCP/IP protocol. We have estimated that on typical prob-
+lem sizes the overall beneﬁts from using a dedicated protocol (for example
+the GAMMA protocol described in [21]) would be negligible: since the ratio
+between communication time and computing time is very low (see §4.3 and
+Fig.7), the improvements by using such a protocol are almost negligible, and
+to be weighed against the increase in complexity and decrease in portability.
+
+The simplest and fastest strategy we have devised for the communication type
+is to rely directly on the standard networking services of the Unix operating
+system, i.e. sockets (after all, message-passing libraries are socket-based). At
+the programming level, this operation is very simple, since a socket is seen as a
+plain ﬁle to write into and to read from. Using sockets allows us to take advan-
+tage easily and eﬃciently of the advanced buﬀering techniques incorporated
+in the management of the input/output streams by the operating system: af-
+ter opening the socket once and for all, it is suﬃcient to write (read) data
+to (from) the socket whenever they are available (needed), and the operating
+system itself manages ﬂushing the socket when its associated buﬀer is full. We
+have found however that for best performances the buﬀer size had to be em-
+pirically adjusted: for Fast Ethernet hardware, the optimum has been found
+at the value of 800 bytes, signiﬁcantly smaller than the usual value (the Linux
+operating system defaults at 8192).
+
+We have built a prototype of such a dedicated system, composed of 8 SMP
+Personal Computers. Each node is equipped with 2 Pentium III 733MHz CPU
+and 512MB of 133MHz SDRAM. The nodes are connected to each other by
+two cheap 100MBits Fast Ethernet cards. We call such a machine a Personal
+Supercomputer. The performance of our numerical method used on this sys-
+tem will be shown in §4 to be comparable to that of a supercomputer. Such
+machines enjoy the advantages of a simple desktop Personal Computer: low
+cost and easy upgrades, unlimited availability even to a single user, low weight,
+noise and heat production, small requirements of ﬂoor space, etc. Further de-
+tails and instructions to build and conﬁgure such a machine can be found in
+[10].
+
+15
+
+4 Performance
+
+The performance of the present pipelined-linear-system (PLS) method is as-
+sessed here in terms of memory requirements, single-processor CPU time and
+parallel speedup, both in absolute terms and by comparison with similar DNS
+codes. We compare it also with an alternative version of the code, that we
+have written with a diﬀerent distributed-memory parallel strategy. This al-
+ternative code employs the more traditional transpose FFT method [19], so
+that the streamwise wavenumbers are distributed across the system while the
+wall-normal direction is local to each processor. Both parallel algorithms have
+been preliminarly tested for correctness, and checked to give identical output
+between a single-processor run and a truly parallel execution.
+
+Our tests have been mainly conducted on the computing system described in
+§3.3, either on a single Pentium III 733 MHz CPU for the single-processor
+tests, or by using multiple processors for the parallel tests. A few measure-
+ments are collected by using more recent dual-processor Opteron machines,
+available at Salerno University. Each of the Opteron machines is equipped
+with two 1.6 GHz AMD CPUs, and carries 1 GByte of RAM; the machines
+are equipped with 3 Gigabit Ethernet cards each. They are thus connected
+both in a switched network via one card and the interposed HP 2724 switch,
+and in the ring topology by means of the other two cards.
+
+The performance of our codes on these machines cannot easily be compared
+with performance ﬁgures of similar codes, since the information available in
+the literature is often partial and based on each time diﬀerent computing
+machines. Some data (for example, RAM requirements) of course can be com-
+pared directly, given their independence of the particular computer architec-
+ture. For other data (typically, CPU time) we report our own ﬁgures, and we
+try in addition to compare qualitatively such data with CPU time on diﬀerent
+architectures, by using the Performance Database maintained and published
+monthly by Dongarra [6].
+
+The results presented in what follows are computed with the parallel algorithm
+described in §3.1. As already pointed out, this algorithm is especially well
+suited when a limited number of computing nodes is available. Indeed, the
+duplication of four computing planes for each internal slice interface implies a
+CPU penalty, while allowing the bare minimum of inter-node communication.
+This penalty increases with the number of computing nodes and decreases
+with the number of discretization points in the y direction.
+
+We deﬁne the speedup factor as the ratio of the actual wall-clock computing
+time tp obtained with p nodes and the wall-clock time t1 required by the same
+
+16
+
+computation on a single node:
+
+S(p) =
+
+tp
+t1
+
+.
+
+The maximum or ideal speedup factor Si that we can expect with our PLS
+algorithm, corresponding to the assumption of inﬁnite communication speed,
+is less than linear, and can be estimated with the formula:
+
+Si(p) = p
+
+1 −
+
+ 
+
+4(p − 1)
+
+,
+
+ny !
+
+(6)
+
+where the factor 4 accounts for the two wall-parallel planes duplicated at each
+side of interior slices. Eq. (6) reduces to a linear speedup when ny → ∞ for a
+ﬁnite value of p. A quantitative evaluation of the function (6) for typical values
+of ny = O(100) shows that the maximum achievable speedup is nearly linear
+as long as the number of nodes remains moderate, i.e. p < 10. We are presently
+considering a slightly diﬀerent parallel implementation, still in development
+at the present time, which is better suited for use when p = O(ny).
+
+4.1 Memory requirements
+
+One fundamental requirement for a DNS code is to save RAM: Jim´enez in [7]
+considers RAM occupation and CPU time as performance monitors of equiva-
+lent importance. The amount of required RAM is dictated by the number and
+the size of the three-dimensional arrays, and it is typically reported [2,22,7]
+to be no less than 7 nx × ny × nz ﬂoating-point variables. Cases where RAM
+requirements are signiﬁcantly higher are not uncommon: for example in [23] a
+channel ﬂow simulation of 128 × 65 × 128 reportedly required 1.2GB of RAM,
+suggesting a memory occupation approximately 18 times larger.
+
+In our code all the traditional optimizations are employed: for example there
+is no reserved storage space for ˆη, which overwrites ˆu in certain sections of the
+time-integration procedure, and is overwritten by ˆu in other sections. An addi-
+tional saving speciﬁc to the present method comes from the implementation of
+the time advancement procedure, discussed in §2.2, which takes advantage of
+the ﬁnite-diﬀerence discretization of the wall-normal derivatives. Each of the
+two scalar equations for ˆη and ˆv requires two variables per point. In addition,
+solving the algebraic system for ˆu and ˆw raises the global memory require-
+ment to 5 variables per point. Thus our code requires a memory space of
+5 nx × ny × nz ﬂoating-point variables, plus workspace and two-dimensional
+arrays. For example a simulation with nx = ny = nz = 128 takes only 94
+MBytes of RAM (using 64-bit ﬂoating-point variables).
+
+17
+
+In a parallel run the memory requirement can be subdivided among the com-
+puting machines. With p = 2 the same 1283 case runs with 53 MBytes of RAM
+(note that the amount of RAM is slightly larger than one half of the p = 1
+case, due to the aforementioned duplication of boundary planes). The system
+as a whole therefore allows the simulation of turbulence problems of very large
+computational size even with a relatively small amount of RAM deployed in
+each node. A problem with computational size of 4003 would easily ﬁt into
+our 8 nodes equipped with 512MB RAM each.
+
+4.2 CPU requirements
+
+As far as CPU eﬃciency is concerned, without special optimization the 1283
+test case mentioned above requires 42.8 CPU seconds for the computation
+of a full three-sub-steps Runge-Kutta temporal step on a single Pentium III
+733MHz processor. Unfortunately, we are not aware of papers where a similar
+code is clearly documented in terms of time required for running a problem
+of a speciﬁed size on these CPU types. One can however deduce from [22]
+that a computational case of slightly smaller size, i.e. 128 × 96 × 128 (which
+takes 31 seconds on our machine) runs on a single processor of the 256 nodes
+Cray T3E of the National Supercomputer Center of Link¨oping (Sweden) in
+approximately 40 seconds, and on a single processor of the 152 nodes IBM SP2
+machine, available at the Center for Parallel Computers of KTH University, in
+8 seconds of CPU time. These timings are in a ratio which is not far from the
+ratio among the computing power of the diﬀerent CPUs, as deduced from the
+tables reported in [6], and indicate that the SP2 machine is the one which is
+able to achieve the higher percentage of its theoretical peak power. The present
+code hence is roughly equivalent (in its serial version) to that described in [22]
+in terms of CPU eﬃciency. Another paper which reports execution times for
+a 1283 problem is in ref. [24]: their code for isotropic turbulence appears to
+run on one CPU of an IBM SP3 Power3 Nighthawk taking approximately 10
+minutes per time step.
+
+The internal timings of our code show that the direct/inverse two-dimensional
+FFT routines take the largest part of the CPU time, namely 56%. The calcu-
+lation of the RHS of the two governing equations (where wall-normal deriva-
+tives are evaluated) takes 25% of the total CPU time, the solution of the
+linear systems arising from the implicit part around 12%, and the calculation
+of the planar velocity components 3%. The time-stepping scheme takes 3%
+and computing a few runtime statistics requires an additional 1% of the CPU
+time.
+
+18
+
+128x128x128
+192x128x192
+128x256x128
+128x96x128 ref. [22]
+Si, ny=128
+Si, ny=256
+
+S
+
+8
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+p
+
+Fig. 5. Measured speedup on the Pentium III-based machine as a function of the
+number p of computing nodes. Thick lines are the ideal speedup Si from Eq. (6) for
+ny = 128 (continuous line) and ny = 256 (dashed line). Gray circles are speedups
+inferred from [22] for a case with ny = 96 and measured on two diﬀerent supercom-
+puters.
+
+4.3 Parallel eﬃciency
+
+4.3.1 Distributed-memory speedup
+
+The parallel (distributed-memory) performance of the code is illustrated in
+ﬁgure 5, where speedup ratios are reported as a function of the number of
+computing nodes. The maximum possible speedup Si is shown with thick
+lines. Si approaches the linear speedup for large ny, being reasonably high
+as long as p remains small compared to ny: with p = 8 it is 6.25 for ny =
+128 and 7.125 for ny = 256. Notwithstanding the commodity networking
+hardware and the overhead implied by the error-corrected TCP protocol, the
+actual performance compared to Si is extremely good, and improves with
+the size of the computational problem. The percentage of time tc spent for
+communication is estimated as follows:
+
+% tc = 100
+
+tp − t1/Si(p)
+tp
+
+.
+
+(7)
+
+The case 192 × 128 × 192 is hardly penalized by the time spent for commu-
+nication, which is only 2% of the total computing time when p = 8. The
+communication time becomes 7% of the total computing time for the larger
+
+19
+
+Si, ny=256
+2563 1000 MBit/s
+2563 100 MBit/s
+2563 10 MBit/s
+
+S
+
+8
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+p
+
+Fig. 6. Measured speedup on the Opteron-based machine as a function of the number
+p of computing nodes. Thick line is the ideal speedup from Eq. (6) for ny = 256.
+Speedup measured when using Gigabit Ethernet cards (circles), and the same cards
+run at the slower speed of 100MBit/s (empty squares) and 10 MBit/s (ﬁlled squares).
+
+case of nx = 128, ny = 256 and nz = 128, and is 12% for the worst (i.e.
+smallest) case of 1283, which requires 7.7 seconds for one time step on our ma-
+chine, with a speedup of 5.55. In ﬁgure 5 we report also (with gray symbols)
+speedup data from [22] for his case with size 128 × 96 × 128: this case runs
+in approximately 2 seconds when 8 processors are used on the SP2 (speedup
+3.9), while it requires 6 seconds with 8 processors of the T3E (speedup 6.8).
+
+It is worth mentioning again that our communication procedure can easily be
+implemented through a standard message-passing library, but shows in this
+case a noticeably degraded performance. In fact we have tested the present
+method on a 1283 case with p = 2 and using the MPI library. A speedup of
+S = 0.87 has been measured (i.e. the wall clock is increased), to be compared
+with Si = 1.94 and a measured speedup of S = 1.92 with the use of plain
+sockets. This result is explained by the large overhead implied by the MPI
+library, that is known to be ineﬃcient in transmitting extremely small data
+packets. We would like to stress again that, from a programming point of view,
+plain sockets are deﬁnitely simple to use: once the socket is properly opened,
+the procedure of communication with another machine boils down to simply
+writing to or reading from a ﬁle.
+
+Figure 6 illustrates the speedup achieved with the faster Opteron machines
+connected via Gigabit Ethernet cards in the ring-topology layout, compared
+with Si. The test case has a size of 2563. The CPUs of this system are signif-
+
+20
+
+icantly faster than the Pentium III, and the network cards, while having 10
+times larger bandwidth, have latency characteristics typical of Fast Ethernet
+cards. It is remarkable how well the measured speedup still approaches the
+ideal speedup, even at the largest tested value of p. Furthermore, we report
+also the measured speedup when the Opteron machines are used with the Gi-
+gabit cards set up to work at the lower speeds of 100 MBit/s and 10MBit/s.
+It is interesting to observe how slightly performance is degraded in the case
+at 100MBit/s, whose curve is nearly indistinguishable form that at 1GBit/s.
+Even with the slowest 10MBit/s bandwidth connecting such fast processors,
+and with a problem of large computational size, it is noteworthy how the
+present method is capable to achieve a reasonable speedup for low p and not
+to ever degrade below S = 1. This relative insensitivity to the available band-
+width can be ascribed to the limited amount of communication required by
+the present method.
+
+The amount of data which has to be exchanged by each machine for the ad-
+vancement of the solution by one time step made by 3 Runge–Kutta substeps
+can be quantiﬁed as follows. The number of bytes Dr transmitted and received
+by each computing node for p > 2 and in one complete time step is:
+
+Dr = 3 × 8 × nx × nz × 88 = 2112 nx × nz
+
+where 3 is the number of temporal substeps, 8 accounts for 8-bytes variables,
+and 88 is the total number of scalar variables that are exchanged at the slice
+interfaces for each wavenumber pair (during solution of the linear systems and
+of the algebraic system to compute ˆu and ˆw). For the 1283 case, Dr ≈ 276
+MBit of network traﬃc, evenly subdivided between the two network cards.
+
+Interestingly, the quantity Dr is linear in the total number of Fourier modes
+nx × nz, and does not depend upon ny. Moreover, the amount of traﬃc does
+not increase when p increases. This has to be contrasted with the amount of
+communication required by other parallel methods; this comparison will be
+discussed in the next subsection.
+
+As already mentioned, the parallel strategy described here targets only sys-
+tems where the number p of computing nodes is small compared to the number
+ny of points in the y direction. Increasing p at ﬁxed ny leads to gradually worse
+performance, since the actual size of the problem increases owing to the du-
+plicated planes at the interface. Nevertheless, ﬁgure 7 shows that, even when
+a larger number of computing nodes is employed on a problem of a large size,
+the percentage of the computing time spent for communication, estimated
+according to Eq. (7), remains very low. This ﬁgure reports the parallel per-
+formance measured on a cluster of SMP machines equipped with 2 Itanium II
+processors, and connected with Gigabit Ethernet cards and a switch, available
+courtesy of the SHARCNET Computing Centre at the University of Western
+Ontario. The test case has a size of nx = 512, ny = 256 and nz = 512.
+
+21
+
+c
+
+t
+
+%
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+4
+
+8
+
+12
+
+20
+
+24
+
+28
+
+32
+
+16
+p
+
+Fig. 7. Time %tc spent for communication as percentage of the total computing
+time, deﬁned in formula (7), for the Itanium II cluster with Gigabit Ethernet inter-
+connects. Problem size: nx = 512, ny = 256 and nz = 512.
+
+Figure 7 suggests that the communication time remains limited up to relatively
+large values of p, even when the networking hardware (Gigabit Ethernet) al-
+lows a bandwidth more than two orders of magnitude smaller than a typical
+supercomputer.
+
+4.3.2 Comparison with a diﬀerent parallel strategy: the transpose method
+
+In order to be able to compare the present PLS parallel strategy with a stan-
+dard strategy which performs a block transpose before and after each FFT, we
+have written a second version of our code, that adopts the same FD discretiza-
+tion for the wall-normal direction, but distributes the streamwise wavenumbers
+across the nodes, i.e. organizes data in slices parallel to the α-axis of ﬁgure 3.
+The serial performance of the two computer codes is identical, since for p = 1
+they perform the same operations. Even though we have obviously put less
+optimization eﬀort into the transpose code, written ad hoc for this test, com-
+pared the the PLS code, we have to mention that the transpose code has been
+written with the basic optimizations in mind. In particular, we have taken
+care that communications are scheduled in such a way that the machines are
+always busy communicating, which is an essential requirement to achieve high
+performance with the transpose FFT.
+
+The amount of data (in bytes) Dt which has to be exchanged by each ma-
+chine for the complete advancement by one time step with the transpose-based
+
+22
+
+method is as follows:
+
+Dt = 3 × 8 × (p − 1)
+
+×
+
+× ny × 18 = 648
+
+nx
+p
+
+3
+2
+
+nz
+p
+
+p − 1
+p2 nx × nz × ny
+
+Again, the factors 3 and 8 account for the number of temporal substeps and
+the 8-bytes variables respectively. In the whole process of computing non-
+linear terms 9 scalars have to be sent and received (3 velocity components
+before IFT and 6 velocity products after FFT); for each wall-parallel plane,
+each machine must exchange with each of the others p − 1 nodes an amount
+of nx × nz/p2 grid cells, and the factor 3/2 corresponds to dealiasing in one
+horizontal direction (the 3/2 expansion, and the subsequent removal of higher-
+wavenumber modes, in the other horizontal direction can be performed after
+transmission).
+
+The ratio between the communication required by the transpose-based method
+and the PLS method can thus be written as:
+
+Dt
+Dr
+
+= 0.307
+
+p − 1
+p2 ny
+
+which corresponds to the intuitive idea that the transpose method exchanges
+all the variables it stores locally, whereas the PLS method only exchanges a
+(small) number of wall-parallel planes, independent on ny and p. Moreover the
+ratio Dt/Dr, being proportional to ny for a given p, is expected to increase
+with the Reynolds number of the simulation, since so does the number of points
+needed to discretize the wall-normal direction, thus indicating an increase of
+PLS eﬃciency relative to the transpose strategy. More important, when the
+transpose-based method is employed, the global amount of communication
+that has to be managed by the switch increases with the number of computing
+machines and is all-to-all rather than between nearest neighbors only, so that
+its performance is expected to degrade when a large p is used.
+
+For a case sized 1283 and p = 2, Dt amounts to ≈ 2700 MBit. This gives a lower
+bound for the communication time with the transpose-based method of 27
+seconds with Fast Ethernet, to be compared with a single-processor execution
+time of t1 = 42.8 seconds on a single Pentium III. Indeed, when tested on
+the Fast Ethernet Pentiums, the transpose-based method has not been found
+to yield any reduction of the wall-clock computing time: we have measured
+t2 = 51.2 seconds. This is in line with the previous estimate: t2 stems from a
+computing time t1/2 plus a communication time of 29.8 seconds, which is near
+to the time estimate on the basis of Dt and assuming network cards running
+at full speed. With a faster network the performance of the transpose-based
+method improve. Figure 8 reports comparative measurements between the
+PLS and the transpose-based methods, run on 8 Opteron boxes interconnected
+with Gigabit Ethernet. The PLS method is run with the machines connected
+
+23
+
+transpose 2563
+transpose 1283
+present 2563
+present 1283
+
+S
+
+8
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+p
+
+Fig. 8. Measured speedup on the Opteron-based machine as a function of the number
+p of computing nodes. Continuous line is the PLS method, and dashed line is the
+transpose-based method.
+
+in a ring, while the transpose-based method is tested with machines linked
+through a switch. Measurements show that S > 1 can now be achieved with
+the transpose-based method. However, the transpose method performs best
+for the smallest problem size, while the PLS shows the opposite behavior. For
+the 2563 case, which is a reasonable size for such machines, the speedup from
+the transpose-based method is around one half of what can be obtained with
+PLS.
+
+4.3.3 Shared-memory speedup
+
+In the present approach, we exploit the availability of two CPUs for each
+computing node by assigning to each of them the computation of a diﬀerent
+FFT, and then the RHS setup for one half of the wavenumber pairs. Since this
+part of the code is local to each machine, there is no communication overhead
+associated with the use of the second CPU, therefore the gain is essentially
+independent of the number p of computing machines.
+
+We have tested machines equipped with 2 CPUs, and measured a 1.55 speedup
+on a 2-CPU Pentium III box. On the dual Opteron system, which exploits a
+faster memory at 400 MHz and a proprietary memory and inter-processor
+bus, the speedup increases to 1.7. The implementation of the shared-memory
+parallelism was not the main focus of the present work, so that for simplicity
+we have parallelized only the non-linear part of the time-stepping procedure,
+
+24
+
+present 2563 2 CPU
+transpose 2563 2 CPU
+present 2563 1 CPU
+
+S
+
+8
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+p
+
+Fig. 9. Measured speedup on the Opteron-based machine as a function of the number
+p of computing nodes, when 2 CPUs per node are used. A continuous line denotes
+the PLS method, and a dashed line the transpose-based method. Open symbols
+refer to the single-CPU speedup.
+
+a portion of the serial code estimated around 80%. The additional SMP gain
+is thus an interesting result, since it comes at a low cost. Indeed, the cost
+of a dual-CPU node is only a fraction greater than the cost of a single-CPU
+computing node. Systems with more than 2 CPU are today signiﬁcantly more
+expensive and, although we have not tested any of them, may be suspected
+to perform quite ineﬃciently when used with the present application, owing
+to the increased memory-contention problems. Hence we regard the use of a
+second CPU as an added bonus at a little extra cost.
+
+The SMP speedup is where the PLS method shows another advantage com-
+pared with the transpose-based method. The second CPU can be exploited in
+the transpose-based method too, however in this case the global eﬀectiveness
+degrades, since the speed of each node increases while the communication time
+remains the same. This can be appreciated in ﬁgure 9, where performance for
+a case 2563 is observed to become unacceptable when p > 6 and two CPU for
+each machine are used with the transpose method. With PLS, on the other
+hand, the penalty associated with the larger amount of communication per
+unit of computing time is clearly seen to remain limited, and no signiﬁcant
+decrease of the parallel eﬃciency is observed when the second CPU in each
+node is activated.
+
+25
+
+5 Conclusions
+
+In this paper we have described a numerical method suitable for the par-
+allel direct numerical simulation of incompressible wall turbulence, capable
+of achieving high eﬃciency by using commodity hardware. The method can
+be used when the governing equations are written either in cartesian or in
+cylindrical coordinates.
+
+The key point in its design is the choice of compact ﬁnite diﬀerences of fourth-
+order accuracy for the discretization of the wall-normal direction. The use of
+ﬁnite diﬀerences schemes, while retaining a large part of the accuracy enjoyed
+by spectral schemes, is crucial to the development of the parallel strategy,
+which exploits the locality of the FD operators to largely reduce the amount
+of inter-node communication. Finite diﬀerences are also key to the imple-
+mentation of a memory-eﬃcient time integration procedure, which permits a
+minimal storage space of 5 variables per point, compared to the commonly
+reported minimum of 7 variables per point. This signiﬁcant saving is available
+in the present case too, the use of compact schemes notwithstanding, since
+they can be written in explicit form, leveraging the missing third derivative in
+the governing equations.
+
+The parallel method described in this paper, based on the pipelined solu-
+tion of the linear systems arising from the discretization of the viscous terms,
+achieves its best performance on systems where the number of computing
+nodes is signiﬁcantly smaller than the number of points in the wall-normal
+direction. The global transpose of the data, which typically constrains DNS
+codes to run on machines with very large networking bandwidth, is completely
+avoided. We have veriﬁed that a code based on transpose algorithms can-
+not yield acceptable parallel speedups when Fast Ethernet network cards are
+employed. When the 10-times-faster Gigabit Ethernet is used, the transpose-
+based method yields positive speedups but cannot compete, in absolute terms,
+with the present PLS method, that is capable to guarantee high parallel eﬃ-
+ciency also on state-of-the-art processors connected with relatively slow Fast
+Ethernet cards.
+
+As a result, the computing eﬀort, as well as the required memory space, can be
+eﬃciently subdivided among a number of low-cost computing nodes. Moreover,
+the distribution of data in wall-parallel slices allows us to exploit a particular,
+eﬃcient and at the same time cost-eﬀective connection topology, where the
+computing machines are connected to each other in a ring. Getting rid of the
+switch is something that should not be underestimated. When the transpose-
+based code is run for a 1283 case on two Opteron machines connected each
+other point-to-point without the HP switch, the parallel speedup increases
+signiﬁcantly, from 1.13 to 1.53. When a third machine is inserted between
+
+26
+
+the two computing machines, the parallel speedup becomes 1.40. While we
+are not in the position to extrapolate the relevance of this result to higher-
+quality switches, removing the need for a switch altogether is certainly an
+improvement performance-wise.
+
+A dedicated system can be easily built, using commodity hardware and hence
+at low cost, to run a computer code based on the PLS method. Such a
+system grants high availability and throughput, as well as ease in expand-
+ing/upgrading. It is our opinion that this concept of Personal Supercomputer
+can be successful, since it is a specialized system, yet built with mass-market
+components, and can be fully dedicated to a single research group or even to
+a single researcher, rather than being shared among multiple users through a
+queueing system. Moreover, the additional investment required to specialize
+towards the PLS code a general-purpose cluster of PC is simply that required
+to acquire two additional network cards for each node, plus a few meters of
+network cable. This means that a cluster can be easily built in such a way that
+it works optimally both as a parallel computing server for the general public
+and a DNS computer for a research group employing a PLS-based code.
+
+Concerning the (theoretical) peak computing power, we have estimated in [25]
+that the investment (early 2003) required to obtain 200 GFlop/s of peak power
+with a state-of-the-art supercomputer would be 50-100 times higher than that
+needed to build a Personal Supercomputer of the same power. The smaller
+investment, together with additional advantages like reduced power consump-
+tion and heat production, minimal ﬂoor space occupation, etc, allows the user
+to have dedicated access to the machine for unlimited time, thus achieving the
+highest throughput. As an example, in [26] we have performed with the Pen-
+tium III-based machine a large number of turbulent channel ﬂow simulations,
+whose global computational demand is estimated to be 300-400 times larger
+than the DNS described in [2]. Even though our performance measurements
+have been partly carried out on relatively old computing hardware, we have
+demonstrated that very good parallel speedups can be obtained for problems
+whose computational size ﬁts that of typical DNS problems aﬀordable with
+the given hardware.
+
+The sole signiﬁcant diﬀerence performance-wise between such a system and a
+real supercomputer lies in the networking hardware, which oﬀers signiﬁcantly
+larger bandwidth and better latency characteristics in the latter case. However
+the negative eﬀects of this diﬀerence are not felt when the present parallel
+algorithm is employed, since the need for a large amount of communication is
+removed a priori, thanks to the algorithm itself.
+
+27
+
+The test of the PLS method on the Itanium II cluster has been carried out
+at the SHARCNET Computing Centre at the University of Western Ontario,
+Canada. Preliminary versions of this work have been presented by M.Q. at
+the XV AIMETA Conference on Theoretical Mechanics [27] and at the XI
+Conference of the CFD Society of Canada [25].
+
+Acknowledgments
+
+References
+
+[1] P. Moin, K. Mahesh, Direct numerical simulation: A tool in turbulence research,
+
+Ann. Rev. Fluid Mech. 30 (1998) 539–578.
+
+[2] J. Kim, P. Moin, R. Moser, Turbulence statistics in fully developed channel ﬂow
+
+at low Reynolds number, J. Fluid Mech. 177 (1987) 133–166.
+
+[3] M. Quadrio, P. Luchini, Direct numerical simulation of the turbulent ﬂow in a
+
+pipe with annular cross-section, Eur. J. Mech. B / Fluids 21 (2002) 413–427.
+
+[4] W. Kwok, R. Moser, J. Jim´enez, A critical evaluation of the resolution
+properties of B-spline and compact ﬁnite diﬀerence methods, J. Comp. Phys.
+174 (2001) 510–551.
+
+[5] Y. Na, P. Moin, Direct numerical simulation of a separated turbulent boundary
+
+layer, J. Fluid Mech. 374 (1998) 379–405.
+
+[6] J. J. Dongarra, Performance of Various Computers Using Standard Linear
+
+Equations Software, (Linpack Benchmark Report) (CS-89-85).
+URL http:///www.netlib.org/benchmark/performance.ps
+
+[7] J. Jim´enez, Computing high-Reynolds-number turbulence: will simulations ever
+
+replace experiments?, J. Turbulence 4 (2003) 22.
+
+[8] G.-S. Karamanos, C. Evangelinos, R. Boes, R. Kirby, G. Karniadakis, Direct
+Numerical Simulation of Turbulence with a PC/Linux Cluster: Fact or Fiction?,
+in: Proc. Supercomputing, 1999.
+
+[9] P. Dmitruk, L.-P. Wang, W. Matthaeus, R. Zhang, D. Seckel, Scalable parallel
+FFT for spectral simulations on a Beowulf cluster, Parallel Computing 27 (2001)
+1921–1936.
+
+[10] M. Quadrio, P. Luchini, The numerical solution of the incompressible Navier–
+Stokes equations in cartesian and cylindrical geometries on a low-cost, dedicated
+parallel computer., Dip. Ing. Aerospaziale, Politecnico di Milano DIA-SR 04-16.
+URL http://pc-quadrio.aero.polimi.it/papers/2004-DIA0416.pdf
+
+[11] F. P. Bertolotti, T. Herbert, P. R. Spalart, Linear and nonlinear stability of the
+
+Blasius boundary layer, J. Fluid Mech. 242 (2002) 441–474.
+
+28
+
+[12] R. Moser, J. Kim, N. Mansour, Direct numerical simulation of turbulent channel
+
+ﬂow up to Reθ = 590, Phys. Fluids 11 (4) (1999) 943–945.
+
+[13] J. Kim, Control of turbulent boundary layers, Phys. Fluids 15 (5) (2003) 1093–
+
+1105.
+
+780–783.
+
+[14] S. Lele, Compact Finite Diﬀerence Schemes with Spectral-like Resolution, J.
+
+Comp. Phys. 103 (1992) 16–42.
+
+[15] K. Mahesh, A Family of High Order Finite Diﬀerence Schemes with Good
+
+Spectral Resolution, J. Comp. Phys. 145 (1) (1998) 332–358.
+
+[16] L. Thomas, The stability of plane Poiseuille ﬂow, Phys. Rev. 91 (4) (1953)
+
+[17] A. Pozzi, Application of Pad´e’s Approximation Theory in Fluid Dynamics,
+
+Advances in Mathematics for Applied Sciences, World Scientiﬁc, 1994.
+
+[18] W. Spotz, G. Carey, Formulation and Experiments with High-Order Compact
+Schemes for Nonuniform Grids, Int. J. Num. Meth. Heat & Fluid Flow 8 (3)
+(1998) 288–303.
+
+[19] R. B. Pelz, The Parallel Fourier Pseudospectral Method, J. Comp. Phys. 92
+
+(1991) 296–312.
+
+[20] J. del ´Alamo, J. Jim´enez, Spectra of the very large anisotropic scales in turbulent
+
+channels, Phys. Fluids 15 (6) (2003) L41–L44.
+
+[21] G. Ciaccio, G. Chiola, Porting MPICH ADI on GAMMA with Flow Control,
+
+in: Midwest Workshop on Parallel Processing, Kent, Ohio, 1999.
+
+[22] M. Skote, Studies of turbulent boundary layer ﬂow through direct numerical
+Institute of Technology Department of
+
+thesis, Royal
+
+simulation, Ph.D.
+Mechanics (2001).
+
+[23] A. G¨unther, D. Papavassilou, M. Warholic, T. Hanratty, Turbulent ﬂow in a
+
+channel at a low Reynolds number, Exp. Fluids 25 (1998) 503–511.
+
+[24] M. Iovieno, D. Cavazzoni, D. Tordella, A new technique for a parallel deliased
+pseudospectral Navier–Stokes code, Computer Physics Comm. 141 (2001) 365–
+374.
+
+[25] M. Quadrio, P. Luchini, J. Floryan, A Parallel Algorithm for the Direct
+Numerical Simulation of Turbulent Channel Flow, in: Proc. of the XI Conf.
+of the CFD Society of Canada, Vancouver (CAN), May 28-30, 2003.
+
+[26] M. Quadrio, P. Ricco, Critical assessment of turbulent drag reduction through
+
+spanwise wall oscillation, J. Fluid Mech. 521 (2004) 251–271.
+
+[27] M. Quadrio, P. Luchini, A 4th order accurate, parallel numerical method for
+the direct simulation of turbulence in cartesian and cylindrical geometries., in:
+Proc. of the XV AIMETA Conf. on Theor. Appl. Mech, 2001.
+
+29
+
+

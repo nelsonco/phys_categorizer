@@ -1,0 +1,1156 @@
+3
+0
+0
+2
+ 
+t
+c
+O
+ 
+6
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+1
+3
+1
+0
+1
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Hybrid atomistic-continuum methods for
+multiscale hydrodynamics
+
+Hettithanthrige S. Wijesinghe and Nicolas G. Hadjiconstantinou
+Mechanical Engineering Department
+Massachusetts Institute of Technology
+Cambridge, MA 02139
+
+February 2, 2008
+
+Abstract
+
+We discuss hybrid atomistic-continuum methods for multiscale hy-
+drodynamic applications. Both dense ﬂuid and dilute gas formulations
+are considered. The choice of coupling method and its relation to the
+ﬂuid physics is discussed. The diﬀerences in hybrid methods resulting
+from underlying compressible and incompressible continuum formula-
+tions as well as the importance of timescale decoupling are highlighted.
+We also discuss recently developed compressible and incompressible
+hybrid methods for dilute gases. The incompressible framework is
+based on the Schwarz alternating method whereas the compressible
+method is a multi-species, fully adaptive mesh and algorithm reﬁne-
+ment approach which introduces the direct simulation Monte Carlo at
+the ﬁnest level of mesh reﬁnement.
+
+1 Introduction
+
+By limiting the molecular treatment to regions where it is needed, a hybrid
+method allows the simulation of complex thermo-ﬂuid phenomena which
+require modeling at the microscale without the prohibitive cost of a fully
+molecular calculation. In what follows we provide an overview of this rapidly
+expanding ﬁeld and discuss recent developments. We also present archety-
+pal hybrid methods for incompressible and compressible ﬂows; the hybrid
+
+1
+
+method for incompressible gas ﬂow is based on the Schwarz alternating cou-
+pling method which uses Chapman-Enskog boundary condition imposition,
+the hybrid method for compressible ﬂow is the recently developed [33] ﬂux-
+coupling based, multispecies adaptive mesh and algorithm reﬁnement scheme
+that extends adaptive mesh reﬁnement by introducing the molecular descrip-
+tion at the ﬁnest level of reﬁnement.
+
+Over the years a fair number of hybrid simulation frameworks has been
+proposed leading to some confusion over the relative merits and applicability
+of each approach. Original hybrid methods focused on dilute gases [27, 28,
+10, 19], which are arguably easier to deal with within a hybrid framework
+than dense ﬂuids, mainly because boundary condition imposition is signiﬁ-
+cantly easier in gases. The ﬁrst hybrid methods for dense ﬂuids appeared a
+few years later [25, 15, 16, 11]. These initial attempts have led to a better
+understanding of the challenges associated with hybrid methods.
+
+To a large extent, the two major issues in developing a hybrid method is
+the choice of a coupling method and the imposition of boundary conditions
+on the molecular simulation. Generally speaking, these two can be viewed as
+decoupled, in the sense that the coupling technique can be developed on the
+basis of matching two compatible and equivalent over some region of space
+hydrodynamic descriptions and can thus be borrowed from the already exist-
+ing and extensive continuum-based numerical methods literature. The choice
+of coupling technique is further discussed in section 2.1. Boundary condition
+imposition can again be considered in a decoupled sense and can be posed
+as a general problem of imposing “macroscopic” boundary conditions on a
+molecular simulation. In our opinion, this is a very challenging problem that
+has not been, in general, resolved to date completely satisfactorily. Bound-
+ary condition imposition on the molecular sub-domain is discussed in section
+2.2. Boundary condition imposition on the continuum sub-domain is gener-
+ally well understood, as is the process of extracting macroscopic ﬁelds from
+molecular simulations (typically achieved through averaging).
+
+In section 3 we give a brief description of the direct simulation Monte
+Carlo (DSMC), the dilute gas simulation method used in this work. In sec-
+tion 4 we demonstrate a hybrid scheme suitable for low speed, incompress-
+ible gaseous ﬂows based on the Schwarz alternating method. This scheme
+introduces Chapman-Enskog boundary condition imposition in incompress-
+ible hybrid formulations. Subsequently, in section 5 we discuss a recently
+developed [33] multi species compressible formulation for gases which intro-
+duces the molecular simulation as the ﬁnest level of reﬁnement within a fully
+
+2
+
+adaptive mesh reﬁnement scheme. We ﬁnish with some concluding remarks.
+
+2 Developing a hybrid method
+
+2.1 The choice of coupling method
+
+Coupling a continuum to a molecular description is meaningful in a region
+where both can be presumed valid. In choosing a coupling method it is there-
+fore convenient to draw upon the wealth of experience and large cadre of cou-
+pling methods nearly 50 years of continuum computational ﬂuid dynamics
+have brought us. Coupling methods for the compressible and incompress-
+ible formulations generally diﬀer, since the two correspond to two diﬀerent
+physical and mathematical hydrodynamic limits. Faithful to their mathe-
+matical formulations, the compressible formulation lends itself naturally to
+time explicit ﬂux-based (control-volume-type) coupling while incompressible
+formulations are typically coupled using either state properties (Dirichlet) or
+gradient information (Neumann).
+
+Given that the two formulations have diﬀerent limits of applicability and
+physical regimes in which each is signiﬁcantly more eﬃcient than the other,
+care must be exercised when selecting the ingredients of the hybrid method.
+In other words, the choice of a coupling method and continuum sub-domain
+formulation needs to be based on the degree on which compressibility eﬀects
+are important in the problem of interest and not on a preset notion that a
+particular coupling method is more appropriate than all others. The latter
+approach was recently pursued in a variety of studies which enforce the use
+of a control-volume-type approach to steady and essentially incompressible
+problems to achieve coupling by time explicit ﬂux matching. This approach
+is not recommended. On the contrary, for an eﬃcient simulation method,
+similarly to the case of continuum solution methods, it is important to allow
+the ﬂow physics to dictate the appropriate formulation, while the numerical
+implementation is chosen to cater to the particular requirements of the latter.
+Below, we expand on some of the considerations which inﬂuence the choice
+of coupling method under the assumption that the hybrid method is applied
+to problems of practical interest and therefore the continuum subdomain
+is appropriately large. Our discussion focuses on timescale considerations
+that are more complex but equally important to limitations resulting from
+lengthscale considerations, such as the size of the molecular region(s).
+
+3
+
+It is well known [30] that the timestep for explicit integration of the com-
+pressible formulation, τc, scales with the physical timestep of the problem,
+τ∆x(= ∆x/U, where ∆x is the numerical grid spacing and U is the charac-
+teristic velocity), according to
+
+τc ≤
+
+M
+1 + M
+
+τ∆x
+
+(1)
+
+where M is the Mach number. As the Mach number becomes small, we are
+faced with the well-known stiﬀness problem whereby the numerical eﬃciency
+of the solution method suﬀers [30] because the compressible formulation re-
+solves the acoustic modes when those are not important. For this reason,
+when the Mach number is small, the incompressible formulation is used which
+allows integration at the physical timestep τ∆x. In the hybrid case matters
+are complicated by the introduction of the molecular integration timestep,
+τm, which is at most of the order of τc (in some cases in gases when ∆x ≤ λ,
+where λ is the molecular mean free path) and in most cases signiﬁcantly
+smaller. One consequence of equation (1) is that as the global domain of
+interest grows, the total integration time grows, and transient calculations
+in which the molecular subdomain is explicitly integrated in time become
+more computationally expensive and eventually infeasible. The severity of
+this problem increases with decreasing Mach number and makes unsteady
+incompressible problems very computationally expensive. New integrative
+frameworks which coarse grain the time integration of the molecular subdo-
+main are therefore required.
+
+Fortunately, for low speed steady problems implicit (iterative) methods
+exist which provide solutions without the need for explicit integration of the
+molecular domain to the global problem steady state. The particular method
+used here is known as the Schwarz method and is discussed further in Section
+4. This method decouples the global evolution timescale from the molecular
+evolution timescale (and timestep) by achieving convergence to the global
+problem steady state through an iteration between steady state solutions of
+the continuum and molecular subdomains. Because the molecular subdo-
+main is small, explicit integration to its steady state is feasible. Although
+the steady assumption may appear restrictive, it is interesting to note that
+the vast majority of both compressible and incompressible test problems
+solved to date and all incompressible practical problems of interest [1] solved
+by hybrid methods have been steady. A variety of other iterative methods
+may be suitable as they provide for timescale decoupling. The choice of
+
+4
+
+the Schwarz coupling method, which uses state variables instead of ﬂuxes to
+achieve matching, was motivated by the fact (as explained below) that state
+variables suﬀer from smaller statistical noise and are thus easier to prescribe
+on a continuum formulation.
+
+The above observations do not preclude the use of the compressible for-
+mulation in the continuum subdomain for low speed ﬂows. In fact, precon-
+ditioning techniques which allow the use of the compressible formulation at
+very low Mach numbers have been developed [30]. Such a formulation can,
+in principle, be used to solve the continuum sub-problem while this is being
+coupled to the molecular sub-problem via an implicit (eg. Schwarz) itera-
+tion. What should be avoided is a time-explicit control-volume-type coupling
+procedure for solving essentially incompressible steady state problems.
+
+The issues discussed above have not been very apparent to date because
+in typical test problems published so far, the continuum and atomistic sub-
+domains are of the same size (and, of course, small). In this case the large
+cost of the molecular subdomain masks the cost of the continuum subdomain
+and also typical evolution timescales (or times to steady state) are small. It
+should not be forgotten, however, that hybrid methods make sense when the
+continuum subdomain is signiﬁcantly larger than the molecular subdomain.
+Although the continuum subdomain stiﬀness in the limit M → 0 (see eq
+(1)) may be remedied by implicit timestepping methods [36] or precondition-
+ing approaches, control-volume-based hybrid approaches suﬀer from adverse
+signal to noise ratios in connection with the averaging required for imposi-
+tion of boundary conditions from the molecular sub-domain to the continuum
+sub-domain. In the case of an ideal gas (where compressible formulations are
+typical) it has been shown in [18] that, for the same number of samples, ﬂux
+(shear stress, heat ﬂux) averaging exhibits relative noise, Ef , which scales as
+
+Ef ∼
+
+Esv
+Kn
+
+(2)
+
+where Esv is the relative noise in the corresponding state variable (velocity,
+temperature). Here Kn = λ/L is the Knudsen number based on the char-
+acteristic lengthscale of the transport gradients, L, and λ is the mean free
+path which is expected to be much smaller than L since, by assumption, a
+continuum sub-domain is present. It thus appears that ﬂux coupling will be
+signiﬁcantly disadvantaged in this case, since the number of samples required
+to make Ef ≈ Esv scales as 1/Kn2 times the number of samples required by
+state-variable averaging. On the other hand, Schwarz-type iterative methods
+
+5
+
+based on the incompressible physics of the ﬂow require a fair number of it-
+erations for convergence (O(10)). These iterations require the re-evaluation
+of the molecular solution. This is an additional computational cost that
+is not shared by control-volume-type or explicit incompressible approaches.
+At this time, the choice between a time-explicit formulation or an iterative
+(Schwarz-type) iteration for incompressible unsteady problems is not clear
+and may be problem dependent. Despite the fact that as L grows the ad-
+vantage seems to shift towards iterative methods, we should recall that from
+equation (1), unless time coarse-graining techniques are developed, large,
+low-speed, unsteady problems are currently too expensive to be feasible by
+either approach.
+
+2.2 Boundary condition imposition
+
+Consider the molecular region Ω on the boundary of which, ∂Ω, we wish to
+impose a set of hydrodynamic (macroscopic) boundary conditions. Typical
+implementations require the use of particle reservoirs R (see Fig 1) in which
+particle dynamics may be altered in such a way that the desired boundary
+conditions appear on ∂Ω; the hope is that the inﬂuence of the perturbed
+dynamics in the reservoir regions decays suﬃciently fast and does not prop-
+agate into the region of interest, that is, the relaxation distance both for the
+velocity distribution function and the ﬂuid structure is small compared to
+the characteristic size of Ω.
+
+In a dilute gas, the non-equilibrium distribution function in the continuum
+limit has been characterized [8] and is known as the Chapman-Enskog distri-
+bution. Use of this distribution to impose boundary conditions on molecular
+simulations of dilute gases results in a robust, accurate and theoretically
+elegant approach. Typical implementations [13] require the use of particle
+generation and initialization within R. Particles that move into Ω within the
+simulation timestep are added to the simulation whereas particles remaining
+in R are discarded. See chapter 4 for details.
+
+Unfortunately, for dense ﬂuids where not only the particle velocities but
+also the ﬂuid structure is important and needs to be imposed, no theoretical
+results for their distributions exist. A related issue is that of domain termi-
+nation; due to particle interactions, Ω, or in the presence of a reservoir, R,
+needs to be terminated in a way that does not have a big eﬀect on the ﬂuid
+state inside of Ω.
+
+As a result, researchers have experimented with possible methods to im-
+
+6
+
+Figure 1: Continuum to atomistic boundary condition imposition using reser-
+voirs.
+
+pose boundary conditions. It is now known that similarly to a dilute gas, use
+of a Maxwell-Boltzmann distribution for the velocities leads to slip [15]. Li
+et al. [21] used a Chapman-Enskog distribution to impose boundary condi-
+tions to generate a dense-ﬂuid shear ﬂow. In this approach, particles crossing
+∂Ω acquire velocities that are drawn from a Chapman-Enskog distribution
+parametrized by the local values of the required velocity and stress bound-
+ary condition. Although this approach was only tested for a Couette ﬂow, it
+appears to give reasonable results (within molecular ﬂuctuations). Because
+in Couette ﬂow no ﬂow normal to ∂Ω exists, ∂Ω can be used as symmetry
+boundary separating two back-to-back shear ﬂows; this sidesteps the issue of
+domain termination.
+
+In a diﬀerent approach, Flekkoy et al. [11] use external forces to impose
+boundary conditions. More speciﬁcally, in the reservoir region they apply an
+external ﬁeld of such magnitude that the total force on the ﬂuid particles in
+the reservoir region is the one required by momentum conservation. They
+then terminate their reservoir region by using an ad-hoc weighing factor for
+the distribution of this force on particles within R that prevents particles
+from leaving the reservoir region. In particular, they chose a weighing factor
+that diverges as particles approach the edge of R such that particles do not
+escape the reservoir region while particles introduced there move towards
+
+7
+
+Ω. Particles introduced into the reservoir are given velocities drawn from
+a Maxwell-Boltzmann distribution, while a Langevin thermostat keeps the
+temperature constant. The method appears to be successful although the
+non-unique (ad-hoc) choice of force ﬁelds and Maxwell-Boltzmann distribu-
+tion makes it not very theoretically pleasing. It is also not clear what the
+eﬀect of these forces are on the local ﬂuid state (it is well known that even
+in a dilute gas [24] gravity driven ﬂow exhibits signiﬁcant deviations from
+Navier-Stokes behavior) but this eﬀect is probably negligible since force ﬁelds
+are only acting in the reservoir region. Delgado-Buscalioni and Coveney [9]
+reﬁned the above approach by using an Usher algorithm to insert parti-
+cles in the energy landscape such that they have the desired speciﬁc energy,
+which is beneﬁcial to imposing a desired energy current while eliminating
+the risk of particle overlap at some computational cost. This approach uses
+a Maxwell–Boltzmann distribution however for the initial velocities of the
+inserted particles. Temperature gradients are imposed by a small number of
+thermostats placed in the direction of the gradient. Although no proof exists
+that the disturbance to the particle dynamics is small, it appears that this
+technique is successful at imposing boundary conditions with moderate error.
+Boundary conditions on MD simulations can also be imposed through the
+method of constraint dynamics [25]. Although the approach in [25] did not
+allow hydrodynamic ﬂuxes across the matching interface, this feature can be
+integrated into this approach with a suitable domain termination.
+
+A method for terminating molecular dynamics simulations with small
+eﬀect on particle dynamics has been suggested and used in [15]. This sim-
+ply involves making the reservoir region fully periodic. In this manner, the
+boundary conditions on ∂Ω also impose a boundary value problem on R,
+where the inﬂow to Ω is the outﬂow from R. As R becomes bigger, the
+gradients in R become smaller and thus the ﬂowﬁeld in R will have a small
+eﬀect on the solution in Ω. The disadvantage of this method is the number of
+particles that are needed to ﬁll R as this grows, especially in high dimensions.
+We believe that signiﬁcant contributions can still be made by developing
+methods to impose boundary conditions in hydrodynamically consistent and,
+most importantly, rigorous approaches.
+
+8
+
+3 The direct simulation Monte Carlo
+
+The DSMC method was proposed by Bird [7] in the 1960’s and has been
+used extensively to model rareﬁed gas ﬂows. A comprehensive discussion of
+DSMC can be found in the review article by Alexander et. al. [2]. The DSMC
+algorithm is based on the assumption that a small number of representative
+“computational particles” can accurately capture the hydrodynamics of a
+dilute gas as given by the Boltzmann equation. Air under standard conditions
+narrowly meets the dilute gas criterion. Empirical results [7] show that a
+small number (≈ 20) of computational particles per cubic molecular mean
+free path is suﬃcient to capture the relevant physics. This is approximately 2
+orders of magnitude smaller than the actual number of gas atoms/molecules
+contained in the same volume. This is one source of DSMC’s signiﬁcant
+computational advantage over a fully molecular simulation.
+
+DSMC solves the Boltzmann equation using a splitting approach: the
+time evolution of the system is approximated by a sequence of discrete
+timesteps, ∆t, in which particles undergo successively collisionless advection
+and collisions. Collisions are performed between randomly chosen particle
+pairs within small cells of linear size ∆x. The ﬂow solution is determined
+by averaging the individual particle properties over space and time. This
+approach has been shown to produce correct solutions of the Boltzmann
+equation in the limit ∆x, ∆t → 0 [29]. The splitting approach eliminates
+the computational cost associated with integrating the equations of motion
+of all particles, but most importantly allows the timestep to be signiﬁcantly
+larger (see also below) than a typical timestep in a hard sphere molecular
+dynamics simulation. This is another reason why DSMC is signiﬁcantly more
+computationally eﬃcient than “brute force” molecular dynamics.
+
+Recent studies [17, 14] have shown that for steady ﬂows, or ﬂows which
+are evolving at timescales that are long compared to the molecular relaxation
+times, a ﬁnite timestep leads to a truncation error that manifests itself in the
+form of timestep-dependent transport coeﬃcients; this error has been shown
+to be of the order of 5% when the timestep is of the order of a mean free
+time and goes to zero as ∆t2. Quadratic dependence of transport coeﬃcients
+on the collision cell size ∆x was shown in [3].
+
+9
+
+4 The Schwarz method for incompressible for-
+
+mulations
+
+Although in some cases compressibility may be important, a large number
+of applications are typically characterized by ﬂows where use of the incom-
+pressible formulation results in a signiﬁcantly more eﬃcient approach [30].
+As explained in the introduction section, our deﬁnition of incompressible
+formulation is based on the ﬂow physics and not on the numerical method
+used. Although we have used here a ﬁnite element discretization based on the
+incompressible formulation, we believe that a preconditioned compressible
+formulation could also be used to solve the continuum subdomain problem
+if it could be successfully matched to the molecular solution through a cou-
+pling method which takes into account the elliptic nature of the (low speed)
+problem to provide solution matching consistent with the ﬂow physics.
+
+Here, matching is achieved through an iterative procedure based on the
+Schwarz alternating method for the treatment of steady-state problems. The
+Schwarz method was originally proposed for molecular dynamics-continuum
+methods in [15] and extended in [16], but it is equally applicable to DSMC-
+continuum hybrid methods [1, 32]. This approach was chosen because of its
+ability to couple diﬀerent descriptions through Dirichlet boundary conditions
+(easier to impose on dense-system molecular simulations compared to ﬂux
+conditions, because ﬂuxes are non-local in dense systems), and its ability to
+reach the solution steady state in an implicit manner. The importance of
+the latter characteristic cannot be overemphasized; the implicit convergence
+in time guarantees timescale decoupling that is necessary for the solution
+of macroscopic problems; the integration of molecular trajectories at the
+molecular timestep for total times corresponding to macroscopic evolution
+times is, and will for a long time be, infeasible.
+
+Within the Schwarz coupling framework, an overlap region facilitates in-
+formation exchange between the continuum and atomistic subdomains in the
+form of Dirichlet boundary conditions. A steady state continuum solution
+is ﬁrst obtained using boundary conditions taken from the atomistic sub-
+domain solution. For the ﬁrst iteration this latter solution can be a guess.
+A steady state atomistic solution is then found using boundary conditions
+taken from the continuum subdomain. This exchange of boundary conditions
+corresponds to a single Schwarz iteration. Successive Schwarz iterations are
+repeated until convergence, i.e. until the solutions in the two subdomains
+
+10
+
+are identical in the overlap region.
+
+The Schwarz method was recently applied [1] to the simulation of ﬂow
+through micromachined ﬁlters. These ﬁlters have passages that are suﬃ-
+ciently small that require a molecular description for the simulation of the
+ﬂow through them. Depending on the geometry and number of ﬁlter stages
+the authors have reported computational savings ranging from 2 to 100. The
+approach in [1] used a Maxwellian velocity distribution and a “control mech-
+anism” to impose the ﬂowﬁeld on the molecular simulation. This approach,
+although succesful in quasi one-dimensional ﬂows, is not very general; ad-
+ditionally, it is well known that using a Maxwellian distribution to impose
+hydrodynamic boundary conditions, in general, if uncorrected will lead to
+slip (discrepancy between the imposed and observed boundary conditions).
+General boundary condition imposition on dilute-gas molecular simulations
+can be performed using the Chapman-Enskog velocity distribution [13, 8].
+This approach eliminates the need for a feedback correction since supplying
+the correct local distribution function eliminates slip. A Chapman-Enskog
+procedure for the Schwarz method is described below. Extensions of the
+Schwarz method to time-dependent problems is currently under investiga-
+tion [31], although, as shown by equation (1), when the Mach number is low,
+the disparity between the molecular and hydrodynamic timescales makes this
+a very stiﬀ problem.
+
+4.1 Driven cavity test problem
+
+In this section we discuss the Schwarz alternating method in the context
+of the solution of the driven cavity problem. We pay particular attention
+to the imposition of boundary conditions on the DSMC domain using a
+Chapman-Enskog distribution which is arguably the most rigorous and gen-
+eral approach. For illustration and veriﬁcation purposes we solve the steady
+driven cavity problem (see Figure 2), in which the continuum subdomain is
+described by the Navier-Stokes equations solved by ﬁnite element discretiza-
+tion. The hybrid solution is expected to recover the fully continuum solution
+since the atomistic subdomain is far from solid boundaries and from regions
+of large velocity gradients. This test therefore provides a consistency check
+for the scheme.
+
+Standard Dirichlet velocity boundary conditions for a driven cavity prob-
+lem were applied on the continuum subdomain; the u velocity component
+on the left, right and lower walls were held at zero while the upper wall u
+
+11
+
+−6
+
+x 10
+
+1
+
+Continuum only 
+
+Atomistic only 
+
+)
+
+m
+
+(
+ 
+
+Y
+
+0.5
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0
+
+0
+
+h 
+
+Overlap width 
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+X (m)
+
+1
+−6
+
+x 10
+
+Figure 2: Continuum and atomistic sub-domains for Schwarz coupling in
+two–dimensions.
+
+velocity was set to 50 m/s. The v velocity component on all boundaries was
+set to zero. Despite the high velocity, the ﬂow is essentially incompressible
+and isothermal. The pressure is scaled by setting the middle node on the
+lower boundary at atmospheric pressure (1.013 × 105 Pa).
+
+The imposition of boundary conditions on the atomistic subdomain is
+facilitated by a particle reservoir as shown in Figure 3. Particles are cre-
+ated at locations x, y within the reservoir with velocities Cx, Cy drawn from
+a Chapman-Enskog velocity distribution. The Chapman Enskog distribu-
+tion is generated [12] by using the mean and gradient of velocities from the
+continuum solution, that is, the number and spatial distribution of particles
+in the reservoir are chosen according to the overlying continuum cell mean
+density and density gradients. After particles are created in the reservoir
+they move for a single DSMC timestep. Particles that enter DSMC cells are
+incorporated into the standard convection/collision routines of the DSMC
+algorithm. Particles that remain in the reservoir are discarded. Particles
+
+12
+
+Chapman Enskog 
+distribution 
+generated by
+interpolating 
+velocity solution 
+from  FE triangle 
+nodes 
+
+DSMC Cells    
+centered on FE
+nodes         
+
+Particle   
+created in 
+reservoir  
+
+Reservoir region 
+
+−7
+
+x 10
+
+5
+
+4.5
+
+)
+
+m
+
+(
+ 
+
+Y
+
+3.5
+
+4
+
+3
+
+2.5
+
+2.5
+
+3
+
+3.5
+
+4
+
+4.5
+
+X (m)
+
+5
+−7
+
+x 10
+
+Figure 3: Particle reservoir in the overlap region.
+
+that leave the DSMC domain are also deleted from the computation.
+
+The rapid convergence of the Schwarz approach is demonstrated in Fig-
+ure 4. The continuum numerical solution is reached to within ±10% at the
+3rd Schwarz iteration and to within ±2% at the 10th Schwarz iteration.
+Our error estimate which includes the eﬀects of statistical noise [18] and dis-
+cretization error due to ﬁnite timestep and cell size is approximately 2.5%.
+Similar convergence of the v velocity ﬁeld is also observed.
+
+The close agreement with the fully continuum results indicates that the
+Chapman-Enskog procedure is not only theoretically appropriate but also ro-
+bust. Despite a Reynolds number of Re ≈ 1, the Schwarz method (originally
+only shown to converge for elliptic problems [22]) converges with negligible
+error. This is in agreement with the ﬁndings of Liu [23] who has recently
+shown that the Schwarz method is expected to converge for Re ∼ O(1).
+
+13
+
+0
+
+−2
+
+−4
+
+−6
+
+−8
+
+)
+
+m
+
+6
+−
+
+0
+1
+ 
+×
+5
+2
+4
+.
+0
+=
+Y
+X
+
+,
+
+(
+ 
+f
+ 
+=
+U
+
+ 
+
+−10
+
+−12
+
+0
+
+Exact     
+Iterate=1 
+Iterate=2 
+Iterate=3 
+Iterate=5 
+Iterate=10
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+0.5
+X (m)
+
+1
+−6
+
+x 10
+
+Figure 4: Convergence of the u velocity component along the y = 0.425 ×
+10−6m plane with successive Schwarz iterations.
+
+14
+
+5 Adaptive mesh and algorithm reﬁnement
+
+for compressible formulations
+
+As discussed above, consideration of the compressible equations of motion
+leads to hybrid methods which diﬀer signiﬁcantly from their incompress-
+ible counterparts. The hyperbolic nature of compressible ﬂows means that
+steady state formulations typically do not oﬀer a signiﬁcant computational
+advantage, and as a result, explicit time integration is the preferred solution
+method and ﬂux matching is the preferred coupling method. Given that the
+characteristic evolution time, τh, scales with the system size, the largest prob-
+lem that can be captured by a hybrid method is limited by the separation of
+scales between the molecular integration time and τh. Local mesh reﬁnement
+techniques [13, 33] minimize the regions of space that need to be integrated
+at small CFL timesteps (due to a ﬁne mesh), such as the regions adjoining
+the molecular subdomain. Implicit timestepping methods [36] can also be
+used to speed up the time integration of the continuum subdomain. Unfor-
+tunately, although both approaches enhance the computational eﬃciency of
+the continuum sub-problem, they do not alleviate the issues arising from the
+disparity between the molecular timestep and the total integration time.
+
+As explained in the introduction, overwhelming computational costs can
+be incurred when using a control-volume-type approach to capture steady
+phenomena where compressibility eﬀects are negligible as is in most cases in
+dense ﬂuids. In this case the integration timestep of the continuum subdo-
+main also becomes of the order of the molecular timescale, while the contin-
+uum subdomain is, presumably, much larger than the molecular subdomain
+and evolves at a much longer timescale. For an example, see in [11], where
+a compressible formulation for liquid ﬂow results in a CFL timestep of 0.17
+τLJ where τLJ ≈ O(10−12s) is the Lennard-Jones timescale. This appears
+to not have been fully appreciated by various groups which have attempted
+to develop dense-ﬂuid hybrid methods based on the compressible continuum
+formulation and control-volume-type matching procedures to solve steady
+and essentially incompressible problems.
+
+In hybrid continuum-DSMC methods, locally reﬁning the continuum so-
+lution cells to the size of DSMC cells leads to a particularly seamless hy-
+brid formulation in which DSMC cells diﬀer from the neighboring continuum
+cells only by the fact that they are inherently ﬂuctuating.
+(The DSMC
+timestep required for accurate solutions–see [3, 17, 14]–is very similar to the
+
+15
+
+CFL timestep of a compressible formulation.) Coupled to a mesh reﬁnement
+method, this approach can tackle true multiscale phenomena as shown below.
+Another characteristic inherent to compressible formulations is the pos-
+sibility of describing parts of the domain by the Euler equations of motion
+[33]. In that case, consistent coupling to the molecular formulation can be
+performed using a Maxwell-Boltzmann distribution [13].
+
+In a recent paper [4], Alexander et al. have shown that explicit time-
+dependent ﬂux-based formulations preserve the ﬂuctuating nature of the
+molecular description within the molecular regions but the ﬂuctuation ampli-
+tude decays rapidly within the continuum regions; correct ﬂuctuation spectra
+can be obtained in the entire domain by solving a ﬂuctuating hydrodynamics
+formulation [20] in the continuum sub-domain.
+
+5.1 Fully adaptive mesh and algorithm reﬁnement for
+
+a dilute gas
+
+The compressible formulation of Garcia et al. [13], referred to as AMAR
+(Adaptive Mesh and Algorithm Reﬁnement), pioneered the use of mesh re-
+ﬁnement as a natural framework for the introduction of the molecular de-
+scription in a hybrid formulation.
+In AMAR the typical continuum mesh
+reﬁnement capabilities are supplemented by an algorithmic reﬁnement (con-
+tinuum to atomistic) based on continuum breakdown criteria. This seamless
+transition is both theoretically and practically very appealing.
+
+In what follows we brieﬂy discuss a recently developed [33, 34] fully adap-
+tive AMAR method. In this method DSMC provides an atomistic descrip-
+tion of the ﬂow while the compressible two–ﬂuid Euler equations serve as
+the continuum–scale model. The continuum and atomistic representations
+are coupled by matching ﬂuxes at the continuum–atomistic interfaces and
+by proper averaging and interpolation of data between scales. This is per-
+formed in three steps; a) the continuum solution values are interpolated to
+create DSMC particles in the reservoir region, here called buﬀer cells, b)
+the conserved quantities in each continuum cell overlaying the DSMC re-
+gion are replaced by averages over particles in the same region and c) ﬂuxes
+recorded when particles cross the DSMC interface are used to correct the
+continuum solution in cells adjacent to the DSMC region. This coupling
+procedure makes the DSMC region appear as any other level in an AMR
+grid hierarchy. Similarly to the overlap region described for the Schwarz
+
+16
+
+method above, the Euler solution information is passed to the particles via
+buﬀer cells surrounding the DSMC region. At the beginning of each DSMC
+integration step, particles are created in the buﬀer cells using the continuum
+hydrodynamic values.
+
+The above algorithm allows grid and algorithm reﬁnement based on any
+combination of ﬂow variables and their gradients. Density gradient based re-
+ﬁnement has has been found to be generally robust and reliable. Concentra-
+tion gradients or concentration values within some interval are also eﬀective
+reﬁnement criteria especially for multi-species ﬂows involving concentration
+interfaces. In this particular implementation, reﬁnement is triggered by spa-
+tial gradients exceeding user deﬁned tolerances. This approach follows from
+the continuum breakdown parameter method proposed by Bird [6].
+
+Using the AMR capabilities provided by the Structured Adaptive Mesh
+Reﬁnement Application Infrastructure (SAMRAI) developed at the Lawrence
+Livermore National Laboratory [26], the above adaptive framework has been
+implemented in a fully three-dimensional, massively parallel form in which,
+multiple molecular (DSMC) patches can be introduced or removed as needed.
+Figure 5 shows the adaptive tracking of a shockwave of Mach number
+10 used as a validation test for this method. Density gradient based mesh
+reﬁnement ensures the DSMC region tracks the shock front accurately. Fur-
+thermore, as shown in Figure 6 the density proﬁle of the shock wave remains
+smooth and is devoid of oscillations that are known to plague traditional
+shock capturing schemes [5, 35].
+
+6 Discussion
+
+One of the most important messages of this paper is that boundary con-
+dition imposition on molecular domains is quite independent of the choice
+of solution coupling approach. As a example, consider the Schwarz method
+which provides a recipe for making solutions in various subdomains glob-
+ally consistent subject to exchange of Dirichlet conditions. The imposition
+of these boundary conditions can be achieved through any method and no
+certain method is favored by the coupling approach. Flexibility in adopting
+appropriate elements from previous approaches, and the importance of chos-
+ing the coupling method according to the ﬂow physics are key steps to the
+development of more sophisticated, next-generation hybrid methods.
+
+Although hybrid methods provide signiﬁcant savings by limiting molec-
+
+17
+
+Figure 5: Moving Mach 10 shock wave though Argon. The AMAR algorithm
+tracks the shock by adaptively moving the DSMC region with the shock front.
+
+ular solutions only to the regions where they are needed, solution of time-
+evolving problems which span a large range of timescales is still not possible
+if the molecular domain, however small, needs to be integrated for the total
+time of interest. New frameworks are therefore required which allow timescale
+decoupling or coarse grained time evolution of molecular simulations.
+
+Signiﬁcant computational savings can be obtained by using the incom-
+pressible formulation when appropriate for steady problems. Neglect of these
+simpliﬁcations can lead to a problem that is simply intractable when the con-
+tinuum subdomain is appropriately large. It is interesting to note that, when
+a hybrid method was used to solve a problem of practical interest [1] while
+providing computational savings, the Schwarz method was preferred because
+it provides a steady solution framework with timescale decoupling.
+
+For dilute gases the Chapman-Enskog distribution provides a robust and
+accurate method for imposing boundary conditions. Further work is required
+for the development of similar frameworks for dense liquids.
+
+7 Acknowledgements
+
+The authors wish to thank R. Hornung and A. L. Garcia for help with the
+computations and valuable comments and discussions, and A. T. Patera and
+
+18
+
+−3
+
+x 10
+
+ 
+
+AMAR
+Theory
+
+τ
+m
+
+ = 9.44
+
+τ
+m
+
+ = 12.38
+
+τ
+m
+
+ = 15.33
+
+7
+
+6
+
+4
+
+3
+
+2
+
+)
+
+3
+
+5
+
+m
+c
+/
+g
+(
+ 
+y
+t
+i
+s
+n
+e
+D
+
+1
+90
+
+100
+
+110
+
+120
+
+130
+
+150
+
+160
+
+170
+
+180
+
+190
+
+140
+x/λ
+
+Figure 6: Moving Mach 10 shock wave though Argon. The AMAR pro-
+ﬁle (red dots) is compared with the analytical time evolution of the initial
+discontinuity (blue lines). τm is the mean collision time.
+
+19
+
+B. J. Alder for helpful comments and discussions. This work was supported
+in part by the Center for Computational Engineering, and the Center for
+Advanced Scientiﬁc Computing, Lawrence Livermore National Laboratory,
+US Department of Energy, W-7405-ENG-48. The authors also acknowledge
+the ﬁnancial support from the University of Singapore through the Singapore-
+MIT alliance.
+
+References
+
+[1] Aktas, O. and Aluru, N. R., “A Combined Continuum/DSMC Technique
+for Multiscale Analysis of Microﬂuidic Filters”, J. Comp. Phys, 178,
+342–372, 2002.
+
+[2] Alexander, F. J., and Garcia, A. L., “The Direct Simulation Monte Carlo
+
+Method”, Computers in Physics, Vol. 11, 1997, pp. 588-593.
+
+[3] Alexander, F. J., Garcia, A. L. and Alder, B. J., “Cell Size Dependence
+of Transport Coeﬃcients in Stochastic Particle Algorithms”, Physics of
+Fluids, 10, 1540, 1998; erratum, Physics of Fluids, 12, 731, 2000.
+
+[4] Alexander, F., Garcia, A. L. and Tartakovsky D., “Algorithm Reﬁne-
+ment for Stochastic Partial Diﬀential Equations: I. Linear Diﬀusion”,
+to appear in Journal of Computational Physics, 2002.
+
+[5] Arora, M., Roe, P. L.,, “On Postshock Oscillations Due to Shock Cap-
+turing Schemes in Unsteady Flows”, Journal of Computational Physics
+130, 25 (1997).
+
+[6] Bird, G. A., “Breakdown of Translational and Rotational Equilibrium
+in Gaseous Expansions”, Am. Inst. Aero. and Astro. J. 8 1998 (1970).
+
+[7] Bird, G. A., Molecular Gas Dynamics and the Direct Simulation of Gas
+
+Flows, Clarendon Press, Oxford, 1994.
+
+[8] Chapman, S. and Cowling, T. G., The mathematical theory of non-
+
+uniform gases, Cambridge University Press, 1970.
+
+[9] Delgado–Buscalioni, R. and Coveney, P. V., “Continuum–Particle Hy-
+brid Coupling for Mass, Momentum and Energy Transfers in Unsteady
+Fluid Flow”, Physical Review E, 67, No. 4, (2003)
+
+20
+
+[10] Eggers, J. and Beylich, A., New algorithms for application in the direct
+
+simulation Monte Carlo method, Prog. Astro. Aero., 159, 166 (1994).
+
+[11] Flekkoy, E. G., Wagner, G. and Feder, J., “Hybrid model for combined
+particle and continuum dynamics”, Europhys. Lett., 52, 271–276, 2000.
+
+[12] Garcia, A .L. and Alder, B. J., “Generation of the Chapman Enskog
+Distribution”, Journal of Computational Physics, 140, 66, 1998.
+
+[13] Garcia, A. L., Bell, J. B., Crutchﬁeld, W. Y. and Alder, B. J., “Adaptive
+Mesh and Algorithm Reﬁnement Using Direct Simulation Monte Carlo”,
+J. Comp. Phys., 54, 134, 1999.
+
+[14] Garcia, A. L. and Wagner, W., “Time step truncation error in direct
+simulation Monte Carlo,” Physics of Fluids, 12, 2621–2633, 2000
+
+[15] Hadjiconstantinou, N. G. and Patera A. T., “Heterogeneous Atomistic-
+Continuum Representations for Dense Fluid Systems”, International
+Journal of Modern Physics C, 8, 967–976, 1997.
+
+[16] Hadjiconstantinou, N. G., “Hybrid Atomistic-Continuum Formulations
+and the Moving Contact-Line Problem”, Journal of Computational
+Physics, 154, 245–265, 1999.
+
+[17] Hadjiconstantinou, N. G., “Analysis of discretization in the direct sim-
+
+ulation Monte Carlo,” Physics of Fluids, 12, 2634–2638, 2000.
+
+[18] Hadjiconstantinou, N. G., Garcia, A. L., Bazant, M. Z. and He, G., “Sta-
+tistical Error in Particle Simulations of Hydrodynamic Phenomena,” J.
+Comp. Phys., 187, 274–297, 2003.
+
+[19] Hash, D., and Hassan, H., “A Hybrid DSMC/Navier-Stokes Solver”,
+
+AIAA Paper 95-0410 (1995).
+
+[20] Landau, L. D. and Lifshitz, E. M., Statistical Mechanics, Part 2, Perg-
+
+amon Press, Oxford, 1980.
+
+[21] Li, J., Liao, D. and Yip S., “Nearly exact solution for coupled contin-
+
+uum/MD ﬂuid simulation”, J. Comput-Aided Mater, 6, 95–102, 1999.
+
+21
+
+[22] Lions, P. L., “On the Schwarz alternating method. I.”, First Interna-
+tional Symposium on Domain Decomposition Methods for Partial Dif-
+ferential Equations, Eds. R. Glowinski, G. Golub, G. Meurant and J.
+Periaux, 1–42, SIAM, Philadelphia, 1988.
+
+[23] Liu, S. H., “On Schwarz Alternating Methods For The Incompressible
+Navier-Stokes Equations”, Siam Journal of Scientiﬁc Computing, 22,
+No. 6, pp. 1974-1986.
+
+[24] Mansour, M. M., Baras, F. and Garcia, A. L., “On the validity of hy-
+drodynamics in plane Poiseuille ﬂows”, Physica A, 240, 255–267, 1997.
+
+[25] O’Connell, S. T. and Thompson, P.A., Molecular dynamics-continuum
+hybrid computations: A tool for studying complex ﬂuid ﬂows. Phys.
+Rev. E, 52:R5792–R5795, 1995.
+
+[26] Structured Adaptive Mesh Reﬁnement Application Infrastructure,
+
+http://www.llnl.gov/CASC/
+
+[27] Wadsworth, D. C. and Erwin, D. A., “One-Dimensional Hybrid
+Continuum/Particle Simulation Approach for Rareﬁed Hypersonic
+Flows”,AIAA Paper 90-1690 (1990).
+
+[28] Wadsworth, D. C. and Erwin, D. A., “Two-Dimensional Hybrid
+Continuum/Particle Simulation Approach for Rareﬁed Hypersonic
+Flows”,AIAA Paper 92-2975 (1992).
+
+[29] Wagner, W., “A Convergence Proof for Bird’s Direct Simulation Monte
+Carlo Method for the Boltzmann Equation,” Journal of Statistical
+Physics, 66, 1011, 1992.
+
+[30] Wesseling, P., “Principles of Computational Fluid Dynamics”, Springer,
+
+2001.
+
+[31] Wijesinghe, H. S., “Hybrid Atomistic-Continuum Formulations for
+Gaseous Flows”, Ph.D. thesis, Department of Aeronautics and Astro-
+nautics, Massachusetts Institute of Technology, in preparation.
+
+[32] Wijesinghe, H. S. and Hadjiconstantinou, N. G., “A hybrid continuum-
+atomistic scheme for viscous incmpressible ﬂow”, Proceedings of the 23th
+International Symposium on Rareﬁed Gas Dynamics, Whistler, British
+Columbia, July, 907–914, 2002.
+
+22
+
+[33] Wijesinghe, H. S., Hornung, R., Garcia, A. L., Hadjiconstantinou, N.
+G., “3–dimensional Hybrid Continuum–Atomistic Simulations For Mul-
+tiscale Hydrodynamics”, to appear in the Proceedings of the 2003 In-
+ternational Mechanical Engineering Congress and Exposition.
+
+[34] Wijesinghe, H. S., Hornung, R., Garcia, A. L., Hadjiconstantinou, N.
+G., “Three–dimensional Hybrid Continuum–Atomistic Simulations For
+Multiscale Hydrodynamics”, submitted to the Journal of Fluids Engi-
+neering.
+
+[35] Woodward, P. R. and Colella, P., “The Numerical Simulation of Two-
+dimensional Fluid Flow with Strong Shocks”, J. Comp. Phys. 54, 115
+(1984).
+
+[36] Yuan, X. and Daiguji, H., ”A specially combined lower-upper factored
+implicit scheme for three dimensional compressible Navier-Stokes equa-
+tions”, Computers and Fluids, 30, 339-363, 2001.
+
+23
+
+

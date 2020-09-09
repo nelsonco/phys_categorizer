@@ -1,0 +1,3109 @@
+0
+0
+0
+2
+
+ 
+
+n
+u
+J
+ 
+
+9
+1
+
+ 
+ 
+]
+h
+p
+-
+o
+i
+b
+
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+
+1
+v
+5
+4
+0
+6
+0
+0
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+LU TP 00-07
+SLAC-PUB-8429
+April 13, 2000
+
+A Novel Approach to Structure Alignment
+
+Mattias Ohlsson, Carsten Peterson, Markus Ringn´er1
+
+Complex Systems Division, Department of Theoretical Physics
+University of Lund, S¨olvegatan 14A, S-223 62 Lund, Sweden
+
+http://www.thep.lu.se/complex/
+
+Richard Blankenbecler2
+
+Stanford Linear Accelerator Center
+
+P.O. Box 4349, Stanford, CA 94309, USA
+
+Submitted to Structure with Folding & Design
+
+Running Head: Structure Alignment of Proteins
+
+Keywords: protein structure alignment; permutation; mean ﬁeld annealing; fuzzy assign-
+ment; database searching
+
+1{mattias,carsten,markus}@thep.lu.se
+2rzbth@slac.stanford.edu
+
+Abstract
+
+Background: Aligning protein structures is a highly relevant task.
+It enables the
+study of functional and ancestry relationships between proteins and is very important
+for homology and threading methods in structure prediction. Existing methods typically
+only partially explore the space of possible alignments and being able to eﬃciently handle
+permutations eﬃciently is rare.
+
+Results: A novel approach for structure alignment is presented, where the key ingre-
+dients are: (1) An error function formulation of the problem simultaneously in terms of
+binary (Potts) assignment variables and real-valued atomic coordinates. (2) Minimiza-
+tion of the error function by an iterative method, where in each iteration a mean ﬁeld
+method is employed for the assignment variables and exact rotation/translation of atomic
+coordinates is performed, weighted with the corresponding assignment variables. The
+approach allows for extensive search of all possible alignments, including those involving
+arbitrary permutations. The algorithm is implemented using a Cα-representation of the
+backbone and explored on diﬀerent protein structure categories using the Protein Data
+Bank (Pdb) and is successfully compared with other algorithms.
+
+Conclusions: The approach performs very well with modest CPU consumption and
+is robust with respect to choice of parameters. It is extremely generic and ﬂexible and
+can handle additional user-prescribed constraints easily. Furthermore, it allows for a
+probabilistic interpretation of the results.
+
+2
+
+Introduction
+
+Aligning protein structures is a subject of utmost relevance. It enables the study of func-
+tional relationship between proteins and is very important for homology and threading
+methods in structure prediction. Furthermore, by grouping protein structures into fold
+families and subsequent tree reconstruction, ancestry and evolutionary issues may get
+unraveled.
+
+Structure alignment amounts to matching two 3D structures such that potential common
+substructures, e.g. α-helices, have priority. The latter is accomplished by allowing for
+gaps in either of the chains. Also, the possibility of permuting sites within a chain
+may be beneﬁcial. At ﬁrst sight, the problem may appear very similar to sequence
+alignment, as manifested in some of the vocabulary (gap costs etc.). However, from an
+algorithmic standpoint there is a major diﬀerence. Whereas sequence alignment can be
+solved within polynomial time using dynamical programming methods [1], this is not the
+case for structure alignment since rigid bodies are to be matched. Hence, for all structure
+alignment algorithms the scope is limited to high quality approximate solutions.
+
+Existing methods for structure alignment fall into two broad classes, depending upon
+whether one (1) directly minimizes the inter-atomic distances between two structures or
+(2) minimizes the distance between substructures that are either preselected or supplied
+by an algorithm involving intra-atomic distances.
+
+One approach within the ﬁrst category is the iterative dynamical programming method
+[2, 3], where one ﬁrst computes a distance matrix between all pairs of atoms (e.g. Cα)
+forming a similarity matrix, which by dynamical programming methods gives rise to an
+assignment matrix mimicking the sequence alignment procedure. One of the chains is
+then moved towards the other by minimizing the distance between assigned pairs. This
+method does not allow for permutations. Another inter-atomic approach is pursued
+in [4], where the area rather than distances between two structures is minimized.
+
+In [5] the approach is diﬀerent. Here one compares distance matrices within each of
+the two structures to be aligned, which provide information about similar substructures.
+The latter are subsequently matched. A similar framework is used in [6] and also in [7].
+Not surprisingly, in [5, 6] and [7] permutations can in principle be dealt with.
+
+There are implementation issues shared by both methodologies above. One is structure
+encoding (Cα and/or Cβ of the chains). For many comparisons Cα appears to be suﬃ-
+cient, whereas in some cases Cβ is needed. Also, the choice of distance metric is a subject
+of concern in order to avoid the inﬂuence of outliers.
+
+The iterative dynamical programming method [3] has been extensively assessed for back-
+
+1
+
+bone structures [8] from the Scop [9] database, in which protein structures have been
+classiﬁed by visual inspection. Some comparisons with Scop have also been performed
+[10] using the method in [6].
+
+Here we present a novel approach, which shares some of its philosophy from the iterative
+dynamical programming method [3]. Its key ingredients are: (A) An error function for-
+mulation of the problem simultaneously in terms of binary (Potts) assignment variables
+and real-valued atomic coordinates and (B) minimization of the error function by an
+iterative method, where each iteration contains two steps:
+
+1. A mean ﬁeld procedure for minimizing with respect to the assignment variables.
+
+2. Exact rotation and translation of atomic coordinates weighted with the correspond-
+
+ing assignment variables.
+
+The approach, which is very general, has some very appealing properties:
+
+• Implicit complete exploration of the entire space of alignments, which allows for
+
+arbitrary permutations. To our knowledge, no other approach has this feature.
+
+• Probabilistic interpretation of the results. This feature is present without tedious
+Monte Carlo estimates since the algorithm is deterministic. Among other things,
+this implies that the approach is less sensitive to the choice of distance metric, since
+the distances are weighted with fuzzy numbers.
+
+• With its generality, almost arbitrary additional constraints are easily incorporated
+
+into the formalism including diﬀerent functional forms of gap penalties.
+
+The approach is tested using Cα-representation of backbones, by comparing the results
+with the approaches of [3] and [5] as implemented in the Yale Alignment Server and
+Dali respectively and in one instance also with [6] (Entrez). In choosing protein pairs
+to align we followed [8] to a large extent. In [8] pairs with marginal sequence overlap but
+where each protein in a pair belongs to the same Scop superfamily and therefore have
+a similar structure were picked for assessment. We selected pairs from a varied selection
+of the families used in [8] to test our algorithm:
+
+• Dihydrofolate Reductases (α/β)
+• Globins (all-α)
+• Plastocyanin/azurin (all-β)
+• Immunoglobulins (all-β)
+
+In addition, we test the permutation capacity of our approach, by aligning:
+
+2
+
+• Permuted proteins (winged helix fold)
+
+When assessing the algorithm, we limit ourselves to a core version, where Cβ degrees
+of freedom are not included. Also, no post-processing of the results is done. We defer
+such elaborations and others to forthcoming publication. Nevertheless, the core version
+of our approach is already very competitive even for chains, where permutations are
+not needed. For the latter case, the other algorithms could not be tested using the
+corresponding WWW-servers. In the instances, where we have tested it for this kind of
+problems, it also performs well.
+
+The algorithm is implemented in C++. Given its generality and power, the CPU demand
+is quite modest – it scales like the chain lengths squared and on the average requires a
+few seconds on a Pentium 400MHz PC.
+
+Methods
+
+The Algorithm
+
+In what follows we have two proteins with N1 and N2 atoms to be structurally aligned.
+This is accomplished by a series of weighted rigid body transformations of the ﬁrst chain,
+keeping the second chain ﬁxed. We denote by xi (i = 1, ..., N1) and yj (j = 1, ..., N2) the
+atom coordinates of the ﬁrst and second chain, respectively. The phrase ”atom” will be
+used throughout this paper in a generic sense – it could represent individual atoms but
+also groups of atoms. In our applications it will mean Cα-atoms along the backbone. A
+square distance metric between the chain atoms is used,
+
+d2
+ij = |xi − yj|2
+
+(1)
+
+but the formalism is not conﬁned to this choice.
+
+We start by discussing the encodings and error function and then we present a method
+for minimizing the latter.
+
+The Gapless Case. For pedagogical reasons, we start oﬀ with the gapless case with
+N1 = N2. We deﬁne binary assignment variables sij such that sij = 1 if atom i in one
+chain matches j in the other and sij = 0 otherwise. Since every atom in one chain must
+match one atom in the other, the following conditions must be fulﬁlled:
+
+N1
+
+X
+
+i=1
+
+sij = 1
+
+j = 1, . . . , N2
+
+(2)
+
+3
+
+N2
+
+X
+
+j=1
+
+sij = 1 i = 1, . . . , N1
+
+(3)
+
+A suitable error function to minimize subject to the above constraints (Eqs. (2,3)) is
+
+Echain =
+
+N1
+
+X
+
+i=1
+
+N2
+
+X
+
+j=1
+
+sijd2
+ij
+
+(4)
+
+where the spatial degrees of freedom, xi, are contained in the distance matrix d2
+whenever sij=1 one adds a penalty d2
+both with respect to the binary variables sij and the real-valued coordinates xi.
+
+ij. Thus
+ij to Echain. Note that Eq. (4) is to be minimized
+
+The Gapped Case. Allowing for gaps in either of the chains is implemented by extend-
+ing sij to include 0-components in a compact way; si0 = 1 and s0j = 1 if an atom (i or j)
+in one chain is matched with a gap in the other and vice versa. Hence, gap positions
+are not represented by individual elements in sij; rather the gap-elements correspond to
+common sinks. The matrix S, with elements sij, containing gap-elements is shown in
+Eq. (5).
+
+S =
+
+
+
+
+
+s02
+s12
+s22
+
+s01
+s11
+s21
+
+s10
+s20
+.
+.
+.
+sN10 sN11 sN12
+
+...
+...
+...
+
+s0N2
+s1N2
+s2N2
+
+.... sN1N2
+
+
+
+
+
+(5)
+
+Some caution is needed when generalizing Eqs. (2,3) to host gaps, since the elements of
+the ﬁrst row and column (gap-mappings containing the index 0) in Eq. (5) diﬀer from
+the others in that they need not sum up to 1. Hence Eqs. (2,3) becomes
+
+N1
+
+X
+
+i=0
+N2
+
+X
+
+j=0
+
+sij = 1;
+
+j = 1, . . . , N2
+
+sij = 1;
+
+i = 1, . . . , N1
+
+where the ﬁrst condition can be rewritten as
+
+N1
+
+X
+
+i=1
+
+sij = 1 or
+
+N1
+
+X
+
+i=1
+
+sij = 0;
+
+j = 1, . . . , N2
+
+(6)
+
+(7)
+
+The encoding (sij) of matches and gaps is illustrated in Fig. 1 with a simple example.
+
+4
+
+j
+
+i
+
+
+
+
+
+0
+0 1
+0 0
+0 0
+0 0
+1 0
+1 0
+1 0
+0 0
+
+0 1
+0 0
+1 0
+0 0
+0 0
+0 0
+0 0
+0 0
+0 0
+
+S
+
+1 1
+0 0
+0 0
+0 0
+0 0
+0 0
+0 0
+0 0
+0 0
+
+1 0
+0 0
+0 0
+0 1
+0 0
+0 0
+0 0
+0 0
+0 0
+
+0 1
+0 0
+0 0
+0 0
+1 0
+0 0
+0 0
+0 0
+0 0
+
+0
+0
+0
+0
+0
+0
+0
+0
+1
+
+
+
+
+
+Figure 1: A simple example of the assignment matrix S (right) corresponding to the matching of the
+two toy chains (left).
+
+Assuming a constant penalty per inserted gap one has the error function
+
+E = Echain +
+
+N1
+
+X
+
+i=1
+
+λ(1)
+i si0 +
+
+N2
+
+X
+
+j=1
+
+λ(2)
+j s0j
+
+(8)
+
+i
+
+where λ(1)
+is the cost for matching atom i in the ﬁrst chain with a gap in the second
+chain, and similarly for λ(2)
+and λ(2)
+,
+j
+j
+originates from the fact that it is desirable not to break α-helix and β-strand structures.
+
+. The position dependence of the gap costs, λ(1)
+
+i
+
+In Eq. (8) the gap penalties are proportional to gap lengths. In sequence alignment it
+is conjectured that gap penalties consist of two parts; a penalty for opening a gap and
+then a penalty proportional to the gap length. As in [3], we will for structure alignment
+here adopt the same gap cost philosophy, i.e. λ(1)
+for opening a gap and a
+position-independent δ per consecutive gap. Hence, Eq. (8) generalizes to
+
+and λ(2)
+j
+
+i
+
+E = Echain +
+
+N1
+
+X
+
+i=1
+
+λ(1)
+i si0 +
+
+N2
+
+X
+
+j=1
+
+λ(2)
+j s0j
+
++
+
+N1
+
+X
+
+i=2
+
+(cid:16)δ − λ(1)
+
+i (cid:17) si−1,0si0 +
+
+N2
+
+X
+
+j=2
+
+(cid:16)δ − λ(2)
+
+j (cid:17) s0,j−1s0j
+
+(9)
+
+where products like si−1,0si0 are 1 if two adjacent atoms are matched to gaps.
+
+Minimization. Next we need an eﬃcient procedure for minimizing E with respect
+to both sij and xi subject to the constraints in Eqs. (6,7). As mentioned above, this
+minimization problem is non-trivial due to the rigid body constraint. A similar problem
+in terms of ﬁtting structures with relevance factors was probed in [11] for track ﬁnding
+problems with a template approach using the mean ﬁeld approximation. Here we will
+adopt a similar approach.
+
+5
+
+In our formulation, the inherent optimization diﬃculty resides in the binary part (sij)
+of the problem. Hence, minimizing Eq. (9) using a simple updating rule for sij will very
+likely yield poor solutions due to local minima. Well known stochastic procedures such
+as simulated annealing (SA) [12] for avoiding this are too costly from a computational
+standpoint. In the mean ﬁeld (MF) approach [13], the philosophy behind SA is retained,
+but the tedious simulations are replaced by an eﬃcient deterministic process. The bi-
+nary variables sij are then replaced by continuous mean ﬁeld variables vij ∈ [0, 1], with
+a dynamics given by iteratively solving the MF equations for a decreasing set of temper-
+atures T down to T0, where most of the vij approach either 1 or 0. These continuous MF
+variables can evolve in a space not accessible to the original intermediate variables. The
+intermediate conﬁgurations at non-zero T have a natural probabilistic interpretation.
+
+For sij satisfying Eq. (6), the MF equations for the corresponding vij read
+
+vij =
+
+euij/T
+
+N2
+
+X
+
+k=0
+
+euik/T
+
+;
+
+i = 1, ..., N1
+
+where the force uij is given by
+
+uij = −
+
+∂E
+∂vij
+
+(10)
+
+(11)
+
+and is computed by substituting sij with vij in E (Eq.
+normalization condition, Eq. (6),
+
+(9)). Note that the desired
+
+N2
+
+X
+
+j=0
+
+vij = 1;
+
+i = 1, ..., N1
+
+(12)
+
+is fulﬁlled automatically in Eq. (10). The other condition (Eq.(7)) is enforced by adding
+a penalty term
+
+Eγ = γ
+
+N2
+
+[(
+
+X
+
+j=1
+
+N1
+
+X
+
+i=1
+
+vij)(
+
+N1
+
+X
+
+k=1
+
+vkj − 1)]
+
+= γ
+
+N1
+
+X
+
+i=1
+
+N1
+
+X
+
+k6=i
+
+N2
+
+X
+
+j=1
+
+vijvkj
+
+(13)
+
+where γ is a parameter and the last equality follows from the fact that v2
+
+ij = vij for T =0.
+
+So far we have only looked at the assignment part when minimizing the error function.
+When updating the mean ﬁeld variables vij, using the MF equations, the distance mea-
+sure d2
+ij is a ﬁxed quantity. This corresponds to having the chains at ﬁxed positions.
+However, we also want to minimize the distance between the two chains. Based on the
+probabilistic nature of the mean ﬁeld variables we propose to update the chain positions
+
+6
+
+using the (fuzzy) assignment matrix V, with elements vij. This is done simultaneously
+with the updating of vij. Explicitly, one of the chains will be moved in order to minimize
+the chain error function Echain (Eq. (4)).
+
+The distance measure d2
+making a total of six independent variables. Let x′
+and rotated protein, i.e. x′
+
+ij depends on the translation vector a and the rotation matrix R,
+i be the coordinates of the translated
+
+i = a + Rxi, then
+
+Echain =
+
+N1
+
+X
+
+i=1
+
+N2
+
+X
+
+j=1
+
+vij (a + Rxi − yj)2
+
+(14)
+
+This minimization problem can be solved exactly with closed-form expressions for R and
+a that minimizes Echain [14]. It should be noted that this solution is rotationally invariant
+(independent of R) for the special case when the atoms in the two chains matches each
+other with the same weight, i.e. when vij = constant for all i and j, which is the case
+for high T .
+
+In summary, for a decreasing set of temperatures T , one iterates until convergence:
+
+1. The MF equations (Eq. (10)).
+2. Exact translation and rotation of the chain (Eq. (14)).
+
+We stress again that step 2 is done with the fuzzy MF assignment variables vij and not
+with the binary ones, sij. After convergence, vij are rounded oﬀ to 0 or 1 and rms (root-
+mean-square-distance) is computed for the matching pairs. Algorithmic details can be
+found in the next subsection.
+
+The forces uij entering Eq. (10) are proportional to d2
+ij/T
+that counts. Hence, for large temperatures T , vij are fairly insensitive to dij and many
+potential matching pairs (i, j) contribute fairly evenly. As the temperature is decreased,
+a few pairs (the ones with small dij) are singled out and ﬁnally at the lowest T only
+one winner remains. One can view the situation as that around each atom i one has a
+Gaussian domain of attraction, which initially (large T ) has a large width, but gradually
+shrinks to a small ﬁnite value.
+
+ij (Eqs. (4,11)). It is the ratio d2
+
+The fuzziness of the approach is illustrated in Fig. 2, where the evolution of vij, as T is
+lowered, is shown for parts of the ﬁrst helices of 1ECD and 1MBD (see next section)
+together with snap-shots of the corresponding chain sections. At high T all vij are similar;
+all potential matches have equal probability. At lower T , several vij have approached
+0 or 1 and the movable chain is moving in the right direction. At yet lower T , note
+that a few vij converge later than the majority. These are in this example related to the
+matching of the last atom in one of the chains. This atom has two potential candidates
+to match resulting in a number of vij that converge last.
+
+7
+
+a
+
+b
+
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+j
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+i
+
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+v
+
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+0.8
+
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+0.6
+
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+0.4
+
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+0.2
+
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+10 15 20 25 30 35 40 45 50
+
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+τ
+
+
+
+d
+
+Figure 2:
+Illustration of the fuzziness of the approach. The alignment shown is for 10 atoms in the ﬁrst
+helices in the proteins 1ECD (blue) and 1MBD (red). (a) Evolution of all the 120 vij as a function of
+iteration time τ (T is lowered with τ ). (b) Positions of the atoms at τ = 1. For high T every atom in
+a protein feels all the atoms in the other protein and the problem is rotationally invariant. (c) τ = 12;
+most of the relevant matchings are forcing the system to move in the right direction. (d) τ = 50; the
+ﬁnal assignments are done. The diﬀerent snapshots are presented using diﬀerent projections. Some vij
+approach 0 or 1 rather late and they are coloured green. These vij are related to the atom at the end
+of the 1MBD segment, which also is coloured green, and as can be seen in (c) the diﬃculty is whether
+to align this atom to the last or second last atom in the 1ECD segment.
+
+Implementation
+
+Here we give a very condensed, but yet self-contained and detailed description of the
+algorithm and the parameters involved, such that the results of this paper are repro-
+ducible.
+
+8
+
+Parameters. Two kind of parameters are used; the ones related to encoding of the
+problem (γ) and iteration dynamics (ǫ), where ǫ governs the annealing schedule (see
+below), and the ones specifying gap costs (λ, δ). The same set of parameters can be
+used for most of the pairs (see Table 1); the algorithm is remarkably stable.
+
+Protein Family
+α/β, all-α
+Plastocyanin/azurin
+Immunoglobulins
+Winged helix fold
+
+ǫ
+0.8
+0.8
+0.8
+0.8
+
+γ
+
+0.065
+0.035
+0.040
+0.070
+
+λ
+
+0.10
+0.10
+0.15
+0.20
+
+λsheet
+1.5λ
+2.0λ
+2.0λ
+2.0λ
+
+λhelix
+1.5λ
+2.0λ
+2.0λ
+2.0λ
+
+δ
+
+λ/2
+λ/5
+λ/5
+λ/5
+
+Table 1: Parameters used in the algorithm. The ﬁrst family involves 27 pairs, whereas the others one
+each.
+
+Initialization. An initialization of the chains is made prior to the mean ﬁeld alignment.
+First both chains are moved to their common center of mass. For the random initializa-
+tion, this move is then followed by a random rotation of one of the chains. Most of the
+times, however, a sequential initialization is used that consists of minimizing Eq. (4) us-
+ing a band-diagonal assignment matrix S. This corresponds to a situation where, on the
+average, atom i in one of the chains is matched to atom i in the other. If not explicitly
+mentioned, sequential initialization is used for all the protein pairs in this paper.
+
+Iteration Steps. The shortest chain is always chosen as the one that is moved (xi). The
+mean ﬁeld variables vij are updated according to Eq. (10) where, in order to improve
+convergence, the derivatives in Eq. (11) are replaced by ﬁnite diﬀerences (see e.g. [15]).
+This update equation accounts for all mean ﬁeld variables except for the ﬁrst row of V,
+which is updated according to
+
+v0j = 1 −
+
+N1
+
+X
+
+i=1
+
+vij;
+
+j = 1, ..., N2
+
+(15)
+
+The algorithmic steps are shown in Fig. 3. After convergence, no post processing is
+applied for the results in the next section.
+
+Results
+
+To test the quality of our alignment algorithm, we have compared alignments of protein
+pairs with results from other automatic procedures. For most of the tested pairs, each
+protein belongs to the same Scop superfamily. The goal here is not a full investigation
+of all families but rather to explore a limited set with representative variation. Pairs were
+picked from a selection of the families investigated in [8]. Our choice of pairs is essentially
+
+9
+
+1. Initialization.
+
+2. Rescale coordinates such that the largest distance between atoms within the
+
+chains is unity.
+
+3. Initiate all vij close to 1/ max(N1, N2) (randomly).
+
+4. Initiate the temperature (e.g. T = 2).
+
+5. Randomly (without replacement) select one row, say row k.
+
+6. Update all vkj , j = 0, ..., N2 according to Eq. (10).
+
+7. Repeat items 5 − 6 N1 times (such that all rows have been updated once).
+
+8. Repeat items 5 − 7 until no changes occur
+
+(deﬁned e.g. by 1/(N1N2)Pij |vij − v(old)
+
+ij
+
+| ≤ 0.0001).
+
+9. Rotation and translation of the shortest chain using the fuzzy assignment matrix
+
+V.
+
+10. Decrease the temperature, T → ǫT .
+
+11. Repeat items 5 − 10 until all vij are close to 1 or 0
+
+(deﬁned e.g. by 1/N1 Pij v2
+
+ij ≥ 0.99).
+
+12. Finally, the mean ﬁeld solution is given by the integer limit of vij , i.e.
+
+for each row i, i = 1, ..., N1 select the column j ∗ such that vij∗ is the largest
+element for this row. Let sij∗ = 1 and all other sij = 0 for this row.
+
+Figure 3: Algorithmic steps.
+
+based on two criteria. First, the pairs should have diverse structures, and in particular
+include all-α, all-β, and α/β proteins. Second, in [8] some families are considered to be
+very easy, easy and diﬃcult to align, respectively, and we included pairs from all these
+categories. In addition we have tested the algorithm on cases where permutations are
+needed.
+
+Our results are compared with the Yale Alignment Server (http://bioinfo.mbb.yale.
+edu/align/) and Dali (http://www2.ebi.ac.uk/dali/). The Yale server applies post
+processing to its alignments by removing aligned pairs with too large root-mean-square-
+distance (rms) in an iterative manner subject to a termination criteria. A similar proce-
+dure is of course possible in our approach, but we have chosen at this stage to keep the
+algorithm clean. In the comparisons below we have for the Yale server quoted results
+both before and after the post-processing.
+
+Unless otherwise stated, proteins are in what follows denoted by their Pdb [16] identiﬁer,
+and in the case of chains or parts of chains with their Scop domain label. A summary
+of the results in terms of rms and the number of aligned atoms (N) is shown in Table 2
+
+10
+
+s
+m
+r
+
+4.5
+
+3.5
+
+2.5
+
+1.5
+
+0.5
+
+80
+
+DALI
+YALE
+LUND
+
+120
+
+100
+Number of aligned atoms (N)
+
+140
+
+160
+
+180
+
+Figure 4: rms and N corresponding to Table 2. The Yale data correspond to no post processing (see
+text).
+
+and in Fig. 4. Detailed comments upon these results and some additional ones can be
+found below.
+
+With regard to the general performance one must keep in mind that it is not straight-
+forward to assess alignment algorithms in terms of e.g. rms and N, since there are no
+obvious ﬁgure-of-merits. It is interesting to notice though that when inspecting aligned
+core regions in detail, we are close to the Yale alignments but in general with a lower
+rms. However, in such comparisons, we diﬀer more from Dali. The Yale algorithm
+has been subject to comparison with Scop classiﬁcations using a multiple alignment
+procedure [8], giving its and our alignments a higher credibility.
+
+Dihydrofolate Reductases (α/β). These proteins belong to the Scop class α/β, which
+contains α- and β-proteins that have mainly parallel beta sheets. They are considered
+very easy to align [8]. If we compare alignments of core structure parts using the three
+methods we ﬁnd that they all essentially agree. However, one notes that the Yale results
+are very sensitive to the post processing.
+
+Globins (all-α). In the all-α Scop class we particularly study a set of globin proteins.
+In general, we get lower rms than the other algorithms for the same number of aligned
+residues. When comparing alignments from the three algorithms we ﬁnd that an im-
+portant aspect of our algorithm is manifested – allowing for permutation of individual
+atoms. The reason for this is that to optimally align secondary structures it is often
+beneﬁcial to have a few permuted residues in loops between the secondary structures.
+
+11
+
+Protein family
+
+Protein Pair
+
+Yale
+
+Dali
+
+Lund
+
+Dihydrofolate
+Reductases
+
+Globins
+
+Plastocyanin/azurin
+Immunoglobulins
+
+1DHFa
+
+1DHFa
+
+1DHFa
+
+8DFR
+
+8DFR
+
+4DFRa
+
+2HHBa
+
+2HHBa
+
+2HHBa
+
+2HHBa
+
+2HHBa
+
+2HHBa
+
+2HHBb
+
+2HHBb
+
+2HHBb
+
+2HHBb
+
+2HHBb
+
+2LHB
+
+2LHB
+
+2LHB
+
+2LHB
+
+1MBD
+
+1MBD
+
+1MBD
+
+2HBG
+
+2HBG
+
+1MBA
+
+1PLC
+
+7FABl2
+
+- 8DFR
+- 4DFRa
+- 3DFR
+- 4DFRa
+- 3DFR
+- 3DFR
+- 2HHBb
+- 2LHB
+- 1MBD
+- 2HBG
+- 1MBA
+- 1ECD
+- 2LHB
+- 1MBD
+- 2HBG
+- 1MBA
+- 1ECD
+- 1MBD
+- 2HBG
+- 1MBA
+- 1ECD
+- 2HBG
+- 1MBA
+- 1ECD
+- 1MBA
+- 1ECD
+- 1ECD
+- 1AZU
+- 1REIa
+
+rms
+
+1.7 (0.7)
+2.7 (1.2)
+2.5 (1.2)
+2.8 (1.3)
+2.6 (1.3)
+2.4 (1.1)
+2.3 (1.2 )
+2.7 (1.6)
+2.4 (1.5)
+2.4 (0.8)
+2.9 (2.2)
+3.1 (2.2)
+2.5 (1.3)
+2.3 (1.4)
+2.4 (1.4)
+3.0 (2.2)
+2.8 (2.2)
+2.4 (1.0)
+2.7 (1.5)
+2.7 (1.8)
+2.7 (1.9)
+2.5 (1.6)
+2.5 (1.7)
+2.2 (1.6)
+2.9 (2.2)
+3.3 (2.5)
+2.8 (1.7)
+4.7 (2.9)
+3.5 (2.6)
+
+N
+
+182 (182)
+155 (130)
+159 (143)
+156 (131)
+160 (146)
+157 (140)
+139 (129)
+131 (123)
+141 (138)
+138 (105)
+138 (134)
+130 (126)
+136 (126)
+145 (138)
+136 (125)
+140 (137)
+136 (134)
+137 (121)
+131 (119)
+138 (130)
+130 (127)
+139 (130)
+143 (137)
+136 (134)
+139 (136)
+128 (125)
+134 (125)
+
+91 (85)
+83 (79)
+
+rms
+0.7
+2.0
+1.7
+2.1
+2.0
+1.5
+1.5
+1.8
+1.5
+1.7
+2.3
+2.3
+1.7
+1.6
+2.0
+2.3
+2.3
+1.4
+2.0
+1.9
+2.0
+2.1
+1.9
+1.9
+2.4
+2.6
+1.9
+2.6
+2.6
+
+N
+182
+155
+158
+151
+160
+152
+139
+128
+139
+138
+136
+129
+134
+145
+135
+138
+129
+135
+128
+135
+128
+139
+142
+136
+137
+129
+133
+86
+78
+
+rms
+0.7
+1.9
+1.7
+1.9
+1.7
+1.5
+1.4
+1.9
+1.5
+1.6
+2.2
+2.2
+1.6
+1.4
+1.6
+2.2
+2.1
+1.4
+2.1
+1.9
+1.9
+1.8
+1.8
+1.6
+2.2
+2.4
+1.9
+2.1
+3.0
+
+N
+182
+154
+159
+154
+160
+153
+139
+130
+141
+137
+138
+130
+134
+143
+133
+139
+134
+136
+130
+132
+128
+137
+142
+136
+135
+125
+135
+78
+89
+
+Table 2: The root-mean-square-distance (rms) and the number of aligned residues (N ) from the align-
+ment of diﬀerent protein pairs. The results are presented for several automatic alignment procedures;
+Lund refers to this work. For Yale the numbers within parenthesis refer to after post processing (see
+text).
+
+If we again compare the core parts of the alignments from the three algorithms we ﬁnd
+that they agree on a large fraction of the parts.
+
+Plastocyanin/azurin (all-β). All-β proteins are diﬃcult to align if one only takes
+backbone coordinates (Cα or Cβ) into account, even though using Cβ instead of Cα
+coordinates, in general, improves the results. As an initial example of all-β proteins we
+have looked at plastocyanin versus azurin. Even though this alignment is slightly more
+diﬃcult than the previous cases, all three methods give similar rms and N and they all
+agree on the alignment of a majority of the core parts. For this example several restarts
+
+12
+
+were performed with random initialization.
+
+Immunoglobulins (all-β). A more diﬃcult example of all-β proteins is immunoglob-
+ulins. We align the domain 7FABl2 with the chain 1REIa and ﬁnd that we can ﬁnd
+alignments with low rms that look good. However, if we investigate the alignment in
+detail we ﬁnd that atoms in all core regions, except one, are misaligned. This is also the
+case in [8], where the same alignment is investigated. To get the core regions correctly
+aligned in [8] they improve their method and take side chain orientation into account.
+We expect that this is the case for our method too. When aligning strands using only
+Cα coordinates, strands in the two proteins are often matched satisfyingly to one an-
+other while the individual atoms are aligned such that one strand is translated with
+respect to the other. It is therefore obvious that side chain orientation is very important
+when aligning strands. For this example several restarts were performed with random
+initialization.
+
+Permuted proteins – winged helix fold. Finally we look at permuted versions of
+similar folds. We compare two DNA binding domains related to transcription regulation.
+The compared domains both have the winged helix fold but one of them has the secondary
+structures in a circularly permuted order. This is a case where iterative dynamical
+programming algorithms will fail. We look at 1LEA and compare it to the Entrez-
+Mmdb [17] structural domain 4 in chain B of 1XGN. This part of 1XGN is classiﬁed as
+a circularly permuted winged helix fold in Scop. In the Entrez-Mmdb database, which
+uses Vast (http://www.ncbi.nlm.nih.gov/Structure/VAST/) for alignments, 1XGNb4
+is listed as a low priority structural neighbour to 1LEA, even though Vast does not
+allow for permutations of secondary structure. If one looks at the actual alignment one
+ﬁnds that the permuted secondary structures are not aligned. In Figure 5 we compare our
+alignment with Vast. We show the sequential parts of our alignment and in particular
+all parts with secondary structure are shown. Vast aligns only 39 residues in this
+comparison, while we align 60. We note that we get all the 39 of the aligned residues
+of Vast but that we in addition align the sheet at the end of 1LEA with the sheet at
+the beginning of the domain in 1XGNb. This demonstrates the importance of having
+a procedure that takes permutations into account, which our method does. Otherwise,
+important similarities between protein structures will not be found. For this example
+several restarts were performed with random initialization.
+
+Discussion
+
+A new approach to structure alignment has been presented and explored. It is based
+upon an error function encoding in terms of both binary assignment variables and real-
+valued atom coordinates. The encoding allows for an extensive search through all possible
+
+13
+
+1LEA
+
+1XGNb4
+
+**************
+18
+5
+|
+|
+TARQQEVFDLIRDH
+VAQARFLLAKIKRE
+|
+|
+216
+229
+
+*******
+
+******************
+59
+26
+|
+|
+PTRAEIAQRLGFRSPNAAEEHLKALARKGVIEIV
+FAYRWLQN-D-M-PEGQLKLALKTLEKAGAIYGY
+|
+|
+235
+265
+
+65
+|
+
+71
+|
+-GIRLLQE
+IYMYVRDV
+|
+212
+
+|
+206
+
+Figure 5: Alignment of 1LEA against the Entrez-Mmdb domain 1XGNb4. The ’*’ denotes atoms
+also aligned by Vast. 1XGNb4 is a circularly permuted version of 1LEA and our method ﬁnds this
+and aligns the sheet at the end of 1LEA with the sheet at the beginning of the domain in 1XGNb.
+
+alignments, including the ones involving arbitrary permutations.
+
+The error function is eﬃciently minimized using a mean ﬁeld approximation of the assign-
+ment variables and exact translation/rotation of the atom coordinates. As a by-product
+of this approximation, a probabilistic interpretation of the result is available without
+tedious stochastic simulations. The approach is not sensitive to the choice of distance
+metric, and hence to a large extent ignores outliers.
+
+Despite some conceptual similarities with the iterative dynamical programming method
+[3], our approach is probabilistic and more general. Also, and maybe more importantly,
+it is quite diﬀerent since permutations are allowed from the outset. For the latter reason,
+the algorithm in [3] cannot be derived as a special case in any limit.
+
+The method is readily extended to handle more detailed chain representations (e.g. side-
+chain orientation) and user-provided constraints of almost any kind.
+
+The approach is evaluated using pairs of protein chains chosen to represent a wide variety
+of situations and the resulting alignments are successfully compared with other methods
+that are available on WWW-servers. This evaluation is done using Cα-representations
+of the chains.
+
+Despite being very ﬂexible, generic and covering the entire space of alignments the
+method is on the average as fast as [6], slightly slower than [3] and signiﬁcantly faster
+than [5]. Also, it is very robust with respect to the algorithmic parameters used with a
+few exceptions. Once side-chains are included, the latter will disappear.
+
+14
+
+Biological Implications
+
+There is a strong need for eﬃcient protein structure alignment algorithms. Aligning
+proteins forms the basis for studying functional relationships among proteins and con-
+struction of phylogenetic trees. It is also very important for structure prediction.
+
+Acknowledgments
+
+We thank Bo S¨oderberg for valuable suggestions and Guoguang Lu for fruitful discus-
+sions. This work was in part supported by the Swedish Natural Science Research Council
+and the Swedish Foundation for Strategic Research. One of us (CP) thanks the Theory
+Group at SLAC, where this work was initiated, for its hospitality.
+
+References
+
+[1] S. B. Needleman and C. D. Wunsch. A general method applicable to the search for
+similarities in the amino acid sequence of two proteins. J. Mol. Biol., 48:443–453,
+1971.
+
+[2] D. V. Laurents, S. Subbiah, and M. Levitt. Structural similarity of dna-binding
+domains of bacteriophage repressors and the globin core. J. Mol. Biol., 3:141–148,
+1993.
+
+[3] M. Gerstein and M. Levitt. Using iterative dynamic programming to obtain accurate
+pairwise and multiple alignments of protein structures. In Proceedings of the Fourth
+International Conference on Intelligent Systems in Molecular Biology, Menlo Park,
+CA, 1996. AAAI Press.
+
+[4] A. Falicov and F. E. Cohen. A surface of minimum area metric for the structural
+
+comparison of proteins. J. Mol. Biol., 258:871–892, 1996.
+
+[5] L. Holm and C. Sander. Protein structure comparison by alignment of distance
+
+matrices. J. Mol. Biol., 233:123–138, 1993.
+
+[6] J-F. Gibrat, T. Madej, and S. H. Bryant. Surprising similarities in structure com-
+
+parison. Curr. Opin. Struct. Biol., 6:377–385, 1996.
+
+[7] G. Lu. Top: A new method for protein structure and similarity searches. J. Appl.
+
+Cryst., 33:176–183, 2000.
+
+15
+
+[8] M. Gerstein and M. Levitt. Comprehensive assessment of automatic structural
+alignment against a manual standard, the scop classiﬁcation of proteins. Prot. Sci.,
+7(2):445–456, 1998.
+
+[9] T. J. Hubbard, A. G. Murzin, S. E. Brenner, and C. Chothia. Scop: A structural
+
+classiﬁcation of proteins database. Nucl. Acid. Res., 25:236–239, 1997.
+
+[10] Y. Matsuo and S. H. Bryant. Identiﬁcation of homologous core structures. Proteins,
+
+35:70–79, 1999.
+
+[11] M. Ohlsson, C. Peterson, and A. L. Yuille. Track ﬁnding with deformable templates
+
+- the elastic arms approach. Comp. Phys. Comm., 71:77–98, 1992.
+
+[12] S. Kirkpatrick, C. D. Gelatt, and M. P. Vecchi. Optimization by simulated annealing.
+
+Science, 220:671–680, 1983.
+
+[13] C. Peterson and B. S¨oderberg. A new method for mapping optimization problems
+
+onto neural networks. Int. J. Neural. Syst., 1:3–22, 1989.
+
+[14] J. von Neumann. Some matrix-inequalities and metrization of matric-space. Tomsk
+
+Univ. Rev., 1:286–300, 1937.
+
+[15] M. Ohlsson and H. Pi. A study of the mean ﬁeld approach to knapsack problems.
+
+Neur. Netw., 10:263–271, 1997.
+
+[16] H. M. Berman, J. Westbrook, Z. Feng, G. Gilliland, T. N. Bhat, H. Weissig, I. N.
+Shindyalov, and P. E. Bourne. The protein data bank. Nucl. Acid. Res., 28:235–242,
+2000.
+
+[17] A. Marchler-Bauer, K. J. Addess, C. Chappey, L. Geer, T. Madej, Y. Matsuo,
+Y. Wang, and S. H. Bryant. Mmdb: Entrez’s 3d structure database. Nucl. Acid.
+Res., 27:240–243, 1999.
+
+16
+
+

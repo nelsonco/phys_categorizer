@@ -1,0 +1,751 @@
+3
+0
+0
+2
+ 
+n
+u
+J
+ 
+3
+1
+ 
+ 
+]
+n
+a
+-
+a
+t
+a
+d
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+0
+1
+1
+6
+0
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+CHEP 2003, La Jolla, California, March 24-28, 2003
+
+1
+
+The PROOF Distributed Parallel Analysis Framework based on ROOT
+
+Maarten Ballintijn and Gunther Roland
+MIT, Cambridge
+Rene Brun
+CERN, ROOT Project
+Fons Rademakers
+CERN, ALICE Collaboration and ROOT Project
+
+The development of the Parallel ROOT Facility, PROOF, enables a physicist to analyze and understand much
+larger data sets on a shorter time scale. It makes use of the inherent parallelism in event data and implements
+an architecture that optimizes I/O and CPU utilization in heterogeneous clusters with distributed storage. The
+system provides transparent and interactive access to gigabytes today. Being part of the ROOT framework
+PROOF inherits the beneﬁts of a performant object storage system and a wealth of statistical and visualization
+tools. This paper describes the key principles of the PROOF architecture and the implementation of the system.
+We will illustrate its features using a simple example and present measurements of the scalability of the system.
+Finally we will discuss how PROOF can be interfaced and make use of the diﬀerent Grid solutions.
+
+1. INTRODUCTION
+
+the
+
+the well
+[1]
+
+The Parallel ROOT Facility, PROOF,
+
+is an
+known ROOT system
+extension of
+(http://root.cern.ch/)
+easy
+that allows
+and transparent analysis of large sets of ROOT ﬁles
+in parallel on remote computer clusters. The main
+design goals for the PROOF system are transparency,
+scalability and adaptability. With transparency
+we mean that there should be as little diﬀerence
+as possible between a local ROOT based analysis
+session and a remote parallel PROOF session, both
+being interactive and giving the same results. With
+scalability we mean that the basic architecture should
+not put any implicit limitations on the number
+of computers that can be used in parallel. And
+with adaptability we mean that the system should
+be able to adapt itself to variations in the remote
+environment (changing load on the cluster nodes,
+network interruptions, etc.).
+
+Being an extension of the ROOT system, PROOF
+is designed to work on objects in ROOT data stores.
+These objects can be individually keyed objects as well
+as TTree based object collections. By logically group-
+ing many ROOT ﬁles into a single object very large
+data sets can be created. In a local cluster environ-
+ment these data ﬁles can be distributed over the disks
+of the cluster nodes or made available via a NAS or
+SAN solution.
+
+In the near future, by employing Grid technologies,
+we plan to extend PROOF from single clusters to vir-
+tual global clusters. In such an environment the pro-
+cessing may take longer (not interactive), but the user
+will still be presented with a single result, like the pro-
+cessing was done locally.
+
+The PROOF development is a joint eﬀort between
+
+CERN and MIT.
+
+TUCT004 and TULT003
+
+Figure 1: PROOF Architecture overview
+
+2. THE PROOF SYSTEM
+
+2.1. System Architecture
+
+PROOF consists of a 3-tier architecture, the ROOT
+client session, the PROOF master server and the
+PROOF slave servers. The user connects from his
+ROOT session to a master server on a remote clus-
+ter and the master server in turn creates slave servers
+on all the nodes in the cluster. Queries are processed
+in parallel by all the slave servers. Using a pull pro-
+tocol the slave servers ask the master for work pack-
+ets, which allows the master to distribute customized
+packets for each slave server. Slower slaves get smaller
+work packets than faster ones and faster ones process
+more packets.
+In this scheme the parallel process-
+ing performance is a function of the duration of each
+small job, packet, and the networking bandwidth and
+latency. Since the bandwidth and latency of a net-
+worked cluster are ﬁxed the main tunable parameter
+in this scheme is the packet size. If the packet size is
+chosen too small the parallelism will suﬀer due to the
+communication overhead caused by the many pack-
+ets sent over the network between the master and the
+slave servers. If the packet size is too large the eﬀect
+of the diﬀerence in performance of each node is not
+evened out suﬃciently. This allows the PROOF sys-
+
+2
+
+CHEP 2003, La Jolla, California, March 24-28, 2003
+
+class TSelector {
+
+TList
+TList
+TObject
+
+*fInput;
+*fOutput;
+*fObject;
+
+Init(TTree *tree);
+Begin(TTree *tree);
+
+void
+void
+const char *GetOption() const;
+Bool_t
+void
+
+Process(Int_t entry);
+Terminate();
+
+};
+
+Table I Simpliﬁed TSelector class deﬁnition
+
+tem to adapt itself to the performance and load on
+each individual cluster node and to optimize the job
+execution time.
+
+2.2. TSelector Framework
+
+The TSelector framework plays a central role in
+It allows users to write their
+the PROOF system.
+analysis code in a way that enables them to process
+small data samples locally on a workstation and using
+the same code to process large data sets in parallel on
+a cluster or the grid using PROOF.
+
+To use the framework a user derives a class from
+TSelector and implements the member functions
+that are part of the protocol. The framework also
+speciﬁes how input objects are made available to the
+selector object and how output objects are returned
+to the user or client session.
+
+The TTree::MakeSelector() function generates a
+skeleton version of a TSelector derived class that
+should be used as the basis for the analysis code. The
+user can either edit the generated ﬁles directly or cre-
+ate a class that inherits from the generated class. The
+second option makes sense if the deﬁnition of the tree
+is expected to change.
+It allows for the class to be
+easily regenerated without modifying the user class.
+Table I lists the most important functions and mem-
+bers which we will describe in some more detail.
+
+The input objects are made available to the selector
+in the list pointed to by fInput. The list is available
+throughout the life of the selector. The objects in the
+list are owned by the system. Each of the slaves has
+a full copy of the list.
+
+The Begin() function is called before any object or
+event is processed. It is a good place to create things
+like histograms and initialize data that is needed to
+process each event. The Begin() function is called
+once in each slave.
+
+The Init() function is called each time a new ﬁle is
+opened by the system. The generated code takes care
+of setting up the branches in case of a tree analysis.
+The user can extend this routine for example to read a
+
+calibration object that pertains to the objects or tree
+in that ﬁle.
+
+The Process() function is called for each object or
+event in the tree. When processing a tree it is up to
+the user to decided which branches should be read and
+when. Generally it is most eﬃcient to read branches
+as they are used. E.g. read the branch(es) that are
+used to make the selection and only if the event is to
+be processed read the rest of the branches that are
+needed. When processing keyed objects the pointer to
+the object is stored in the fObject member.
+
+The Terminate() function is called after all objects
+or events have been processed. It allows the user to do
+a cleanup, like deleting temporary objects and closing
+auxiliary ﬁles. It is also the place to do ﬁnal calcu-
+lations. The Terminate() function is called once in
+each slave.
+
+Finally the contents of the fOutput lists of all the
+slaves are merged in the master and send back to the
+client. The merging uses the special Merge(Tlist*)
+API. The objects are ﬁst grouped by name. Using
+the introspection features provided by CINT [2], the
+C++ interpreter used by ROOT, it is then determined
+if the Merge() function is implemented for those ob-
+jects. For histograms this is available by default. User
+classes can implement the API if merging makes sense.
+If the merge function is not available the individual
+objects are returned to the client.
+
+2.3. Specifying Data Sets
+
+The TDSet class is used to specify the collection of
+objects or trees that are to be processed with PROOF.
+When analyzing trees the user must pass "TTree" to
+the TDSet constructor. The TDSet::Add() function
+is then used to add a ﬁle, directory within that ﬁle
+and tree name to the set.
+
+To process a collection of objects, the user must pass
+the name of the class of the objects to the constructor.
+In that case TDSet::Add() is used to add ﬁles and the
+directories within them that contain the objects.
+
+The contents of one TDSet can also be added to
+another TDSet. The TDSet implements the Print()
+function which allows the contents to be inspected.
+Users can create TDSets ”by hand” but it is also fore-
+seen that (Grid) catalogs will provide query interfaces
+that return TDSets.
+It will be possible to use logi-
+cal ﬁlenames rather then physical ﬁlenames to specify
+ﬁles. The translation will be done using the API de-
+ﬁned by the abstract class TGrid in combination with
+plugins implementing the communication with avail-
+able catalogs.
+
+2.4. The PROOF Package Manager
+
+In complex analysis environments the analysis
+scripts very likely depend on one or more external li-
+
+TUCT004 and TULT003
+
+CHEP 2003, La Jolla, California, March 24-28, 2003
+
+3
+
+Table II The PROOF Package API
+
+Int_t
+void
+void
+Int_t
+void
+void
+
+UploadPackage(const char *par, Int_t par = 1);
+ClearPackage(const char *package);
+ClearPackages();
+EnablePackage(const char *package);
+ShowPackages(Bool_t all = kFALSE);
+ShowEnabledPackages(Bool_t all = kFALSE);
+
+0..n
+
+Track
+
+0..n
+
+Vertex
+
+Event
+
+0..n
+
+1..n
+
+Hit
+
+braries containing common algorithms. To be able to
+run these scripts successfully on PROOF it is required
+that these external libraries are available on each slave
+node.
+
+The PROOF package manager has been designed
+to distribute and install these libraries on a PROOF
+cluster. Packages are compressed tar ﬁles contain-
+ing the library source or binaries with one addi-
+tional PROOF-INF directory (like Java JAR ﬁles). This
+PROOF-INF directory contains a SETUP.C script and,
+optionally, a BUILD.sh shell script. The BUILD.sh
+script is used to compile the library source on the
+PROOF cluster, which might have a diﬀerent type
+of CPU or OS than the user’s local system. The
+SETUP.C script is used to load the libraries into the
+PROOF server processes. Package ﬁles are called PAR
+(PROOF ARchive) ﬁles and must have a .par exten-
+sion.
+
+For example an Event.par ﬁle which provides a li-
+brary called libEvent.so has the following BUILD.sh:
+
+make libEvent.so
+
+and SETUP.C:
+
+Int_t SETUP()
+{
+
+gSystem->Load("libEvent");
+return 1;
+
+}
+
+In a two step process packages are ﬁrst uploaded to
+PROOF and then enabled as required. The PROOF
+package API (see table II) gives the user full control.
+To avoid unnecessary transfer of par ﬁles the upload
+command ﬁrst asks the MD5 checksum of the remote
+version of the package and, if it exists, checks it with
+the one of the local version. Only when the check-
+sums are diﬀerent will the par ﬁle be transfered to the
+PROOF cluster.
+
+Figure 2: The AnT data model
+
+3.1. Local Development
+
+The data model underlying the tree in this exam-
+ple is typical for a HEP experiment (see ﬁg 2). The
+tree contains a TClonesArray for a hit, track and ver-
+tex class and a single event class. Relations between
+hits, tracks and vertexes are expressed using TRef and
+TRefArray.
+
+For this example we use a very simple example
+script. The relevant parts are included below. All
+error checking has been omitted for brevity.
+In the
+Init() function a single histogram is created which
+is stored in the data member fVtx x of the selector
+class.
+
+void antsel::Begin(TTree *tree)
+{
+
+// Initialize the tree branches.
+Init(tree);
+
+fVtx_x = new TH1F("v","v",100,-10.,10.);
+
+}
+
+The Process() function reads the data, makes a
+simple selection and ﬁlls the histogram. It uses the
+fRMSSelVtx reference to get the proper vertex. In a
+more elaborate version it would only read the event
+branch for the test and read the vertex branch as
+needed.
+
+void antsel::Process(Int_t entry)
+{
+
+fChain->GetTree()->GetEntry(entry);
+
+if (eventInfo->fPdlMean > 1500) {
+
+TPhAnTVertex *vtx = (TPhAnTVertex*)
+
+eventInfo->fRMSSelVtx->GetObject();
+
+fVtx_x->Fill(vtx->fPos.X());
+
+3. A REAL LIFE EXAMPLE
+
+}
+
+}
+
+In this section we will use a simple but full ﬂedged
+example to illustrate the use of PROOF and to de-
+scribe some of the features of the implementation.
+
+The Terminate() function adds the histogram to
+the output list fOutput such that it will be returned
+to the client by PROOF.
+
+TUCT004 and TULT003
+
+4
+
+CHEP 2003, La Jolla, California, March 24-28, 2003
+
+void antsel::Terminate()
+{
+
+fOutput->Add(fVtx_x);
+
+}
+
+Running the script on a typical laptop we can an-
+alyze 2000 events, or 8 Mbyte, in about 6 seconds
+(ROOT I/O has compressed the data in the tree by
+a factor 5.) Once the script works as required we are
+ready to run it using PROOF.
+
+3.2. Session Setup
+
+We start by creating a PROOF session. The argu-
+ment speciﬁes the PROOF cluster we want to connect
+to.
+
+root[1] gROOT->Proof("pgate.lns.mit.edu")
+
+We ﬁrst have to authenticate ourselves to the
+PROOF server. All authentication methods imple-
+mented in the standard ROOT TAuthenticate class
+are available. The PROOF master server is then cre-
+ated. The master server reads the proof.conf conﬁg-
+uration ﬁle and uses the information to start a num-
+ber of slave servers. The conﬁguration ﬁle is provided
+by the administrator of the PROOF cluster. It con-
+tains information about the nodes that make up the
+PROOF cluster, the relative performance of the nodes
+and which nodes share a ﬁle system.
+
+When all the slaves are started we are ready to run
+queries. But before that we can conﬁgure packages.
+For this example we’ll upload and enable a single pack-
+age
+
+root[2] gProof->UploadPackage("ant.par")
+root[3] gProof->EnablePackage("ant")
+
+Normally we only need to upload a package if it has
+changed. The EnablePackage() function will cause
+the package to be build in the case of a source package.
+Finally the SETUP.C script is run on all slaves, loading
+our library and making available its classes.
+
+We will use a previously loaded script to create the
+
+data set
+
+root[4] TDSet *d = get_dataset()
+
+Instead of creating the TDSet it might be returned by
+a database or catalog query.
+
+The system goes through a number of steps to im-
+plement this command. First the selector script and
+possibly its corresponding include ﬁle are send to the
+master and from the master to the slaves. The system
+will optimize this step if an up to date version of the
+script is already available in the cluster. It also makes
+use of the shared ﬁle system(s) if available.
+
+Then the client sends the query message, including
+the input objects, option and parameters, to the mas-
+ter. The master determines the total number of events
+in the dataset by having the slaves open the ﬁles in
+the dataset in parallel. This information could in the
+future also be obtained from a database, avoiding this
+step in he process. The master server creates a list of
+nodes with the ﬁles to be processed and their sizes.
+This list will be used to optimize the distribution of
+work over the slaves. The ﬁles have to be speciﬁed as
+rootd URLs for this optimization to be available, e.g.
+"root://proof.mit.edu/data/file.root".
+
+The master now forwards the query to the slaves.
+Each slave starts the script and enters a loop in which
+it asks the master for work packets. The master
+will allocate work to each slave using the informa-
+tion about the location of the ﬁles. A slave will ﬁrst
+be assigned ﬁles which are on its local disk. When a
+slave has exhausted all local ﬁles the rootd protocol
+is used to process ﬁles on other nodes. If no location
+information was available, .e.g if the ﬁles are stored
+on a central NFS server, the algorithm reduces to a
+round robin assignment of the ﬁles to the slaves. An
+heuristic is used to determine the packet size. It takes
+into account the number of slaves and their relative
+performance as well as the total number of events to
+be processed. The master monitors the real-time per-
+formance of each slave allowing this heuristic to be
+reﬁned. The master also records which packet is pro-
+cessed by which slave allowing error recovery to be
+implemented in the case of slave failure.
+
+When all events are processed the slaves send the
+partial results to the master. Using the previously
+described Merge() algorithm the master combines the
+partial results and sends them to the client.
+
+3.4. The Results
+
+3.3. PROOF Run
+
+We are now ready to use PROOF to process our
+query. Using the same script that was used previously
+and the data set we just created we issue the command
+
+root[5] d->Process("antsel.C", "", 60000)
+
+The processing of the above query ran in about
+12 seconds using 8 slaves on 4 dual Athlon 1.4 GHz
+machines.
+The amount of data processed was
+240 Mbyte. This shows the large improvement of even
+a small dedicated cluster over a typical desktop work-
+station. A more precise measurement of the PROOF
+performance will be presented in the next section.
+
+TUCT004 and TULT003
+
+CHEP 2003, La Jolla, California, March 24-28, 2003
+
+5
+
+Figure 3: Detailed Proof Session
+
+4. SCALABILITY MEASUREMENTS
+
+First performance measurements show a very good
+and eﬃcient scalability (see ﬁg 4). For the tests we
+used a Linux cluster of 32 nodes. Each node had
+two Itanium 2 1 GHz CPU’s, 2x75 GB 15K SCSI
+disk, 2 GB RAM and fast ethernet. The data set
+to be analyzed consisted of 128 ﬁles totaling 8.8 GB
+of data (9 million events). Each cluster node had 4
+ﬁles (277 MB). Processing these 128 ﬁles using one
+node took 325 seconds and 32 nodes in parallel only
+12 seconds. One node processing only its 4 local ﬁles
+took 9 seconds. This shows that the eﬃciency is about
+88%. We also ran tests using all 64 CPU’s in the clus-
+ter (two slaves per node). This showed the same lin-
+earity but less eﬃciency, due to overhead in the Linux
+SMP implementation and resource contention in each
+node. All in all we expect an eﬃcient scalability to at
+least a 100 node cluster.
+
+5. PROOF IN THE GRID ENVIRONMENT
+
+To be able to build a global virtual PROOF cluster
+we need to use the Grid services that are currently
+being developed. The interfacing of PROOF to the
+Grid can be done at several levels. The following levels
+have been identiﬁed:
+
+TUCT004 and TULT003
+
+3x10
+
+800
+
+c
+e
+s
+/
+s
+t
+n
+e
+v
+E
+
+600
+
+400
+
+200
+
+0
+0
+
+10
+
+20
+
+30
+# CPU’s
+
+Figure 4: PROOF Scalability
+
+• Interface to the grid ﬁle catalog allowing a user
+to select a data set based on tags or logical ﬁle
+names (using wildcards etc).
+
+• Interface to the grid resource broker to ﬁnd the
+best location(s), based on the data set, where to
+run the query. This could trigger the replication
+of some missing ﬁles to a cluster (only when the
+amount of data in the ﬁles is relatively small).
+
+• Interface to the grid job queue manager to start
+proof master and slave daemons on the remote
+cluster. The ROOT client will then connect to
+
+6
+
+CHEP 2003, La Jolla, California, March 24-28, 2003
+
+these pre-started daemons to create a PROOF
+session. This will require the grid queuing sys-
+tem to support interactive high priority jobs.
+
+We are currently working with the AliEn [3] Grid
+developers on a prototype that implements step wise
+the above scenarios. AliEn (http://alien.cern.ch) is a
+grid solution tuned for typical HEP data processing.
+It has been developed by the ALICE collaboration but
+is experiment independent. It provides all commonly
+understood Grid services, like: ﬁle catalog, replication
+service, job queue manager, resource broker, authen-
+tication service, monitoring, etc. It is entirely imple-
+mented in Perl and has a C client API. AliEn is simple
+to install and works reliably. In ALICE it is routinely
+used for simulation and reconstruction. AliEn has also
+been chosen as the grid component for the EU Mam-
+moGrid project.
+
+The ROOT and PROOF interface to AliEn, and
+other Grid middleware, will be via a TGrid abstract
+interface.
+
+6. FUTURE WORK
+
+Currently we are ﬁne tuning PROOF for a sin-
+gle cluster and are working with some ”early adopter
+sites” that have setup dedicated clusters.
+
+Several smaller and larger additions and reﬁnements
+of the system are already foreseen. General infras-
+tructure for dynamic startup of the session will al-
+low PROOF to co-exist with traditional batch system
+as well as Grid based environments. This could be
+extended to dynamic allocation and release of slaves
+during the session, e.g. based on the data set to be
+processed.
+
+We are also working at combining multiple clusters
+at geographically separated sites which will require
+
+a hierarchy of master servers. Further integration of
+PROOF and ROOT will drive the implementation of
+event lists and friend trees. We are also working on
+TTree::Draw() style functionality.
+
+The Grid middle-ware is in wild development at the
+moment and we are following closely these develop-
+ments to make sure it will support the features we
+need, especially facilities for interactive high priority
+jobs and data services.
+
+7. CONCLUSIONS
+
+We demonstrated the PROOF system, part of the
+widely adopted ROOT analysis environment, that al-
+lows users to harness the power of a large cluster of
+workstations from their desktops. PROOF greatly ex-
+tends the amount and range of data that can be in-
+teractively analyzed.
+Acknowledgments
+
+This material is based upon work supported by
+the National Science Foundation under Grant No.
+0219063.
+
+References
+
+[1] Rene Brun and Fons Rademakers, ROOT - An Ob-
+ject Oriented Data Analysis Framework, Proceed-
+ings AIHENP’96 Workshop, Lausanne, Sep. 1996,
+Nucl. Inst. & Meth. in Phys. Res. A 389 (1997)
+81-86. See also http://root.cern.ch/.
+
+[2] C++ Interpreter - CINT, Masaharu Goto, CQ
+publishing, ISBN4-789-3085-3 (Japanese). See also
+http://root.cern.ch/root/Cint.html.
+[3] P. Buncic et al, http://alien.cern.ch.
+
+TUCT004 and TULT003
+
+

@@ -1,0 +1,3826 @@
+5
+0
+0
+2
+ 
+g
+u
+A
+ 
+7
+1
+ 
+ 
+]
+h
+p
+-
+o
+i
+b
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+2
+1
+1
+8
+0
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Gene regulatory networks: a coarse-grained,
+equation-free approach to multiscale computation
+
+Radek Erban∗
+
+Ioannis G. Kevrekidis†
+
+David Adalsteinsson‡
+
+Timothy C. Elston§
+
+January 16, 2014
+
+Abstract: We present computer-assisted methods for analyzing stochastic models of gene reg-
+ulatory networks. The main idea that underlies this equation-free analysis is the design and
+execution of appropriately-initialized short bursts of stochastic simulations; the results of these
+are processed to estimate coarse-grained quantities of interest, such as mesoscopic transport
+coeﬃcients. In particular, using a simple model of a genetic toggle switch, we illustrate the
+computation of an eﬀective free energy Φ and of a state-dependent eﬀective diﬀusion coeﬃ-
+cient D that characterize an unavailable eﬀective Fokker-Planck equation. Additionally we
+illustrate the linking of equation-free techniques with continuation methods for performing a
+form of stochastic “bifurcation analysis”; estimation of mean switching times in the case of a
+bistable switch is also implemented in this equation-free context. The accuracy of our methods
+is tested by direct comparison with long-time stochastic simulations. This type of equation-free
+analysis appears to be a promising approach to computing features of the long-time, coarse-
+grained behavior of certain classes of complex stochastic models of gene regulatory networks,
+circumventing the need for long Monte Carlo simulations.
+
+1 Introduction
+
+Various ways to model gene-regulatory networks exist, ranging from logical (boolean),
+to stochastic (Monte Carlo methods) or deterministic (ordinary diﬀerential equations)
+models (for recent reviews see [35, 19, 21]). Each modeling approach has its advantages
+
+∗University of Oxford, Mathematical Institute, 24-29 St. Giles’, Oxford, OX1 3LB, United Kingdom,
+
+e-mail: erban@maths.ox.ac.uk; corresponding author.
+
+†Princeton University, Department Of Chemical Engineering, PACM and Mathematics, Engineering
+
+Quadrangle, Olden Street, Princeton, NJ 08544, USA; e-mail: kevrekidis@princeton.edu.
+
+‡University of North Carolina, Applied Mathematics Program, Department of Mathematics, Chapel
+
+Hill, NC 27599, USA, e-mail: david@amath.unc.edu.
+
+§University of North Carolina, Department of Pharmacology, Chapel Hill, NC 27599, USA, e-mail:
+
+telston@med.unc.edu.
+
+1
+
+and disadvantages. One advantage of stochastic modeling is that it takes into account
+ﬂuctuations due to the inherently random nature of biochemical reactions. This intrinsic
+noise gives rise to signiﬁcant eﬀects when either the molecular abundances of protein
+or mRNA molecules are small or the kinetics of the transitions between the chemical
+states of the promoter are slow [23, 21].
+
+The established approach for stochastic modeling of spatially homogeneous chemical
+systems was introduced by Gillespie [13]. The Gillespie Stochastic Simulation Algorithm
+(SSA) is based on repeatedly answering two questions: when does the next chemical
+reaction occur and what kind of reaction is it? Gillespie [13] derived a simple way to
+answer these two questions that reduces the problem to a continuous-time discrete space
+Markov process.
+
+The SSA generates exact sample paths of the stochastic process and, for suﬃciently
+large networks, it is computationally more eﬃcient than solving the chemical master
+equation. However, the large size of naturally occurring gene regulatory networks makes
+even the SSA computationally intensive and practically impossible to use for comput-
+ing the long-time behavior of the network. Consequently, an important restriction of
+stochastic computations for many networks of interest is that we can eﬃciently run
+stochastic Gillespie-based simulators for short times only. It is therefore natural to look
+for computational methods that use only short time simulations (and as few of these
+as necessary) to compute the required information for the system. Such a computer-
+assisted approach is presented in this paper.
+
+Model reduction often provides a natural path to eﬃcient simulation of a compli-
+cated model. As in other branches of physical modeling, separation of time scales can
+lead to successful model reduction in gene regulatory network modeling. Separation of
+time scales is frequently present in this context because synthesis and degradation of
+new proteins and transcripts usually occurs on a slower time scale than processes that
+change the chemical state of proteins (e.g., multimerization, protein/DNA interactions,
+phosphorylation). Theoretical methods for stochastic model reduction that take advan-
+tage of separation of time scales are being developed (e.g.
+[23, 5, 17, 31]). Analytical
+reduction techniques assume that fast variables are in quasi-steady state with respect to
+the remaining slow variables. If the quasi-steady state distributions conditioned on the
+slow variables can be determined, then they can be used to eliminate the fast variables.
+Our approach is also based on (and takes advantage of) the separation of time
+scales and the approximation (computationally, on the ﬂy) of quasi-steady marginal
+distributions (conditioned on the slow variables). The main feature of our approach, as
+will become apparent through its description and illustration, is that we do not “ﬁrst
+reduce and then simulate the reduced model”; our methods come in the form of wrappers
+around a black box dynamic simulator, and could equally well be applied to the most
+detailed stochastic version of the network model or to its best explicit reduction already
+available. In our approach, results about the long-term dynamic behavior of a stochastic
+simulator do not come from long-term simulation; they come from the design, execution
+
+2
+
+and processing of the results of “intelligently designed” short bursts of direct dynamic
+simulation.
+
+We believe it is useful to draw here an analogy with the study of nonlinear dynamics
+in systems of ODEs. Long-term information in the form of detailed bifurcation diagrams
+can be obtained from long dynamic integration; yet the same information is much more
+systematically and economically obtained through diﬀerent algorithms using the same
+model: bifurcation, stability and continuation methods. It is this alternative to direct,
+long-term stochastic simulation (whether with the full detailed network model or with
+any good analytical reduction of it) that our approach makes available to the mod-
+eler. Ours is a “design of computational experiments” approach; it is guided by model
+reduction, but a reduced model is never explicitly obtained.
+
+The remainder of the paper is organized as follows. In Section 2, we introduce the
+genetic toggle switch as a simple model to illustrate our methods, and we specify the
+main questions that one would like to answer with these techniques. In Section 3, we
+present the general mathematical framework and main ideas of equation-free analysis
+In Section 4, we present an analysis of a deterministic model of
+[24, 8, 12, 36, 16].
+the genetic toggle switch to provide insight into this system. We also introduce several
+stochastic models of increasing complexity that are used to illustrate equation-free anal-
+ysis. In Section 5, we compute the eﬀective free energies and the associated stationary
+distributions for the stochastic models described in Section 4. Equation-free bifurcation
+analysis is then presented, and, in bistable cases, the mean ﬁrst passage times for the
+system to switch between apparent stable ﬁxed points are computed. We end with a
+discussion of the equation-free approach, its strengths, weaknesses, relations to other
+current methods for the acceleration of SSA-type simulations (e.g.
+[23, 5, 17, 31, 1])
+and its possible extensions in Section 6. In particular, we will discuss the applicability
+of our methods to more complicated gene-regulatory networks.
+
+2 Model Description
+
+Our illustrative example is a two gene network in which each protein represses the
+transcription of the other gene (mutual repression). This type of system has been
+engineered in E. coli and is often referred to as a genetic toggle switch [9, 18]. The
+advantage of this simple system is that it allows us to test the accuracy of equation-free
+methods by direct comparisons with results from long-time stochastic simulations. In
+Section 6, we discuss the applicability of our methods to more complex problems where
+long direct stochastic simulation is impossible and the accuracy must be checked by on
+line a posteriori error estimates.
+
+A simple version of the genetic toggle switch is schematically drawn in Figure 1.
+The system contains two proteins P1 and P2. The production of P1 (P2) depends on the
+chemical state of the upstream operator O1 (O2). If O1 is empty then P1 is produced at
+the rate γ1 and if O1 is occupied by a dimer of P2, then protein P1 is produced at a rate
+
+3
+
+Gene 1
+γ
+1
+
+P1
+
+2P
+
+γ
+2
+
+operator
+
+O
+1
+
+ko1
+
+k−o1
+
+operator
+
+O
+1
+P P2
+2
+
+P P1 1
+
+P P1
++
+1
+
+k
+−1
+
+k
+1
+
+P2
+
++
+
+P2
+
+P2 P2
+
+k
+2
+
+k
+−2
+
+P P1 1
+operator O
+2
+
+ko2
+
+k
+−o2
+
+Gene 2
+
+operator
+
+O
+2
+
+Gene 1
+ε
+1
+
+P1
+
+P2
+ε
+2
+
+Gene 2
+
+Figure 1: A schematic diagram of the genetic toggle switch.
+
+ǫ1 < γ1. Similarly, if O2 is empty then P2 is produced at the rate γ2 and if O2 is occupied
+by a dimer of P1, then protein P2 is produced at a rate ǫ2 < γ2. Note that for simplicity,
+transcription and translation are described by a single rate constant. The biochemical
+reactions and rate constants that correspond to the processes shown in Figure 1 are
+
+γ1O1+ε1P2P2O1
+
+−→
+←−δ1
+
+−→
+←−δ2
+
+γ2O2+ε2P1P1O2
+
+∅
+
+∅
+
+P1
+
+P2
+
+P1 + P1
+
+P1P1
+
+P2 + P2
+
+P2P2
+
+P2P2 + O1
+
+P2P2O1
+
+P1P1 + O2
+
+P1P1O2
+
+k1
+−→
+←−k−1
+
+k2
+−→
+←−k−2
+
+ko1
+−→
+←−k−o1
+
+ko2
+−→
+←−k−o2
+
+4
+
+(2.1)
+
+(2.2)
+
+(2.3)
+
+(2.4)
+
+(2.5)
+
+(2.6)
+
+where the overbars denote complexes. Equation (2.1) describes production and degra-
+dation of protein P1, equation (2.2) describes production and degradation of protein
+P2, equations (2.3) and (2.4) are dimerization reactions and equations (2.5) and (2.6)
+represent the binding and dissociation of the dimer and DNA.
+
+Single cell ﬂuorescence measurements can be used to measure intercellular variability
+in protein expression levels. Therefore it is important to have eﬃcient methods for
+computing the steady-state distribution of protein abundances from stochastic models
+similar to the one deﬁned by (2.1) – (2.6). For moderately complex systems using
+long-time Monte Carlo simulations quickly becomes computationally prohibitive. We
+will illustrate how equation-free analysis can overcome this diﬃculty by accelerating the
+exploration of certain features of the long-term dynamics of the stochastic simulation.
+For certain values of the model parameters, the genetic toggle switch is bistable. If the
+system is described in terms of ordinary diﬀerential equations (ODEs) for the protein
+concentrations, then standard bifurcation analysis (numerical continuation methods)
+can be applied to determine the regions of parameter space in which bistability occurs.
+Using the model described by (2.1) – (2.6) as an example, we show how to extend these
+techniques to stochastic models. An important quantity that characterizes the dynamics
+of bistable stochastic systems is the average time for spontaneous transitions between
+stable steady states to occur. We will illustrate how this mean ﬁrst passage time can be
+computed by using only short-time simulations.
+
+3 Equation-Free Analysis: Mathematical Framework
+
+Let us suppose that we have a well-stirred mixture of chemically reacting species; our
+main assumption is that the evolution of the system can be described in terms of a single,
+slowly evolving random variable Q (the approach carries through for the case of a small
+number of slow variables, but in this paper we will focus on the single slow variable
+case). Q might be the concentration of one of the chemical species or some function of
+the concentrations. Let R denote a vector of the other (fast, “slaved” system variables).
+Our assumption implies that the evolution of the system can be approximately described
+by the time-dependent probability density function f (q, t) for the slow variable Q that
+evolves according to following eﬀective Fokker-Planck equation [33]:
+
+∂f
+∂t
+
+=
+
+∂
+∂q (cid:18)
+
+∂
+∂q
+
+[D(q)f (q, t)]
+
+V (q)f (q, t)
+
+.
+
+−
+
+(cid:19)
+
+(3.1)
+
+If the eﬀective drift V (q) and diﬀusion coeﬃcient D(q) could be explicitly written down
+as function of q, then (3.1) can be used to compute interesting properties of the system
+(e. g., the steady state distribution). Note that in addition to the assumption of a
+single slow variable, the validity of equation (3.1) requires suﬃciently large molecular
+abundances and suﬃciently fast chemical kinetics for transitions in the chemical state
+
+5
+
+of the operator [9, 23]. Assuming that (3.1) provides a good approximation, we make
+use of the following formulas for the drift and diﬀusion coeﬃcient [16, 20, 25, 37]
+
+V (q) = lim
+∆t→0
+1
+2
+
+D(q) =
+
+lim
+∆t→0
+
+< Q(t + ∆t)
+
+q
+−
+∆t
+< [Q(t + ∆t)
+
+|
+
+Q(t) = q >
+
+q]2
+
+|
+
+−
+∆t
+
+Q(t) = q >
+
+.
+
+(3.2)
+
+(3.3)
+
+As described below, estimates of these two quantities can be found by using short-time
+bursts of appropriately initialized stochastic simulations. The steady solution of (3.1) is
+proportional to exp[
+
+βΦ(q)], where the eﬀective free energy Φ(q) is deﬁned as
+
+−
+Φ(q)
+kBT ≡
+
+βΦ(q) =
+
+q
+
+V (q′)
+D(q′)
+
+− Z
+0
+
+dq′ + ln D(q) + constant.
+
+(3.4)
+
+Consequently, computing the eﬀective free energy and the steady state probability distri-
+bution also can be accomplished without the need for long-time stochastic simulations.
+A procedure for computationally estimating V (q) and D(q) is as follows:
+
+|
+
+(A) Given Q = q, approximate the conditional density P (r
+|
+variables R. Details of this preparatory step are given below.
+(B) Use P (r
+Q = q) from the step (A) to determine appropriate initial conditions
+for the short simulations and run multiple realizations for time ∆t. Use the results
+of these simulations and the deﬁnitions (3.2) and (3.3) to estimate the average
+velocity V (q) and eﬀective diﬀusion coeﬃcient D(q).
+(C) Repeat steps (A) and (B) for suﬃciently many values of Q and then compute
+Φ(q) using formula (3.4) and numerical quadrature.
+
+Q = q) for the fast
+
+A very important feature of this algorithm is that it is trivially parallelizable (diﬀerent
+realizations of short simulations starting at “the same q” as well a simulation realizations
+starting at diﬀerent q values can be run independently, on multiple processors).
+
+In order to use the algorithm (A) – (C), we have to specify how the step (A) is
+performed. There are several computational options to approximate the conditional
+Q = q). The simplest approximation is to estimate (through numerical
+density P (r
+Q = q) as a Dirac
+experiments) the conditional mean <R
+delta function δ(r
+
+Q = q> and approximate P (r
+|
+Q = q>). Then the step (A) reads as follows:
+
+<R
+
+|
+
+|
+
+−
+
+|
+
+(A1) Given Q = q, pick an initial guess for the conditional mean of R. Denote
+the initial guess as <R(0)>. Run multiple realizations for a short time δt and
+compute <R(δt)> . This procedure deﬁnes the mapping <R(0)>
+<R(δt)> .
+Find the steady state of this mapping using standard numerical methods. The
+Q = q> . Initialize R(0) as
+steady state is the required conditional average <R
+<R
+
+Q = q> in all realizations in part (B) of the algorithm.
+
+→
+
+|
+
+|
+
+6
+
+Another option is to approximate P (r
+Q = q) as a distribution characterized by a few
+parameters, e.g. as a Gaussian distribution with mean µ and variance σ. This can be
+done as follows:
+
+|
+
+(A2) Given Q = q, pick initial guesses for the mean µ(0) and variance σ(0)
+Q = q). Use this distribution to
+of the conditional distribution function P (r
+generate many realizations of R(0). Using these realizations as initial conditions,
+run stochastic simulations for a short time δt and compute R(δt). Computing mean
+and variance of R(δt), we obtain the mapping [µ(0), σ(0)]
+[µ(δt), σ(δt)]. Next
+use standard numerical methods to ﬁnd the steady state [µ, σ] of this mapping
+Q = q) as a Gaussian distribution with mean µ and variance
+and approximate P (r
+σ.
+
+→
+
+|
+
+|
+
+|
+
+The conditional density P (r
+Q = q) can be also approximated by other basis func-
+tions. It is straightforward to generalize (A1) or (A2) to such a case. The better the
+approximation of P (r
+Q = q) we have, the shorter the time step, δt, required in the
+Q = q) in
+step (B) to achieve the same accuracy. So, a better approximation of P (r
+step (A) decreases the computational intensity of step (B). On the other hand, step
+(A) is more computationally intensive if we want to obtain a better approximation of
+Q = q) is to
+P (r
+use a “run-and-reset” procedure as was done in [8]. This is accomplished as follows.
+
+Q = q). One possibility for generating a better approximation of P (r
+
+|
+
+|
+
+|
+
+|
+
+(A3) Given Q = q, initialize the other variables R
+R(0) of the system. Run
+stochastic simulations for the short time δt. Then reset the value of Q(δt) to its
+original value q keeping R unchanged. Repeat this procedure for many time steps
+and compute the conditional density P (r
+Q = q) as a histogram of the recorded
+values of R.
+
+≡
+
+|
+
+|
+
+The approach (A3) attempts to compute the P (r
+Q = q) eﬀectively by successive sub-
+stitution, without resorting to numerical algorithms of the Newton-Raphson type for
+locating ﬁxed points of mappings; we will return to this latter issue in the Discussion
+section. In our illustrative computations in Section 5, we use step (A) in the form (A1)
+or (A3) for the simple stochastic models described below. Both give good results for our
+illustrative example. Since (A1) works for suﬃciently long times δt, there is no need to
+use (A2) or higher order approximations. For some stochastic simulations of our model
+problem, we also use slightly modiﬁed versions of the methods (A1) or (A3) as will be
+described in Section 5.
+
+3.1 Bifurcations
+
+In deterministic problems, we often summarize the parametric dependence of the long-
+term dynamics in terms of bifurcation diagrams; for example, we may plot the steady
+
+7
+
+states of a deterministic set of ODEs as a function of a distinguished bifurcation param-
+eter. Several excellent continuation methods have been developed, implemented and
+made available for this purpose over the years, such as AUTO [6, 7].
+
+Here we illustrate how these methods can be extended to stochastic models [24,
+12, 37, 26, 27]. We assume, as above, that we have a stochastic problem that can be
+eﬀectively described by a single variable Q. Let γ be the bifurcation parameter. The
+ﬁrst two steps in the algorithm are as follows:
+
+(A) Given Q = q and the value of the bifurcation parameter γ, compute the
+Q = q) using step (A) of the previous algorithm.
+conditional density P (r
+(B) Using P (r
+Q = q) from step (A) to determine the initial conditions, run
+multiple stochastic simulations for a short time ∆t and compute the conditional
+average <Q(∆t)
+
+Q(0) = q>.
+
+|
+
+|
+
+→
+
+|
+Steps A and B deﬁne the mapping (Q(0), γ)
+<Q(∆t)>. We denote this mapping as F ,
+i.e. F (Q, γ) =<Q(∆t)> . Our goal is to track the ﬁxed points of F (i.e. F (Q, γ) = Q)
+as the bifurcation parameter γ is varied. To do this, we ﬁrst use a Newton-Raphson
+algorithm to ﬁnd two steady states (Q1, γ1) and (Q2, γ2) which are suﬃciently close
+to each other (note that one can estimate the derivative of F (Q, γ) numerically by
+evaluating F (Q, γ) at diﬀerent points). Then, in a parameter continuation context, we
+choose a small parameter δ (which can be modiﬁed adaptively during the computation)
+and ﬁnd the next steady state using continuation. That is, the next values of Q and γ
+are found by solving the following system of equations
+
+(cid:26)
+
+(Q
+
+Q2)(Q2
+
+−
+
+−
+
+γ2)(γ2
+
+γ1)
+
+−
+
+−
+
+−
+
+F (Q, γ)
+
+Q
+Q1) + (γ
+
+−
+
+= 0,
+δ = 0.
+
+(3.5)
+
+To ﬁnd the solution of (3.5), we estimate the Jacobian numerically by evaluating F (Q, γ)
+at several points and then use Newton-Raphson algorithm. When the number of vari-
+ables starts becoming large, matrix-free methods of iterative numerical linear algebra
+(such as Broyden, or Newton-Krylov GMRES [22]) can be used to solve for the ﬁxed
+point, as opposed to full numerical Jacobian estimation. The ﬁxed points computed
+this way provide, under certain conditions, good estimates of the critical points (min-
+ima, saddles) of the eﬀective potential Φ(q)) as a function of a model parameter γ; this
+issue is discussed extensively in [26, 27, 3, 37], and we will return to it again in the
+Discussion section.
+
+3.2 First Passage Time
+
+Suppose that we have a bistable stochastic system. That is, the eﬀective free energy Φ(q)
+has two local minima [14] - see Figure 2. Then an important quantity characterizing
+the long-time system dynamics is the mean time for spontaneous transitions to occur
+between the stable steady states. Let qm < qM denote the two stable steady states and
+
+8
+
+Φ(q)
+
+q
+
+m
+
+q
+u
+
+q
+M
+
+Figure 2: Potential Φ(q) of the bistable system.
+
+let qu be the unstable state (i.e.
+local maximum of Φ(q)). Then we deﬁne the ﬁrst
+passage time for transitions from qm to qM as 2τe where τe is the average time for the
+system to reach the unstable steady state qu for the ﬁrst time given that it starts at qm.
+The factor of two occurs because once the system reaches the unstable steady state, half
+the time it returns the original stable steady state qm and the other half of the time it
+transitions to qM .
+
+Algorithm (A) – (C) gives a procedure to estimate the eﬀective potential Φ(q) by
+running short simulations only. Once we have the eﬀective potential, we can compute
+τe as follows [14]
+
+τe;p =
+
+exp
+
+qu
+
+Z
+
+qm
+
+Φ(q)
+kBT (cid:21) Z
+
+(cid:20)
+
+q
+
+−∞
+
+1
+D(ξ)
+
+exp
+
+Φ(ξ)
+kBT (cid:21)
+
+(cid:20)−
+
+dξdq
+
+(3.6)
+
+Equation (3.6) can be further simpliﬁed if the height of the potential barrier [Φ(qu)
+−
+Φ(qm)] is large compared to the noise strength. In this case, the limit q in the second
+integral can be replaced by qs, allowing the two integrals to be evaluated separately
+
+qu
+
+τe;p ≈ Z
+
+qm
+
+exp
+
+Φ(q)
+kBT (cid:21)
+
+(cid:20)
+
+dq
+
+qu
+
+× Z
+
+−∞
+
+1
+D(q)
+
+exp
+
+Φ(q)
+kBT (cid:21)
+
+(cid:20)−
+
+dq.
+
+The main contribution of the ﬁrst integral stems from the region around qs, and the main
+contribution from the second integral stems from the region around qm. Consequently,
+we expand Φ(q) according to
+
+Φ(q)
+
+Φ(qu)
+
+≈
+
+1
+2|
+
+−
+
+Φ′′(qu)
+
+(q
+
+qu)2,
+
+|
+
+−
+
+Φ(q)
+
+Φ(qm) +
+
+Φ′′(qm)(q
+
+qm)2.
+
+≈
+
+−
+
+1
+2
+
+9
+
+for the ﬁrst and the second integral, respectively [33]. When these expansions are used
+in equation (3.2), the following result is obtained
+
+τe;k ≈
+
+[D(qu) + D(qm)]
+
+Φ′′(qm)
+
+Φ′′(qu)
+
+|
+
+|
+
+4πkBT
+
+p
+
+Φ(qu)
+
+Φ(qm)
+
+exp
+
+(cid:20)
+
+−
+kBT
+
+(cid:21)
+
+(3.7)
+
+which is the generalization of Kramers’ formula to the case of a state dependent diﬀusion
+coeﬃcient [33, 16]. Formulas (3.6) and (3.7) are both used in Section 5.2 to estimate τe.
+
+4 Analysis of the Model Problem
+
+In this section, we study the behavior of the model given by equations (2.1) – (2.6).
+To provide insight into the problem, we start by analyzing the deterministic system. In
+Sections 4.2 and 4.3, we introduce two stochastic models that are simpliﬁed versions
+of the model deﬁned by (2.1) – (2.6). We use these models because of the relative
+ease in performing long-time stochastic simulations with them; this allows the results
+from the equation-free analysis to be validated by direct comparisons with Monte Carlo
+simulations. We will also verify that the equation-free methods can be applied to the
+full model. As discussed below, for this case the long-time Monte Carlo simulations
+become computationally very expensive.
+
+4.1 The Deterministic Model
+
+To simplify the deterministic analysis, we make the assumption that equations (2.3) –
+(2.6) are at quasi-equilibrium and derive deterministic rate equations for the protein
+concentrations. Let x1 and x2 denote the average monomer concentrations of P1 and
+P2, respectively, and let d1 and d2 denote the respective dimer concentrations. Also, let
+o1 and o2 denote the probabilities that the operators O1 and O2 are not occupied. For
+the dimerization process the assumption of quasi-equilibrium implies
+
+d1 =
+
+k1
+k−1
+
+x2
+1,
+
+and
+
+d2 =
+
+k2
+k−2
+
+x2
+2.
+
+Similarly, the quasi-equilibrium assumption for the operators implies that
+
+o1 =
+
+k−o1
+k−o1 + ko1d2
+
+,
+
+and
+
+o2 =
+
+k−o2
+k−o2 + ko2d1
+
+.
+
+The total concentration of P1 is given by y1 = x1 + 2d1. The total concentration y1
+evolves according to the following ordinary diﬀerential equation
+
+(4.1)
+
+(4.2)
+
+(4.3)
+
+dy1
+dt
+
+= γ1o1 + ε1(1
+
+o1)
+
+δ1x1.
+
+−
+
+−
+
+10
+
+where δ is the degradation rate of the monomers, and it has been assumed that dimers
+are protected from degradation. Substituting y1 = x1 + 2d1 = x1 + 2 k1
+x2
+1 into (4.3), we
+k−1
+obtain
+
+1 + 4
+
+(cid:18)
+
+k1
+k−1
+
+x1
+
+(cid:19)
+
+dx1
+dt
+
+= γ1o1 + ε1(1
+
+o1)
+
+δ1x1
+
+−
+
+−
+
+Finally, using (4.1) – (4.2) produces
+
+(4.4)
+
+(4.5)
+
+(4.6)
+
+dx1
+dt
+
+=
+
+1
+1 + κ1x1 (cid:20)
+
+γ1
+
+1
+1 + ω1x2
+2
+
++ ε1
+
+ω1x2
+2
+1 + ω1x2
+
+2 −
+
+δ1x1
+
+(cid:21)
+
+where the parameters κ1 and ω1 are deﬁned as follows
+
+κ1 = 4
+
+k1
+k−1
+
+,
+
+and
+
+ω1 =
+
+ko1
+k−o1
+
+k2
+k−2
+
+.
+
+Using similar reasoning an analogous equation for x2 can be derived.
+
+For simplicity, we will present the symmetric case in which the rate constants for
+
+processes involving P1 are identical to those involving P2. That is, we assume κ
+≡
+κ1 = κ2, γ
+δ1 = δ2. Moreover, we assume that
+the production rate is zero if an operator is occupied, i.e. ε1 = ε2 = 0. Making these
+assumptions, (4.4) simpliﬁes to
+
+ω1 = ω2, and δ
+
+γ1 = γ2, ω
+
+≡
+
+≡
+
+≡
+
+dx1
+dt
+
+=
+
+1
+1 + κx1 (cid:20)
+
+γ
+1 + ωx2
+
+δx1
+
+,
+
+(cid:21)
+
+2 −
+
+and the equation for x2 is obtained by alternating the subscripts in the above equation.
+Hence, the problem has been reduced to a system of two equations with four parameters.
+Note that the value of κ does not inﬂuence the steady-state behavior of the system. In
+this paper, we ﬁx the values of δ and ω to be 0.00075 and 2
+
+10−6, respectively.
+
+The steady states values of x1 as a function of γ are shown in Figure 3.
+
+In this
+ﬁgure, solid lines denote stable steady states and dashed lines denote unstable steady
+states. For γ < 1.06 there is a single steady state. At γ = 1.06 a pitchfork bifurcation
+occurs, and for γ > 1.06, there exist three steady states. The steady state with x1 = x2
+is unstable and the other two steady states are stable.
+
+×
+
+Due to separation of time scales, the long-term dynamics of this problem lie on a
+lower-dimensional (here one-dimensional) slow manifold; this suggests that one may be
+able to construct an eﬀective one-dimensional dynamical system describing the long-
+term evolution of the model on (near) this slow manifold. In constructing such a re-
+duced model, an important question even in the simple deterministic case is the choice
+of the right observable - the variable in terms of which the long-term dynamics will be
+expressed. An extensive discussion of the choice of such a “right observable” for the
+deterministic case can be found, for example, in [11]; as discussed there, even if we do
+not know the exact slow variables, any set of variables that parametrizes the slow man-
+ifold can be practically used to reduce the system in an equation-free context. For the
+
+11
+
+1400 P
+1
+
+1
+
+x
+
+1200
+
+1000
+
+800
+
+600
+
+400
+
+0.8
+
+0.9
+
+1
+
+1.2
+
+1.3
+
+1.1
+
+γ
+
+Figure 3: The dependence of the steady state values of x1 on γ. The solid lines denote
+stable ﬁxed points and the dashed line corresponds to unstable ﬁxed points. In this ﬁgure
+and throughout the paper δ = 0.00075 and ω = 2
+
+10−6.
+
+×
+
+stochastic case, a good early illustration and discussion of manifold parametrization can
+be found in [36]. Choosing the right observable is an important issue in the implemen-
+tation of equation-free computations, and the subject of intense current research which
+we will brieﬂy comment on in Section 6.
+
+In this paper, and for this example, our equation-free analysis assumes that the
+problem can be described in terms of a single variable. Consequently, it becomes im-
+portant to select a good observable that further simpliﬁes the two-dimensional problem
+to one dimension. A tempting (and obvious) choice for the one-dimensional observable
+is the molecular abundance of P1 (or P2). We demonstrate below that using P1 in the
+equation-free analysis produces good results. However, we also make use of the symmet-
+ric variable deﬁned as the diﬀerence in the protein abundances Q = P1
+P2. In terms
+−
+x2. The bifurcation diagram in
+of the rate equations the symmetric variable is s = x1
+terms of s is shown in Figure 4. The symmetry of the diagram suggests that Q might
+be a more natural observable than P1 (which also produces good results, as we will see
+below).
+
+−
+
+4.2 Stochastic Model I
+
+To start our investigations in the equation-free framework, we constructed a very simple
+stochastic model of the system. We use this simple model to benchmark equation-free
+computations, since the results can be tested against Monte-Carlo simulations easily.
+Results for the full system are also presented below. The simple stochastic model consists
+only of reactions for the synthesis and degradation of proteins P1 and P2, but the
+
+12
+
+1000
+
+ − P
+Q = P
+2
+1
+
+500
+
+2
+
+x
+−
+
+x
+
+1
+
+0
+
+−500
+
+−1000
+
+0.8
+
+0.9
+
+1
+
+γ
+
+1.1
+
+1.2
+
+1.3
+
+Figure 4: The dependence of steady state values of the symmetric variable s = x1
+on γ.
+
+x2
+
+−
+
+following eﬀective rate constants are used
+
+1
+1+κP1
+
+γ
+1+ωP 2
+2
+
+∅
+
+−→
+←−δ
+
+1+κP1
+
+1
+1+κP2
+
+γ
+1+ωP 2
+1
+
+P1
+
+P2
+
+(4.7)
+
+−→
+←−δ
+The above reactions are consistent with the deterministic model, but in general do not
+preserve the noise structure of the full stochastic model.
+
+(4.8)
+
+1+κP2
+
+∅
+
+To simulate the mechanism contained in model (4.7) – (4.8), we use the standard
+Gillespie SSA [13]. The results for diﬀerent values of the parameter γ are plotted in
+Figure 5. For each γ we plot the time evolution P1 (left panel) and Q = P1
+P2 (right
+panel). We see that for small γ, the solution ﬂuctuates around the stable deterministic
+steady state with relatively small noise amplitude. When γ = 1.06, the noise amplitude
+has increased substantially, which is typical of stochastic systems near a “bifurcation”;
+the word bifurcation is put here in quotes to denote that (in contrast to the deterministic
+case) there is no isolated parameter value marking the onset of bistability - no clear
+bifurcation point exists for the stochastic dynamics. Yet one can still claim that a clear
+bifurcation point exists for the critical points of the potential Φ(q, γ) in the stochastic
+model; furthermore, depending on the time horizon of our observation of a stochastic
+simulation, one may still appear to see an apparent bifurcation point for its averaged
+statistics (see the discussion in [16, 3]). If γ is increased further, then Q = 0 is no longer
+
+−
+
+13
+
+γ = 0.8
+
+γ=0.8
+
+1000 Q = P
+ − P
+2
+1
+
+γ=0.8
+
+P
+1
+
+P
+1
+
+P
+1
+
+1400
+
+1200
+
+1000
+
+800
+
+600
+
+400
+
+200
+
+1400
+
+1200
+
+1000
+
+800
+
+600
+
+400
+
+200
+
+1400
+
+1200
+
+1000
+
+800
+
+600
+
+400
+
+200
+
+8
+time
+
+8
+time
+
+8
+time
+
+2
+
+4
+
+6
+
+10
+
+12
+
+14
+
+×106
+
+2
+
+4
+
+6
+
+10
+
+12
+
+14
+
+×106
+
+γ = 1.06
+
+γ=1.06
+
+1000 Q = P
+ − P
+2
+1
+
+γ=1.06
+
+2
+
+4
+
+6
+
+10
+
+12
+
+14
+
+×106
+
+2
+
+4
+
+6
+
+10
+
+12
+
+14
+
+×106
+
+γ = 1.14
+
+γ=1.14
+
+1000 Q = P
+ − P
+2
+1
+
+γ=1.14
+
+8
+time
+
+8
+time
+
+8
+time
+
+2
+
+4
+
+6
+
+10
+
+12
+
+14
+
+×106
+
+2
+
+4
+
+6
+
+10
+
+12
+
+14
+
+×106
+
+Figure 5: Stochastic Model I. Plots of P1 and Q = P1
+P2 as a function of time for
+diﬀerent values of γ. The parameter values used to produce these ﬁgures are δ = 0.00075,
+ω = 2
+
+10−6, and κ = 2
+
+10−4.
+
+−
+
+×
+
+×
+
+500
+
+0
+
+−500
+
+−1000
+
+500
+
+0
+
+−500
+
+−1000
+
+500
+
+0
+
+−500
+
+−1000
+
+14
+
+a stable steady state and the system clearly shows bistability. All plots are computed for
+106]. For γ = 1.25 the steady states are suﬃciently stable
+the same time interval [0, 15
+so that no transitions occurred in this time interval (data not shown). Therefore, for this
+case, determining the steady state probability distribution from long-term Monte-Carlo
+simulations would be very time consuming.
+
+×
+
+4.3 Stochastic Model II
+
+Stochastic Model I considers only two variables P1 and P2. Here, we introduce a stochas-
+tic model that also takes into account the biochemical states of the operators, while
+maintaining the assumption that the dimerization reactions (2.3) – (2.4) are at equilib-
+rium. That is, we consider the four variables P1, P2, O1 and O2. The model is deﬁned
+in terms of the following reaction steps:
+
+P1
+
+P2
+
+∅
+
+∅
+
+γ
+1+κP1
+
+O1
+
+−→
+←−δ
+1+κP1
+
+γ
+1+κP2
+
+O2
+
+−→
+←−δ
+1+κP2
+
+K
+−→
+←−KωP 2
+
+2
+
+K
+−→
+←−KωP 2
+
+1
+
+“O1 = 0”
+
+“O1 = 1”
+
+“O2 = 0”
+
+“O2 = 1”
+
+(4.9)
+
+(4.10)
+
+(4.11)
+
+(4.12)
+
+≡
+
+and contains an extra parameter, K
+k−o1 = k−o2. Note that “O1 = 0” means that the
+operator O1 has a dimer of P2 bound to it and therefore is “oﬀ” and “O1 = 1” means
+that the operator O1 is empty and therefore “on”. The same is true for O2. This implies
+that the random variables O1 and O2 are binary, whereas the variables P1 and P2 can
+take on any non-negative integer value. Stochastic Model I is recovered from Stochastic
+Model II in the limit K
+. We thus expect the models to produce similar results for
+large values of K.
+
+→ ∞
+
+Again, we use the standard Gillespie SSA [13] to simulate model (4.9) – (4.12).
+The results for diﬀerent values of K for γ = 1.14 are plotted in Figure 6. Comparing
+Figure 6 and corresponding panel from Figure 5, we can conﬁrm that Stochastic Model
+II produces the same behavior as Stochastic Model I for large K. However, in general,
+diﬀerent values of K can change the bifurcation structure of the system and aﬀect the
+ﬁrst passage times between the two stable steady states of the bistable system [23].
+
+Because Stochastic Models I and II do not explicitly take into account dimerization,
+which in general is a fast process, they run much more eﬃciently than the full model
+
+15
+
+K = 0.1, γ = 1.14
+
+P
+1
+
+K=0.1, γ=1.14
+
+ − P
+1000 Q = P
+2
+1
+
+K=0.1, γ=1.14
+
+1400
+
+1200
+
+1000
+
+800
+
+600
+
+400
+
+200
+
+1400
+
+1200
+
+1000
+
+800
+
+600
+
+400
+
+200
+
+1400
+
+1200
+
+1000
+
+800
+
+600
+
+400
+
+200
+
+P
+1
+
+P
+1
+
+8
+time
+
+8
+time
+
+8
+time
+
+2
+
+4
+
+6
+
+10
+
+12
+
+14
+
+×106
+
+2
+
+4
+
+6
+
+10
+
+12
+
+14
+
+×106
+
+K = 1, γ = 1.14
+
+K=1, γ=1.14
+
+ − P
+1000 Q = P
+2
+1
+
+K=1, γ=1.14
+
+2
+
+4
+
+6
+
+10
+
+12
+
+14
+
+×106
+
+2
+
+4
+
+6
+
+10
+
+12
+
+14
+
+×106
+
+K = 10, γ = 1.14
+
+K=10, γ=1.14
+
+ − P
+1000 Q = P
+2
+1
+
+K=10, γ=1.14
+
+8
+time
+
+8
+time
+
+8
+time
+
+2
+
+4
+
+6
+
+10
+
+12
+
+14
+
+×106
+
+2
+
+4
+
+6
+
+10
+
+12
+
+14
+
+×106
+
+Figure 6: Stochastic Model II. Plots of P1 and Q = P1
+P2 as a function of time for
+diﬀerent values of K and γ = 1.14. The other model parameter values are the same as
+in Figure 5.
+
+−
+
+500
+
+0
+
+−500
+
+−1000
+
+500
+
+0
+
+−500
+
+−1000
+
+500
+
+0
+
+−500
+
+−1000
+
+16
+
+given by (2.1) – (2.6). However, they do not in general preserve the noise structure of the
+full system. In the next section we use all three models to highlight the computational
+features (and potential beneﬁts) of equation-free analysis.
+
+5 Results of Equation-Free Analysis
+
+In our approach, we want to study the stochastic models presented above using only
+short bursts of appropriately initialized stochastic simulations; the goal is to design these
+bursts, and process their results so as to determine long-time properties of the system
+(e.g., steady-state distributions, bifurcations, mean ﬁrst passage times) eﬃciently. We
+use (and compare) the diﬀerent algorithms discussed in Section 3.
+
+5.1 The eﬀective potential and steady state distribution
+
+≡
+
+−
+
+P1
+
+P2 and the fast (slaved) variable R
+
+In this section, we use equation-free analysis to evaluate the eﬀective potential (an
+“eﬀective free energy”) and the steady-state distribution for Stochastic Models I and II
+and the full system. We start with Stochastic Model I. First, we will consider the slow
+variable Q
+P1 +P2. Initially the preparatory
+step (A) of the algorithm presented in Section 3 was done using the method outlined in
+(A1), i.e. we used the conditional mean <R
+Q = q> to initialize the computations in
+the step (B). A good approximation to this average can be found using the deterministic
+equations, and this was the number used in our preliminary computations to initialize
+the simulations in the step (B). That is, for a given Q, we initialized all realizations
+in the step (B) with the same value of R. Then we chose ∆t equal to 100 time steps
+of the Gillespie SSA. Note that this implies that the actual value of ∆t varies for each
+realization and depends on the values of the rate constants. However, the computer
+(CPU) time is the same for all the results presented for this case.
+
+≡
+
+|
+
+The equation-free results for the eﬀective potential for diﬀerent values of γ are given
+in Figure 7. These results are in good agreement with the long-term stochastic sim-
+ulations presented in Section 4.2. The potential has a single minimum γ < 1.06. As
+γ is increased the potential broadens implying the system becomes “noisier”. When
+γ > 1.06, the potential shows two local minima and the system is bistable.
+
+Since we are using a very simple stochastic model, it is not computationally expensive
+to compute the steady-state distributions directly by long time simulations. We use the
+Gillespie SSA to generate 1011 time steps of the stochastic process and recorded the value
+of Q at each time step. The resulting time series was binned to produce the steady-
+state distribution of the system. Figure 8 presents a comparison of the two computed
+steady state distributions. The results obtained by long-time simulations are shown as
+blue histograms and the steady state distributions computed from the eﬀective potential
+βΦ(Q)] are given by the red lines. We see that equation-free analysis gives very
+C exp[
+−
+good results.
+
+17
+
+βΦ(Q)
+
+10
+
+βΦ(Q)
+
+γ=1.20
+γ=1.25
+
+1.5
+
+0.5
+
+2
+
+1
+
+0
+
+γ=0.98
+γ=1.02
+γ=1.06
+γ=1.10
+γ=1.14
+
+8
+
+6
+
+4
+
+2
+
+0
+
+−600
+
+−400
+
+−200
+
+200
+
+400
+
+600
+
+−1000
+
+−500
+
+500
+
+1000
+
+0
+Q
+
+0
+Q
+
+Figure 7: The eﬀective free energy Φ for diﬀerent values of γ computed by our procedure.
+The other model parameter values are the same as in Figure 5.
+
+In Section 3, we introduced three possible methods, (A1) – (A3), to perform the
+preparatory step (A) (typically called the “lifting” step in the equation-free framework).
+We have shown that approach (A1) produces good results for Stochastic Model 1. Since
+(A1) works, there is no need to improve the results by considering (A2). Instead, we
+discuss the (A3) approach. In this approach given Q = q we run the simulations for a
+short time δt and record the value of R. Then we reset Q = q but leave R unchanged.
+We repeat this procedure many times and compute the conditional density P (r
+Q = q)
+as a histogram of recorded values of R. In our simulations, we chose δt equal to one SSA
+step. To compute the conditional density P (r
+Q = q), we used 11 million SSA steps.
+First we let the system run for a million time steps to remove the transient in R, and
+then used remaining 10 million time steps to compute the conditional density. We used
+200 million Gillespie time steps in part (B) of the algorithm. Consequently, step (A3)
+did not signiﬁcantly change the computational cost of the program.
+
+|
+
+|
+
+|
+
+The graphs of P (r
+
+Q = q) for γ = 0.98 and γ = 1.14 are given in Figure 9. The
+Q = q) for ﬁve values of Q. The right panels
+Q = q) as a function of r and q. Next, we can use the computed conditional
+Q = q) to initialize R in the step (B). Doing this, produces results which
+
+left panel in these ﬁgures shows P (r
+show P (r
+density P (r
+are virtually identical to results from Figure 8 (graphs not shown).
+
+|
+
+|
+
+|
+
+We now repeat the previous computations using the more complicated Stochastic
+Model II. The results are shown in Figures 10 and 11. In Figure 10, we choose γ = 1.14
+and compute the steady state distribution for Q for three values of K. The results
+are compared with direct simulations of Stochastic Model II and with each other. The
+results from Figure 10 can also be compared to the corresponding plot with γ = 1.14 in
+. As can be seen, the results given by
+Figure 8, which can be viewed as the limit K
+
+→ ∞
+
+18
+
+−3
+
+x 10
+
+−3
+
+x 10
+
+γ=0.98
+
+γ=1.10
+
+−400
+
+−200
+
+200
+
+400
+
+600
+
+−1000
+
+−500
+
+500
+
+1000
+
+−3
+
+x 10
+
+γ=1.14
+
+γ=1.20
+
+0
+−600
+
+−3
+
+x 10
+
+2.5
+
+1.5
+
+2
+
+1
+
+0.5
+
+n
+o
+
+i
+t
+
+u
+b
+i
+r
+t
+s
+d
+e
+
+ 
+
+i
+
+t
+
+a
+
+t
+s
+ 
+y
+d
+a
+e
+
+t
+s
+
+i
+
+n
+o
+i
+t
+u
+b
+i
+r
+t
+s
+d
+ 
+e
+t
+a
+t
+s
+ 
+y
+d
+a
+e
+t
+s
+
+1.2
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+0
+Q
+
+0
+Q
+
+0
+Q
+
+0
+Q
+
+−1000
+
+−500
+
+500
+
+1000
+
+−1000
+
+−500
+
+500
+
+1000
+
+Figure 8: Comparison of steady state distributions obtained from the eﬀective free ener-
+gies shown in Figure 7 with histograms (blue) obtained by long time simulations.
+
+Stochastic Model II for K = 10 are already in good agreement with the corresponding
+results obtained by Stochastic Model I. Figure 11 shows similar results for γ = 1.20.
+Again, we obtained accurate results using the equation-free method.
+
+≡
+
+−
+
+P1
+
+Up to now we have used the symmetric variable Q
+
+P2 as our observable.
+However, we often do not have a priori knowledge of the slow variable, or, more generally,
+of a good observable to parametrize the long-time system dynamics. To investigate the
+sensitivity of our results to the choice of observable, we repeated the computations on
+Stochastic Model I using P1 instead of Q. To use P1 as our observable, we modify
+step (A1) so that we simply initialize P2 using P2 = 1
+. The numerical results for
+δ
+diﬀerent values of γ are given in Figure 12. Again good agreement is seen between the
+equation-free method and the Monte-Carlo simulations. Because P1 has both a slow
+and a fast component, this result illustrates that equation-free methods can be used
+even when the slow variable is unknown. An extensive discussion of this point in a
+deterministic context can be found in [11]: one does not necessarily need the correct
+
+γ
+1+ωP 2
+1
+
+n
+o
+
+i
+t
+
+u
+b
+i
+r
+t
+s
+d
+e
+
+ 
+
+i
+
+t
+
+a
+
+t
+s
+ 
+y
+d
+a
+e
+
+t
+s
+
+1.2
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+i
+
+n
+o
+i
+t
+u
+b
+i
+r
+t
+s
+d
+ 
+e
+t
+a
+t
+s
+ 
+y
+d
+a
+e
+t
+s
+
+1.8
+
+1.6
+
+1.4
+
+1.2
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+19
+
+γ=1.14
+
+0
+
+1400
+
+γ=0.98
+
+0.02
+
+0.015
+
+0.01
+
+0.005
+
+i
+
+n
+o
+i
+t
+u
+b
+i
+r
+t
+s
+d
+ 
+e
+t
+a
+t
+s
+ 
+y
+d
+a
+e
+t
+s
+
+0.02
+
+0.015
+
+0.01
+
+0.005
+
+i
+
+n
+o
+i
+t
+u
+b
+i
+r
+t
+s
+d
+ 
+e
+t
+a
+t
+s
+ 
+y
+d
+a
+e
+t
+s
+
+−1100
+−500
+0
+800
+1200
+
+−1100
+−500
+0
+800
+1200
+
+γ=1.14
+
+0.02
+
+0.015
+
+0.01
+
+0.005
+
+0
+
+1400
+
+γ=0.98
+
+0.02
+
+0.015
+
+0.01
+
+0.005
+
+0
+1200
+
+1600
+
+R
+
+1800
+
+2000
+
+1500
+R
+
+1600
+
+1700
+
+1800
+
+1000
+
+0
+
+Q
+
+−1000
+
+1000
+
+0
+
+Q
+
+0
+1200
+
+1400
+
+1600
+
+R
+
+1800
+
+1300
+
+1400
+R
+
+1500
+
+1600
+
+1700
+
+−1000
+
+Figure 9: Conditional distribution P (r
+left show P (r
+a function of r and q.
+
+|
+
+Q = q) for selected values of q. Pictures on the right show P (r
+
+Q = q) for Stochastic Model I. Pictures on the
+Q = q) as
+
+|
+
+|
+
+slow variable – one needs an observable that parametrizes the slow manifold, a quantity
+in terms of which the slow manifold can be expressed as the graph of a function.
+
+Encouraged by the success of our computational framework for the simple Stochastic
+Models I and II considered above, we next investigated how well these methods would
+work on the full system described by equations (2.1) – (2.6). We ﬁrst performed long
+time Monte Carlo simulations using BioNetS [1]. A two dimensional histogram for the
+total protein numbers T1 = P1 + 2P1P1 and T2 = P2 + 2P2P2 is shown in Figure 13(a).
+This simulation took over 500 total CPU hours and is the result of 800 runs distributed
+over 18 CPUs (over a trillion Gillespie SSA steps). The black curve in Figure 13(b)
+is the projection of the histogram onto the T1 axis. We next performed equation-free
+computations for the system. As our single observable, Q, we used the total protein
+number T1, because this is a quantity that can be measured using single cell ﬂuorescent
+techniques. We used a slightly modiﬁed version of step (A3) to compute the conditional
+
+20
+
+−3
+
+x 10
+
+γ=1.14
+
+K=10
+K=1
+K=0.1
+
+−3
+
+x 10
+
+K=0.1
+
+γ=1.14
+
+−1000
+
+−500
+
+500
+
+1000
+
+−1000
+
+−500
+
+500
+
+1000
+
+−3
+
+x 10
+
+K=1
+
+γ=1.14
+
+−3
+
+x 10
+
+K=10
+
+γ=1.14
+
+i
+
+n
+o
+i
+t
+u
+b
+i
+r
+t
+s
+d
+ 
+e
+t
+a
+t
+s
+ 
+y
+d
+a
+e
+t
+s
+
+1.2
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+n
+o
+
+i
+t
+
+u
+b
+i
+r
+t
+s
+d
+e
+
+ 
+
+i
+
+t
+
+a
+t
+s
+ 
+y
+d
+a
+e
+
+t
+s
+
+1.2
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+0
+Q
+
+0
+Q
+
+0
+Q
+
+0
+Q
+
+−1000
+
+−500
+
+500
+
+1000
+
+−1000
+
+−500
+
+500
+
+1000
+
+Figure 10: Comparison of steady state distributions from Stochastic Model II. The top
+left panel are results from the equation-free analysis for K = 0.1, K = 1 and K = 10
+and γ = 1.14. The remaining three panels compare these results (red lines) to the steady
+state distribution computed from long-time Monte Carlo simulation (blue histograms).
+The other model parameter values are the same as in Figure 5.
+
+|
+
+×
+
+density P (r
+T1 = t1). For a given value of T1, we set the rate constants for synthesis
+and degradation of this protein equal to zero. We then ran the simulations for a time
+105 to remove any transients. Next still keeping T1 ﬁxed, 10000 samples of the
+of 1
+105
+other variables were collected at evenly space intervals over a time period of 2
+and used to generate the conditional density. A time step of ∆t = 15 was used in step
+(B) of the algorithm. To compute the steady state distribution, polynomials were ﬁt to
+the average velocity and eﬀective diﬀusion coeﬃcient computed from the equation-free
+analysis and then used to compute the eﬀective free energy. The red curve shown in
+Figure 13(b) is the result of the equation-free analysis.
+It took less than an hour of
+CPU time. Very good agreement between the equation-free method and Monte Carlo
+simulation is seen. Our investigations into these methods revealed that whereas the
+
+×
+
+i
+
+n
+o
+i
+t
+u
+b
+i
+r
+t
+s
+d
+ 
+e
+t
+a
+t
+s
+ 
+y
+d
+a
+e
+t
+s
+
+1.2
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+n
+o
+
+i
+t
+
+u
+b
+i
+r
+t
+s
+d
+e
+
+ 
+
+i
+
+t
+
+a
+t
+s
+ 
+y
+d
+a
+e
+
+t
+s
+
+1.2
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+21
+
+−3
+
+x 10
+
+K=0.1
+
+1.5
+
+γ=1.20
+
+−3
+
+x 10
+
+K=1
+
+1.5
+
+γ=1.20
+
+i
+
+n
+o
+i
+t
+u
+b
+i
+r
+t
+s
+d
+ 
+e
+t
+a
+t
+s
+ 
+y
+d
+a
+e
+t
+s
+
+0.5
+
+1
+
+0
+
+i
+
+n
+o
+i
+t
+u
+b
+i
+r
+t
+s
+d
+ 
+e
+t
+a
+t
+s
+ 
+y
+d
+a
+e
+t
+s
+
+0.5
+
+1
+
+0
+
+−1000
+
+−500
+
+500
+
+1000
+
+−1000
+
+−500
+
+500
+
+1000
+
+0
+Q
+
+0
+Q
+
+Figure 11: Stochastic Model II. Comparison of steady state distributions obtained by
+equation-free analysis (red line) with histograms (blue) obtained by long time stochastic
+simulations. In this ﬁgure γ = 1.2 and K = 0.1 in the left panel and K = 1 in the right.
+The other model parameter values are the same as in Figure 5.
+
+velocity, V (q), is robust to changes in ∆t, the eﬀective diﬀusion coeﬃcient, D(q), is
+quite sensitive and needs to be treated with care. Also, because of the exponential in
+the integral for the eﬀective potential, small changes in the average velocity or eﬀective
+diﬀusion coeﬃcient can have large eﬀects on the steady state distribution. Therefore,
+it is important to average over suﬃciently many realizations to ensure convergence of
+average velocity and eﬀective diﬀusion coeﬃcient. Better estimation techniques, such
+as those developed by A¨ıt-Sahalia using maximum likelihood [2] should be incorporated
+in the data processing step of the algorithms. Even with these caveats, the results
+presented in this section demonstrate the feasibility and high potential of equation-free
+methods for analyzing stochastic models of genetic networks.
+
+5.2 First Passage Time
+
+When γ is suﬃciently large the system is bistable. An important characterization of
+bistable systems is the average time for noise-induced transitions between the stable
+states. Here we make use of the deﬁnition of the ﬁrst passage time from Section 3.2. For
+the results presented in this section we use Q = P1
+P2 as our observable and Stochastic
+Model I. The system is bistable for γ > 1.06. Let the deterministic stable steady states
+of P1 be denoted as pm and pM with pm < pM . Because of the symmetry of our problem,
+pm and pM are also the stable steady states of P2. Let the random variable
+Te be deﬁned
+as the ﬁrst time when “P1 = P2” given the initial conditions P1 = pm and P2 = pM . In
+Te denotes the time to reach Q = 0 when the process starts
+terms of Q, this means that
+with Q equal to the negative steady state qm ≡
+pM . Let τe denote the average of
+Te. Then, direct Monte Carlo simulations can be used to compute the value of τe. The
+
+pm −
+
+−
+
+22
+
+−3
+
+x 10
+
+−3
+
+x 10
+
+γ=0.98
+
+γ=1.10
+
+0
+200
+
+−3
+
+x 10
+
+          P
+1
+
+400
+
+600
+
+800 1000 1200 1400
+
+400
+
+600
+
+800 1000 1200 1400
+
+          P
+1
+
+γ=1.14
+
+γ=1.20
+
+5
+
+4
+
+3
+
+2
+
+1
+
+4
+
+3
+
+2
+
+1
+
+i
+
+n
+o
+i
+t
+u
+b
+i
+r
+t
+s
+d
+ 
+e
+t
+a
+t
+s
+ 
+y
+d
+a
+e
+t
+s
+
+i
+
+n
+o
+i
+t
+u
+b
+i
+r
+t
+s
+d
+ 
+e
+t
+a
+t
+s
+ 
+y
+d
+a
+e
+t
+s
+
+0
+200
+
+          P
+1
+
+400
+
+600
+
+800 1000 1200 1400
+
+400
+
+600
+
+800 1000 1200 1400
+
+          P
+1
+
+Figure 12: Comparison of steady state distributions using the variable P1 as the observ-
+able for various values of γ. The other model parameter values are the same as in Figure
+5. Again, the red lines are the results of equation-free analysis and the blue histograms
+are obtained by the long-time stochastic simulations.
+
+2.5
+
+3
+
+2
+
+1
+
+1.5
+
+0.5
+
+i
+
+n
+o
+i
+t
+u
+b
+i
+r
+t
+s
+d
+ 
+e
+t
+a
+t
+s
+ 
+y
+d
+a
+e
+t
+s
+
+0
+200
+
+−3
+
+x 10
+
+5
+
+4
+
+3
+
+2
+
+1
+
+i
+
+n
+o
+i
+t
+u
+b
+i
+r
+t
+s
+d
+ 
+e
+t
+a
+t
+s
+ 
+y
+d
+a
+e
+t
+s
+
+0
+200
+
+23
+
+(a)
+
+(b)
+
+−3
+
+x 10
+
+2
+
+1.5
+
+)
+
+1
+
+t
+(
+ρ
+
+1
+
+0.5
+
+0
+0
+
+500
+
+1000
+)
+Total Protein Number (T
+1
+
+1500
+
+2000
+
+Figure 13: (a) The steady-state distribution for the total protein numbers computed from
+long-time Monte Carlo simulations of the full model (2.1) – (2.6). (b) The projection
+of the 2D distribution onto the T1 axis (black curve). The red curve is the result of the
+equation-free analysis. The parameter values used to compute these ﬁgures are γ1 =
+10−4, k−1 = k−2 = 1,
+γ2 = 1.14, δ1 = δ2 = 7.5
+ko1 = ko2 = 0.004 and k−o1 = k−02 = 0.1. These values are consistent with the parameter
+values K = 0.1, δ = 7.5
+
+×
+10−6 used in Stochastic Models I and II.
+
+×
+104 and ω = 2
+
+104, ǫ1 = ǫ2 = 0, k1 = k2 = 5
+
+×
+
+γ
+1.14
+1.20
+1.25
+
+pm
+481.1
+425.8
+392.4
+
+×
+
+pM
+1038.6
+1174.2
+1274.3
+
+qm = pm −
+-557.5
+-748.4
+-881.9
+
+pM computed τe from simulations
+105
+107
+109
+
+103
+105
+107
+
+7.0
+1.6
+1.0
+
+6.7
+1.6
+6.3
+
+N
+10 000
+10 000
+250
+
+±
+±
+±
+
+×
+×
+×
+
+×
+×
+×
+
+Table 1: The mean ﬁrst passage time computed from long-time stochastic simulations,
+averaging over N transitions. The results are expressed in the form ([sample mean]
+[sample variance]/√N).
+
+±
+
+results of such simulations for three diﬀerent values of γ are presented in the Table 1.
+As expected, the computational time needed to compute the mean ﬁrst passage time
+increases rapidly with γ. In Section 3.2, we introduced two formulas (3.6) and (3.7)
+to compute τe. Both formulas make use of the eﬀective free energy computed by the
+equation-free algorithm. These potentials for γ = 1.14, γ = 1.20 and γ = 1.25 are given
+in Figure 7. Consequently, we can compare the results obtained by the long simulations
+with the results found from formulas (3.6) and (3.7) for τe;p and τe;k, respectively. The
+results are shown in Table 2.
+Not surprisingly, the results given by τe;p are better than results given by the Kramers’
+approximation τe;k. However both methods produce results that are within a factor of
+2 of the waiting times estimated from Monte Carlo simulations. As γ becomes large
+the Monte Carlo simulations become computationally expensive. Therefore only 250
+realizations were used to estimate the mean ﬁrst passage time, and we expect that the
+
+24
+
+τe from Table 1
+
+τe;p given by (3.6)
+
+τe;k given by (3.7)
+
+γ
+1.14
+1.20
+1.25
+
+105
+107
+109
+
+7.0
+1.6
+1.0
+
+×
+×
+×
+
+105
+107
+108
+
+6.1
+1.4
+6.7
+
+×
+×
+×
+
+106
+107
+109
+
+1.3
+2.6
+1.2
+
+×
+×
+×
+
+Table 2: Comparison of the mean ﬁrst passage time computed from equation-free analysis
+with long-time stochastic simulations.
+
+discrepancy between the Monte Carlo simulations and equation-free analysis for this case
+is due to ﬁnite sampling errors. Initializing the simulation at conditions that are rarely
+visited by the direct simulation itself constitutes a form of bias; this bias is designed to
+give faster computational estimates of the eﬀective potential and – through this – of the
+ﬁrst passage times. Clearly, this approach hinges on knowledge of a good observable,
+and in principle does not depend strongly on the value of the parameter γ; therefore,
+the larger the parameter γ the higher the computational speedup in the ﬁrst passage
+time estimation that will result. A quantitative study of this speedup is underway and
+will be reported elsewhere; it does not lie within the scope of this paper. We stress,
+however, that (as in molecular dynamics simulations) knowledge of a good observable
+(a good “reaction coordinate”) is crucial for the success of the approach.
+
+Note that formula τe;k requires estimates of the second derivative of the potential at
+points qu and qm. To do this, we ﬁt Φ(q) locally to a polynomial and used the derivatives
+of the polynomial at the required points; once again, maximum likelihood techniques
+(e.g. [2]) should be used for better results. The formula for τe;p, requires the evaluation
+of an indeﬁnite integral. The integral was approximated by considering only a ﬁnite
+interval that neglected contributions from the region of suﬃciently small q where the
+potential Φ is very large.
+
+5.3 Bifurcations
+
+In this section, our goal is to run the simulations for short times only and compute a
+form of “stochastic bifurcation diagram” using continuation methods, as an extension
+of the deterministic bifurcation computations. We use Stochastic Model I and study
+the dependence of the “steady states” on γ; the “steady states” we report are the
+Q = q)
+ﬁxed points of the algorithm from Section 3.1 with the conditional density P (R
+approximated by the Dirac delta function in (A) – (B), similar to the approach (A1)
+from Section 3. Numerical results are given in Figure 14. For comparison we also plot
+the steady states of the corresponding deterministic equation (compare with Figure 4).
+The plot in Figure 14 was computed by initializing on diﬀerent branches far from the
+bifurcation point and continuing from these diﬀerent initializations (our simple arclength
+continuation algorithm did not include a “pitchfork detection” component).
+
+|
+
+The accuracy of the numerical results depend on several factors: the estimation tech-
+nique for the Jacobian elements, the tolerance of the error for Newton-Raphson itera-
+
+25
+
+ − P
+Q = P
+2
+1
+
+1000
+
+500
+
+0
+
+−500
+
+−1000
+
+0.8
+
+0.9
+
+1
+
+1.2
+
+1.3
+
+1.1
+
+γ
+
+Figure 14: A plot of the steady states obtained by equation-free analysis (3.5) (blue
+circles). Also shown are the deterministic steady states from Figure 4 (red line).
+
+tions, the number of realizations which are used to evaluate F , the time interval ∆t and
+the steepness of the underlying potential Φ. As can be seen in Figure 14, stochasticity
+along with all these numerical factors have slightly perturbed the pitchfork bifurcation;
+this could be exacerbated by our choice of (symmetric or asymmetric) observable. It is
+easy to follow any branch of steady states far from the bifurcation point. For obvious
+reasons this becomes more complicated when we are close to the “bifurcation point” at
+γ = 1.06. The main problem is that the potential becomes “ﬂat” close to the bifurca-
+tion point — see Figure 7. One way to improve the results is to adaptively change the
+number of realizations in (B). That is, if the Newton-Raphson iterations of (3.5) do not
+converge to a desired tolerance, then more realizations are added. Another approach is
+to estimate directly a local polynomial model of the underlying diﬀusion process from
+discrete SSA data using maximum likelihood tools, and then search for the bifurcations
+of the critical points of the eﬀective potential. Indeed, one can plot the zeroes of the
+estimated drift, or – in the case of a state-dependent diﬀusion coeﬃcient – one can cor-
+rect them to report the maxima of the steady state distribution [25, 37]; both of these
+are good candidate bifurcation diagrams for the stochastic case. When the potential is
+steep and the equilibrium is “less noisy” it is not necessary to use many realizations; the
+relation between computational eﬀort (in terms of number of replicas, simulation time
+horizon and estimation method) and resulting accuracy is, again, a subject of current
+investigation beyond the scope of this paper.
+
+Finally, the results using P1 instead of Q as the observable are shown in Figure 15.
+In this case, the asymmetry of our observable, and the perturbation it causes on the
+initialization process, make the perturbation of the pitchfork bifurcation stronger. Of
+course, the results depend on the initialization procedure, our estimation technique, the
+
+26
+
+P
+1
+
+1400
+
+1200
+
+1000
+
+800
+
+600
+
+400
+
+200
+
+0.8
+
+0.9
+
+1
+
+1.1
+
+1.2
+
+1.3
+
+γ
+
+Figure 15: Plot of the steady states obtained by using P1 as the observable (blue circles).
+Again for comparison the deterministic case is shown as the red line.
+
+error tolerance, the number of realizations, the length of time step ∆t as well as the
+type of continuation algorithm we are using (here we used a very simple one, without
+bifurcation detection, in order to demonstrate what is possible). Accurate bifurcation
+detection depends on accurate Jacobians and even higher derivatives; estimating these
+from dynamic (and noisy !) data is notoriously diﬃcult. While conceptually we do
+have the tools to “hone in” the more accurate detection of bifurcation points, careful
+quantitative work is necessary to pin down the tradeoﬀs between computational eﬀort,
+model estimation accuracy and bifurcation point estimation accuracy.
+
+6 Discussion
+
+In this paper we discussed and illustrated the use of certain equation-free numerical tech-
+niques that have the potential to accelerate the computer-assisted analysis of stochastic
+models of regulatory networks. There is a clear current need for accelerating such simula-
+tions: even for modestly complex regulatory networks, stochastic models rapidly become
+computationally expensive. Computational acceleration is usually based on model re-
+duction; theoretical methods for stochastic model reduction that take advantage of a
+separation of time scales are the focus of intense current research [23, 5, 17, 31, 34]. As
+we discussed in the introduction, many important gene regulatory networks do satisfy
+this assumption of a separation of time scales because synthesis and degradation of new
+proteins and transcripts usually occurs on a slower time scale than processes that change
+the chemical state of proteins. Analytical model reduction techniques assume that the
+fast variables are in quasi-steady state with respect to the slow variables, and use the
+quasi-steady state distributions conditioned on the slow variables to eliminate the fast
+
+27
+
+variables by averaging. These methods have been successfully applied to simple models,
+but the theory is not as well established as the deterministic counterpart. Having an
+explicit model lies often at the basis of such stochastic reduction methods.
+
+In the equation-free approach many of the same elements (separation of time scales,
+approximation of conditional quasi-steady distributions) also underpin computational
+eﬃciency; but the basic premise is that the model is available in the form of a “black
+box” simulation code. We do not try to ﬁrst reduce, and then simulate the reduced
+surrogate; we try to design the smallest number of “intelligent” short computational
+experiments with the full stochastic model to ﬁnd the quantities of interest, whether
+these are steady state probability distributions, their maxima, or transition rates in
+the bistable case. In that sense, the approaches we described here do not hinge upon
+the “inner”, detailed simulator as being a Gillespie SSA one - the methods are equally
+applicable to any “inner” simulator, stochastic or deterministic, as long as the main
+assumption of a low-dimensional eﬀective stochastic model is a good one for the long-
+term system dynamics. Indeed, if another reduction method can be used to produce
+a good approximate dynamic simulator, our algorithms can be “wrapped” around this
+surrogate simulator rather than the full model for further acceleration.
+
+Another important point has to do with the type of computation we are interested in
+- do we want to accelerate the direct simulation of the model, or do we want to accelerate
+the computation of certain features of its long-term dynamics (e.g. of the maxima of the
+steady state distribution)? These latter quantities can be also obtained from long-term
+direct simulation, but one of the points that we want to stress is that we can link direct
+simulation to diﬀerent numerical algorithms (such as contraction mappings, and con-
+tinuation methods) to obtain these quantities, often faster than with direct simulation
+alone. In the same way that bifurcation diagrams for dynamical systems are usually
+not computed through direct ODE integration, but through bifurcation algorithms, the
+parametric dependence of the long-term dynamics of stochastic models does not have to
+be computed through long-time direct simulation only. This “alternative” acceleration,
+not through accelerating the direct simulation itself, but through linking it to diﬀerent
+numerical algorithms, lies at the basis of the equation-free framework.
+
+Having said this, we brieﬂy mention that equation-free methods for accelerating the
+direct simulation itself also exist. Coarse projective integration which uses short bursts
+of direct simulation to estimate time derivatives of evolving probability densities, and
+then passes them to standard numerical integration algorithms, has been successfully
+used in many contexts [24, 8, 10, 12] Coarse projective integration has a strong relation
+to the direct simulation acceleration methods in [15]; it has not been discussed in this
+paper, because we chose to focus on very long-term features of the network dynamics;
+it might interest the reader that the method can be used to also integrate backward in
+time, and solve “eﬀective boundary value problems” to ﬁnd “coarse” limit cycles [32].
+
+In the equation-free methods for analyzing stochastic models of gene regulation that
+we discussed in this paper, we have tried to circumvent the diﬃculties encountered by
+
+28
+
+direct simulation (in this case SSA) through the design of short bursts of appropriately
+initialized computational experiments with the full simulator.
+In a sense, we “resign
+ourselves” to the fact that the direct simulator is expensive; we ask what is the shortest
+amount of running of this expensive direct simulator in order to obtain the quantities
+we are interested in. The “design of experiment” protocols are templated on tradi-
+tional continuum numerical methods, like the ﬁxed point and continuation algorithms
+to compute bifurcation points, or quadrature to estimate Kramers’ formula. The only
+diﬀerence is that the quantities (residuals, actions of Jacobians, values of the integrand)
+that are required for numerical computation are not given by a closed formula, but
+rather through direct numerical simulation of the full model and estimation. We reit-
+erate once more that these techniques can be wrapped around the full direct simulator,
+or our best available reduction of it, without change.
+
+Knowing appropriate coarse-grained observables (the variables in terms of which the
+unavailable eﬀective model would be written) is an important feature of the algorithms.
+Extensive experience with the problem, intuition, or analytical work may often suggest
+such observables; we did take advantage of such knowledge in this paper. We did
+already demonstrate an important point: more than one observables are capable of
+doing a good job as the parameterizing variables in an equation-free context; one does
+not need to know the exact slow variables. This issue is discussed extensively for the
+deterministic context in [11]. It is, however, important to note that algorithms for the
+detection of low-dimensionality in high-dimensional data can be vital in suggesting such
+observables from simulations. Principal Component Analysis is an established linear
+method for the detection of appropriate lower-order observables from simulation data;
+numerically estimated eigenmodes of the problem may also provide good observables
+(see the discussion in [36] about estimating gaps between eigenvalues, and using them
+to decide whether we should include more observables as independent variables). There
+are, however, some important developments in this area: the recent use of harmonic
+analysis (geometric diﬀusion) on graphs constructed from high-dimensional data shows
+great promise in detecting good observables (reaction coordinates) for complex, high
+dimensional systems [30, 4, 29]. This “variable-free” approach can be naturally linked
+to equation-free computation (one designs computational experiments both to detect
+the appropriate observables and to do computations with them) [30]; we are currently
+working on demonstrating this link for gene regulatory network modeling.
+
+It is clear that, in certain cases, an equation-free computational approach is expected
+to have advantages over direct simulation. For steep potentials and low noise, for exam-
+ple, the way equation-free computation uses a good observable to bias the simulation
+will sample the eﬀective potential and give a good estimate of the transition rates much
+faster than direct simulation. Also, parametric analysis methods should be able to ex-
+plore parametric transitions faster and more systematically than direct simulation, in
+analogy with the use of bifurcation techniques rather than direct simulation in deter-
+ministic dynamical systems (e.g. by writing augmented algorithms that converge on
+
+29
+
+marginally stable or unstable solutions). The complexity of the computation depends
+crucially on the dimensionality of the unavailable reduced model, and not so crucially on
+the dimensionality of the detailed, full model. We are currently working on the quan-
+tiﬁcation of these computational beneﬁts; this work is complicated by the fact that –
+lacking explicit formulas from which to obtain derivative information – errors must be
+computed on-line, through a posteriori estimates.
+
+This brings us to a ﬁnal, yet vital issue: estimation. Given the noisy nature of the
+data, estimating the numerical quantities of interest lies at the heart of the accuracy (and
+thus the viability) of the computation. For our gene networks, these quantities included
+the eﬀective potential Φ(q) and the eﬀective diﬀusion coeﬃcient D(q). Preliminary in-
+vestigations revealed that the eﬀective diﬀusion coeﬃcient, D(q), is quite sensitive to the
+time step ∆t and needs to be treated with care. Also, small changes in the average ve-
+locity or eﬀective diﬀusion coeﬃcient can have relatively large eﬀects on the steady state
+distribution. Even though some computations are “embarrassingly parallel” (one short,
+ﬁne scale realization per processor, running independently) variance reduction becomes
+[28]). Maximum likelihood estimation techniques (e.g.
+an important feature (see, e.g.
+[2]) take the place of simple formulas such as (3.2) and (3.3); one can envision certain
+hypothesis testing computations (is our model locally well-approximated by a diﬀusion
+process ?) becoming part of the overall computational scheme. Until these elements,
+and their computational cost, are analyzed and tested, there will be no ﬁrm guarantees
+for the computational eﬃciency of equation-free methods. Yet, even with these caveats,
+as we computationally demonstrated in this paper, we believe that the equation-free
+framework provides a promising new approach to gene regulatory network modeling, al-
+ternative to long-direct simulation. It links directly with powerful and tested traditional
+continuum numerical algorithms (such as numerical integration, ﬁxed point algorithms,
+matrix-free iterative linear algebra) and with system theory techniques like ﬁltering and
+estimation. These techniques are, in some sense “oﬀ the shelf” and do not need to be
+redeveloped. In our opinion, it is the linking of equation-free techniques with novel data
+reduction/clustering techniques (such as the use of the graph Laplacian to detect good
+reaction coordinates [30]) that hold the most promise in the computational study of
+complicated stochastic systems in general, and of gene regulatory networks and their
+models in particular.
+Acknowledgments. This work was partially supported by DARPA and an NSF/ITR
+grant (I.G.K). This work was partially supported by Biotechnology and Biological Sci-
+ences Research Council (R.E.). This work was supported by DARPA (F30602-01-2-0579)
+(T.C.E.).
+
+References
+
+[1] D. Adalsteinsson, D. McMillen, and T. Elston, Biochemical network stochastic sim-
+ulator (BioNetS): software for stochastic modeling of biochemical networks, BMC
+
+30
+
+Bioinformatics 5 (2004), no. 24, 1–21.
+
+[2] Y. A¨ıt-Sahalia, Maximum-likelihood estimation of discretely-sampled diﬀusions: A
+
+closed-form approximation approach, Econometrica 70 (2002), 223–262.
+
+[3] D. Barkley, I. Kevrekidis, and A. Stuart, The moment map: Nonlinear dynamics
+of density evolution via a few moments, submitted to SIAM Journal on Applied
+Dynamical Systems, 2005.
+
+[4] M. Belkin and P. Niyogi, Laplacian eigenmaps for dimensionality reduction and
+
+data representation, Neural Computation 15 (2003), no. 6, 1373–1396.
+
+[5] Y. Cao, D. Gillespie, and L. Petzold, The slow-scale stochastic simulation algorithm,
+
+Journal of Chemical Physics 122 (2005), 14116.
+
+[6] E. Doedel, H. Keller, and J. Kernevez, Numerical analysis and control of bifurcation
+
+problems, part i, Int. J. Bifurcation and Chaos 1 (1991), no. 3, 493–520.
+
+[7]
+
+, Numerical analysis and control of bifurcation problems, part ii, Int. J.
+
+Bifurcation and Chaos 1 (1991), no. 4, 745–772.
+
+[8] R. Erban, I. Kevrekidis, and H. Othmer, An equation-free computational approach
+for extracting population-level behavior from individual-based models of biological
+dispersal, submitted to Physica D, 28 pages, 2004.
+
+[9] T. Gardner, C. Cantor, and J. Collins, Construction of a genetic toggle switch in
+
+e. coli, Nature 403 (2000), 339–342.
+
+[10] C. Gear, Projective integration methods for distributions, NEC TR 2001-130 (2001),
+
+1–9.
+
+[11] C. Gear, T. Kaper, I. Kevrekidis, and A. Zagaris, Projecting on a slow manifold:
+Singularly perturbed systems and legacy codes, submitted to SIAM Journal on Ap-
+plied Dynamical Systems, can be found as Physics/0405074 at arXiv.org, 2004.
+
+[12] C. Gear, I. Kevrekidis, and C. Theodoropoulos, ’Coarse’ integration/bifurcation
+analysis via microscopic simulators: micro-Galerkin methods, Computers and
+Chemical Engineering 26 (2002), no. 4, 941–963.
+
+[13] D. Gillespie, Exact stochastic simulation of coupled chemical reactions, The journal
+
+of physical chemistry 81 (1977), no. 25, 2340–2361.
+
+[14]
+
+[15]
+
+, Markov Processes, an introduction for physical scientists, Academic Press,
+
+Inc., Harcourt Brace Jovanowich, 1992.
+
+, Approximate accelerated stochastic simulation of chemically reacting sys-
+
+tems, The journal of chemical physics 115 (2001), no. 4, 1716–1733.
+
+31
+
+[16] M. Haataja, D. Srolovitz, and I. Kevrekidis, Apparent hysteresis in a driven system
+with self-organized drag, Physical Review Letters 92 (2004), no. 16, 160603.
+
+[17] E. Haseltine and J. Rawlings, Approximate simulation of coupled fast and slow
+reactions for stochastic chemical kinetics, Journal of Chemical Physics 117 (2002),
+6959–6969.
+
+[18] J. Hasty, D. McMillen, and J. Collins, Engineered gene circuits, Nature 420 (2002),
+
+224–230.
+
+[19] J. Hasty, D. McMillen, F. Isaacs, and J. Collins, Computational studies of gene reg-
+ulatory networks: in numero molecular biology, Nature Reviews Genetics 2 (2001),
+268–279.
+
+[20] G. Hummer and I. Kevrekidis, Coarse molecular dynamics of a peptide fragment:
+free energy, kinetics and long time dynamics computations, Journal of Chemical
+Physics 118 (2003), no. 23, 10762–10773.
+
+[21] M. Kaern, T. Elston, W. Blake, and J. Collins, Stochasticity in gene expression:
+
+from theories to phenotypes, Nature Reviews Genetics 6 (2005), 451–464.
+
+[22] C. Kelley, Solving nonlinear equations with newtons method, SIAM, 2003.
+
+[23] T. Kepler and T. Elston, Stochasticity in transcriptional regulation: Origins, con-
+sequences and mathematical representations, Biophysical Journal 81 (2001), 3116–
+3136.
+
+[24] I. Kevrekidis, C. Gear, J. Hyman, P. Kevrekidis, O. Runborg, and K. Theodoropou-
+los, Equation-free, coarse-grained multiscale computation: enabling microscopic
+simulators to perform system-level analysis, Communications in Mathematical Sci-
+ences 1 (2003), no. 4, 715–762.
+
+[25] D. Kopelevich, A. Panagiotopoulos, and I. Kevrekidis, Coarse-grained kinetic com-
+putations of rare events: application to micelle formation, Journal of Chemical
+Physics 122 (2005), 044908.
+
+[26] A. Makeev, D. Maroudas, and I. Kevrekidis, ”Coarse” stability and bifurcation
+analysis using stochastic simulators: Kinetic Monte Carlo examples, The Journal
+of Chemical Physics 116 (2002), no. 23, 10083–10091.
+
+[27] A. Makeev, D. Maroudas, A. Panagiotopoulos, and I. Kevrekidis, Coarse bifurca-
+tion analysis of kinetic monte carlo simulations: a lattice gas model with lateral
+interactions, The Journal of Chemical Physics 117 (2002), no. 18, 8229–8240.
+
+[28] M. Melchior and H.C. ¨Ottinger, Variance reduced simulations of stochastic diﬀer-
+
+ential equations, Journal of Chemical Physics 103 (1995), 9506–9509.
+
+32
+
+[29] B. Nadler, S. Lafon, R. Coifman, and I. Kevrekidis, Diﬀusion maps, spectral cluster-
+ing and eigenfunctions of fokker-planck operators, can be found as Math/0506090
+at arXiv.org, 2005.
+
+[30]
+
+, Diﬀusion maps, spectral clustering and the reaction coordinates of dynam-
+
+ical systems, to appear in Appl. Comp. Harm. Anal., 2005.
+
+[31] C. Rao and A. Arkin, Stochastic chemical kinetics and the quasi-steady-state as-
+sumption: application to the gillespie algorithm, Journal of Chemical Physics 118
+(2003), 4999–5010.
+
+[32] R. Rico-Martinez, C. Gear, and I. Kevrekidis, Coarse projective kMC integration:
+Forward/reverse initial and boundary value problems, Journal of Computational
+Physics 196 (2004), no. 2, 474–489.
+
+[33] H. Risken, The Fokker-Planck Equation, methods of solution and applications,
+
+Springer-Verlag, 1989.
+
+[34] H. Salis and Y. Kaznessis, Accurate hybrid stochastic simulation of a system of
+coupled chemical or biochemical reactions, The Journal of Chemical Physics 122
+(2005), 054103.
+
+[35] T. Schlitt and A. Brazma, Modelling gene networks at diﬀerent organisational levels,
+
+FEBS Letters 579 (2005), 1859–1866.
+
+[36] C. Siettos, M. Graham, and I. Kevrekidis, Coarse Brownian dynamics for nematic
+liquid crystals: Bifurcation, projective integration, and control via stochastic simu-
+lation, Journal of Chemical Physics 118 (2003), no. 22, 10149–10156.
+
+[37] S. Sriraman, I. Kevrekidis, and G. Hummer, Coarse nonlinear dynamics of ﬁlling-
+emptying transitions: water in carbon nanotubes, submitted to Physical Review
+Letters, 2005.
+
+33
+
+

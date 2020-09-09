@@ -1,0 +1,2377 @@
+Implementation of analytical Hartree-Fock gradients for periodic
+
+CLRC, Daresbury Laboratory, Daresbury, Warrington, WA4 4AD, UK
+
+Institut f¨ur Mathematische Physik, TU Braunschweig, Mendelssohnstraße 3, D-38106
+
+systems
+
+K. Doll
+
+Braunschweig
+
+Abstract
+
+We describe the implementation of analytical Hartree-Fock gradients for pe-
+
+riodic systems in the code CRYSTAL, emphasizing the technical aspects of
+
+this task. The code is now capable of calculating analytical derivatives with
+
+respect to nuclear coordinates for systems periodic in 0, 1, 2 and 3 dimensions
+
+(i.e. molecules, polymers, slabs and solids). Both closed-shell restricted and
+
+unrestricted Hartree-Fock gradients have been implemented. A comparison
+
+with numerical derivatives shows that the forces are highly accurate.
+
+1
+0
+0
+2
+ 
+b
+e
+F
+ 
+6
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+9
+4
+0
+2
+0
+1
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Typeset using REVTEX
+
+1
+
+I. INTRODUCTION
+
+The determination of equilibrium structure is one of the most important targets in elec-
+
+tronic structure calculations. In surface science especially, theoretical calculations of surface
+
+structures are of high importance to explain and support experimental results. Therefore,
+
+a fast structural optimization is an important issue in modern electronic structure codes.
+
+Finding minima in energy surfaces is substantially simpliﬁed by the availability of analytical
+
+gradients. As a rule of thumb, availability of analytical gradients improves the eﬃciency by
+
+a factor of order N with N being the number of parameters to be optimized. UK’s Collab-
+
+orative Computational Project 3 has therefore supported the implementation of analytical
+gradients in the electronic structure code CRYSTAL1–4. This implementation will also be
+
+valuable for future projects which require analytical gradients as a prerequisite. Another
+
+advantage of having analytical gradients is that higher derivatives can be obtained with less
+
+numerical noise (e.g. the 2nd derivative has less numerical noise when only one numerical
+
+diﬀerentiation is necessary).
+
+CRYSTAL is capable of performing Hartree-Fock and density-functional calculations for
+
+systems with any periodicity (i.e. molecules, polymers, slabs and solids). The periodicity
+
+is ”cleanly” implemented in the sense that, for example, a slab is considered as an object
+
+periodic in two dimensions and is not repeated in the third dimension with one slab being
+
+separated from the others by vacuum layers. The code is based on Gaussian type orbitals
+
+and the technology is therefore in many parts similar to that of molecular quantum chemistry
+
+codes. As the density-functional part of the code relies in big parts on the Hartree-Fock
+
+part, the strategy of the project was to implement Hartree-Fock gradients ﬁrst.
+
+The implementation of Hartree-Fock gradients for multicenter basis sets was pioneered by
+
+Pulay5; the theory had already been derived earlier independently6. Meanwhile, analytical
+
+gradients have been implemented in many molecular codes, and several review articles have
+
+appeared (see, e.g., references 7–13).
+
+Substantial work has also been done in the case of one-dimensional periodicity: Hartree-
+
+2
+
+Fock gradients with respect to nuclear coordinates and with respect to the lattice vector have
+already been implemented in codes periodic in one dimension14–16. Moreover, correlated
+
+calculations based on the MP2 scheme17,18 and MP2 gradients15 have been coded. Also,
+
+density functional gradients have been implemented19,20. Even second derivatives at the
+
+Hartree-Fock level have meanwhile been coded21.
+
+The implementation of Hartree-Fock gradients with respect to nuclear coordinates in
+
+CRYSTAL is to the best of our knowledge the ﬁrst implementation for the case of 2- and
+
+3-dimensional periodicity. The aim of this article is to describe the implementation of the
+
+gradients in the code, with an emphasis on the technical aspects. Therefore, the article is
+
+supposed to complement our ﬁrst article on the purely theoretical aspects22. An attempt of
+
+a detailed description is made; however, as the whole code is undergoing constant changes, it
+
+can not be too detailed. For example, it did not seem advisable to give any variable names
+
+because they have already undergone major changes after the code moved to Fortran 90
+
+with the possibility of longer variable names.
+
+The article is structured as follows: In section II, we give a brief introduction to Gaussian
+
+and Hermite Gaussian type basis functions. The deﬁnition of the density matrix is given in
+
+section III. The individual integrals, their derivatives, and details of the implementation are
+
+discussed in section IV. Formulas for total energy and gradient are given in section V. The
+
+structure of the gradient code is explained in section VI, followed by examples in section
+
+VII and the conclusion.
+
+II. BASIS FUNCTIONS
+
+Two sets of basis functions are relevant for CRYSTAL: ﬁrstly, unnormalized spherical
+
+Gaussian type functions, in a polar coordinate system characterized by the set of variables
+
+(|~r|, ϑ, ϕ), and centered at ~A. They are deﬁned as
+
+S(α, ~r − ~A, n, l, m) = |~r − ~A|
+
+2n+l
+
+P|m|
+l
+
+(cos ϑ) exp(imϕ) exp(−α|~r − ~A|
+
+2
+
+)
+
+(1)
+
+3
+
+with P|m|
+
+l being the associated Legendre function. CRYSTAL uses real spherical Gaussian
+
+type functions deﬁned as
+
+R(α, ~r − ~A, n, l, 0) = S(α, ~r − ~A, n, l, 0)
+
+R(α, ~r − ~A, n, l, |m|) = Re S(α, ~r − ~A, n, l, |m|)
+
+R(α, ~r − ~A, n, l, −|m|) = Im S(α, ~r − ~A, n, l, |m|)
+
+This is in the following denoted as φµ(α, ~r − ~Aµ, n, l, m) = NµR(α, ~r − ~Aµ, n, l, m), with
+
+the normalization Nµ. µ is an index enumerating the basis functions in the reference cell
+
+(e.g. the primitive unit cell). In fact, CRYSTAL uses only basis functions with quantum
+
+number n = 0 and angular momentum l=0,1 or 2 (i.e. s, p or d functions).
+
+The exponents are deﬁned by the user of the code. A huge amount of basis sets for
+
+molecular calculations is available in the literature and on the world wide web; also for
+
+periodic systems a large number of basis sets has been published. Molecular basis sets can,
+
+with a little eﬀort, be adopted for solid state calculations. High exponents which are used to
+
+describe core electrons do not have to be adjusted, but exponents with low values (e.g. less
+
+than 1 a−2
+
+0 , with a0 being the Bohr radius) should be reoptimized for the corresponding solid.
+
+Very diﬀuse exponents should be omitted because they cause linear dependence problems
+
+in periodic systems.
+
+A second type of basis functions, which CRYSTAL uses internally to evaluate the inte-
+
+grals, is the Hermite Gaussian type function (HGTF) which is deﬁned as:
+
+Λ(γ, ~r − ~A, t, u, v) =
+
+t
+
+∂
+∂Ax (cid:19)
+
+(cid:18)
+
+u
+
+∂
+∂Ay (cid:19)
+
+(cid:18)
+
+v
+
+∂
+∂Az (cid:19)
+
+(cid:18)
+
+exp(−γ|~r − ~A|2)
+
+(2)
+
+CRYSTAL uses the McMurchie-Davidson algorithm to evaluate the integrals. The basic
+
+idea of this algorithm is to map the product of two spherical Gaussian type functions on
+
+two centers onto a set of Hermite Gaussian type functions at one center.
+
+S( ˜α, ~r − ~B, ˜n, ˜l, ˜m)S(α, ~r − ~A, n, l, m) =
+
+E(˜n, ˜l, ˜m, n, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)
+
+(3)
+
+t,u,v
+X
+
+4
+
+with γ = α + ˜α and ~P = α ~A+ ˜α ~B
+α+ ˜α .
+
+Gaussian product rule23:
+
+The starting point E(0, 0, 0, 0, 0, 0, 0, 0, 0) = exp(− α ˜α
+
+α+ ˜α| ~B − ~A|2) is derived from the
+
+2
+
+α ~A + ˜α ~B
+α + ˜α (cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:19)
+
+~r −
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(4)
+
+exp(−α|~r − ~A|2) exp(−˜α|~r − ~B|2) = exp
+
+−
+
+| ~B − ~A|2
+
+exp
+
+− (α + ˜α)
+
+α˜α
+α + ˜α
+
+(cid:18)
+
+(cid:19)
+
+(cid:18)
+
+As indicated in section IV, all the integrals can be expressed with the help of the
+coeﬃcients E(˜n, ˜l, ˜m, n, l, m, t, u, v)24–27. These coeﬃcients are generated by recursion
+
+relations24,25. They are zero for the case t + u + v > 2n + 2˜n + l + ˜l and for all nega-
+
+tive values of t, u or v. CRYSTAL uses only basis functions with n = 0. Therefore, there are
+
+(l+˜l+1)(l+˜l+2)(l+˜l+3)
+3!
+
+coeﬃcients E(0, ˜l, ˜m, 0, l, m, t, u, v) for ﬁxed values of l, m, ˜l, ˜m. As the
+
+maximum angular quantum number is l = 2, this results in 25 possible combinations of m
+
+and ˜m. Therefore, the maximum number of coeﬃcients is 25 × 35 = 875. These coeﬃcients
+
+are pre-programmed in the subroutine DFAC3. Pre-programming is the fastest possible way
+
+of evaluating these coeﬃcients which is important because this is one of the key issues of the
+
+integral calculation. On the other hand, the code has become inﬂexible as no E-coeﬃcients
+
+are available for higher quantum numbers.
+
+Derivatives of Gaussian type functions are again Gaussian type functions. Therefore,
+
+the evaluation of gradients is closely related to the evaluation of integrals. In a similar way
+
+as all the integrals can be expressed with the help of coeﬃcients E, all the derivatives of
+
+the integrals can be expressed with the help of coeﬃcients for the gradients, GA
+
+x , GA
+
+y , GA
+z .
+
+These G-coeﬃcients can be obtained with recursion relations derived by Saunders4,22. The
+
+recursions are similar to the ones for the E-coeﬃcients. However, as the existing subroutine
+
+DFAC3 cannot compute the G-coeﬃcients, the recursions were newly coded. This has in
+
+addition the advantage that, by small modiﬁcations of the new subroutines, E-coeﬃcients
+
+for higher quantum numbers than l = ˜l = 2 can now be computed by recursion. There are
+
+three sets of G-coeﬃcients because of the three spatial directions. The G-coeﬃcients are
+
+zero for the case t + u + v > 2n + 2˜n + l + ˜l + 1 and for all negative values of t, u or v.
+
+This means that for a maximum quantum number of l = 2, there are 3 × 5 × 5 × 56 = 4200
+
+5
+
+coeﬃcients. Three other sets of G-coeﬃcients are necessary because of the second center.
+
+However, the sets on the second center are closely related to the sets on the ﬁrst center and
+
+can be derived from them in an eﬃcient way28,4,22.
+
+III. DENSITY MATRIX
+
+After solving the Hartree-Fock equations29, the crystalline orbitals are linear combina-
+
+tions of Bloch functions
+
+Ψi(~r, ~k) =
+
+aµi(~k)ψµ(~r, ~k)
+
+µ
+X
+
+which are expanded in terms of real spherical Gaussian type functions
+
+ψµ(~r, ~k) = Nµ
+
+R(α, ~r − ~Aµ − ~g, n, l, m)ei~k~g
+
+The sum over ~g is over all direct lattice vectors.
+
+In the case of closed shell, spin-restricted Hartree-Fock, the spin-free density matrix in
+
+reciprocal space is deﬁned as
+
+Pµν(~k) = 2
+
+aµi(~k)a∗
+
+νi(~k)Θ(ǫF − ǫi(~k))
+
+with the Fermi energy ǫF and the Heaviside function Θ; i is an index enumerating the
+
+X~g
+
+Xi
+
+In the case of unrestricted Hartree-Fock (UHF)30, we use the notation
+
+eigenvalues.
+
+and
+
+matrices
+
+Ψ↑
+
+i (~r, ~k) =
+
+µi(~k)ψµ(~r, ~k)
+a↑
+
+Ψ↓
+
+i (~r, ~k) =
+
+µi(~k)ψµ(~r, ~k)
+a↓
+
+µ
+X
+
+µ
+X
+
+6
+
+(5)
+
+(6)
+
+(7)
+
+(8)
+
+(9)
+
+for the crystalline orbitals with up and down spin, respectively. We deﬁne the density
+
+µν(~k) =
+P ↑
+
+µi(~k)a∗↑
+a↑
+
+νi (~k)Θ(ǫF − ǫ↑
+
+i (~k))
+
+for up spin and
+
+µν(~k) =
+P ↓
+
+µi(~k)a∗↓
+a↓
+
+νi (~k)Θ(ǫF − ǫ↓
+
+i (~k))
+
+Xi
+
+Xi
+
+(10)
+
+(11)
+
+for down spin. In the following, Pµν refers to the sum P ↑
+
+µν + P ↓
+
+µν in the UHF case.
+
+The density matrices in real space Pµ~0ν~g, P ↑
+
+µ~0ν~g, P ↓
+
+µ~0ν~g are obtained by Fourier transfor-
+
+mation.
+
+IV. INTEGRALS AND THEIR DERIVATIVES
+
+The calculation of the integrals is fundamental to all quantum chemistry programs.
+
+CRYSTAL uses two integral packages: a package derived from GAUSSIAN7031 is the default
+
+for calculations when only s and sp shells are used; alternatively Saunders’ ATMOL Gaussian
+
+integral package can be used and it must be used for cases when p or d functions are involved.
+
+The implementation of gradients has been done with routines based on the ATMOL package.
+
+This is not a restriction, and it is possible to use routines based on GAUSSIAN70 for the
+
+integrals and routines based on ATMOL for the gradients.
+
+The calculation of the integrals is essentially controlled from MONMAD and MONIRR
+
+for one-electron integrals and from SHELLC or SHELLX for the bielectronic integrals.
+
+SHELLC is used in the case of non-direct SCF, i.e. when the integrals are written to
+
+disk and read in each cycle. SHELLX is the direct version when the integrals are computed
+
+in each cycle without storing them on disk. The direct mode is the preferred one when the
+
+integral ﬁle is too big or when input/output to disk is too slow. The gradients are com-
+
+puted only once after the last iteration, when convergence is achieved. Therefore, a direct
+
+implementation of gradients has been done.
+
+One of the bottlenecks of the CRYSTAL code is the restriction to a highest quantum
+
+number of l = 2, i.e. the code can only cope with s, p, sp and d functions, but not with
+
+basis functions with higher angular momentum. Introducing gradients, however, is similar
+
+7
+
+to increasing the quantum number from d to f for the corresponding basis function. This
+
+means that many subroutines had to be extended to higher quantum numbers, and array
+
+dimensions in the whole code had to be adjusted.
+
+A. One-electron integrals
+
+In this section we summarize the appearing types of integrals and the corresponding gra-
+
+dients. We restrict the description to the x-component of the gradient; y- and z-component
+
+can be obtained in similar way. Note that the integrals depend on the dimension because
+
+of the Ewald scheme used. Therefore, there are four diﬀerent routines for the one-electron
+
+integrals for the case of 0,1,2 and 3-dimensional periodicity: CJAT0, CJAT1, CJAT2 and
+
+CJAT3. Similarly, four gradient routines have been developed which have been given the
+
+preliminary names CJAT0G, CJAT1G, CJAT2G and CJAT3G. These routines calculate all
+
+the one-electron integrals except for the multipolar integrals which are computed in POLIPA
+
+(with the corresponding gradient routine OLIPAG).
+
+1. Overlap integral
+
+The basic integral is the overlap integral:
+
+Sµ ~g1ν ~g2 =
+
+φµ( ˜α, ~r − ~Aµ − ~g1, ˜n, ˜l, ˜m)φν(α, ~r − ~Aν − ~g2, n, l, m)d3r =
+
+E(˜n, ˜l, ˜m, n, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)d3r =
+
+(12)
+
+Z
+
+t,u,v
+Z X
+
+E(˜n, ˜l, ˜m, n, l, m, 0, 0, 0)
+
+3
+2
+
+π
+γ !
+
+ 
+
+The x-component of the gradient with respect to center Aµ is obtained as
+
+Sµ ~g1ν ~g2 =
+
+∂
+∂Aµ,x
+∂
+∂Aµ,x Z
+∂
+
+∂Aµ,x Z X
+
+t,u,v
+
+φµ( ˜α, ~r − ~Aµ − ~g1, ˜n, ˜l, ˜m)φν(α, ~r − ~Aν − ~g2, n, l, m)d3r =
+
+E(˜n, ˜l, ˜m, n, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)d3r =
+
+8
+
+(13)
+
+GAµ
+
+x (˜n, ˜l, ˜m, n, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)d3r =
+
+t,u,v
+Z X
+
+GAµ
+
+x (˜n, ˜l, ˜m, n, l, m, 0, 0, 0)
+
+3
+2
+
+π
+γ !
+
+ 
+
+Equation
+
+14
+
+deﬁnes the coeﬃcients GAµ
+
+x ; similarly the coeﬃcients GAµ
+
+y , GAµ
+
+z , GAν
+
+x , GAν
+
+y , GAν
+z
+
+can be de-
+
+(14)
+
+thus
+
+ﬁned.
+
+In the following, we use the identity
+
+Sµ ~g1ν ~g2 = Sµ~0ν( ~g2− ~g1) = Sµ~0ν~g.
+
+2. Kinetic energy integrals
+
+In equation 15, the expression for the kinetic energy integrals for the case of spherical
+
+Gaussian type functions is reiterated25:
+
+Tµ~0ν~g =
+
+Z
+−n(2n + 2l + 1)
+
+α(4n + 2l + 3)
+
+Z
+
+Z
+
+φµ( ˜α, ~r − ~Aµ, ˜n, ˜l, ˜m)
+
+−
+
+∆~r
+
+φν(α, ~r − ~Aν − ~g, n, l, m)d3r =
+
+1
+2
+
+(cid:18)
+
+(cid:19)
+
+φµ( ˜α, ~r − ~Aµ, ˜n, ˜l, ˜m)φν(α, ~r − ~Aν − ~g, n − 1, l, m)d3r +
+
+Z
+φµ( ˜α, ~r − ~Aµ, ˜n, ˜l, ˜m)φν(α, ~r − ~Aν − ~g, n, l, m)d3r −
+
+2α2
+
+φµ( ˜α, ~r − ~Aµ, ˜n, ˜l, ˜m)φν(α, ~r − ~Aν − ~g, n + 1, l, m)d3r =
+
+−n(2n + 2l + 1)
+
+E(˜n, ˜l, ˜m, n − 1, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)d3r +
+
+α(4n + 2l + 3)
+
+E(˜n, ˜l, ˜m, n, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)d3r −
+
+2α2
+
+E(˜n, ˜l, ˜m, n + 1, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)d3r
+
+(15)
+
+The x-component of the gradient is therefore:
+
+t,u,v
+Z X
+
+t,u,v
+Z X
+
+t,u,v
+Z X
+
+t,u,v
+Z X
+
+∂
+∂Aµ,x
+
+Tµ~0ν~g =
+
+−n(2n + 2l + 1)
+
+GAµ
+
+x (˜n, ˜l, ˜m, n − 1, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)d3r +
+
+9
+
+α(4n + 2l + 3)
+
+GAµ
+
+x (˜n, ˜l, ˜m, n, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)d3r −
+
+2α2
+
+GAµ
+
+x (˜n, ˜l, ˜m, n + 1, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)d3r
+
+(16)
+
+t,u,v
+Z X
+
+As CRYSTAL uses spherical Gaussian type functions with n = 0, this reduces to
+
+t,u,v
+Z X
+
+∂
+∂Aµ,x
+
+3
+2
+
+π
+γ !
+
+ 
+
+2
+
+3
+2
+
+π
+γ !
+
+ 
+
+Tµ~0ν~g =
+
+α(4n + 2l + 3)GAµ
+
+x (0, ˜l, ˜m, 0, l, m, 0, 0, 0) −
+
+α2GAµ
+
+x (0, ˜l, ˜m, 1, l, m, 0, 0, 0)
+
+Explicit diﬀerentiation with respect to the other center ~Aν is more diﬃcult because the
+
+kinetic energy operator applies to that center. However, the diﬀerentiation can easily be
+
+avoided by applying translational invariance:
+
+(17)
+
+(18)
+
+∂
+∂Aµ,x
+
+Tµ~0ν~g = −
+
+∂
+∂Aν,x
+
+Tµ~0ν~g
+
+3. Nuclear attraction integrals
+
+The nuclear attraction integrals are deﬁned as
+
+Nµ~0ν~g = −
+
+Za
+
+φµ( ˜α, ~r − ~Aµ, ˜n, ˜l, ˜m)A(~r − ~Aa)φν(α, ~r − ~Aν − ~g, n, l, m)d3r =
+
+E(˜n, ˜l, ˜m, n, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)A(~r − ~Aa)d3r
+
+(19)
+
+a
+X
+
+Z
+
+−
+
+Za
+
+a
+X
+
+t,u,v
+Z X
+
+where A is the Coulomb potential function in the molecular case, the Euler-MacLaurin
+
+potential function for systems periodic in one dimension32, Parry’s potential function33 for
+
+systems periodic in two dimensions, and the Ewald potential function for systems periodic
+
+in three dimensions34,35,26. The summation with respect to a runs over all nuclei of the
+
+primitive unit cell.
+
+The x-component of the partial derivative with respect to the center Aµ,x is obtained as:
+
+10
+
+∂
+∂Aµ,x
+
+Nµ~0ν~g =
+
+−
+
+Za
+
+a
+X
+
+t,u,v
+Z X
+
+GAµ
+
+x (˜n, ˜l, ˜m, n, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)A(~r − ~Aa)d3r
+
+(20)
+
+In the same way, the partial derivative with respect to Aν,x is obtained. The partial
+
+derivative with respect to the set of third centers ~Aa is obtained by translational invariance:
+
+for each center ~Aa, there is a derivative with value
+
+− ∂
+∂ ~Aµ
+
+− ∂
+∂ ~Aν
+
+.
+
+4. Multipolar integrals
+
+The electronic charge density is expressed with a lattice basis as:
+
+ρ(~r) = −
+
+Pν~gµ~0φµ( ˜α, ~r − ~Aµ, ˜n, ˜l, ˜m)φν(α, ~r − ~Aν − ~g, n, l, m)
+
+X~g,µ,ν
+
+Then, the Ewald potential due to this charge density is given by:
+
+The Ewald energy of the electons (i.e. the Ewald energy of the electrons in the primitive
+
+unit cell with all the electrons) is obtained as
+
+Φew(ρ; ~r) =
+
+A(~r − ~r′)ρ(~r′)d3r′
+
+Z
+
+E =
+
+ρ(~r)A(~r − ~r′)ρ(~r′)d3rd3r′
+
+1
+2 Z Z
+
+For eﬃciency reasons, the calculation of the Ewald potential is done approximatively.
+
+A multipolar expansion up to an order L is performed for the charge distribution in the
+
+long range. Therefore, the electrons do not feel the Ewald potential created by the correct
+
+charge distribution, but the Ewald potential created by the multipolar moments. It is thus
+
+necessary to compute the multipolar moments of the charge distribution which are deﬁned
+
+as
+
+l (ρc; ~Ac) =
+ηm
+
+ρc(~r)X m
+
+l (~r − ~Ac)d3r
+
+Z
+
+with X m
+
+l being regular solid harmonics26 and the charge ρc(~r) deﬁned as
+
+11
+
+(21)
+
+(22)
+
+(23)
+
+(24)
+
+ρc(~r) = −
+
+Pν~gµ~0φµ( ˜α, ~r − ~Aµ, ˜n, ˜l, ˜m)φν(α, ~r − ~Aν − ~g, n, l, m) =
+
+E(˜n, ˜l, ˜m, n, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)
+
+(25)
+
+c is an index for the shell. The total electronic charge ρ(~r) is thus obtained by summing
+
+−
+
+X~g,µ∈c,ν
+
+Pν~gµ~0
+
+X~g,µ∈c,ν
+
+t,u,v
+X
+
+over all shells c:
+
+ρ(~r) =
+
+ρc(~r)
+
+c
+X
+
+(26)
+
+In CRYSTAL, the multipole is located at center ~Aµ and therefore it is convenient to take
+the derivative with respect to center ~Aν and obtain the derivative with respect to ~Aµ by
+
+translational invariance. The expression computed for the gradients is thus
+
+∂
+∂Aν,x
+
+−
+
+−
+
+X~g,µ∈c,ν
+
+Pν~gµ~0
+
+Z
+
+Pν~gµ~0
+
+X~g,µ∈c,ν
+
+t,u,v
+Z X
+
+φµ( ˜α, ~r − ~Aµ, ˜n, ˜l, ˜m)φν(α, ~r − ~Aν − ~g, n, l, m)X m
+(cid:16)
+x (˜n, ˜l, ˜m, n, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)X m
+GAν
+
+l (~r − ~Aµ)d3r
+
+(cid:17)
+
+l (~r − ~Aµ)
+
+d3r =
+
+(27)
+
+5. Field integrals
+
+If the electronic charge distribution is approximated with an expansion up to the maxi-
+
+mum quantum number L, the Ewald potential of this model charge distribution is obtained
+
+Φew(ρmodel; ~r) =
+
+Φew(ρmodel
+c
+
+; ~r) =
+
+L
+
+l
+
+l (ρc; ~Ac)Z m
+ηm
+l (
+
+ˆ~Ac)A(~r − ~Ac)
+
+(28)
+
+c
+X
+
+Xm=−l
+ˆ~Ac) being the spherical gradient operator in a renormalized form26. The model
+
+Xl=0
+
+c
+X
+
+with Z m
+l (
+
+charge distribution is expressed as
+
+ρmodel
+c
+
+(~r) =
+
+l (ρc; ~Ac)δm
+ηm
+
+l ( ~Ac, ~r)
+
+L
+
+l
+
+Xl=0
+
+Xm=−l
+
+l ( ~Ac, ~r) = lim
+δm
+
+Z m
+l (
+
+α→∞
+
+ˆ~Ac)Λ(α, ~r − ~Ac, 0, 0, 0)
+
+12
+
+(29)
+
+(30)
+
+as
+
+and
+
+The integral of the electronic charge distribution and the Ewald potential function is
+
+required which gives rise to the ﬁeld integrals which are deﬁned as follows:
+
+M m
+
+lµ~0ν~gc =
+ˆ~Ac)
+
+Z m
+l (
+
+Z
+
+Z m
+l (
+
+ˆ~Ac)
+
+t,u,v
+Z X
+
+The term
+
+φµ( ˜α, ~r − ~Aµ, ˜n, ˜l, ˜m)φν(α, ~r − ~Aν − ~g, n, l, m)
+
+A(~r − ~Ac) −
+
+E(˜n, ˜l, ˜m, n, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)
+
+(cid:20)
+
+A(~r − ~Ac) −
+(cid:20)
+
+pen
+
+X~n
+pen
+
+X~n
+
+1
+|~r − ~Ac − ~n| (cid:21)
+1
+|~r − ~Ac − ~n| (cid:21)
+
+d3r =
+
+d3r (31)
+
+A(~r − ~Ac)−
+(cid:20)
+
+pen
+~n
+
+1
+|~r− ~Ac−~n|
+
+(cid:21)
+
+P
+
+instead of A(~r − ~Ac) appears because the multipolar
+
+approximation is only done for the charge distribution in the long range. The penetration
+
+depth pen is a certain threshold for which the integrals are evaluated exactly26,3.
+
+For the gradients, the derivative with respect to all the centers is needed. The partial
+
+derivative with respect to Aµ,x is obtained as
+
+M m
+
+lµ~0ν~gc =
+
+∂
+∂Aµ,x
+
+Z m
+l (
+
+ˆ~Ac)
+
+t,u,v
+Z X
+
+GAµ
+
+x (˜n, ˜l, ˜m, n, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)
+
+A(~r − ~Ac) −
+(cid:20)
+
+pen
+
+X~n
+
+1
+|~r − ~Ac − ~n| (cid:21)
+
+d3r (32)
+
+In similar way, the partial derivative with respect to center ~Aν is computed. Finally, the
+
+partial derivatives with respect to the centers ~Ac are obtained from translational invariance.
+
+6. Spheropole
+
+This term arises because the charge distribution is approximated by a model charge
+
+distribution in the long range26:
+
+Φew(ρc; ~r) = Φew(ρmodel
+
+; ~r) + Φew(ρc −ρmodel
+
+; ~r) = Φew(ρmodel
+
+; ~r) + Φcoul(ρc −ρmodel
+
+; ~r) + Qc (33)
+
+c
+
+c
+
+c
+
+The calculation of the Coulomb potential Φcoul(ρc−ρmodel
+
+; ~r) is restricted to contributions
+
+from those charges inside the penetration depth pen. The use of the Coulomb potential
+
+Φcoul(ρc−ρmodel
+
+; ~r) instead of the Ewald potential Φew(ρc − ρmodel
+
+; ~r) is correct, if ρc − ρmodel
+
+c
+
+c
+
+c
+
+is of zero charge, dipole, quadrupole and spherical second moment35. However, this condition
+
+c
+
+c
+
+13
+
+leads to a correction in the three-dimensional case36,35,26: although the diﬀerence ρc − ρmodel
+
+c
+
+has zero charge, dipole and quadrupole moment, it has in general a non-zero spherical second
+
+moment Qc. Therefore, the potential must be shifted by Q deﬁned as:
+
+Q =
+
+Qc =
+
+c
+X
+
+c
+X
+
+2π
+3V Z
+
+(ρc(~r) − ρmodel
+
+(~r))|~r|2d3r
+
+c
+
+(34)
+
+Three types of contributions are obtained26: zero, ﬁrst and second order HGTFs. They
+
+have to be combined with the corresponding E-coeﬃcient. For the zeroth order, a contri-
+
+bution of
+
+E(˜n, ˜l, ˜m, n, l, m, 0, 0, 0)
+
+3
+2γ +
+
+~Aµ − ~P
+
+(cid:17)
+is computed. The derivative is therefore
+
+(cid:16)
+
+(cid:18)
+
+2
+
+(cid:19)
+
+∂
+∂Aµ,x  
+
+E(˜n, ˜l, ˜m, n, l, m, 0, 0, 0)
+
++ ( ~Aµ − ~P )2
+
+(35)
+
+3
+2γ
+
+ 
+
+!!
+
+To obtain the derivative
+
+∂
+∂Aµ,x
+
+E(˜n, ˜l, ˜m, n, l, m, 0, 0, 0), we use the identity
+
+E(˜n, ˜l, ˜m, n, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)
+
+=
+
+E(˜n, ˜l, ˜m, n, l, m, t, u, v)
+
+Λ(γ, ~r − ~P , t + 1, u, v) +
+
+Λ(γ, ~r − ~P , t, u, v)
+
+E(˜n, ˜l, ˜m, n, l, m, t, u, v) =
+
+˜α
+γ
+
+∂
+∂Aµ,x
+
+
+
+
+
+∂
+∂Aµ,x 
+
+
+t,u,v
+X
+
+t,u,v
+X
+
+t,u,v
+X
+
+t,u,v
+X
+
+GAµ
+
+x (˜n, ˜l, ˜m, n, l, m, t, u, v)Λ(γ, ~r − ~P , t, u, v)
+
+(36)
+
+which gives
+
+∂
+∂Aµ,x
+
+E(˜n, ˜l, ˜m, n, l, m, t, u, v) = GAµ
+
+x (˜n, ˜l, ˜m, n, l, m, t, u, v) −
+
+E(˜n, ˜l, ˜m, n, l, m, t − 1, u, v) (37)
+
+˜α
+γ
+
+A similar operation is necessary for the components with E(˜n, ˜l, ˜m, n, l, m, 1, 0, 0),
+
+E(˜n, ˜l, ˜m, n, l, m, 0, 1, 0) and E(˜n, ˜l, ˜m, n, l, m, 0, 0, 1) (ﬁrst order HGTFs) which are mul-
+
+tiplied with prefactors 2(Px − Aµ,x), 2(Py − Aµ,y) and 2(Pz − Aµ,z), respectively. Fi-
+
+nally, derivatives of the products of E(˜n, ˜l, ˜m, n, l, m, 2, 0, 0), E(˜n, ˜l, ˜m, n, l, m, 0, 2, 0) and
+
+E(˜n, ˜l, ˜m, n, l, m, 0, 0, 2) (second order HGTFs) with 2 are required.
+
+14
+
+B. Bielectronic integrals
+
+We deﬁne a bielectronic integral as
+
+Bµ~0ν~gτ~nσ~n+~h =
+
+φµ(α1, ~r− ~Aµ, n1, l1, m1)φν(α2, ~r− ~Aν −~g, n2, l2, m2)
+|~r − ~r ′|
+
+Z
+φτ (α3,~r ′−~Aτ −~n, n3, l3, m3)φσ(α4, ~r ′−~Aσ −~n−~h, n4, l4, m4)d3r d3r′ =
+
+E(n1, l1, m1, n2, l2, m2, t, u, v)
+
+E(n3, l3, m3, n4, l4, m4, t′, u′, v′)[t, u, v|
+
+|t′, u′, v′] (38)
+
+1
+|~r − ~r ′|
+
+t,u,v
+X
+
+Xt′,u′,v′
+
+The expression [t, u, v|
+
+1
+
+|~r−~r ′| |t′, u′, v′] is deﬁned as24,25
+
+[t, u, v|
+
+1
+|~r − ~r ′|
+
+|t′, u′, v′] =
+
+Λ(γ, ~r − ~P , t, u, v)
+
+Λ(γ ′, ~r ′ − ~P ′, t,′ u′, v′)d3r d3r ′
+
+(39)
+
+1
+|~r − ~r ′|
+
+Z Z
+
+The partial derivative with respect to Aµ,x is obtained as
+
+Bµ~0ν~gτ~nσ~n+~h =
+
+∂
+∂Aµ,x
+
+t,u,v
+X
+
+GAµ
+
+x (n1, l1, m1, n2, l2, m2, t, u, v)
+
+E(n3, l3, m3, n4, l4, m4, t′, u′, v′)[t, u, v|
+
+|t′, u′, v′] (40)
+
+1
+|~r − ~r ′|
+
+Xt′,u′,v′
+
+Similarly, gradients with respect to the other centers are obtained. One of the gradients
+
+can be obtained by translational invariance if the other three gradients have been computed.
+
+In the context of periodic systems, it is necessary to perform summations over the lattice
+
+vectors ~g,~h, ~n. We deﬁne a Coulomb integral as follows
+
+Cµ~0ν~gτ~0σ~h =
+
+Bµ~0ν~gτ~nσ~n+~h
+
+Similarly, we deﬁne an exchange integral as follows:
+
+Xµ~0ν~gτ~0σ~h =
+
+Bµ~0τ~nν~gσ~n+~h
+
+(41)
+
+(42)
+
+pen
+
+X~n
+
+X~n
+
+15
+
+V. TOTAL ENERGY AND GRADIENT
+
+A. Total energy
+
+The correct summation of the Coulomb energy is the most severe problem of the total
+
+energy calculation. The individual contributions to the Coulomb energy, such as for example
+
+the nuclear-nuclear interaction, are divergent for periodic systems. Thus, a scheme based
+
+on the Ewald method is used to sum the individual contributions26. The total energy is
+
+then expressed as the sum of kinetic energy Ekin, the Ewald energies of the nuclear-nuclear
+
+repulsion EN N , nuclear-electron attraction Ecoul−nuc, electron-electron repulsion Ecoul−el,
+
+and ﬁnally the exchange energy Eexch−el.
+
+Etotal = Ekinetic + ENN + Ecoul−nuc + Ecoul−el + Eexch−el =
+
+Pν~gµ~0Tµ~0ν~g + ENN
+
+Pν~gµ~0
+
+a
+X
+
+Z
+
+=
+
+−
+
++
+
+X~g,µ,ν
+
+X~g,µ,ν
+1
+2
+
+X~g,µ,ν
+
+−
+
+1
+2
+
+Za
+
+φµ( ˜α, ~r − ~Aµ, ˜n, ˜l, ˜m)φν(α, ~r − ~Aν − ~g, n, l, m)A(~r − ~Aa)d3r
+
+Pν~gµ~0
+
+− QSµ~0ν~g +
+
+Pσ~hτ~0Cµ~0ν~gτ~0σ~h −
+
+(cid:18)
+
+X~h,τ,σ
+
+P ↑
+
+ν~gµ~0
+
+P ↑
+
+σ~hτ~0
+
+Xµ~0ν~gτ~0σ~h −
+
+P ↓
+
+ν~gµ~0
+
+X~g,µ,ν
+
+X~h,τ,σ
+
+X~g,µ,ν
+
+X~h,τ,σ
+
+1
+2
+
+Xm=−l
+
+c
+X
+
+Xl=0
+P ↓
+
+σ~hτ~0
+
+Xµ~0ν~gτ~0σ~h
+
+L
+
+l
+
+l (ρc; ~Ac)M m
+ηm
+
+lµ~0ν~gc
+
+(cid:19)
+
+(43)
+
+B. Gradient of the total energy
+
+The force with respect to the position of the nuclei can be calculated similarly to the
+
+molecular case6,5. The derivatives of all the integrals are necessary, and the derivative of the
+
+density matrix is expressed with the help of the energy-weighted density matrix. The full
+
+force is obtained as:
+
+~FAi = −
+
+∂Etotal
+∂ ~Ai
+
+=
+
+−
+
+Pν~gµ~0
+
+X~g,µ,ν
+
+∂Tµ~0ν~g
+∂ ~Ai
+
+−
+
+∂ENN
+∂ ~Ai
+
+16
+
++
+
+−
+
+X~g,µ,ν
+1
+2
+
+X~g,µ,ν
+
+∂
+∂ ~Ai Z (cid:20)
+
+L
+
+l
+
++
+
++
+
++
+
+c
+X
+∂
+∂ ~Ai (cid:20) Z
+1
+2
+
++
+
+X~g,µ,ν
+
+Xl=0
+
+τ,σ
+X
+
+Xm=−l Z
+Pσ~hτ~0
+
+L
+
+l
+
+∂Cµ~0ν~gτ~0σ~h
+∂ ~Ai
+
+Pσ~hτ~0
+
+Pν~gµ~0
+
+Za
+
+φµ(α2, ~r − ~Aµ, n2, l2, m2)φν(α1, ~r − ~Aν − ~g, n1, l1, m1)A(~r − ~Aa)d3r
+
+∂
+∂ ~Ai (cid:20) Z
+2π
+3V
+
+a
+X
+
+(cid:26)
+
+Pν~gµ~0
+
+− Sµ~0ν~g
+
+Pσ~hτ~0
+
+c
+X
+
+X~h,σ,τ ∈c
+
+− φτ (α2, ~r − ~Aτ , n2, l2, m2)φσ(α1, ~r − ~Aσ − ~h, n1, l1, m1)
+
+φτ (α2, ~r ′ − ~Aτ , n2, l2, m2)φσ(α1, ~r ′ − ~Aσ − ~h, n1, l1, m1)X m
+
+l (~r ′ − ~Ac)d3r′δm
+
+l ( ~Ac, ~r)
+
+r2d3r
+
+(cid:21)
+
+(cid:21)
+
+Xl=0
+
+Xm=−l X~h,τ ∈c,σ
+φτ (α2, ~r − ~Aτ , n2, l2, m2)φσ(α1, ~r − ~Aσ − ~h, n1, l1, m1)X m
+
+l (~r − ~Ac)d3r M m
+
+lµ~0ν~gc
+
+(cid:21)(cid:27)
+
+P ↑
+
+ν~gµ~0
+
+X~h,τ,σ
+
+P ↑
+
+σ~hτ~0
+
+∂Xµ~0ν~gτ~0σ~h
+∂ ~Ai
+
++
+
+1
+2
+
+P ↓
+
+σ~hτ~0
+
+∂Xµ~0ν~gτ~0σ~h
+∂ ~Ai
+
+P ↓
+
+ν~gµ~0
+
+X~g,µ,ν
+µj(~k)(ǫ↑
+
+X~h,τ,σ
+
+exp(i~k~g)
+
+{ a↑
+
+νj(~k)a∗↑
+
+j (~k) + Q)Θ(ǫF − ǫ↑
+
+j (~k) − Q)
+
++
+
+∂Sµ~0ν~g
+∂ ~Ai ZBZ
+µj(~k)(ǫ↓
+
+X~g,µ,ν
+νj(~k)a∗↓
+
++a↓
+
+Xj
+
+j (~k) + Q)Θ(ǫF − ǫ↓
+
+j (~k) − Q) } d3k
+
+(44)
+
+The last addend is the energy weighted density matrix; the integral is over the ﬁrst
+
+Brillouin zone.
+
+VI. STRUCTURE OF THE GRADIENT CODE
+
+The present structure of the gradient code is indicated in ﬁgure 1. The ﬁrst step is to
+
+compute the gradient of the Ewald energy of the nuclei in subroutine GRAMAD (the Ewald
+
+energy is computed in ENEMAD). The control module TOTGRA then ﬁrst calls routines to
+
+compute the gradient of the bielectronic integrals (labeled with SHELLX∇ as these routines
+
+will change their structure). The subroutine SHELLX∇ calls subroutines which explicitly
+
+compute the derivatives of Coulomb and exchange integrals, and multiplies the gradients a
+
+ﬁrst time with the density matrix. Back in TOTGRA again, the second multiplication with
+
+the density matrix is performed. The next step is to compute the derivatives of the multi-
+
+17
+
+poles (MONIRG) and to compute the energy weighted density matrix (PDIGEW). Then,
+
+the gradients of the one-electron integrals are computed (CJAT0G, CJAT1G, CJAT2G or
+
+CJAT3G, depending on the dimension). The ﬁeld integrals and their gradients are now
+
+multiplied with the multipolar integrals and their gradients, and a multiplication with the
+
+density matrix is performed. This concludes the calculation of the gradients.
+
+The structure has been simpliﬁed to focus on the most important parts. In addition, as
+
+already mentioned, the code will undergo changes during the optimization process so that
+
+a too detailed description seems to be unadvised.
+
+18
+
+FIGURES
+
+FIG. 1. The present structure of the gradient code. The left column describes the purpose
+
+of the routines, the middle column gives the names of the corresponding routines, and the right
+
+column gives the name of the routines in the energy code. One arrow indicates that the routine is
+
+a subroutine, two arrows indicate that it is a subroutine called from a subroutine.
+
+19
+
+nuclear-nuclear repulsion
+
+gradients
+
+GRAMAD
+
+ENEMAD
+
+gradient control module
+
+TOTGRA
+
+TOTENY + MONMAD
+
+gradient of bielectronic in-
+
+tion with density matrix
+
+tegrals, (cid:12)rst multiplica-
+
+& SHELLXr
+
+SHELLX
+
+gradient of Coulomb and
+
+& & VIC5Jr, VIC5Kr,
+
+exchange integrals
+
+VIC5Lr
+
+VIC5J, VIC5K, VIC5L
+
+& MONIRG
+
+MONIRR+QGAMMA
+
+multipolar gradients
+
+& & OLIPAG
+
+POLIPA
+
+energy weighted density
+
+matrix
+
+& PDIGEW
+
+derived from PDIG
+
+gradients of one-electron
+
+& CJAT0G, CJAT1G,
+
+CJAT0, CJAT1,
+
+integrals
+
+CJAT2, CJAT3
+
+CJAT2G, CJAT3G
+
+second multiplication of
+
+gradients of bielectronic
+
+integrals with density ma-
+
+trix
+
+trix
+
+Calculation of multipoles
+
+and their gradients, multi-
+
+plication with density ma-
+
+multiplication of (cid:12)eld in-
+
+tegrals and their gradients
+
+with multipolar integrals
+
+and their gradients, multi-
+
+plication with density ma-
+
+trix
+
+printing of forces
+
+20
+
+VII. EXAMPLES
+
+In tables I, II and III, we give examples of the accuracy of the gradients. First, in table
+
+I, a chain of NiO molecules is considered, with ferromagnetic ordering (all the Ni spins up)
+
+and with antiferromagnetic ordering (nearest Ni spins are antiparallel). The oxygen atoms
+
+are moved by 0.01 ˚A from their equilibrium positions which results in a non-vanishing
+
+force. The agreement between numerical and analytical gradient is better than 0.0001 Eh
+a0 .
+
+As we discussed in our ﬁrst article22, the agreement can be improved by using stricter
+
+”ITOL”-parameters (these are parameters which control the accuracy of the evaluation of
+
+the integrals3). Indeed, when increasing these parameters, the agreement further improves
+
+up to an error of less than 10−5 Eh
+a0 .
+
+In table II, a LiF layer with a lattice constant of 5 ˚A is considered with one atom being
+
+displaced from its equilibrium position. The forces agree to 2 × 10−5 Eh
+
+a0 when default ITOL
+
+parameters (6, 6, 6, 6, 12) are used.
+
+Finally, in table III, a three-dimensional, ferromagnetically polarized NiO solid is con-
+
+sidered. When displacing the oxygen ions, the forces agree to better than 2 × 10−5 Eh
+a0 .
+
+As a whole, the accuracy is certainly very high and can further be improved by applying
+
+stricter cutoﬀ (ITOL) parameters.
+
+VIII. CONCLUSION
+
+In this article, we described the implementation of analytical gradients in the code CRYS-
+
+TAL. In its present form, the code is capable of computing highly accurate Hartree-Fock
+
+gradients for systems with 0,1,2 and 3-dimensional periodicity. Both closed-shell restricted
+
+Hartree-Fock as well as unrestricted Hartree-Fock calculations can be performed.
+
+A ﬁrst step of improving the eﬃciency of the code has been completed with the coding of
+
+gradients for the bipolar expansion, and a further enhancement of the eﬃciency will be one
+
+of the future directions. Of highest importance is the implementation of symmetry which
+
+21
+
+will lead to high saving factors37. Other targets are the implementation of gradients with
+
+respect to the lattice vector, an extension to metallic systems38, and the implementation of
+
+density functional gradients.
+
+IX. ACKNOWLEDGMENTS
+
+The author would like to thank CCP3 and Prof. N. M. Harrison for their interest and
+
+support of this work (EPSRC grant GR/K90661), Mr. V. R. Saunders for many helpful
+
+discussions, and Prof. R. Dovesi and the Turin group for helpful discussions and hospitality.
+
+22
+
+REFERENCES
+
+1 C. Pisani, R. Dovesi, and C. Roetti, Hartree-Fock Ab Initio Treatment of Crystalline
+
+Systems, edited by G. Berthier et al, Lecture Notes in Chemistry Vol. 48 (Springer, Berlin,
+
+1988).
+
+2 C. Pisani and R. Dovesi, Int. J. Quantum Chem. 17, 501 (1980); R. Dovesi and C. Roetti,
+
+Int. J. Quantum Chem. 17, 517 (1980).
+
+3 V. R. Saunders, R. Dovesi, C. Roetti, M. Caus`a, N. M. Harrison, R. Orlando, C. M.
+
+Zicovich-Wilson, crystal 98 User’s Manual, Theoretical Chemistry Group, University
+
+of Torino (1998).
+
+4 V. R. Saunders, N. M. Harrison, R. Dovesi, C. Roetti, Electronic Structure Theory: From
+
+Molecules to Crystals (in preparation)
+
+5 P. Pulay, Mol. Phys. 17, 197 (1969).
+
+(1958).
+
+7 P. Pulay, Adv. Chem. Phys. 69, 241 (1987).
+
+6 S. Brato˘z, in Calcul des fonctions d’onde mol´eculaire, Colloq. Int. C. N. R. S. 82, 287
+
+8 P. Pulay, in Applications of Electronic Structure Theory, edited by H. F. Schaefer III, 153
+
+(Plenum, New York, 1977).
+
+9 T. Helgaker and P. Jørgensen, Adv. in Quantum Chem. 19, 183 (1988).
+
+10 T. Helgaker and P. Jørgensen, in Methods in Computational Physics, edited by S. Wilson
+
+and G. H. F. Diercksen, 353 (Plenum, New York, 1992).
+
+11 H. B. Schlegel, in Modern electronic structure theory, edited by D. R. Yarkony, 459 (World
+
+12 P. Pulay, in Modern electronic structure theory, edited by D. R. Yarkony, 1191 (World
+
+Scientiﬁc, Singapore, 1995).
+
+Scientiﬁc, Singapore, 1995).
+
+23
+
+13 H. B. Schlegel, Theor. Chim. Acta 103, 294 (2000).
+
+14 H. Teramae, T. Yamabe, C. Satoko and A. Imamura, Chem. Phys. Lett. 101, 149 (1983);
+
+H. Teramae, T. Yamabe and A. Imamura, J. Chem. Phys. 81, 3564 (1984).
+
+15 S. Hirata and S. Iwata, J. Chem. Phys. 109, 4147 (1998).
+
+16 D. Jacquemin, J.-M. Andr´e and B. Champagne, J. Chem. Phys. 111, 5306 (1999); J.
+
+Chem. Phys. 111, 5324 (1999).
+
+17 S. Suhai, Phys. Rev. B 27, 3506 (1983); S. Suhai, Chem. Phys. Lett. 96, 619 (1983).
+
+18 J.-Q. Sun and R. J. Bartlett, J. Chem. Phys. 104, 8553 (1996).
+
+19 S. Hirara and S. Iwata, J. Chem. Phys. 107, 10075 (1997); S. Hirata, H. Torii and M.
+
+Tasumi, Phys. Rev. B 57, 11994 (1998); S. Hirata and S. Iwata, J. Chem. Phys. 108, 7901
+
+(1998); S. Hirata and S. Iwata, J. Phys. Chem. A 102, 8426 (1998).
+
+20 K. N. Kudin and G. E. Scuseria, Phys. Rev. B 61, 16440 (2000).
+
+21 S. Hirata and S. Iwata, J. Mol. Struct.: THEOCHEM 451, 121 (1998).
+
+22 K. Doll, V. R. Saunders and N. M. Harrison, accepted by Int. J. Quantum Chem.
+
+23 S. F. Boys, Proc. Roy. Soc. A 200, 542 (1950).
+
+24 L. E. McMurchie and E. R. Davidson, J. Comput. Phys. 26, 218 (1978).
+
+25 V. R. Saunders, in Methods in Computational Molecular Physics, edited by G. H. F.
+
+Diercksen and S. Wilson, 1 (Reidel, Dordrecht, Netherlands, 1984).
+
+26 V. R. Saunders, C. Freyria-Fava, R. Dovesi, L. Salasco, and C. Roetti, Mol. Phys. 77, 629
+
+(1992).
+
+27 R. Dovesi, C. Pisani, C. Roetti, and V. R. Saunders, Phys. Rev. B 28, 5781 (1983).
+
+28 T. Helgaker and P. R. Taylor, Theor. Chim. Acta 83, 177 (1992).
+
+24
+
+29 J. M. Andr´e, L. Gouverneur and G. Leroy, Int. J. Quantum Chem. 1, 427 (1967); Int. J.
+
+Quantum Chem. 1, 451 (1967); J. M. Andr´e, J. Chem. Phys. 50, 1536 (1969).
+
+30 E. Apr`a in Quantum-Mechanical Ab-initio Calculation of the Properties of Crystalline
+
+Materials, edited by C. Pisani, Lecture Notes in Chemistry Vol. 67 (Spinger, Berlin,
+
+31 W. J. Hehre, W. A. Lathan, R. Ditchﬁeld, M. D. Newton and J. A. Pople, GAUSSIAN
+
+70, QCPE, Indiana University, Bloomington, Indiana, program number 236.
+
+32 V. R. Saunders, C. Freyria-Fava, R. Dovesi, and C. Roetti, Comp. Phys. Comm. 84, 156
+
+1996).
+
+(1994).
+
+33 D. E. Parry, Surf. Science 49, 433 (1975); 54, 195 (1976) (Erratum).
+
+34 P. P. Ewald, Ann. Phys. (Leipzig) 64, 253 (1921).
+
+35 F. E. Harris, in Theoretical Chemistry: Advances and Perspectives, Vol. 1, 147 (1975),
+
+edited by H. Eyring and D. Henderson, Academic Press, New York
+
+36 R. N. Euwema and G. T. Surratt, J. Phys. Chem. Solids 36, 67 (1975).
+
+37 R. Dovesi, Int. J. Quantum Chem. 29, 1755 (1986).
+
+38 M. Kertesz, Chem. Phys. Lett. 106, 443 (1984).
+
+25
+
+TABLES
+
+TABLE I. Ferromagnetic (FM) and antiferromagnetic (AFM) NiO chain (i.e. a chain with
+
+alternating nickel and oxygen atoms). The distance between two oxygen atoms is chosen as 5 ˚A.
+
+The force is computed numerically and analytically with the oxygen atoms being displaced. A
+
+[5s4p2d] basis set was used for nickel, and a [4s3p] basis set for oxygen.
+
+magnetic
+
+ITOL
+
+displacement
+
+analytical derivative
+
+numerical derivative
+
+ordering
+
+parameter
+
+of oxygen
+
+(x-component)
+
+(x-component)
+
+FM
+
+FM
+
+AFM
+
+AFM
+
+6 6 6 6 12
+
+8 8 8 8 14
+
+6 6 6 6 12
+
+8 8 8 8 14
+
+in ˚A
+
+0.01
+
+0.01
+
+0.01
+
+0.01
+
+Eh/a0
+
+0.001274
+
+0.001246
+
+0.001276
+
+0.001250
+
+TABLE II. Forces on the atoms of a LiF layer when one of the atoms is displaced from its
+
+equilibrium position. A [4s3p] basis set was used for the ﬂuorine atom and a [2s1p] basis set for
+
+the lithium atom. Default ITOL parameters were used.
+
+atom
+
+analytical derivative
+
+numerical derivative
+
+(x-component)
+
+(x-component)
+
+Eh/a0
+
+0.001188
+
+0.001249
+
+0.001191
+
+0.001252
+
+0.001400
+
+-0.020726
+
+0.010376
+
+0.008950
+
+F at (0.5 ˚A, 0 ˚A, 0 ˚A)
+
+Li at (2.5 ˚A, 0 ˚A, 0 ˚A)
+
+F at (2.5 ˚A, 2.5 ˚A, 0 ˚A)
+
+Li at (0 ˚A, 2.5 ˚A, 0 ˚A)
+
+0.001379
+
+-0.020731
+
+0.010384
+
+0.008969
+
+26
+
+TABLE III. Ferromagnetic NiO in an fcc structure at a lattice constant of 4.2654 ˚A. We com-
+
+pare numerical and analytical derivatives when moving the oxygen ion parallel to the x-direction.
+
+Default ITOL parameters were used, the basis sets are the same as in table I.
+
+displacement of oxygen
+
+analytical derivative
+
+numerical derivative
+
+(x-component)
+
+(x-component)
+
+in ˚A
+
+0.01
+
+0.02
+
+0.03
+
+0.04
+
+0.05
+
+Eh/a0
+
+0.001485
+
+0.002925
+
+0.004378
+
+0.005847
+
+0.007346
+
+Eh/a0
+
+0.001499
+
+0.002939
+
+0.004387
+
+0.005857
+
+0.007352
+
+27
+
+

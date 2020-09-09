@@ -1,0 +1,1487 @@
+4
+0
+0
+2
+ 
+c
+e
+D
+ 
+7
+1
+ 
+ 
+]
+h
+p
+-
+o
+i
+b
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+6
+1
+1
+2
+1
+4
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Peptide Conformational Equilibria Computed via a
+Single-Stage Shifting Protocol
+
+F. Marty Ytreberg∗and Daniel M. Zuckerman†
+Computational Biology, School of Medicine
+Dept. of Environmental and Occupational Health,
+Graduate School of Public Health,
+University of Pittsburgh, 200 Lothrop St., Pittsburgh, PA 15261
+
+October 28, 2013
+
+Abstract
+
+We study the conformational equilibria of two peptides using a
+novel statistical mechanics approach designed for calculating free en-
+ergy diﬀerences between highly dis-similar conformational states. Our
+results elucidate the contrasting roles of entropy in implicitly solvated
+leucine dipeptide and decaglycine. The method extends earlier work by
+Voter, and overcomes the notorious “overlap” problem in free energy
+computations by constructing a mathematically equivalent calculation
+with high conformational similarity. The approach requires only equi-
+librium simulations of the two states of interest, without the need for
+sampling transition states. We discuss extensions of the approach to
+binding aﬃnity estimation and explicitly solvated systems, as well as
+possible optimizations.
+
+1
+
+Introduction
+
+Although free energy diﬀerences (∆G) are fundamental to the description of
+every molecular process, computer-based estimation of ∆G remains among
+the most diﬃcult and time-consuming tasks in computational chemistry and
+biology. Despite the obstacles, molecular mechanics ∆G calculations are
+presently applied for protein engineering,1,2 drug design,3,4 toxicology stud-
+ies,5 solubility estimation,6,7 and determining binding aﬃnities of ligands
+
+∗E-mail: fmy1@pitt.edu
+†E-mail: dmz@ccbb.pitt.edu
+
+1
+
+to proteins.8 Although many ad hoc and approximate methods are in wide
+use,9 including docking protocols,10–14 there is a widely recognized need to
+more rigorously include molecular ﬂexibility and entropic eﬀects.10–14 Ad-
+ditionally, the development of improved, polarizable molecular mechanics
+forceﬁelds6,15–17 suggests rigorous, ensemble-based ∆G estimates will play
+an increasing role in elucidating subtle molecular eﬀects—aided by the de-
+creasing cost of computer resources.
+
+Our concern here is to calculate the conformational free energy diﬀer-
+ences ∆G and entropy diﬀerences ∆S for peptides with a method based on
+statistical mechanics, which fully accounts for molecular ﬂexibility. Because
+these techniques attempt a full accounting of entropic and enthalpic eﬀects,
+they are computationally demanding—and it is the need for greater eﬃ-
+ciency which we address here. Our ideas are framed and tested for molecular
+mechanics calculations, but they should also prove applicable with quantum
+mechanical computation.18
+
+Present statistical mechanics methods can be classiﬁed into equilibrium
+and non-equilibrium approaches. Equilibrium ∆G calculations, such as ther-
+modynamic integration and multi-stage free energy perturbation, have been
+used successfully for many years.19–22 Equilibrium methods can be very ac-
+curate, but have a large computational cost. On the other hand, Jarzynski’s
+equality23 has recently has opened up a host of non-equilibrium ∆G meth-
+ods.24–28 Non-equilibrium methods can provide rapid estimates for ∆G, but
+typically suﬀer from bias without careful convergence testing.29–32 Single-
+stage approaches,7,33 may be considered non-equilibrium calculations which
+are based upon simulating only one or both end states of interest.
+
+Poor “overlap”—the lack of conformational similarity between the molec-
+ular states of interest—is a key cause of computational expense in statistical
+mechanics methods. This phenomenon is illustrated schematically in Figure
+1. Unfortunately, in many cases of interest, poor overlap is the rule rather
+than the exception. Such dis-similarity is implicit in the critical problem of
+conformational equilibria, for instance.
+
+The most common approach to improve overlap in free energy calcu-
+lations is that used in thermodynamic integration, namely, simulating the
+system at multiple hybrid, intermediate stages (e.g., Refs. 6,19–22,34,35).
+An alternative strategy was taken by van Gunsteren and collaborators36
+and McCammon and collaborators33 who built non-physical intermediate
+reference states that increased overlap between the two end states. A third
+noteworthy solution to the overlap problem is the computation of absolute
+free energies for each of the end states, avoiding any need for conﬁgurational
+overlap.37–40
+
+2
+
+Here, we address the overlap problem using a two-decade-old, elegant
+idea from solid-state systems.41 In Ref. 41, Voter pointed out that shifting
+potential energy functions (or coordinates) by a constant vector in conﬁgu-
+ration space can dramatically improve the overlap of the states while main-
+taining the value of ∆G exactly; he applied this idea to tungsten dimers on
+a crystal surface. A similar approach was adopted for lattice systems by
+Bruce and collaborators.42 In their “metric scaling” approach, Reinhardt
+and collaborators also built on Voter’s idea for slow-growth ∆G estimates
+for crystal lattice changes.43 Most recently, in a generalization of Voter’s
+approach, Jarzynski introduced “targeted free energy perturbation,” and
+applied the method to a Lennard-Jones ﬂuid.44 However, Ref. 44 also in-
+dicates that constructing the mapping is likely to be as hard as estimating
+the free energy itself, and
+
+Here, we introduce the ﬁrst generalization of Voter’s shifting strategy
+speciﬁcally tailored to molecular calculations. Because no intermediate
+stages are required, the approach has the potential to dramatically reduce
+computation times. Overlap is obtained by shifting internal coordinates of
+the molecule. The shifting strategy is further combined with Bennett’s iter-
+ative approach45 to eﬃciently utilize the data. These two ideas, (i) shifting
+internal coordinates and (ii) the use of Bennett’s iterative method, provide
+the backbone of the single-stage shifting approach presented here.
+
+In outline, this report ﬁrst builds the necessary mathematical frame-
+work for the single-stage shifting method in Section 2. Then in Section
+3, the method is tested on leucine dipeptide (ACE-(leu)2-NME) in GBSA
+implicit solvent, correctly calculating the free energy diﬀerence ∆G and en-
+tropy diﬀerence ∆S between the alpha and beta conformations. The leucine
+dipeptide system is also used to demonstrate various shifting approaches,
+and show the importance of using Bennett’s iterative method. Finally, the
+single-stage shifting method is used to predict ∆G and ∆S between the
+alpha and extended conformations of decaglycine (ACE-(gly)10-NME) in
+GBSA solvent.
+
+While our results already demonstrate notable eﬃciency (the decaglycine
+calculations, for instance, would be extremely costly by conventional stag-
+ing methods), we have not yet pursued a number of fairly clear avenues
+for optimization; these are discussed in Section 4. Finally, the extension
+of the single-stage shifting method to explicitly solvated systems, and for
+“alchemical” mutations, is explored in Section 5.
+
+3
+
+2 The single-stage shifting method
+
+In this section we introduce a single-stage method which improves the over-
+lap between the end states by construction. In essence, a mathematically
+equivalent calculation, with high overlap, is performed instead of addressing
+the original problem.
+
+2.1 Constructing an equivalent shifted ∆G calculation
+
+Consider two end states deﬁned by potential energy functions U0(~x) and
+U1(~x), where ~x is a set of conﬁgurational coordinates. The two states could
+be two diﬀerent conformations, or the bound and unbound states of a pro-
+tein. For problems in conformational equilibria, as studied below, U0 and U1
+can be the same potential function restricted to diﬀerent regions of conﬁg-
+urational space (i.e., two conformational states). The free energy diﬀerence
+∆G between these two states is given by
+
+e−β∆G =
+
+Z[U1(~x)]
+Z[U0(~x)]
+
+=
+
+d~x e−βU1(~x)
+d~x e−βU0(~x) ,
+
+(1)
+
+R
+
+R
+
+where β = 1/kBT , and Z indicates a partition function, and integration is
+to be performed over the indicated potential function. Note that for implicit
+solvation, as is used in this study, the Gibbs free energy is equivalent to the
+Helmholtz free energy. Using the formalism of free energy perturbation,46
+we can re-write eq (1) as
+
+e−β∆G =
+
+d~x
+
+e−β[U1(~x)−U0(~x)]
+(cid:16)
+(cid:17)
+d~x e−βU0(~x)
+
+R
+
+e−βU0(~x)
+
+*
+
+=
+
+e−β[U1(~x)−U0(~x)]
+
+(2)
+
+,
+
++0
+
+R
+
+where the h...i0 indicates an equilibrium average over U0 conﬁgurations.
+
+Voter’s shifting strategy41 improves the overlap between states (potential
+functions) without altering ∆G. Imagine shifting the origin of the conﬁgu-
+rational coordinates ~x in U1 by a constant vector ~C. This corresponds to a
+simple change of variables, ~x → ~x+ ~C, and Z[U1(~x+ ~C)] = Z[U1(~x)] remains
+unchanged because integration is performed over all space. Eq (2) can now
+be written as
+
+e−β∆G =
+
+d~x
+
+e−β[U1(~x+ ~C)−U0(~x)]
+(cid:16)
+d~x e−βU0(~x)
+
+(cid:17)
+
+R
+
+e−βU0(~x)
+
+*
+
+=
+
+e−β[U1(~x+ ~C)−U0(~x)]
+
+. (3)
+
++0
+
+In principle, eq (3) implies that one can arbitrarily shift the coordinates for
+the U0 conﬁgurations needed for the average. (Shifting U0 rather than U1
+
+R
+
+4
+
+produces an analogous result.) In practice, the shifting should be done to
+maximize the overlap between conﬁgurations in U0 and U1. Unfortunately,
+no Cartesian shift vector can bring two distinct molecular conﬁgurations into
+overlap. Therefore, we apply the Voter idea in internal coordinates—and we
+term the approach single-stage shifting.
+
+To demonstrate the reasoning behind a shift in internal coordinates, con-
+sider the schematic torsional potentials shown in Figure 1a,b. Simulations
+for U1 will mainly sample the large “trans” well at φ = 0, while simulations
+for U0 will mainly sample the large “gauche” well at φ ≈ −150. Shifting
+U1 by a constant corresponding to the diﬀerence between the minima of the
+two potentials (i.e., roughly 150 degrees for this example) produces Figure
+1c, where the overlap between φ conﬁgurations is excellent. Such a shift
+does not alter the U1 partition function and thus ∆G is unaﬀected. Note
+that, below, we shift internal coordinates rather than potentials, but these
+are equivalent procedures.
+
+In practice, the dimensionality of the system will be high and the shifting
+constant will not be as obvious as that in Figure 1. Reasonable methods for
+determining the shifting constant will be discussed in Section 2.3.
+
+2.2 Utilizing bi-directional data—Bennett’s Methods
+
+In single-stage free energy perturbation (eq (3)), only conﬁgurations from
+U0 are evaluated using U1. However, if simulations are performed in both
+states of interest, one could just as readily evaluate conﬁgurations from U1
+using U0. Bennett showed that the “bi-directional” (U0 → U1 and U1 → U0)
+evaluations could be combined to minimize the uncertainty in ∆G.45
+
+Bennett introduced both “iterative” and “acceptance-ratio” methods to
+utilize bi-directional data.45 Generalizing the acceptance-ratio formulation
+to the shifting approach yields41,45
+
+min
+
+1.0, e−β(U1(~x+ ~C)−U0(~x))
+
+min
+
+1.0, e−β(U0(~x− ~C)−U1(~x))
+
+e−β∆G =
+
+*
+
+*
+
+(cid:16)
+
+(cid:16)
+
++0
+
+(cid:17)
+
+.
+
++1
+
+(cid:17)
+
+(4)
+
+Similarly, generalizing to the iterative method to shifted coordinates leads
+to the following relation45
+
+1 + e−β(U0(~x)−U1(~x+ ~C)+∆G)
+
+−1
+
+1 + e−β(U1(~x)−U0(~x− ~C)−∆G)
+
+*(cid:18)
+
+(cid:19)
+
++0
+
+*(cid:18)
+
+−1
+
+(cid:19)
+
++1
+
+. (5)
+
+=
+
+5
+
+Since ∆G is on both sides of eq (5), it must be solved in an iterative fashion.
+Eq. (5), in its un-shifted form, has been shown to be the optimal use of bi-
+directional data.35,45,47,48
+
+Below we use the single-stage shifting method to calculate ∆G using eqs
+(3), (4) and (5) with internal coordinates shifted by a constant ~C, which
+is chosen to maximize the overlap between U0 and U1 states. For the sys-
+tems studied below, leucine dipeptide and decaglycine, we ﬁnd the iterative
+method of eq (5) to be the most eﬃcient use of the raw data.
+
+2.3 Practical implementation in molecular systems
+
+Determining a shifting constant ~C in eq (5) involves making a decision about
+the subset of coordinates to shift. There is generally a minimum number of
+coordinates needed. For example, for leucine dipeptide, we deﬁne the alpha
+and beta conformations using two backbone torsion angles; thus these two
+torsions must be shifted. In practice, it is also possible to shift too many
+coordinates, leading to steric clashes. This will be shown below for peptides.
+Once the subset of shifted internal coordinates has been determined, the
+shift constant ~C must be calculated for all coordinates in the subset.
+In
+Figure 1, we chose to shift according to the minimum of U0 and U1. This
+leads to our ﬁrst approach: after equilibrium simulation in each potential,
+ﬁnd the lowest energy frame (snapshot) for both U0 and U1; then choose the
+constant vector ~C which aligns the two lowest-energy frames,
+
+~C = ~y min
+
+0 − ~y min
+
+1
+
+,
+
+(6)
+
+(7)
+
+where ~y represents the subset of coordinates (e.g., only torsions) of the
+conﬁguration ~x. Strictly speaking, ~C is a vector of the same dimensionality
+as ~x, with zero for every component not present in ~y. Another reasonable
+choice for a shift constant is realized by generating a histogram for each
+coordinate in ~y for both U0 and U1. The shift constant is then chosen to
+align the peaks of these histograms,
+
+~C = ~y mode
+0
+
+− ~y mode
+1
+
+,
+
+Below, we shift using both of these choices for various internal coordinate
+subsets, and compare the results.
+
+Procedurally, an estimate of ∆G is generated using the following steps:
+
+1. Generate an equilibrium trajectory in both states of interest, i.e., using
+U0 and U1. Determine, as discussed above, the subset of coordinates
+to shift ~y, and the shifting vector ~C using eq (6) or (7).
+
+6
+
+2. For each frame in the U0 trajectory, shift the internal coordinates by
+~C (e.g., φ2 → φ2 + 90.0). Then, for each U0 frame, ~x, evaluate and
+record U1(~x + ~C) − U0(~x).
+
+3. Repeat step 2 for each frame in the U1 ensemble with one important
+diﬀerence—the frames must be shifted in the opposite direction (e.g.,
+φ2 → φ2 − 90.0), yielding U0(~x − ~C) − U1(~x).
+
+4. Solve eq (3), (4) and/or (5) to determine a ∆G estimate.
+
+Below, we utilize this process to generate multiple ∆G estimates, after which
+the mean ∆G and standard deviation are calculated.
+
+When shifting internal coordinates care must be taken to shift the coordi-
+nates so that the partition function remains unchanged. Using the standard
+internal coordinates for bond length r, bond angle θ and dihedrals ω, a
+diﬀerential volume element in conﬁguration space is given by
+
+d~x1 = r2
+
+1dr1 sin θ1dθ1 dω1 = d(r3
+
+1/3) d(cos θ1) dω1,
+
+(8)
+
+where ~x1 represents one possible set of internal coordinates. Equation (8)
+holds for every possible set of internal coordinates, and thus implies that the
+shifting of internal coordinates must be done according to simple rules. Bond
+lengths must be shifted according to the cube of the length: r3 → r3 − r3
+c ,
+where rc is the bond length shifting constant (i.e., one component of the
+vector ~C) found either by the peaks from histograms of r3 and using eq (7),
+or by comparing minimum energy frames and using eq (6). Similarly, bond
+angles must be shifted using cos θ → cos θ − cos θc, and dihedrals are shifted
+via ω → ω − ωc.
+
+3 Results for peptides
+
+To test the eﬀectiveness of the single-stage shifting method, we performed
+all-atom simulations of leucine dipeptide (ACE-(leu)2-NME) and decaglycine
+(ACE-(gly)10-NME). Both peptides were simulated using the TINKER Ver-
+sion 4.2 molecular dynamics package.49 The peptides were solvated im-
+plicitly using the generalized Born surface area (GBSA) approach50 and
+Langevin dynamics were utilized with the friction coeﬃcient set to that of
+water (91.0 psec−1). A time step of 1.0 fsec was chosen for all simulations.
+Leucine dipeptide was maintained at 500.0 K (to enable independent veriﬁ-
+cation of our result) and utilized the CHARMM27 forceﬁeld parameter set.51
+Decaglycine was maintained at 300.0 K and used the AMBER96 forceﬁeld
+parameter set52 for comparison with Ref. 37.
+
+7
+
+3.1 Leucine dipeptide
+
+Leucine dipeptide (ACE-(leu)2-NME) was chosen as a test system because
+(i) it possesses some of the complexity of a large molecule—four backbone
+torsions and eight side-chain dihedrals; and (ii) it is small enough to allow
+for very long simulation times. Long simulation times are necessary for
+an unbiased, independent determination of the conformational population
+(hence ∆G), providing a strict test of the single-stage shifting method.
+
+For leucine dipeptide we calculated the free energy diﬀerence ∆G and
+entropy diﬀerence ∆S for the alpha → beta conformational change. We
+deﬁned the alpha and beta conformations using two internal backbone tor-
+sions, namely, for alpha: −145 < φ2 < −25 and − 125 < ψ1 < −5; and
+for beta: −160 < φ2 < −40 and 70 < ψ1 < −170. A temperature of 500
+K was chosen to enable repeated crossing of the free energy barrier between
+the alpha and beta conformations. At 500 K, leucine dipeptide switches be-
+tween alpha and beta conformations at a rate of around 2.5 transitions per
+nsec with GBSA solvation. Note that this high temperature is required only
+to obtain an unbiased estimate of ∆G—our single-stage shifting approach
+works equally well at lower temperatures.
+
+To obtain an independent and unbiased value of ∆G, four 1.0 µsec simu-
+lations were performed yielding around 2500 transition events per trajectory.
+The four trajectories were then used to calculate ∆G via the deﬁnition
+
+∆G ≡ −
+
+ln
+
+1
+β
+
+Nbeta
+Nalpha !
+
+,
+
+ 
+
+(9)
+
+where Nalpha and Nbeta are, respectively, the number of dynamics steps the
+system was in the alpha and beta conformations. The unbiased value of
+∆G for alpha → beta was found to be ∆G = 0.95 ± 0.05 kcal/mole, where
+the value of ∆G given is the average of the four 1.0 µsec estimates with
+uncertainty given by the standard deviation.
+
+The unbiased entropy diﬀerence was calculated using eq (9) via T ∆S =
+∆Uavg − ∆G where ∆Uavg is the average of Ubeta − Ualpha. We found that
+T ∆S was zero within uncertainty. This is consistent with our observation
+that the ﬂuctuating degrees of freedom for leucine dipeptide are mainly the
+side-chain torsions, and thus do not change dramatically between the alpha
+and beta conformations. Given the overall ∆G value, the alpha conformation
+is favored to to intra-molecular attractions.
+
+With an unbiased value of ∆G from eq (9), it is possible to test various
+implementations of the single-stage shifting method. To this end, we simu-
+lated leucine dipeptide in the alpha and beta conformations, generating four
+
+8
+
+1.0 nsec trajectories for each conformation. Each of the trajectories were
+obtained by constraining the backbone torsions to stay within the deﬁned
+ranges for alpha and beta, given above. The constraining force was zero if
+the torsion angles were within the allowed range, and harmonic otherwise.
+Frames were saved every 0.1 psec yielding 10,000 frames per trajectory.
+
+The four trajectories provide sixteen independent single-stage shifting
+estimates of ∆G and ∆S using all possible pairings. The results for ∆G
+are summarized in Table 1 where we used both the lowest energy frame
+and histogram peak shifting approaches (Section 2.3) to estimate ∆G for
+leucine dipeptide. The value of ∆S was found to be zero within uncertainty,
+consistent with the value found using eq (9). For each shifting approach, we
+tested four sets of shifting coordinates: backbone torsions only, all torsions,
+all torsions and bond angles, or all internal coordinates (torsions, angles and
+bond lengths).
+In addition, we also show results using both the iterative
+method of eq (5) and the acceptance-ratio method of eq (4). The values
+for ∆G are averages with standard deviations shown in parentheses. Our
+single-stage shifting results in Table 1 agree well with the unbiased estimate
+given above. The table also show that shifting torsions results in a small
+uncertainty, while including bond angles and lengths makes the ∆G estimate
+less certain.
+
+In all of our simulations, we have found that shifting torsions (either
+backbone only, or all torsions), and using the iterative method of eq (5), has
+consistently provided accurate results. Also, as demonstrated in Table 1,
+lower uncertainty is obtained by shifting according to histogram peaks and
+using eq (7) rather than shifting by the lowest energy frames.
+
+We also stress the importance of using bi-directional data to determine
+∆G for conformational equilibria. To this end, in Figure 2, we employed the
+single-stage shifting method using three data analysis protocols: single-stage
+free energy perturbation in both directions (eq (3)),46 Bennett’s acceptance-
+ratio method (eq (4)) and Bennett’s iterative method (eq (5)).45 The su-
+perior convergence properties of the iterative method can be seen in Figure
+2. The solid horizontal black line represents the independent, 4.0 µsec ∆G
+value obtained by using eq (9). The data are ∆G estimates using the single-
+stage shifting method, where backbone torsions were shifted according to
+the histogram peaks. The data for the ﬁgure was generated using a single
+trajectory in each of the alpha and beta conformations. The red curve was
+generated from Bennett’s acceptance-ratio method, the green dashed curve
+is free energy perturbation in the forward direction (i.e., ∆Galpha→beta), and
+the green solid curve is free energy perturbation in the reverse direction (i.e.,
+−∆Gbeta→alpha). Finally the solid blue curve is Bennett’s iterative method.
+
+9
+
+It is clear from the ﬁgure that using bi-directional data is very important to
+the success of our single-stage shifting method. Further, Bennett’s iterative
+method is shown to converge more quickly than the other methods.
+
+Figure 3 demonstrates the eﬃciency of the single-stage shifting method
+compared to long simulation and use of eq (9). The horizontal black line
+is the unbiased ∆G from long (4.0 µsec) simulation. The curve shows the
+average (blue squares) and standard deviation (errorbars) of the single-stage
+shifting method where backbone torsions were shifted by the histogram
+peaks, and the iterative method of eq (5) was used to analyze the data.
+In our unconstrained simulations, leucine dipeptide switched between the
+alpha and beta conformations, on average, once every 400 psec. Using our
+single-stage shifting method, with only 30 psec of simulation (15 psec in
+alpha and 15 psec in alpha), a reasonably accurate and precise value of ∆G
+can be obtained.
+
+3.2 Decaglycine
+
+We also applied the single-stage shifting method to decaglycine (ACE-(gly)10-
+NME), predicting the conformational ∆G and entropy diﬀerence ∆S for al-
+pha → extended conformations. We again deﬁned the alpha and extended
+conformations by the internal backbone torsions (i.e., excluding φ1 and ψ10),
+namely, for alpha: −115 < φ < 5 and − 115 < ψ < 5; and for extended:
+120 < φ < −120 and 120 < ψ < −120. Previous ∆G and ∆S calculations
+of decaglycine in vacuum were performed by Karplus and Kushick,39 and
+quite recently by Cheluvaraja and Meirovitch.37 Apparently, decaglycine’s
+conformational ∆G and ∆S have not previously been computed in implicit
+solvent.
+
+To calculate ∆G and ∆S, four trajectories in each conformation were
+generated using the simulation parameters deﬁned previously. Thus, sixteen
+independent ∆G and ∆S estimates can be calculated. Each trajectory was
+1.0 nsec in length with a frame saved every 0.1 psec yielding 10,000 frames
+per trajectory—although this may be quite sub-optimal; see Section 4. As
+with leucine dipeptide, the sixteen ∆G and ∆S estimates were generated
+using various shifting approaches.
+
+Table 2 shows the results of our calculation of ∆G and ∆S for the alpha
+→ extended conformational change using various shifting approaches. The
+entropy change was estimated via T ∆S = ∆Uavg − ∆G where ∆Uavg is
+the average of Uext − Ualpha. Acceptance ratio estimates had a much larger
+uncertainty then the iterative method estimates and thus are not included in
+the table. The results clearly demonstrate that shifting by histogram peaks
+
+10
+
+provides a higher level of precision than shifting by the lowest energy frame.
+Also, as with leucine dipeptide, lower uncertainty is obtained when shifting
+torsions only (i.e., not bond angles and lengths).
+
+The results in Table 2 suggest that the “compensating” role of the en-
+tropy is vital for an accurate ∆G calculation in GBSA solvent. Our studies
+of decaglycine in vacuum (data not shown), as well those of other groups37,39
+show that the alpha conformation is more stable than extended, due mainly
+to energetics. However, our results suggest that, with the addition of (im-
+plicit) solvent, the energy diﬀerence between the two conformations becomes
+small enough that the entropy term dominates ∆G—to the degree that the
+extended conformation is more stable than alpha.
+
+Figure 4 shows ∆G and T ∆S as a function simulation time. The data
+points are the average of the sixteen independent estimates with standard de-
+viation given by the error bars for both ∆G (blue squares) and T ∆S (green
+circles). These estimates were obtained using the iterative method, and
+shifting the backbone torsions by the histogram peak. The ﬁgure demon-
+strates the apparent convergence of the ∆G and T ∆S estimates. Note that
+it would be impractical to obtain an independent estimate for decaglycine
+(as we did with leucine dipeptide) because of the required simulation times.
+In the current implementation, a total of 8 nsec of simulation was re-
+quired to obtain a reasonably accurate and precise estimate of ∆G. To
+our knowledge, no multi-stage calculation has ever been attempted on this
+system, undoubtedly due to the prohibitive computational expense. Never-
+theless, we believe additional optimization of our current shifting protocol
+will be possible, as we now discuss.
+
+Finally, we note that, as in any ∆G computation, our results reﬂect the
+
+deﬁnitions chosen for the alpha and extended states.
+
+4 Further optimization of the single-stage shifting
+
+approach
+
+While the present results indicate that peptide conformational equilibria
+can be determined by sub-nsec simulations, several promising avenues for
+optimization have not been explored. We brieﬂy sketch several possible ap-
+proaches for improving eﬃciency, including combining the shifting approach
+with traditional staged calculations.
+
+It is useful to consider the upper limit for the computational cost of the
+single-stage shifting procedure. The maximum is essentially twice that of
+equilibrium simulation, provided the method is hard-wired into the molec-
+
+11
+
+ular dynamics program, due to the extra energy call that must be made for
+each shifted frame. In the current study, the shifting procedure was scripted
+external to the simulation program (TINKER), and thus the cost for tra-
+jectory analysis was high—limiting the number of frames per trajectory to
+10,000. We found that, for this ﬁxed number of frames per trajectory, the
+simulation time between frames had very little aﬀect on the ∆G estimate.
+Thus, we feel that substantial increases in eﬃciency could be realized by
+(It is
+utilizing every frame in the ∆G calculation—i.e., every time step.
+worthwhile to recall that interactions change enough over a single time step
+to require re-calculation of forces.) Ultimately, then, reliable and accurate
+∆G calculations should take no more time than required to sample the equi-
+librium ensemble in a given state (the minimum time for any ∆G method).
+Additionally, the shifting procedures explored in this report ignore corre-
+lation between coordinates, such as those known from Ramachandran plots,
+where backbone torsions φ and ψ do not vary independently. Ramachan-
+dran plots, moreover, average over many residues, which individually are
+likely more correlated. To motivate more general shifts, consider one state
+where a certain pair of φ, ψ angles inhabit a predominantly vertical region of
+Ramachandran space, while the other state populates a region with a very
+diﬀerent orientation. In such a case, simple shifts alone (e.g., those in eqs
+(6) and (7)) will not maximize overlap to the extent that a combined shift
+and (partition-function-preserving) rotation would. Further, if one oblong
+well is very narrow and the other well is very broad, then coordinate scaling
+(contraction/expansion) should also be performed (see also Refs. 43,44). In
+general the coordinates can be linearly scaled, rotated and/or translated
+using a constant matrix A (i.e., ~x → A~x + ~C), and eqs (3), (4) and (5)
+must be generalized to account for the matrix A. More complex, nonlinear
+transformations are also possible, but may not be practical.
+
+In larger systems than those considered here (e.g., whole proteins), the
+gain in overlap due to the internal coordinate shift may prove insuﬃcient
+to permit reliable single-stage computation of ∆G values.
+In such cases,
+it may be advantageous to combine the single-stage shifting approach with
+multi-stage methodology. To do so, a path connecting the two states of
+interest can be deﬁned (e.g., Refs. 53–55), and independent trajectories can
+be generated at intermediate stages along the path. Then, between each
+successive intermediate stage, the incremental free energy diﬀerence (δG)
+is estimated using the shifting protocol outlined in Section 2.3. The δG
+estimates can then be summed to obtain the full ∆G for the complete path.
+
+12
+
+5 Extension to “alchemical” calculations and ex-
+
+plicitly solvated systems
+
+It is possible to extend the formalism of the single-stage shifting method
+beyond conformational ∆G calculation for implicitly solvated molecules. In
+this section we outline the potential for the single-stage shifting method to
+be used for “alchemical” mutations—which are the basis for relative binding
+aﬃnities and solubilities56—and on explicitly solvated systems.
+
+For alchemical mutation, two distinct potential energy functions U0 and
+U1—one for each molecule—are used in eqs (3), (4) and (5). While the math-
+ematical formalism is unchanged from conformational ∆G calculations, the
+diﬃculty in alchemical mutations lies in determining the shifting vector ~C,
+since the number of degrees of freedom for U0 and U1 are diﬀerent, in gen-
+eral. (For conformational ∆G calculations, such as those above, the number
+of degrees of freedom for U0 and U1 are always the same.) This diﬃculty
+can be overcome by introducing “dummy” coordinates as in Ref. 54. Al-
+though dummy coordinates will change the absolute free energy values, use
+of a thermodynamic cycle guarantees that the free energy diﬀerence ∆G will
+remain unchanged. Thus, accurate relative binding aﬃnities and solubilities
+can be obtained.54
+
+If explicit solvation is used for conformational or alchemical ∆G calcu-
+lation, then the single-stage shifting method must be generalized to include
+non-standard intermolecular “external” coordinates. This can, in principle,
+be accomplished by introducing auxiliary vectors to describe the location
+and orientation (e.g., Euler angles) of each solvent or solute molecule. The
+necessary shifting vector ~C will now include the full set of intra- and inter-
+molecular coordinates.
+
+6 Conclusion
+
+In a study of peptide equilibria, we have demonstrated a simple method for
+substantially overcoming the overlap problem in calculating free energy dif-
+ferences (∆G) and entropy diﬀerence (∆S) between conformational states.
+The new single-stage shifting method utilizes a shift in internal coordinates
+to improve the overlap between conﬁgurations, motivated by Voter’s study
+in Ref. 41. The approach requires only simulation in the two states of in-
+terest without the need for “staged” intermediate calculations. Bennett’s
+iterative method45 is used to eﬃciently calculate a ∆G value from the raw
+data.
+
+13
+
+We tested the single-stage shifting approach on two peptides, obtaining
+excellent results with sub-nsec simulation times. First, for leucine dipep-
+tide in implicit solvent, we accurately calculated the conformational ∆G
+for alpha → beta conformations—judging by nearly perfect agreement with
+a 4.0 µsec simulation. The entropy diﬀerence ∆S was found to be nearly
+zero, also consistent with long simulation. The single-stage shifting method
+was then used to predict the conformational ∆G and ∆S for alpha → ex-
+tended conformations of decaglycine in implicit solvent, apparently for the
+ﬁrst time. We ﬁnd that, with implicit solvent, the extended conformation
+of decaglycine is favored over alpha, due mainly to the entropy gain in the
+extended state. By contrast, in vacuum, the alpha conformation is preferred
+due mainly to the strongly favorable intra-molecular interactions. It must
+be borne in mind that our quantitative results necessarily depend on our
+state deﬁnitions.
+
+While the present report describes a single type of application of the
+single-stage shifting approach (to conformational equilibria), we believe the
+idea will ﬁnd quite broad applications—in part due to the substantial po-
+tential for further optimization. We have therefore discussed optimization of
+the method, and application to “alchemical” mutations (for relative binding
+aﬃnities), as well as the use of explicit solvent. The single-stage shifting ap-
+proach may also be combined with multi-stage simulation, allowing further
+optimization. We are currently exploring these ideas.
+
+Acknowledgments
+
+We would like to thank Carlos Camacho, Ronald White, Srinath Cheluvaraja
+and Edward Lyman for many fruitful discussions. Funding for this research
+was provided by the Dept. of Environmental and Occupational Health and
+the Center for Computational Biology and Bioinformatics at the University
+of Pittsburgh, and the National Institutes of Health (Grant T32 ES007318).
+
+14
+
+7 References
+
+456.
+
+1. DeGrado, W. F.; Nilsson, B. O. Curr. Op. Struct. Bio. 1997, 7, 455–
+
+2. Lazar, G. A.; Marshall, S. A.; Plecs, J. J.; Mayo, S. L.; Desjarlais, J. R.
+
+Curr. Op. Struct. Bio. 2003, 13, 513–518.
+
+3. Jorgensen, W. L. Science 2004, 303, 1813–1818.
+
+4. Sotriﬀer, C.; Klebe, G.; Stahl, M.; Bohm, H.-J. Burger’s Medicinal
+Chemistry and Drug Discovery; volume 1 Wiley: New York, Sixth ed.;
+2003.
+
+5. Oostenbrink, B. C.; Pitera, J. W.; van Lipzip, M. M.; Meerman, J.
+H. N.; van Gunsteren, W. F. J. Med. Chem. 2000, 43, 4594–4605.
+
+6. Grossﬁeld, A.; Ren, P.; Ponder, J. W. J. Am. Chem. Soc. 2003, 125,
+
+7. Pitera, J. W.; van Gunsteren, W. F. J. Phys. Chem. B 2001, 105,
+
+15671–15682.
+
+11264–11274.
+
+8. Singh, S. B.; Ajay,; Wemmer, D. E.; Kollman, P. A. Proc. Nat. Acad.
+
+Sci. (USA) 1994, 91, 7673–7677.
+
+9. Kolmodin, K.; Aqvist, J. FEBS Lett. 2000, 465, 8–11.
+
+10. Shoichet, B. K. Nature 2004, 432, 862–865.
+
+11. Wei, B. Q.; Weaver, L. H.; Ferrari, A. M.; Matthews, B. W.;
+
+Shoichet, B. K. J. Mol. Biol. 2004, 337, 1161–1182.
+
+12. Halperin, I.; Wolfson, H.; Nussinov, R. Proteins 2002, 47, 409–443.
+
+13. Brooijmans, N.; Kuntz, I. D. Annu. Rev. Biophys. Biomol. Struct.
+
+2003, 32, 335–373.
+
+14. Trosset, J. Y.; Scheraga, H. A. J. Comput. Chem. 1999, 20, 412–427.
+
+15. Patel, S.; Mackerell Jr., A. D.; Brooks III, C. L. J. Comput. Chem.
+
+2004, 25, 1504–1514.
+
+16. Kaminski, G. A.; Stern, H. A.; Berne, B. J.; Friesner, R. A.; Cao, Y. X.;
+Murphy, R. B.; Zhou, R.; Halgren, T. A. J. Comput. Chem. 2002, 23,
+1515–1531.
+
+15
+
+17. Lamoureux, G.; B., R. J. Chem. Phys. 2003, 119, 3025–3039.
+
+18. Yang, W.; Bitetti-Putzer, R.; Karplus, M. J. Chem. Phys. 2004, 120,
+
+19. Yang, W.; Bitetti-Putzer, R.; Karplus, M. J. Chem. Phys. 2004, 120,
+
+9450–9453.
+
+2618–2628.
+
+20. McCammon, J. A. Curr. Opin. Struc. Bio. 1991, 2, 96–200.
+
+21. Jorgensen, W. L.; Ravimohan, C. J. Chem. Phys. 1985, 83, 3050–3054.
+
+22. Shirts, M. R.; Pitera, J. W.; Swope, W. C.; Pande, V. S. J. Chem.
+
+Phys. 2003, 119, 5740–5761.
+
+23. Jarzynski, C. Phys. Rev. Lett. 1997, 78, 2690–2693.
+
+24. Zuckerman, D. M.; Woolf, T. B. Phys. Rev. Lett. 2002, 89, 180602.
+
+25. Hummer, G.; Szabo, A. Proc. Nat. Acad. Sci. (USA) 2001, 98, 3658–
+
+3661.
+
+26. Liphardt, J.; Dumont, S.; Smith, S. B.; Tinoco, I.; Bustamante, C.
+
+Science 2002, 296, 1832–1835.
+
+27. Park, S.; Schulten, K. J. Chem. Phys. 2004, 120, 5946–5961.
+
+28. Park, S.; Khalili-Araghi, F.; Tajkhorshid, E.; Schulten, K. J. Chem.
+
+Phys. 2003, 119, 3559–3566.
+
+29. Zuckerman, D. M.; Woolf, T. B. Chem. Phys. Lett. 2002, 351, 445–453.
+
+30. Ytreberg, F. M.; Zuckerman, D. M. J. Chem. Phys. 2004, 120, 10876–
+
+10879.
+
+1759.
+
+360–367.
+
+18, 431–492.
+
+31. Ytreberg, F. M.; Zuckerman, D. M. J. Comput. Chem. 2004, 25, 1749–
+
+32. Hummer, G.; Szabo, A. J. Chem. Phys. 1996, 105, 2004–2010.
+
+33. Mordasini, T. Z.; McCammon, J. A. J. Phys. Chem. B 2000, 104,
+
+34. Beveridge, D.; DiCapua, F. Ann. Rev. Biophys. Biophys. Chem. 1989,
+
+16
+
+35. Lu, N.; Kofke, D. A.; Woolf, T. B. J. Comput. Chem. 2004, 25, 28–40.
+
+36. Oostenbrink, C.; van Gunsteren, W. F. J. Comput. Chem. 2003, 24,
+
+1730–1739.
+
+9246.
+
+13164.
+
+37. Cheluvaraja, S.; Meirovitch, H. Proc. Nat. Acad. Sci. 2004, 101, 9241–
+
+38. Chang, C. E.; Gilson, M. K. J. Am. Chem. Soc. 2004, 126, 13156–
+
+39. Karplus, M.; Kushick, J. N. Macromolecules 1981, 14, 325–332.
+
+40. Stoessel, J. P.; Nowak, P. Macromolecules 1990, 23, 1961–1965.
+
+41. Voter, A. F. J. Chem. Phys. 1985, 82, 1890–1899.
+
+42. Bruce, A. D.; Wilding, N. B.; Ackland, G. J. Phys. Rev. Lett. 1997,
+
+79, 3002–3005.
+
+43. Miller, M. A.; Reinhardt, W. P. J. Chem. Phys. 2000, 113, 7035–7046.
+
+44. Jarzynski, C. Phys. Rev. E 2002, 65, 046122.
+
+45. Bennett, C. H. J. Comput. Phys. 1976, 22, 245–268.
+
+46. Zwanzig, R. W. J. Chem. Phys. 1954, 22, 1420–1426.
+
+47. Crooks, G. E. Phys. Rev. E 2000, 61, 2361–2366.
+
+48. Shirts, M. R.; Bair, E.; Hooker, G.; Pande, V. S. Phys. Rev. Lett.
+
+2003, 91, 140601.
+
+49. Ponder, J. W.; Richard, F. M. J. Comput. Chem. 1987, 8, 1016–1024
+
+http://dasher.wustl.edu/tinker/.
+
+50. Still, W. C.; Tempczyk, A.; Hawley, R. C. J. Am. Chem. Soc. 1990,
+
+112, 6127–6129.
+
+51. N., F.; MacKerell, A. D. J. Comput. Chem. 2000, 21, 86–104.
+
+52. Kollman, P.; Dixon, R.; Cornell, W.; Fox, T.; Chipot, C.; Pohorille, A.
+
+Comp. Sim. Biomol. Sys. 1997, 3, 83-96.
+
+53. Tobias, D. J.; Brooks, C. L. J. Phys. Chem. 1992, 96, 3864–3870.
+
+17
+
+54. Shobana, S.; Roux, B.; Andersen, O. S. J. Phys. Chem. B 2000, 104,
+
+5179–5190.
+
+55. Kong, X.; Brooks, C. L. J. Chem. Phys. 1996, 105, 2414–2423.
+
+56. Tembe, B. L.; McCammon, J. A. Computers Chem. 1984, 8, 281–283.
+
+18
+
+Shifting
+approach
+Peak of
+histogram All torsions
+(eq (7))
+
+Shifted coordinates
+Backbone torsions only
+
+All torsions and bond angles
+All internal coordinates
+Backbone torsions only
+All torsions
+All torsions and bond angles
+All internal coordinates
+
+Lowest
+energy
+frames
+(eq (6))
+
+Iterative
+
+Accept. ratio
+∆G (kcal/mol) ∆G (kcal/mol)
+
+1.08 (0.15)
+0.56 (0.87)
+0.76 (2.64)
+0.78 (2.63)
+1.29 (0.35)
+0.99 (0.66)
+3.36 (4.75)
+4.50 (7.16)
+
+1.02 (0.13)
+0.55 (0.86)
+1.01 (3.25)
+1.09 (3.26)
+1.30 (0.39)
+0.98 (0.66)
+6.48 (9.45)
+8.80 (14.32)
+
+Table 1: Conformational free energy diﬀerences ∆G for alpha → beta
+conformations for leucine dipeptide in GBSA solvent using several variations
+of the single-stage shifting approach. Each shifting ∆G result is an average
+of sixteen independent 2.0 nsec estimates of ∆G with standard deviation
+shown in parentheses. The iterative results use eq (5) and the acceptance-
+ratio results use eq (4). For comparison, the value of ∆G obtained from
+long simulation (4.0 µsec) is 0.95 (0.05) kcal/mole. The entropy diﬀerence
+∆S, found by single-stage shifting, was zero within uncertainty, consistent
+with the value obtained by long simulation. This table also demonstrates
+that shifting too many coordinates (i.e., bond angles and lengths) leads to
+steric clashes, and thus a larger uncertainty for ∆G.
+
+19
+
+Shifting
+approach
+Peak of
+histogram All torsions
+(eq (7))
+
+Shifted coordinates
+Backbone torsions only
+
+All torsions and bond angles
+All internal coordinates
+Backbone torsions only
+All torsions
+All torsions and bond angles
+All internal coordinates
+
+Lowest
+energy
+frames
+(eq (6))
+
+Iterative
+
+Iterative
+
+∆G (kcal/mol) T ∆S (kcal/mol)
+
+-12.39 (0.47)
+-12.59 (0.82)
+-12.77 (2.94)
+-12.75 (3.11)
+-11.97 (1.59)
+-12.12 (2.57)
+-18.53 (11.14)
+-24.79 (14.03)
+
+9.75 (0.66)
+9.95 (0.93)
+10.12 (2.97)
+10.10 (3.13)
+9.34 (1.71)
+9.48 (2.76)
+15.89 (10.93)
+22.15 (13.86)
+
+Table 2: Conformational free energy diﬀerences ∆G and entropy diﬀer-
+ences T ∆S for alpha → extended conformations of decaglycine in GBSA
+solvent using several shifting approaches. Each shifting result is an average
+of sixteen independent 2.0 nsec estimates with standard deviation shown in
+parentheses, using the iterative method of eq (5). Acceptance ratio results
+(data not shown) had a much larger uncertainty than the iterative method.
+This data clearly shows that lower uncertainty is obtained by shifting via
+histogram peaks rather than by the lowest energy frame. Also, shifting non-
+torsional coordinates (i.e., bond angles and lengths) dramatically increases
+uncertainty.
+
+20
+
+12
+
+8
+
+4
+
+0
+
+-4
+
+-8
+
+-12
+12
+
+8
+
+4
+
+0
+
+-4
+
+-8
+
+-12
+12
+
+8
+
+4
+
+0
+
+-4
+
+-8
+
+)
+l
+o
+m
+
+/
+l
+a
+c
+k
+(
+
+U
+
+ 
+
+0
+
+)
+l
+o
+m
+
+/
+l
+a
+c
+k
+(
+
+U
+
+ 
+1
+
+)
+l
+o
+m
+
+/
+l
+a
+c
+k
+(
+
+Shift
+
+Shifted U1
+
+U0
+
+-12
+
+-180
+
+-90
+
+0
+φ (degrees)
+
+90
+
+180
+
+Illustration of the shifting idea using two idealized torsional po-
+Figure 1:
+tentials (a) U0(φ) and (b) U1(φ). There is minimal conﬁgurational overlap
+between these two potentials, since simulations will mainly sample the deep,
+dis-similar minima of the potentials. (c) With the use of an appropriate shift-
+ing constant, it is possible to construct overlap between the states without
+altering the numerical value of the conformational free energy diﬀerence.
+Note that for peptides, we shift internal coordinates rather than potentials
+(see Section 2.3), however, these two procedures are equivalent.
+
+21
+
+20
+
+15
+
+10
+
+5
+
+0
+
+-5
+
+)
+l
+o
+m
+
+/
+l
+a
+c
+k
+(
+ 
+s
+e
+t
+a
+m
+
+i
+t
+s
+E
+
+ 
+ 
+
+G
+∆
+
+-10
+
+0.1
+
+Shift-FEP forward
+
+Shift-Bennett acceptance ratio
+
+Shift-Bennett iterative
+
+Actual ∆G
+
+Shift-FEP backward
+
+1
+
+100
+10
+Simulation Time Per Trajectory (ps)
+
+1000
+
+Figure 2: Comparison between several shifting methods for the conforma-
+tional change in free energy for alpha → beta of leucine dipeptide in GBSA
+solvent. The alpha (top left, “cis-like”) and beta (top right, “trans-like”)
+conformations are also shown, with the backbone carbons colored black.
+Two trajectories (one in each conformation) were analyzed using several
+protocols of the single-stage shift technique. The solid horizontal black line
+represents the 4.0 µsec value of ∆G obtained by using eq (9). The curves
+are obtained using the single-stage shifting method where backbone torsions
+were shifted according to the peak of the histogram (i.e., lowest uncertainty
+∆G estimate in Table 1). The red curve was generated from Bennett’s
+acceptance-ratio method, the green dashed curve is free energy perturba-
+tion in the forward direction (i.e., ∆Galpha→beta), and the green solid curve
+is free energy perturbation in the reverse direction (i.e., −∆Gbeta→alpha).
+The solid blue curve is Bennett’s iterative method. The ﬁgure clearly sug-
+gests the superior convergence properties of the iterative method for our
+single-stage shifting data.
+
+22
+
+8
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+)
+l
+o
+m
+
+/
+l
+a
+c
+k
+(
+ 
+e
+t
+a
+m
+
+i
+t
+s
+E
+
+ 
+ 
+
+G
+∆
+
+-1
+
+0.1
+
+1
+
+100
+10
+Simulation Time Per Trajectory (ps)
+
+1000
+
+Figure 3: Conformational free energy diﬀerence ∆G for alpha → beta
+conformations of leucine dipeptide in GBSA solvent, shown as a function
+of the simulation time. The horizontal black line shows the known ∆G
+obtained using 4.0 µsec of simulation and eq (9). The data were obtained
+using the single-stage shifting method where backbone torsions were shifted
+according to the peak of the histogram, and the iterative method of eq (5)
+was used to analyze the data. The average ∆G estimates (blue squares) and
+standard deviations (errorbars) were calculated using sixteen independent
+estimates of ∆G. Using the single-stage shifting method, with only 30 psec of
+simulation (15 psec in alpha and 15 psec in beta), the average estimate of ∆G
+is within 1.0 kcal/mol of the known value with a standard deviation of less
+than 1.0 kcal/mol. This may be compared with unconstrained simulations,
+in which transitions between alpha and beta conformations occurred, on
+average, every 400 psec.
+
+23
+
+)
+l
+o
+m
+
+/
+l
+a
+c
+k
+(
+ 
+e
+t
+a
+m
+
+i
+t
+s
+E
+
+ 
+ 
+
+G
+∆
+
+-10
+
+-12
+
+-14
+
+-16
+
+12
+
+)
+l
+o
+m
+
+/
+l
+a
+c
+k
+(
+ 
+e
+t
+a
+m
+
+i
+t
+s
+E
+
+ 
+ 
+
+S
+∆
+T
+
+10
+
+8
+
+100
+Simulation Time Per Trajectory (ps)
+
+1000
+
+Figure 4: Conformational free energy diﬀerence ∆G and entropy diﬀerence
+T ∆S for the alpha → extended conformational change in decaglycine with
+GBSA solvent. The alpha (top left) and beta (top right) conformations are
+also shown. The data were obtained from eight independent simulations—
+four constrained to be in alpha and four in extended. From the eight simula-
+tions, sixteen independent estimates of ∆G were obtained, and the averages
+(blue squares) and standard deviations (error bars) were calculated as a
+function of simulation time. Each ∆G estimate was generated using the end
+point shifting method by shifting backbone torsions via histogram peaks,
+and using the iterative method of eq (5).
+
+24
+
+

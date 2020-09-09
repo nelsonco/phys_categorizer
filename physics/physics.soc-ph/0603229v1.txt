@@ -1,0 +1,4327 @@
+6
+0
+0
+2
+ 
+r
+a
+
+M
+ 
+7
+2
+ 
+ 
+]
+h
+p
+-
+c
+o
+s
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+9
+2
+2
+3
+0
+6
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Laws of Graph Evolution:
+Densiﬁcation and Shrinking Diameters
+
+Jure Leskovec
+School of Computer Science, Carnegie Mellon University, Pittsburgh, PA
+Jon Kleinberg
+Department of Computer Science, Cornell University, Ithaca, NY
+Christos Faloutsos
+School of Computer Science, Carnegie Mellon University, Pittsburgh, PA
+
+February 20, 2014
+
+Abstract
+
+How do real graphs evolve over time? What are “normal” growth patterns in
+social, technological, and information networks? Many studies have discovered
+patterns in static graphs, identifying properties in a single snapshot of a large
+network, or in a very small number of snapshots; these include heavy tails
+for in- and out-degree distributions, communities, small-world phenomena, and
+others. However, given the lack of information about network evolution over
+long periods, it has been hard to convert these ﬁndings into statements about
+trends over time.
+
+Here we study a wide range of real graphs, and we observe some surprising
+phenomena. First, most of these graphs densify over time, with the number
+of edges growing super-linearly in the number of nodes. Second, the average
+distance between nodes often shrinks over time, in contrast to the conventional
+wisdom that such distance parameters should increase slowly as a function of
+the number of nodes (like O(log n) or O(log(log n)).
+
+Existing graph generation models do not exhibit these types of behavior,
+even at a qualitative level. We provide a new graph generator, based on a
+“forest ﬁre” spreading process, that has a simple, intuitive justiﬁcation, requires
+very few parameters (like the “ﬂammability” of nodes), and produces graphs
+exhibiting the full range of properties observed both in prior work and in the
+present study.
+
+We also notice that “forest ﬁre” exhibits a sharp transition between sparse
+graphs and graphs that are densifying. Graphs with decreasing distance between
+the nodes are generated around this transition point.
+
+Last, we analyze the connection between the temporal evolution of degree
+distribution and densiﬁcation of a graph. We ﬁnd that the two are fundamentally
+related. We also observe that real datasets exhibit this type of relation.
+
+1
+
+2
+
+1 Introduction
+
+J. Leskovec et al.
+
+In recent years, there has been considerable interest in graph structures arising in
+technological, sociological, and scientiﬁc settings: computer networks (routers or au-
+tonomous systems connected together); networks of users exchanging e-mail or instant
+messages; citation networks and hyperlink networks; social networks (who-trusts-
+whom, who-talks-to-whom, and so forth); and countless more [28]. The study of
+such networks has proceeded along two related tracks: the measurement of large net-
+work datasets, and the development of random graph models that approximate the
+observed properties.
+
+Many of the properties of interest in these studies are based on two fundamental
+parameters: the nodes’ degrees (i.e., the number of edges incident to each node), and
+the distances between pairs of nodes (as measured by shortest-path length). The
+node-to-node distances are often studied in terms of the diameter — the maximum
+distance — and a set of closely related but more robust quantities including the
+average distance among pairs and the eﬀective diameter (the 90th percentile distance,
+a smoothed form of which we use for our studies).
+
+Almost all large real-world networks evolve over time by the addition and deletion
+of nodes and edges. Most of the recent models of network evolution capture the
+growth process in a way that incorporates two pieces of “conventional wisdom:”
+
+(A) Constant average degree assumption: The average node degree in the network
+remains constant over time. (Or equivalently, the number of edges grows linearly
+in the number of nodes.)
+
+(B) Slowly growing diameter assumption: The diameter is a slowly growing function
+
+of the network size, as in “small world” graphs [4, 7, 26, 35].
+
+For example, the intensively-studied preferential attachment model [3, 28] posits
+a network in which each new node, when it arrives, attaches to the existing network
+by a constant number of out-links, according to a “rich-get-richer” rule. Recent
+work has given tight asymptotic bounds on the diameter of preferential attachment
+networks [6, 9]; depending on the precise model, these bounds grow logarithmically
+or even slower than logarithmically in the number of nodes.
+
+How are assumptions (A) and (B) reﬂected in data on network growth? Empirical
+studies of large networks to date have mainly focused on static graphs, identifying
+properties of a single snapshot or a very small number of snapshots of a large network.
+For example, despite the intense interest in the Web’s link structure, the recent work
+of Ntoulas et al. [30] noted the lack of prior empirical research on the evolution of
+the Web. Thus, while one can assert based on these studies that, qualitatively, real
+networks have relatively small average node degrees and diameters, it has not been
+clear how to convert these into statements about trends over time.
+
+The present work: Densiﬁcation laws and shrinking diameters Here we
+study a range of diﬀerent networks, from several domains, and we focus speciﬁcally
+on the way in which fundamental network properties vary with time. We ﬁnd, based
+on the growth patterns of these networks, that principles (A) and (B) need to be
+reassessed. Speciﬁcally, we show the following for a broad range of networks across
+diverse domains.
+
+Laws of graph evolution
+
+3
+
+(A′) Empirical observation: Densiﬁcation power laws: The networks are becoming
+denser over time, with the average degree increasing (and hence with the num-
+ber of edges growing super-linearly in the number of nodes). Moreover, the
+densiﬁcation follows a power-law pattern.
+
+(B′) Empirical observation: Shrinking diameters: The eﬀective diameter is, in many
+
+cases, actually decreasing as the network grows.
+
+We view the second of these ﬁndings as particularly surprising: Rather than shedding
+light on the long-running debate over exactly how slowly the graph diameter grows as
+a function of the number of nodes, it suggests a need to revisit standard models so as
+to produce graphs in which the eﬀective diameter is capable of actually shrinking over
+time. We also note that, while densiﬁcation and decreasing diameters are properties
+that are intuitively consistent with one another (and are both borne out in the datasets
+we study), they are qualitatively distinct in the sense that it is possible to construct
+examples of graphs evolving over time that exhibit one of these properties but not
+the other.
+
+We can further sharpen the quantitative aspects of these ﬁndings. In particular,
+the densiﬁcation of these graphs, as suggested by (A′), is not arbitrary; we ﬁnd that
+as the graphs evolve over time, they follow a version of the relation
+
+e(t) ∝ n(t)a
+
+(1)
+
+where e(t) and n(t) denote the number of edges and nodes of the graph at time
+t, and a is an exponent that generally lies strictly between 1 and 2. We refer to
+such a relation as a densiﬁcation power law, or growth power law. (Exponent a = 1
+corresponds to constant average degree over time, while a = 2 corresponds to an
+extremely dense graph where each node has, on average, edges to a constant fraction
+of all nodes.)
+
+What underlying process causes a graph to systematically densify, with a ﬁxed ex-
+ponent as in Equation (1), and to experience a decrease in eﬀective diameter even as
+its size increases? This question motivates the second main contribution of this work:
+we present two families of probabilistic generative models for graphs that capture
+aspects of these properties. The ﬁrst model, which we refer to as Community Guided
+Attachment
+(CGA) , argues that graph densiﬁcation can have a simple underlying
+basis; it is based on a decomposition of the nodes into a nested set of communities,
+such that the diﬃculty of forming links between communities increases with the com-
+munity size. For this model, we obtain rigorous results showing that a natural tunable
+parameter in the model can lead to a densiﬁcation power law with any desired expo-
+nent a. The second model, which is more sophisticated, exhibits both densiﬁcation
+and a decreasing eﬀective diameter as it grows. This model, which we refer to as the
+Forest Fire Model, is based on having new nodes attach to the network by “burning”
+through existing edges in epidemic fashion. The mathematical analysis of this model
+appears to lead to novel questions about random graphs that are quite complex, but
+through simulation we ﬁnd that for a range of parameter values the model exhibits
+realistic behavior in densiﬁcation, distances, and degree distributions. It is thus the
+ﬁrst model, to our knowledge, that exhibits this full set of desired properties.
+
+Accurate properties of network growth, together with models supporting them,
+
+have implications in several contexts.
+
+4
+
+J. Leskovec et al.
+
+• Graph generation: Our ﬁndings form means for assessing the quality of graph
+generators. Synthetic graphs are important for ‘what if’ scenarios, for extrap-
+olations, and for simulations, when real graphs are impossible to collect (like,
+e.g., a very large friendship graph between people).
+
+• Graph sampling: Datasets consisting of huge real-world graphs are increasingly
+available, with sizes ranging from the millions to billions of nodes. There are
+many known algorithms to compute interesting measures (shortest paths, cen-
+trality, betweenness, etc), but most of these algorithms become impractical for
+large graphs. Thus sampling is essential — but sampling from a graph is a non-
+trivial problem. Densiﬁcation laws can help discard bad sampling methods, by
+providing means to reject sampled subgraphs.
+
+• Extrapolations: For several real graphs, we have a lot of snapshots of their past.
+What can we say about their future? Our results help form a basis for validating
+scenarios for graph evolution.
+
+• Abnormality detection and computer network management: In many network
+settings, “normal” behavior will produce subgraphs that obey densiﬁcation laws
+(with a predictable exponent) and other properties of network growth. If we
+detect activity producing structures that deviate signiﬁcantly from this, we can
+ﬂag it as an abnormality; this can potentially help with the detection of e.g.
+fraud, spam, or distributed denial of service (DDoS) attacks.
+
+The rest of the paper is organized as follows: Section 2 surveys the related work.
+Section 3 gives our empirical ﬁndings on real-world networks across diverse domains.
+Section 4 describes our proposed models and gives results obtained both through
+analysis and simulation. Section 5 gives the formal and experimental analysis of the
+relationship between the degree distribution and the graph densiﬁcation over time.
+We conclude and discuss the implications of our ﬁndings in Section 6.
+
+2 Related Work
+
+Research over the past few years has identiﬁed classes of properties that many real-
+world networks obey. One of the main areas of focus has been on degree power
+laws, showing that the set of node degrees has a heavy-tailed distribution. Such
+degree distributions have been identiﬁed in phone call graphs [1], the Internet [11], the
+Web [3, 14, 21], click-stream data [5] and for a who-trusts-whom social network [8].
+Other properties include the “small-world phenomenon,” popularly known as “six
+degrees of separation”, which states that real graphs have surprisingly small (average
+or eﬀective) diameter (see [4, 6, 7, 9, 17, 26, 35, 36]).
+
+In parallel with empirical studies of large networks, there has been considerable
+work on probabilistic models for graph generation. The discovery of degree power
+laws led to the development of random graph models that exhibited such degree
+distributions, including the family of models based on preferential attachment [2, 3, 10]
+and the related copying model [18, 20]. See [27, 28] for surveys of this area.
+
+It is important to note the fundamental contrast between one of our main ﬁndings
+here — that the average number of out-links per node is growing polynomially in the
+
+Laws of graph evolution
+
+5
+
+network size — and body of work on degree power laws. This earlier work devel-
+oped models that almost exclusively used the assumption of node degrees that were
+bounded by constants (or at most logarithmic functions) as the network grew; our
+ﬁndings and associated model challenge this assumption, by showing that networks
+across a number of domains are becoming denser.
+
+The bulk of prior work on the study of network datasets has focused on static
+graphs, identifying patterns in a single snapshot, or a small number of network snap-
+shots (see also the discussion of this point by Ntoulas et al. [30]). Two exceptions are
+the very recent work of Katz [16], who independently discovered densiﬁcation power
+laws for citation networks, and the work of Redner [33], who studied the evolution of
+the citation graph of Physical Review over the past century. Katz’s work builds on his
+earlier research on power-law relationships between the size and recognition of profes-
+sional communities [15]; his work on densiﬁcation is focused speciﬁcally on citations,
+and he does not propose a generative network model to account for the densiﬁcation
+phenomenon, as we do here. Redner’s work focuses on a range of citation patterns
+over time that are diﬀerent from the network properties we study here.
+
+Our Community Guided Attachment (CGA) model, which produces densifying
+graphs, is an example of a hierarchical graph generation model, in which the linkage
+probability between nodes decreases as a function of their relative distance in the
+hierarchy [8, 17, 36, 24, 23]. Again, there is a distinction between the aims of this past
+work and our model here; where these earlier network models were seeking to capture
+properties of individual snapshots of a graph, we seek to explain a time evolution
+process in which one of the fundamental parameters, the average node degree, is
+varying as the process unfolds. Our Forest Fire Model follows the overall framework
+of earlier graph models in which nodes arrive one at a time and link into the existing
+structure; like the copying model discussed above, for example, a new node creates
+links by consulting the links of existing nodes. However, the recursive process by
+which nodes in the Forest Fire Model creates these links is quite diﬀerent, leading to
+the new properties discussed in the previous section.
+
+This work signiﬁcantly extends the work of [24] by introducing new measurements
+and analysis of evolution of degree distribution over time and its connection to Den-
+siﬁcation Power Law. In a follow-up paper [23] we introduce Kronecker Graphs, a
+mathematically tractable model of graph growth and evolution. Kronecker Graphs
+are based on tensor product of graph adjacency matrix, and exhibit a full set of static
+and temporal graph properties. The emphasis of the work on Kronecker graphs is on
+ability to prove theorems about properties, and not to provide simple graph models,
+like our Forest Fire model.
+
+3 Observations
+
+We study the temporal evolution of several networks, by observing snapshots of these
+networks taken at regularly spaced points in time. We use datasets from four diﬀerent
+sources; for each, we have information about the time when each node was added
+to the network over a period of several years — this enables the construction of a
+snapshot at any desired point in time. For each of datasets, we ﬁnd a version of the
+densiﬁcation power law from Equation (1), e(t) ∝ n(t)a; the exponent a diﬀers across
+datasets, but remains remarkably stable over time. We also ﬁnd that the eﬀective
+
+6
+
+J. Leskovec et al.
+
+1994
+
+1996
+Year of publication
+
+1998
+
+2000
+
+2002
+
+4
+1975
+
+1980
+
+1985
+1990
+Year granted
+
+1995
+
+(a) arXiv
+
+(b) Patents
+
+e
+e
+r
+g
+e
+d
+−
+t
+u
+o
+ 
+e
+g
+a
+r
+e
+v
+A
+
+20
+
+15
+
+10
+
+5
+
+0
+
+4.2
+
+4
+
+3.8
+
+3.6
+
+e
+e
+r
+g
+e
+d
+−
+t
+u
+o
+ 
+e
+g
+a
+r
+e
+v
+A
+
+3.4
+0
+
+12
+
+10
+
+8
+
+6
+
+e
+e
+r
+g
+e
+d
+−
+t
+u
+o
+ 
+e
+g
+a
+r
+e
+v
+A
+
+e
+e
+r
+g
+e
+d
+−
+t
+u
+o
+ 
+e
+g
+a
+r
+e
+v
+A
+
+2.5
+
+1.5
+
+3
+
+2
+
+1
+
+200
+
+400
+Time [days]
+
+600
+
+1994
+
+1996
+
+1998
+
+2000
+
+Year of publication
+
+(c) Autonomous Systems
+
+(d) Aﬃliation network
+
+Figure 1: The average node out-degree over time. Notice that it increases, in all 4 datasets.
+That is, all graphs are densifying.
+
+diameter decreases in all the datasets considered.
+
+The datasets consist of two citation graphs for diﬀerent areas in the physics lit-
+erature, a citation graph for U.S. patents, a graph of the Internet, and ﬁve bipartite
+aﬃliation graphs of authors with papers they authored. Overall, then, we consider 9
+diﬀerent datasets from 4 diﬀerent sources.
+
+3.1 Densiﬁcation Laws
+
+Here we describe the datasets we used, and our ﬁndings related to densiﬁcation. For
+each graph dataset, we have, or can generate, several time snapshots, for which we
+study the number of nodes n(t) and the number of edges e(t) at each time-stamp t. We
+denote by n and e the ﬁnal number of nodes and edges. We use the term Densiﬁcation
+Power Law plot (or just DPL plot) to refer to the log-log plot of number of edges e(t)
+versus number of nodes n(t).
+
+3.1.1 ArXiv citation graph
+
+We ﬁrst investigate a citation graph provided as part of the 2003 KDD Cup [12]. The
+HEP–TH (high energy physics theory) citation graph from the e-print arXiv covers all
+
+Laws of graph evolution
+
+7
+
+the citations within a dataset of n=29,555 papers with e= 352,807 edges. If a paper
+i cites paper j, the graph contains a directed edge from i to j. If a paper cites, or
+is cited by, a paper outside the dataset, the graph does not contain any information
+about this. We refer to this dataset as arXiv.
+
+This data covers papers in the period from January 1993 to April 2003 (124
+months).
+It begins within a few months of the inception of the arXiv, and thus
+represents essentially the complete history of its HEP–TH section. For each month
+m (1 ≤ m ≤ 124) we create a citation graph using all papers published before month
+m. For each of these graphs, we plot the number of nodes versus the number of edges
+on a logarithmic scale and ﬁt a line.
+
+Figure 2(a) shows the DPL plot; the slope is a = 1.68 and corresponds to the ex-
+ponent in the densiﬁcation law. Notice that a is signiﬁcantly higher than 1, indicating
+a large deviation from linear growth. As noted earlier, when a graph has a > 1, its
+average degree increases over time. Figure 1(a) exactly plots the average degree ¯d
+over time, and it is clear that ¯d increases. This means that the average length of the
+bibliographies of papers increases over time.
+
+There is a subtle point here that we elaborate next: With almost any network
+dataset, one does not have data reaching all the way back to the network’s birth (to
+the extent that this is a well-deﬁned notion). We refer to this as the problem of the
+“missing past.” Due to this, there will be some eﬀect of increasing out-degree simply
+because edges will point to nodes prior to the beginning of the observation period.
+We refer to such nodes as phantom nodes, with a similar deﬁnition for phantom edges.
+In all our datasets, we ﬁnd that this eﬀect is relatively minor once we move away
+from the beginning of the observation period; on the other hand, the phenomenon
+of increasing degree continues through to the present. For example, in arXiv, nodes
+over the most recent years are primarily referencing non-phantom nodes; we observe a
+knee in Figure 1(a) in 1997 that appears to be attributable in large part to the eﬀect
+of phantom nodes. (Later, when we consider a graph of the Internet, we will see a
+case where comparable properties hold in the absence of any “missing past” issues.)
+We also experimented with a second citation graph, taken from the HEP–PH
+section of the arXiv, which is about the same size as our ﬁrst arXiv dataset.
+It
+exhibits the same behavior, with the densiﬁcation exponent a = 1.56. The plot
+is omitted for brevity but we show the summary of results on all 11 datasets we
+considered on table 1.
+
+3.1.2 Patents citation graph
+
+Next, we consider a U.S. patent dataset maintained by the National Bureau of Eco-
+nomic Research [13]. The data set spans 37 years (January 1, 1963 to December
+30, 1999), and includes all the utility patents granted during that period, totaling
+n=3,923,922 patents. The citation graph includes all citations made by patents
+granted between 1975 and 1999, totaling e=16,522,438 citations. For the patents
+dataset there are 1,803,511 nodes for which we have no information about their ci-
+tations (we only have the in-links). Because the dataset begins in 1975, it too has a
+“missing past” issue, but again the eﬀect of this is minor as one moves away from the
+ﬁrst few years.
+
+The patents data also contains citations outside the dataset. For patents outside
+
+6
+10
+
+5
+10
+
+4
+10
+
+3
+10
+
+s
+e
+g
+d
+e
+
+ 
+f
+
+o
+
+ 
+r
+e
+b
+m
+u
+N
+
+2
+10
+
+2
+10
+
+4.4
+
+10
+
+4.3
+
+10
+
+4.2
+
+10
+
+s
+e
+g
+d
+e
+ 
+f
+o
+ 
+r
+e
+b
+m
+u
+N
+
+4.1
+
+10
+
+6
+10
+
+5
+10
+
+4
+10
+
+s
+e
+g
+d
+e
+ 
+f
+o
+ 
+r
+e
+b
+m
+u
+N
+
+8
+
+J. Leskovec et al.
+
+Apr 2003
+
+1999
+
+Jan 1993
+
+Edges
+= 0.0113 x1.69 R2=1.0
+
+5
+10
+
+5
+10
+
+5
+10
+
+1975
+
+Edges
+= 0.0002 x1.66 R2=0.99
+
+7
+10
+
+3
+10
+
+4
+10
+
+Number of nodes
+
+(a) arXiv
+
+6
+10
+Number of nodes
+(b) Patents
+
+3.5
+
+10
+
+3.6
+
+10
+
+10
+Number of nodes
+
+3.7
+
+Edges
+= 0.87 x1.18 R2=1.00
+
+3.8
+
+10
+
+2
+10
+
+2
+10
+
+Edges
+= 0.4255 x1.15 R2=1.0
+
+3
+10
+
+4
+10
+
+Number of nodes
+
+5
+10
+
+(c) Autonomous Systems
+
+(d) Aﬃliation network
+
+May ’05
+
+2004
+
+Oct ’03
+
+3
+10
+
+3
+10
+
+Edges
+= 1 x1.12 R2=1.00
+
+4
+10
+Number of nodes
+
+5
+10
+
+1910
+
+4
+10
+
+Edges
+= 0.9 x1.11 R2=0.98
+
+5
+10
+
+Number of nodes
+
+6
+10
+
+(e) Email network
+
+(f) IMDB actors to movies network
+
+Figure 2: Number of edges e(t) versus number of nodes n(t), in log-log scales, for several
+graphs. All 4 graphs obey the Densiﬁcation Power Law, with a consistently good ﬁt. Slopes:
+a = 1.68, 1.66, 1.18, 1.15, 1.12, and 1.11 respectively.
+
+8
+10
+
+7
+10
+
+6
+10
+
+s
+e
+g
+d
+e
+
+ 
+f
+
+o
+
+ 
+r
+e
+b
+m
+u
+N
+
+6
+10
+
+5
+10
+
+4
+10
+
+3
+10
+
+s
+e
+g
+d
+e
+ 
+f
+o
+ 
+r
+e
+b
+m
+u
+N
+
+s
+e
+g
+d
+e
+
+ 
+f
+
+o
+
+ 
+r
+e
+b
+m
+u
+N
+
+7
+10
+
+6
+10
+
+5
+10
+
+4
+10
+
+3
+10
+
+Laws of graph evolution
+
+9
+
+the dataset the time is unknown. These patents have zero out-degree and are at some
+time cited by the patents from the dataset. We set the grant year of these out-of-
+dataset patents to the year when they were ﬁrst cited by a patent from a dataset. This
+is natural and is equivalent to saying that patents for which grant year is unknown
+are in the dataset from the beginning, but when counting, we count only non-zero
+degree nodes. So the time when we ﬁrst count an unknown patent is when it gets a
+ﬁrst link.
+
+We follow the same procedure as with arXiv. For each year Y from 1975 to 1999,
+we create a citation network on patents up to year Y , and give the DPL plot, in
+Figure 2(b). As with the arXiv citation network, we observe a high densiﬁcation
+exponent, in this case a = 1.66.
+
+Figure 1(b) illustrates the increasing out-degree of patents over time. Note that
+this plot does not incur any of the complications of a bounded observation period,
+since the patents in the dataset include complete citation lists, and here we are simply
+plotting the average size of these as a function of the year.
+
+3.1.3 Autonomous systems graph
+
+The graph of routers comprising the Internet can be organized into sub-graphs called
+Autonomous Systems (AS). Each AS exchanges traﬃc ﬂows with some neighbors
+(peers). We can construct a communication network of who-talks-to-whom from the
+BGP (Border Gateway Protocol) logs.
+
+We use the the Autonomous Systems (AS) dataset from [31]. The dataset contains
+735 daily instances which span an interval of 785 days from November 8 1997 to
+January 2 2000. The graphs range in size from n=3,011 nodes and e=10,687 edges
+to the largest AS graph that has n=6,474 nodes and e=26,467 edges.
+
+In contrast to citation networks, where nodes and edges only get added (not
+deleted) over time, the AS dataset also exhibits both the addition and deletion of the
+nodes and edges over time.
+
+Figure 2(c) shows the DPL plot for the Autonomous Systems dataset. We ob-
+serve a clear trend: Even in the presence of noise, changing external conditions, and
+disruptions to the Internet we observe a strong super-linear growth in the number
+of edges over more than 700 AS graphs. We show the increase in the average node
+degree over time in Figure 1(c). The densiﬁcation exponent is a = 1.18, lower than
+the one for the citation networks, but still clearly greater than 1.
+
+3.1.4 Aﬃliation graphs
+
+Using the arXiv data, we also constructed bipartite aﬃliation graphs. There is a node
+for each paper, a node for each person who authored at least one arXiv paper, and an
+edge connecting people to the papers they authored. Note that the more traditional
+co-authorship network is implicit in the aﬃliation network: two people are co-authors
+if there is at least one paper joined by an edge to each of them.
+
+We studied aﬃliation networks derived from the ﬁve largest categories in the
+arXiv (ASTRO–PH, HEP–TH, HEP–PH, COND–MAT and GR–QC). We place a
+time-stamp on each node: the submission date of each paper, and for each person,
+the date of their ﬁrst submission to the arXiv. The data for aﬃliation graphs covers
+the period from April 1992 to March 2002. The smallest of the graphs (category GR–
+
+10
+
+J. Leskovec et al.
+
+QC) had 19,309 nodes (5,855 authors, 13,454 papers) and 26,169 edges. ASTRO–PH
+is the largest graph, with 57,381 nodes (19,393 authors, 37,988 papers) and 133,170
+edges. It has 6.87 authors per paper; most of the other categories also have similarly
+high numbers of authors per paper.
+
+For all these aﬃliation graphs we observe similar phenomena, and in particular
+we have densiﬁcation exponents between 1.08 and 1.15. We present the complete set
+of measurements only for ASTRO–PH, the largest aﬃliation graph. Figures 1(d) and
+2(d) show the increasing average degree over time, and a densiﬁcation exponent of
+a = 1.15. Table 1 shows the sizes and Densiﬁcation Power Lawexponents for other
+four aﬃliation graphs.
+
+3.1.5 Email network
+
+We also considered an email network from a large European research institution. For a
+period from October 2003 to May 2005 (18 months) we have anonymized information
+about all incoming and outgoing email of the research institution. For each sent or
+received email message we know the time, the sender and the recipient of the email.
+Overall we have 3,038,531 emails between 287,755 diﬀerent email addresses. Note
+that we have a complete email graph for only 1,258 email addresses that come from
+the research institution. Furthermore, there are 38,048 email addresses that both sent
+and received email within the the span of our dataset. All other email addresses are
+either non-existing, mistyped or spam.
+
+Given a set of email messages we need to create a graph. Since there can be
+multiple emails sent between same two addresses (nodes) we follow the practice of
+Kossinets and Watts (2006). Given a set of email messages, each node corresponds
+to an email address. We create an edge between nodes i and j, if they exchanged
+messages both ways, i.e.
+i sent at least one message to j, and j sent at least one
+message to i.
+
+Similarly to citation networks, we take all email messages up to particular time t
+and create a graph using the procedure described above. So, in the ﬁrst month we
+observe 254,080 emails between 38,090 diﬀerent addresses. Using the procedure [19]
+of generating a graph from a set of emails, we get n=6,537 nodes and e=18,812 edges.
+After 18 months, at the end of the dataset, we have n=35,756 nodes and e=123,254
+edges.
+
+Figure 2(e) presents the DPL plot for the Email network. Observe a clear trend:
+the email network is densifying, regardless of the fact that it is growing and that new
+parts of social network (email address space) are being explored. The densiﬁcation
+exponent is a = 1.12, lower than the one for the citation networks but more similar
+to those from aﬃliation networks. Still clearly greater than 1.
+
+Note that there is one issue with this dataset: we have complete information about
+all sent and received emails only for the core of the network (1258 email addresses
+from the institution). For the rest of the addresses, the nodes on the periphery, we
+only have their communication (links) with the core of the network.
+
+Regardless of how we look at the email network it always densiﬁes: If we consider
+only the core of the network, the densiﬁcation is very high. This is expected, since
+the number of nodes (people at the research institution) basically remains constant
+over time and the edges can only be added, not deleted, and densiﬁcation naturally
+
+Laws of graph evolution
+
+11
+
+occurs.
+
+Interestingly, the network also densiﬁes if we consider the core plus the periphery
+but when determining edges we take a sliding window of 2 month period [19]. This
+means that for every month m, we take all email messages between m − 2 and m, and
+create a graph, where there is an edge, if nodes exchanged emails both ways in last 2
+months. This graph also densiﬁes with densiﬁcation exponent a = 1.21.
+
+3.1.6 IMDB actors to movies network
+
+The Internet Movie Data Base (IMDB, http://www.imdb.com) is a collection of facts
+about movies and actors. For every movie we know the year of production, genre and
+actor names that appeared in the movie. From IMDB we obtained data about 896,192
+actors and 334,084 movies produced between 1890 to 2004 (114 years).
+
+Given this data we created a bi-partite graph of actors to movies. This means
+that whenever a new movie appears, it links to all the actors participating in it. We
+create a new actor node when the actor ﬁrst appears in any movie. This way, when
+a new movie appears, we ﬁrst create a movie node. Then we introduce actor nodes,
+but only for actors for whom this was their ﬁrst appearance in a movie. Then we link
+actors and the movie.
+
+In our experiment we started observing the graph in 1910, when the giant con-
+nected component started to form. Before 1910 the largest connected component
+consisted of less 15% of the nodes. At the beginning of our observation period the
+network had n=7,690 nodes (4,219 actors and 3,471 movies) and e=12,243 edges. At
+the end of the dataset in 2004, we have n=1,230,276 nodes and e=3,790,667 edges.
+
+We follow the usual procedure: for every year Y we take all the movies up to year
+Y and actors that appeared in them. We create a graph and measure how the number
+of edges grows with the number of nodes. Figure 2(f) presents the DPL plot for the
+IMDB actors to movies network. Again, notice the nontrivial densiﬁcation exponent
+of a = 1.11.
+
+3.1.7 Product recommendation network
+
+We also report the analysis of [22], where they measured the densiﬁcation of a large
+person-to-person recommendation network from a large on-line retailer. The network
+generation process was as follows. Each time a person purchases a book, music CD,
+or a movie he or she is given the option of sending emails recommending the item
+to friends. Any of the recipients of the recommendation that makes a purchase can
+further recommend the item.
+
+The network consists of e=15,646,121 recommendations made among n=3,943,084
+distinct users. The data was collected from June 5 2001 to May 16 2003. In total,
+548,523 products were recommended. We report the Densiﬁcation Power Law expo-
+nent a = 1.26 in table 1.
+
+3.2 Shrinking Diameters
+
+We now discuss the behavior of the eﬀective diameter over time, for this collection of
+network datasets. Following the conventional wisdom on this topic, we expected the
+underlying question to be whether we could detect the diﬀerences among competing
+
+12
+
+J. Leskovec et al.
+
+Time DPL exponent
+
+Dataset
+Arxiv HEP–PH
+Arxiv HEP–TH
+Patents
+AS
+Aﬃliation ASTRO–PH
+Aﬃliation COND–MAT
+Aﬃliation GR-QC
+Aﬃliation HEP–PH
+Aﬃliation HEP–TH
+Email
+IMDB
+Recommendations
+
+Nodes
+30,501
+29,555
+3,923,922
+6,474
+57,381
+62,085
+19,309
+51,037
+45,280
+35,756
+1,230,276
+3,943,084
+
+Edges
+347,268
+352,807
+16,522,438
+26,467
+133,179
+108,182
+26,169
+89,163
+68,695
+123,254
+3,790,667
+15,656,121
+
+124 months
+124 months
+37 years
+785 days
+10 years
+10 years
+10 years
+10 years
+10 years
+18 months
+114 years
+710 days
+
+1.56
+1.68
+1.66
+1.18
+1.15
+1.10
+1.08
+1.08
+1.08
+1.12
+1.11
+1.26
+
+Table 1: Dataset names with sizes, time lengths and Densiﬁcation Power Law exponents.
+Notice very high densiﬁcation exponent for citation networks (≈ 1.6), around 1.2 for Au-
+tonomous Systems and lower (but still signiﬁcant) densiﬁcation exponent (≈ 1.1) for aﬃlia-
+tion and collaboration type networks.
+
+hypotheses concerning the growth rates of the diameter — for example, the diﬀerence
+between logarithmic and sub-logarithmic growth. Thus, it was with some surprise
+that we found the eﬀective diameters to be actually decreasing over time (Figure 3).
+Let us deﬁne the necessary concepts underlying the observations. We say that two
+nodes in an undirected network are connected if there is an path between them; for
+each natural number d, let g(d) denote the fraction of connected node pairs whose
+shortest connecting path has length at most d. The hop-plot for the network is the
+set of pairs (d, g(d)); it thus gives the cumulative distribution of distances between
+connected node pairs. We extend the hop-plot to a function deﬁned over all positive
+real numbers by linearly interpolating between the points (d, g(d)) and (d+1, g(d+1))
+for each d, and we deﬁne the eﬀective diameter of the network to be the value of d
+at which this function achieves the value 0.9. (Note that this varies slightly from
+an alternate deﬁnition of the eﬀective diameter used in earlier work: the minimum
+value d such that at least 90% of the connected node pairs are at distance at most
+d. Our variation smooths this deﬁnition by allowing it to take non-integer values.)
+The eﬀective diameter is a more robust quantity than the diameter (deﬁned as the
+maximum distance over all connected node pairs), since the diameter is prone to the
+eﬀects of degenerate structures in the graph (e.g. very long chains). However, the
+eﬀective diameter and diameter tend to exhibit qualitatively similar behavior.
+
+For each time t (as in the previous subsection), we create a graph consisting of
+nodes up to that time, and compute the eﬀective diameter of the undirected version
+of the graph.
+
+Figure 3 shows the eﬀective diameter over time; one observes a decreasing trend for
+all the graphs. We performed a comparable analysis to what we describe here for all
+11 graph datasets in our study, with very similar results. For the citation networks in
+our study, the decreasing eﬀective diameter has the following interpretation: Since all
+the links out of a node are “frozen” at the moment it joins the graph, the decreasing
+
+Laws of graph evolution
+
+13
+
+Full graph
+Post ’95 subgraph
+Post ’95 subgraph, no past
+
+Full graph
+Post ’95 subgraph
+Post ’95 subgraph, no past
+
+4
+1992
+
+1998
+Time [years]
+
+4
+1992
+
+Time [years]
+
+1994
+
+1996
+
+2000
+
+2002
+
+2004
+
+1994
+
+1996
+
+1998
+
+2000
+
+2002
+
+(a) arXiv citation graph
+
+(b) Aﬃliation network
+
+Full graph
+Post ’85 subgraph
+Post ’85 subgraph, no past
+
+Linear fit
+
+1980
+
+1985
+
+1990
+
+1995
+
+2000
+
+Time [years]
+
+3500
+
+4000
+
+4500
+
+5000
+
+5500
+
+6000
+
+6500
+
+Size of the graph [number of nodes]
+
+4
+3000
+
+(c) Patents citation graph
+
+(d) Autonomous Systems
+
+Full graph
+Post Jan ’04 subgraph
+Post Jan ’04 subgraph, no past
+
+Full graph
+Post ’40 subgraph
+Post ’40 subgraph, no past
+
+12
+
+11
+
+10
+
+9
+
+8
+
+7
+
+6
+
+5
+
+r
+e
+
+t
+
+e
+m
+a
+d
+
+i
+
+ 
+
+e
+v
+i
+t
+c
+e
+
+f
+f
+
+E
+
+5
+
+4.8
+
+4.6
+
+4.4
+
+4.2
+
+i
+
+r
+e
+t
+e
+m
+a
+d
+ 
+e
+v
+i
+t
+c
+e
+f
+f
+
+E
+
+i
+
+r
+e
+t
+e
+m
+a
+d
+ 
+e
+v
+i
+t
+c
+e
+f
+f
+
+E
+
+16
+
+15
+
+14
+
+13
+
+12
+
+11
+
+10
+
+9
+
+8
+
+10
+
+9
+
+8
+
+7
+
+6
+
+5
+
+35
+
+30
+
+25
+
+20
+
+15
+
+10
+
+r
+e
+
+t
+
+e
+m
+a
+d
+
+i
+
+ 
+
+e
+v
+i
+t
+c
+e
+
+f
+f
+
+E
+
+i
+
+r
+e
+t
+e
+m
+a
+d
+ 
+e
+v
+i
+t
+c
+e
+f
+f
+
+E
+
+5
+1975
+
+6.5
+
+5.5
+
+7
+
+6
+
+5
+
+i
+
+r
+e
+t
+e
+m
+a
+d
+ 
+e
+v
+i
+t
+c
+e
+f
+f
+
+E
+
+4.5
+
+4
+0
+
+5
+
+10
+Time [months]
+
+15
+
+20
+
+1920
+
+1940
+
+1960
+
+1980
+
+2000
+
+Time [years]
+
+(e) Email network
+
+(f) IMDB actors to movies network
+
+Figure 3: The eﬀective diameter over time for 6 diﬀerent datasets. Notice consistent decrease
+of diameter over time.
+
+14
+
+J. Leskovec et al.
+
+distance between pairs of nodes appears to be the result of subsequent papers acting
+as “bridges” by citing earlier papers from disparate areas. Note that for other graphs
+in our study, such as the AS dataset, it is possible for an edge between two nodes to
+appear at an arbitrary time after these two nodes join the graph.
+
+We note that the eﬀective diameter of a graph over time is necessarily bounded
+from below, and the decreasing patterns of the eﬀective diameter in the plots of
+Figure 3 are consistent with convergence to some asymptotic value. However, under-
+standing the full “limiting behavior” of the eﬀective diameter over time, to the extent
+that this is even a well-deﬁned notion, remains an open question.
+
+3.2.1 Validating the shrinking diameter conclusion
+
+Given the unexpected nature of this result, we wanted to verify that the shrinking
+diameters were not attributable to artifacts of our datasets or analyses. We explored
+this issue in a number of ways, which we now summarize; the conclusion is that the
+shrinking diameter appears to be a robust, and intrinsic, phenomenon. Speciﬁcally, we
+performed experiments to account for (a) possible sampling problems, (b) the eﬀect
+of disconnected components, (c) the eﬀect of the “missing past”(as in the previous
+subsection), and (d) the dynamics of the emergence of the giant component.
+
+• Possible sampling problems: Computing shortest paths among all node pairs
+is computationally prohibitive for graphs of our scale. We used several diﬀer-
+ent approximate methods, obtaining almost identical results from all of them.
+In particular, we applied the Approximate Neighborhood Function (ANF) ap-
+proach [32] (in two diﬀerent implementations), which can estimate eﬀective di-
+ameters for very large graphs, as well as a basic sampling approach in which we
+ran exhaustive breadth-ﬁrst search from a subset of the nodes chosen uniformly
+at random. The results using all these methods were essentially identical.
+
+Plots on ﬁgure 3 were created by averaging over 100 runs of the ANF, the
+approximate diameter algorithm. For all datasets the standard error is less
+than 10%. For clarity of presentation we do not show the error bars.
+
+• Disconnected components: One can also ask about the eﬀect of small dis-
+connected components. All of our graphs have a single giant component – a
+connected component (or weakly connected component in the case of directed
+graphs, ignoring the direction of the edges) that accounts for a signiﬁcant frac-
+tion of all nodes. For each graph, we computed eﬀective diameters for both the
+entire graph and for just the giant component; again, our results are essentially
+the same using these two methods.
+
+• “Missing Past” eﬀects: A third issue is the problem of the “missing past,” the
+same general issue that surfaced in the previous subsection when we considered
+densiﬁcation. In particular, we must decide how to handle citations to papers
+that predate our earliest recorded time. (Note that the missing past is not an
+issue for the AS network data, where the eﬀective diameter also decreases.)
+
+To understand how the diameters of our networks are aﬀected by this unavoid-
+able problem, we perform the following test. We pick some positive time t0 > 0,
+and determine what the diameter would look like as a function of time, if this
+
+Laws of graph evolution
+
+15
+
+were the beginning of our data. We can then put back in the nodes and the
+edges from before time t0, and study how much the diameters change. If this
+change is small — or at least if it does not aﬀect the qualitative conclusions
+— then it provides evidence that the missing past is not inﬂuencing the overall
+result.
+
+Speciﬁcally, we set this cut-oﬀ time t0 to be the beginning of 1995 for the arXiv
+(since we have data from 1993), and to be 1985 for the patent citation graph (we
+have data from 1975). For Email network we set the cut-oﬀ time to January 2004
+and for IMDB to 1940 (we also experimented with 1920 and 1960 and ﬁndings
+were consistent). We then compared the results of three measurements:
+
+− Diameter of full graph. We compute the eﬀective diameter of the graph’s
+
+giant component.
+
+− Post-t0 subgraph. We compute the eﬀective diameter of the post-t0 sub-
+graph using all nodes and edges. This means that for each time t (t > t0)
+we create a graph using all nodes dated before t. We then compute the
+eﬀective diameter of the subgraph of the nodes dated between t0 and t.
+To compute the eﬀective diameter we can use all edges and nodes (includ-
+ing those dated before t0). This experiment measures the diameter of the
+graph if we knew the full (pre-t0) past — the citations of the papers which
+we have intentionally excluded for this test.
+
+− Post-t0 subgraph, no past. We set t0 the same way as in previous experi-
+ment, but then for all nodes dated before t0 we delete all their out-links.
+This creates the graph we would have gotten if we had started collecting
+data only at time t0.
+
+In Figure 3, we superimpose the eﬀective diameters using the three diﬀerent
+techniques. If the missing past does not play a large role in the diameter, then
+all three curves should lie close to one another. We observe this is the case for
+the arXiv citation graphs. For the arXiv paper-author aﬃliation graph, and
+for the patent citation graph, the curves are quite diﬀerent right at the cut-oﬀ
+time t0 (where the eﬀect of deleted edges is most pronounced), but they quickly
+align with one another. As a result, it seems clear that the continued decreasing
+trend in the eﬀective diameter as time runs to the present is not the result of
+these boundary eﬀects.
+
+• Emergence of giant component: A ﬁnal issue is the dynamics by which the giant
+component emerges. For example, in the standard Erd¨os-Renyi random graph
+model (which has a substantially diﬀerent ﬂavor from the growth dynamics of
+the graphs here), the diameter of the giant component is quite large when it ﬁrst
+appears, and then it shrinks as edges continue to be added. Could shrinking
+diameters in some way be a symptom of emergence of giant component?
+
+It appears fairly clear that this is not the case. Figure 4 shows the fraction of all
+nodes that are part of the largest connected component (GCC) over time. We
+plot the size of the GCC for the full graph and for a graph where we had no past
+— i.e., where we delete all out-links of the nodes dated before the cut-oﬀ time t0.
+
+16
+
+J. Leskovec et al.
+
+1
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+1992
+
+1
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+Full graph
+Post 1995 subgraph, no past
+
+Full graph
+Post 1995 subgraph, no past
+
+1996
+
+1994
+1998
+2002
+(a) arXiv citation graph
+
+2000
+
+2004
+
+1992
+
+1996
+
+1994
+2000
+(b) Aﬃliation network
+
+1998
+
+2002
+
+Figure 4: The fraction of nodes that are part of the giant connected component over time.
+We see that after 4 years the 90% of all nodes in the graph belong to giant component.
+
+Because we delete the out-links of the pre-t0 nodes the size of GCC is smaller,
+but as the graph grows the eﬀect of these deleted links becomes negligible.
+
+We see that within a few years the giant component accounts for almost all
+the nodes in the graph. The eﬀective diameter, however, continues to steadily
+decrease beyond this point. This indicates that the decrease is happening in
+a “mature” graph, and not because many small disconnected components are
+being rapidly glued together.
+
+Based on all this, we believe that the decreasing diameters in our study reﬂect a
+fundamental property of the underlying networks. Understanding the possible causes
+of this property, as well as the causes of the densiﬁcation power laws discussed earlier,
+will be the subject of the next section.
+
+4 Proposed Models
+
+We have now seen that densiﬁcation power laws and shrinking eﬀective diameters are
+properties that hold across a range of diverse networks. Moreover, existing models
+do not capture these phenomena. We would like to ﬁnd some simple, local model
+of behavior, which could naturally lead to the macroscopic phenomena we have ob-
+served. We present increasingly sophisticated models, all of which naturally achieve
+the observed densiﬁcation; the last one (the “Forest Fire” model) also exhibits shrink-
+ing diameter and all the other main patterns known (including heavy-tailed in- and
+out-degree distributions).
+
+4.1 Community Guided Attachment
+
+What are the underlying principles that drive all our observed graphs to obey a
+densiﬁcation power law, without central control or coordination? We seek a model
+in which the densiﬁcation exponent arises from intrinsic features of the process that
+generates nodes and edges. While one could clearly deﬁne a graph model in which
+
+Laws of graph evolution
+
+17
+
+Symbol Description
+
+a
+c
+f (h)
+n(t)
+e(t)
+b
+¯d
+H
+h(v, w)
+p
+pb
+r
+γ
+
+Densiﬁcation Exponent
+Diﬃculty Constant
+Diﬃculty Function
+number of nodes at time t
+number of edges at time t
+community branching factor
+expected average node out-degree
+height of the tree
+least common ancestor height of v, w
+forest ﬁre forward burning probability
+forest ﬁre backward burning probability
+ratio of backward and forward probability
+power-law degree distribution exponent
+
+Table 2: Table of symbols
+
+e(t) ∝ n(t)a by simply having each node, when it arrives at time t, generate n(t)a−1
+out-links — the equivalent of positing that each author of a paper in a citation
+network has a rule like, “Cite na−1 other documents,” hard-wired in his or her brain
+— such a model would not provide any insight into the origin of the exponent a, as
+the exponent is unrelated to the operational details by which the network is being
+Instead, our goal is to see how underlying properties of the network
+constructed.
+evolution process itself can aﬀect the observed densiﬁcation behavior.
+
+We take the following approach. Power laws often appear in combination with
+self-similar datasets [34]. Our approach involves two steps, both of which are based
+on self-similarity. Thus, we begin by searching for self-similar, recursive structures. In
+fact, we can easily ﬁnd several such recursive sets: For example, computer networks
+form tight groups (e.g., based on geography), which consist of smaller groups, and so
+on, recursively. Similarly for patents: they also form conceptual groups (“chemistry”,
+“communications”, etc.), which consist of sub-groups, and so on recursively. Several
+other graphs feature such “communities within communities” patterns. For example,
+it has been argued (see e.g. [36] and the references therein) that social structures
+exhibit self-similarity, with individuals organizing their social contacts hierarchically.
+Moreover, pairs of individuals belonging to the same small community form social ties
+more easily than pairs of individuals who are only related by membership in a larger
+community. In a diﬀerent domain, Menczer studied the frequency of links among Web
+pages that are organized into a topic hierarchy such as the Open Directory [25]. He
+showed that link density among pages decreases with the height of their least common
+ancestor in the hierarchy. That is, two pages on closely related topics are more likely
+to be hyperlinked than are two pages on more distantly related topics.
+
+This is the ﬁrst, qualitative step in our explanation for the Densiﬁcation Power
+Law. The second step is quantitative. We will need a numerical measure of the
+diﬃculty in crossing communities; we call this the Diﬃculty Constant, and we deﬁne
+it more precisely below.
+
+18
+
+J. Leskovec et al.
+
+4.1.1 The Basic Version of the Model
+
+We represent the recursive structure of communities-within-communities as a tree Γ,
+of height H. We shall show that even a simple, perfectly balanced tree of constant
+fanout b is enough to lead to a densiﬁcation power law, and so we will focus the
+analysis on this basic model.
+
+The nodes V in the graph we construct will be the leaves of the tree; that is,
+n = |V |. (Note that n = bH.) Let h(v, w) deﬁne the standard tree distance of two
+leaf nodes v and w: that is, h(v, w) is the height of their least common ancestor (the
+height of the smallest sub-tree containing both v and w).
+
+We will construct a random graph on a set of nodes V by specifying the probability
+that v and w form a link as a function f of h(v, w). We refer to this function f as
+the Diﬃculty Function. What should be the form of f ? Clearly, it should decrease
+with h; but there are many forms such a decrease could take.
+
+The form of f that works best for our purposes comes from the self-similarity
+arguments we made earlier: We would like f to be scale-free; that is, f (h)/f (h −
+1) should be level-independent and thus constant. The only way to achieve level-
+independence is to deﬁne f (h) = f (0) ∗ c−h. Setting f (0) to 1 for simplicity, we
+have:
+
+f (h) = c−h
+
+(2)
+
+where c ≥ 1. We refer to the constant c as the Diﬃculty Constant. Intuitively,
+
+cross-communities links become harder to form as c increases.
+
+This completes our development of the model, which we refer to as Commu-
+nity Guided Attachment:
+If the nodes of a graph belong to communities-within-
+communities, and if the cost for cross-community edges is scale-free (Eq. (2)), the
+Densiﬁcation Power Law follows naturally. No central control or exogenous regula-
+tions are needed to force the resulting graph to obey this property. In short, self-
+similarity itself leads to the Densiﬁcation Power Law.
+
+Theorem 4.1 In the Community Guided Attachment random graph model just de-
+ﬁned, the expected average out-degree ¯d of a node is proportional to:
+
+¯d
+
+=
+=
+
+=
+
+n1−logb(c)
+logb(n)
+constant
+
+if 1 ≤ c ≤ b
+if c = b
+
+if c > b
+
+Proof: For a given node v, the expected out-degree (number of links) ¯d of the
+
+node is proportional to
+
+¯d =
+
+f (h(x, v)) =
+
+(b − 1)bj−1c−j =
+
+logb(n)
+
+j=1
+X
+
+logb(n)
+
+b − 1
+c
+
+j−1
+
+.
+
+b
+c
+
+j=1 (cid:18)
+X
+
+(cid:19)
+
+(3)
+
+There are three diﬀerent cases: if 1 ≤ c < b then by summing the geometric series
+
+Xx6=v
+
+we obtain
+
+Laws of graph evolution
+
+19
+
+¯d
+
+=
+
+=
+
+logb(n)
+
+b
+c
+
+b − 1
+c
+
+·
+
+b
+(cid:0)
+c
+Θ(n1−logb(c)).
+(cid:1)
+
+(cid:0)
+
+(cid:1)
+
+− 1
+
+=
+
+− 1
+
+b − 1
+b − c
+
+(cid:18)
+
+(cid:19)
+
+(n1−logb(c) − 1)
+
+In the case when c = b the series sums to
+
+¯d
+
+=
+
+=
+
+Xx6=v
+Θ(logb(n)).
+
+f (h(x, v)) =
+
+b − 1
+b
+
+logb(n)
+
+j−1
+
+b
+b
+
+=
+
+b − 1
+b
+
+logb(n)
+
+j=1 (cid:18)
+X
+
+(cid:19)
+
+The last case is when Diﬃculty Constant c is greater than branching factor b
+(c > b), then the sum in Eq. (3) converges to a constant even if carried out to inﬁnity,
+and so we obtain ¯d = Θ(1).
+
+Note that when c < b, we get a densiﬁcation law with exponent greater than 1:
+the expected out-degree is n1−logb(c), and so the total number of edges grows as na
+where a = 2 − logb(c). Moreover, as c varies over the interval [1, b), the exponent a
+ranges over all values in the interval (1, 2].
+
+Corollary 4.2 If the Diﬃculty Function is scale-free (f (h) = c−h, with 1 < c < b),
+then the Community Guided Attachment obeys the Densiﬁcation Power Law with
+exponent
+
+a = 2 − logb(c)
+
+4.1.2 Dynamic Community Guided Attachment
+
+So far we have discussed a model in which nodes are ﬁrst organized into a nested set
+of communities, and then they start forming links. We now extend this to a setting in
+which nodes are added over time, and the nested structure deepens to accommodate
+them. We will assume that a node only creates out-links at the moment it is added
+(and hence, only to nodes already present); this is natural for domains like citation
+networks in which a paper’s citations are written at the same time as the paper itself.
+Speciﬁcally, the model is as follows. Rather than having graph nodes reside only
+at the leaves of the tree Γ, there will now be a graph node corresponding to every
+internal node of Γ as well. Initially, there is a single node v in the graph, and our tree
+Γ consists just of v. In time step t, we go from a complete b-ary tree of depth t − 1 to
+one of depth t, by adding b new leaves as children of each current leaf. Each of these
+new leaves will contain a new node of the graph.
+
+Now, each new node forms out-links according to a variant of the process in which
+all graph nodes are leaves. However, since a new node has the ability to link to
+internal nodes of the existing tree, not just to other leaves, we need to extend the
+model to incorporate this. Thus, we deﬁne the tree-distance d(v, w) between nodes v
+and w to be the length of a path between them in Γ — this is the length of the path
+from v up to the least common ancestor of v and w, plus the length of the path from
+this least common ancestor down to w. Note that if v and w are both leaves, then
+d(v, w) = 2h(v, w), following our deﬁnition of h(v, w) from above.
+
+20
+
+J. Leskovec et al.
+
+The process of forming out-links is now as follows: For a constant c, node v forms
+a link to each node w, independently, with probability c−d(v,w)/2. (Note that dividing
+by 2 in the exponent means this model gives the same probability as basic model in
+the case when both v and w are leaves.)
+
+Like the ﬁrst model, this process produces a densiﬁcation law with exponent a =
+2 − logb(c) when c < b. However, for c < b2, it also yields a heavy-tailed distribution
+of in-degrees — something that the basic model did not produce. We describe this in
+the following theorem.
+
+Theorem 4.3 The Dynamic Community Guided Attachment model just deﬁned has
+the following properties.
+
+• When c < b, the average node degree is n1−logb(c) and the in-degrees follow a
+
+Zipf distribution with exponent 1
+
+2 logb(c).
+
+• When b < c < b2, the average node degree is constant, and the in-degrees follow
+
+a Zipf distribution with exponent 1 − 1
+
+2 logb(c).
+
+• When c > b2, the average node degree is constant and the probability of an
+
+in-degree exceeding any constant bound k decreases exponentially in k.
+
+Proof: In the proof, all logarithms will be expressed in base b unless speciﬁed
+
+otherwise.
+
+We begin with the following basic facts. If a node is at height h in the tree, then
+the number of nodes at distance d ≤ h from it is Θ
+. Nodes at distance d > h can
+be reached by going up for j steps, and then down for d − j steps (if d − j ≤ h + j).
+This is maximized for j = (d − h)/2, and so the total number of nodes reachable at
+distance d is Θ
+
+b(d+h)/2
+
+bd
+
+(cid:0)
+
+(cid:1)
+
+.
+
+Case 1: c < b In this case, the expected out-degree for a leaf node is
+
+(cid:0)
+
+(cid:1)
+
+2 log n
+
+Xd=0
+
+Θ
+
+bd/2
+cd/2
+
+= Θ
+
+= Θ
+
+= Θ
+
+n1−log c
+
+.
+
+blog n
+clog n
+
+n
+clog n
+
+(cid:16)
+
+(cid:17)
+
+(cid:0)
+
+(cid:1)
+
+(cid:18)
+
+(cid:19)
+
+(cid:18)
+
+(cid:19)
+
+Since the expected out-degree values for other nodes are smaller, and since a constant
+fraction of all nodes are leaves, it follows that the expected value of the out-degree
+taken over all nodes is Θ
+
+as well.
+Now we compute the expected in-degree of a node at height h. This is
+
+n1−log c
+
+Θ
+
+bd
+cd/2
+
++
+
+(cid:0)
+
+Θ
+
+(cid:1)
+
+b(d+h)/2
+cd/2
+
+=
+
+Θ
+
+bd/2 +
+
+Θ
+
+bh/2.
+
+bd/2
+cd/2
+
+bd/2
+cd/2
+
+(cid:18)
+
+Xd≤h
+
+Xd≤h
+The largest term in this sum is the last, for d = 2 log n − h. Here is takes the value
+
+Xd>h
+
+Xd>h
+
+(cid:18)
+
+(cid:19)
+
+(cid:19)
+
+(cid:19)
+
+(cid:18)
+
+(cid:18)
+
+(cid:19)
+
+blog n
+clog n−(h/2)
+
+Θ
+
+(cid:18)
+
+= Θ
+
+ch/2 = Θ
+
+blog n
+clog n
+
+(cid:19)
+
+(cid:18)
+
+(cid:19)
+
+n1−log cch/2
+(cid:16)
+
+(cid:17)
+
+.
+
+The maximum expected in-degree z is achieved for h = log n, when we get
+
+z = Θ
+
+n1−log cc.5 log n
+
+= Θ
+
+n1−.5 log c
+
+.
+
+(cid:0)
+
+(cid:1)
+
+(cid:0)
+
+(cid:1)
+
+Laws of graph evolution
+
+21
+
+So for a node at depth t = log n − h, we get an expected in-degree of
+
+(cid:17)
+Hence, to compute a Zipf exponent, we see that a node of degree rank r = bt has
+
+(cid:17)
+
+Θ
+
+n1−log cc(log n−t)/2
+(cid:16)
+
+= Θ
+
+.
+
+zc−t/2
+(cid:16)
+
+depth t, so it has degree
+
+Case 2: b < c < b2 In this case, the expected out-degree for a leaf node is
+
+Θ
+
+z
+ct/2
+
+= Θ
+
+(cid:16)
+
+(cid:17)
+
+(cid:16)
+
+z
+r.5 log c
+
+.
+
+(cid:17)
+
+2 log n
+
+Xd=0
+
+Θ
+
+bd/2
+cd/2
+
+(cid:18)
+
+(cid:19)
+
+= Θ(1).
+
+Since the expected out-degree values for other nodes are smaller, it follows that the
+expected value of the out-degree taken over all nodes is Θ (1) as well.
+
+Now we compute the expected in-degree of a node at height h. This is
+
+Θ
+
+bd
+cd/2
+
+b(d+h)/2
+cd/2
+
+bd/2
+cd/2
+
++
+
+Θ
+
+=
+
+Θ
+
+bd/2 +
+
+Θ
+
+bh/2.
+
+bd/2
+cd/2
+
+(cid:18)
+
+(cid:18)
+
+(cid:19)
+
+Xd>h
+
+Xd≤h
+
+Xd≤h
+Since b < c < b2, these terms increase geometrically up to d = h, then decrease. Thus,
+the largest term is for d = h, where it is Θ
+Thus the maximum degree is z = Θ
+
+bhc−h/2
+n1−.5 log c
+
+Xd>h
+
+, and for depth t = log n − h, we
+(cid:1)
+
+(cid:0)
+
+.
+
+(cid:19)
+
+(cid:18)
+
+(cid:19)
+
+(cid:19)
+
+(cid:18)
+
+get a degree of
+
+(cid:0)
+
+−t
+
+(cid:1)
+
+b
+c1/2
+
+Θ
+
+ (cid:18)
+
+log n
+
+(cid:19)
+
+(cid:18)
+
+b
+c1/2
+
+= Θ
+
+z
+ 
+
+(cid:18)
+
+!
+
+(cid:19)
+
+−t
+
+b
+c1/2
+
+(cid:19)
+
+.
+
+!
+
+Now, b/c1/2 = b1−.5 log c, so a node of degree rank r = bt (at depth t) has degree
+Θ
+
+z/r1−.5 log c
+
+.
+
+(cid:0)
+
+(cid:1)
+
+Case 3: c > b2 The expected out-degrees here are only smaller than they are in
+the previous case, and hence the expected value of the out-degree taken over all nodes
+is Θ (1).
+
+The node whose in-degree is most likely to exceed a ﬁxed bound k is the root, at
+height h = log n. The in-degree of the root is a sum X of independent 0-1 random
+variables Xv, where Xv takes the value 1 if node v links to the root, and Xv takes
+the value 0 otherwise. We have
+
+EX =
+
+EXv =
+
+Θ
+
+= Θ(1),
+
+bd
+cd/2
+
+Xd≤log n
+and hence by Chernoﬀ bounds, the probability that it exceeds a given value k > EX
+decreases exponentially in k.
+
+v
+X
+
+(cid:19)
+
+(cid:18)
+
+Thus, the dynamic Community Guided Attachment model exhibits three qualita-
+tively diﬀerent behaviors as the parameter c varies: densiﬁcation with heavy-tailed
+
+22
+
+J. Leskovec et al.
+
+in-degrees; then constant average degree with heavy-tailed in-degrees; and then con-
+stant in- and out-degrees with high probability. Note also the interesting fact that
+the Zipf exponent is maximized for the value of c right at the onset of densiﬁcation.
+Finally, we have experimented with versions of the dynamic Community Guided
+Attachment model in which the tree is not balanced, but rather deepens more on the
+left branches than the right (in a recursive fashion). We have also considered versions
+in which a single graph node can “reside” at two diﬀerent nodes of the tree Γ, allowing
+for graph nodes to be members of diﬀerent communities. We do not go into further
+details of these extensions in this version of the paper.
+
+4.2 The Forest Fire Model
+
+Community Guided Attachment and its extensions show how densiﬁcation can arise
+naturally, and even in conjunction with heavy-tailed in-degree distributions. However,
+it is not a rich enough class of models to capture all the properties in our network
+datasets. In particular, we would like to capture both the shrinking eﬀective diameters
+that we have observed, as well as the fact that real networks tend to have heavy-
+tailed out-degree distributions (though generally not as skewed as their in-degree
+distributions). The Community Guided Attachment models do not exhibit either of
+these properties.
+
+Speciﬁcally, our goal is as follows. Given a (possibly empty) initial graph G, and
+a sequence of new nodes v1 . . . vk, we want to design a simple randomized process to
+successively link vi to nodes of G (i = 1, . . . k) so that the resulting graph Gf inal will
+obey all of the following patterns: heavy-tailed distributions for in- and out-degrees,
+the Densiﬁcation Power Law, and shrinking eﬀective diameter.
+
+We are guided by the intuition that such a graph generator may arise from a
+
+combination of the following components:
+
+• some type of “rich get richer” attachment process, to lead to heavy-tailed in-
+
+degrees;
+
+• some ﬂavor of the “copying” model [20], to lead to communities;
+
+• some ﬂavor of Community Guided Attachment, to produce a version of the
+
+Densiﬁcation Power Law;
+
+• and a yet-unknown ingredient, to lead to shrinking diameters.
+
+Note that we will not be assuming a community hierarchy on nodes, and so it is
+
+not enough to simply vary the Community Guided Attachment model.
+
+Based on this, we introduce the Forest Fire Model, which is capable of producing
+all these properties. To set up this model, we begin with some intuition that also
+underpinned Community Guided Attachment: nodes arrive in over time; each node
+has a “center of gravity” in some part of the network; and its probability of linking to
+other nodes decreases rapidly with their distance from this center of gravity. However,
+we add to this picture the notion that, occasionally, a new node will produce a very
+large number of out-links. Such nodes will help cause a more skewed out-degree
+distribution; they will also serve as “bridges” that connect formerly disparate parts
+of the network, bringing the diameter down.
+
+Laws of graph evolution
+
+23
+
+4.2.1 The Basic Forest Fire Model
+
+Following this plan, we now deﬁne the most basic version of the model. Essentially,
+nodes arrive one at a time and form out-links to some subset of the earlier nodes; to
+form out-links, a new node v attaches to a node w in the existing graph, and then
+begins “burning” links outward from w, linking with a certain probability to any new
+node it discovers. One can view such a process as intuitively corresponding to a model
+by which an author of a paper identiﬁes references to include in the bibliography.
+He or she ﬁnds a ﬁrst paper to cite, chases a subset of the references in this paper
+(modeled here as random), and continues recursively with the papers discovered in this
+way. Depending on the bibliographic aids being used in this process, it may also be
+possible to chase back-links to papers that cite the paper under consideration. Similar
+scenarios can be considered for social networks: a new computer science graduate
+student arrives at a university, meets some older CS students, who introduce him/her
+to their friends (CS or non-CS), and the introductions may continue recursively.
+
+We formalize this process as follows, obtaining the Forest Fire Model. To begin
+with, we will need two parameters, a forward burning probability p, and a backward
+burning ratio r, whose roles will be described below. Consider a node v joining the
+network at time t > 1, and let Gt be the graph constructed thus far. (G1 will consist
+of just a single node.) Node v forms out-links to nodes in Gt according to the following
+process.
+
+(i) v ﬁrst chooses an ambassador node w uniformly at random, and forms a link to
+
+w.
+
+(ii) We generate two random numbers: x and y that are geometrically distributed
+with means p/(1 − p) and rp/(1 − rp) respectively. Node v selects x out-links
+and y in-links incident to nodes that were not yet visited. Let w1, w2, . . . , wx+y
+denote the other ends of these selected links. If not enough in- or out-links are
+available, v selects as many is it can.
+
+(iii) v forms out-links to w1, w2, . . . , wx+y, and then applies step (ii) recursively to
+each of w1, w2, . . . , wx+y. As the process continues, nodes cannot be visited a
+second time, preventing the construction from cycling.
+
+Thus, the “burning” of links in Forest Fire model begins at w, spreads to w1, . . . ,
+wx+y, and proceeds recursively until it dies out.
+In terms of the intuition from
+citations in papers, the author of a new paper v initially consults w, follows a subset
+of its references (potentially both forward and backward) to the papers w1, . . . , wx+y,
+and then continues accumulating references recursively by consulting these papers.
+The key property of this model is that certain nodes produce large “conﬂagrations,”
+burning many edges and hence forming many out-links before the process ends.
+
+Despite the fact that there is no explicit hierarchy in the Forest Fire Model, as there
+was in Community Guided Attachment, there are some subtle similarities between the
+models. Where a node in Community Guided Attachment was the child of a parent
+in the hierarchy, a node v in the Forest Fire Model also has an “entry point” via its
+chosen ambassador node w. Moreover, just as the probability of linking to a node
+in Community Guided Attachment decreased exponentially in the tree distance, the
+probability that a new node v burns k successive links so as to reach a node u lying
+
+24
+
+J. Leskovec et al.
+
+k steps away is exponentially small in k. (Of course, in the Forest Fire Model, there
+may be many paths that could be burned from v to u, adding some complexity to
+this analogy.)
+
+In fact, our Forest Fire Model combines the ﬂavors of several older models, and
+produces graphs qualitatively matching their properties. We establish this by simu-
+lation, as we describe below, but it is also useful to provide some intuition for why
+these properties arise.
+
+• Heavy-tailed in-degrees. Our model has a “rich get richer” ﬂavor: highly linked
+nodes can easily be reached by a newcomer, no matter which ambassador it
+starts from.
+
+• Communities. The model also has a “copying” ﬂavor: a newcomer copies several
+of the neighbors of his/her ambassador (and then continues this recursively).
+
+• Heavy-tailed out-degrees. The recursive nature of link formation provides a
+reasonable chance for a new node to burn many edges, and thus produce a large
+out-degree.
+
+• Densiﬁcation Power Law. A newcomer will have a lot of links near the com-
+munity of his/her ambassador; a few links beyond this, and signiﬁcantly fewer
+farther away. Intuitively, this is analogous to the Community Guided Attach-
+ment, although without an explicit set of communities.
+
+• Shrinking diameter. It is not a priori clear why the Forest Fire Model should
+exhibit a shrinking diameter as it grows. Graph densiﬁcation is helpful in reduc-
+ing the diameter, but it is important to note that densiﬁcation is certainly not
+enough on its own to imply shrinking diameter. For example, the Community
+Guided Attachment model obeys the Densiﬁcation Power Law, but it can be
+shown to have a diameter that slowly increases.
+
+Rigorous analysis of the Forest Fire Model appears to be quite diﬃcult. However,
+in simulations, we ﬁnd that by varying just the two parameters p and r, we can
+produce graphs that densify (a > 1), exhibit heavy-tailed distributions for both in-
+and out-degrees (Fig. 6), and have diameters that decrease. This is illustrated in
+Figure 5, which shows plots for the eﬀective diameter and the Densiﬁcation Power
+Law exponent as a function of the number of nodes for some selections of p and r.
+
+We see from these plots that, depending on the forward and backward burning
+parameters, the Forest Fire Model is capable of generating sparse or dense graphs,
+with eﬀective diameters that either increase or decrease. Notice very rapid change in
+behavior. By increasing the backward burning for a few percent we move from an
+increasing, to slowly and then more rapidly decreasing diameter (ﬁgure 6).
+
+4.2.2 Extensions to the Forest Fire Model
+
+Our basic version of the Forest Fire Model exhibits rich structure with just two
+parameters. By extending the model in natural ways, we can ﬁt observed network
+data even more closely. We propose two natural extensions: “orphans” and multiple
+ambassadors.
+
+Laws of graph evolution
+
+25
+
+5
+10
+
+4
+10
+
+3
+10
+
+2
+10
+
+6
+10
+
+5
+10
+
+4
+10
+
+3
+10
+
+2
+10
+
+6
+10
+
+5
+10
+
+4
+10
+
+3
+10
+
+2
+10
+
+7
+10
+
+6
+10
+
+5
+10
+
+4
+10
+
+3
+10
+
+2
+10
+
+s
+e
+g
+d
+e
+ 
+f
+o
+ 
+r
+e
+b
+m
+u
+N
+
+s
+e
+g
+d
+e
+ 
+f
+o
+ 
+r
+e
+b
+m
+u
+N
+
+s
+e
+g
+d
+e
+ 
+f
+o
+ 
+r
+e
+b
+m
+u
+N
+
+s
+e
+g
+d
+e
+ 
+f
+o
+ 
+r
+e
+b
+m
+u
+N
+
+Edges
+= 1.8e0 x1.02  R2=1.00
+
+1
+10
+
+1
+10
+
+2
+10
+
+3
+10
+Number of nodes
+
+4
+10
+
+5
+10
+
+2000
+
+4000
+6000
+Number of nodes
+
+8000
+
+10000
+
+Edges
+= 1.0e0 x1.21  R2=1.00
+
+1
+10
+
+1
+10
+
+2
+10
+
+3
+10
+Number of nodes
+
+4
+10
+
+5
+10
+
+5
+0
+
+2000
+
+4000
+6000
+Number of nodes
+
+8000
+
+10000
+
+Edges
+= 5.2e−1 x1.32  R2=1.00
+
+1
+10
+
+1
+10
+
+2
+10
+
+3
+10
+Number of nodes
+
+4
+10
+
+5
+10
+
+0
+
+2000
+
+4000
+6000
+Number of nodes
+
+8000
+
+10000
+
+i
+
+r
+e
+t
+e
+m
+a
+d
+ 
+e
+v
+i
+t
+c
+e
+f
+f
+
+E
+
+10
+
+9.5
+
+8.5
+
+9
+
+8
+
+7
+
+7.5
+
+6.5
+
+6
+0
+
+6.5
+
+i
+
+t
+
+r
+e
+e
+m
+a
+d
+e
+v
+i
+t
+c
+e
+
+ 
+
+f
+f
+
+E
+
+6
+
+5.5
+
+6.1
+
+6
+
+5.9
+
+5.8
+
+5.7
+
+5.6
+
+5.5
+
+5.4
+
+5.4
+
+5.2
+
+5
+
+4.8
+
+4.6
+
+4.4
+
+4.2
+
+4
+
+i
+
+t
+
+r
+e
+e
+m
+a
+d
+e
+v
+i
+t
+c
+e
+
+ 
+
+f
+f
+
+E
+
+i
+
+t
+
+r
+e
+e
+m
+a
+d
+ 
+e
+v
+i
+t
+c
+e
+f
+f
+
+E
+
+Edges
+= 1.7e−1 x1.57  R2=0.99
+
+1
+10
+
+1
+10
+
+2
+10
+
+3
+10
+Number of nodes
+
+4
+10
+
+DPL exponent
+
+5
+10
+
+3.8
+0
+
+2000
+
+4000
+6000
+Number of nodes
+
+8000
+
+10000
+
+Eﬀective diameter
+
+Figure 5: The DPL plot and diameter for Forest Fire model. Row 1: sparse graph (a =
+1.01 < 2), with increasing diameter (forward burning probability: p = 0.35, backward
+probability: pb = 0.20). Row 2: (most realistic case:) densifying graph (a = 1.21 < 2) with
+slowly decreasing diameter (p = 0.37, pb = 0.32). Row 3: densifying graph ((a = 1.32 < 2)
+with decreasing diameter (p = 0.37, pb = 0.33). Row 4: dense graph with densiﬁcation
+exponent close to 2 (a = 1.57) and decreasing diameter (p = 0.38, pb = 0.35).
+
+26
+
+J. Leskovec et al.
+
+4
+10
+
+3
+10
+
+t
+
+n
+u
+o
+C
+
+2
+10
+
+1
+10
+
+0
+10
+
+0
+10
+
+4
+10
+
+3
+10
+
+t
+
+n
+u
+o
+C
+
+2
+10
+
+1
+10
+
+1
+10
+
+2
+10
+
+Node in−degree
+
+In-degree
+
+3
+10
+
+0
+10
+
+0
+10
+
+1
+10
+
+2
+10
+
+Node out−degree
+Out-degree
+
+3
+10
+
+Figure 6: Degree distribution of a sparse graph with decreasing diameter (forward burning
+probability: 0.37, backward probability: 0.32).
+
+“Orphans”: In both the patent and arXiv citation graphs, there are many isolated
+nodes, that is, documents with no citations into the corpus. For example, many
+papers in the arXiv only cite non-arXiv papers. We refer to them as orphans. Our
+basic model does not produce orphans, since each node always links at least to its
+chosen ambassador. However, it is easy to incorporate orphans into the model in two
+diﬀerent ways. We can start our graphs with n0 > 1 nodes at time t = 1; or we
+can have some probability q > 0 that a newcomer will form no links (not even to its
+ambassador).
+
+We ﬁnd that such variants of the model have a more pronounced decrease in the
+eﬀective diameter over time, with large distances caused by groups of nodes linking
+to diﬀerent orphans gradually diminishing as further nodes arrive to connect them
+together.
+
+Multiple ambassadors: We experimented with allowing newcomers to choose more
+than one ambassador with some positive probability. That is, rather than burning
+links starting from just one node, there is some probability that a newly arriving node
+burns links starting from two or more. This extension also accentuates the decrease in
+eﬀective diameter over time, as nodes linking to multiple ambassadors serve to bring
+together formerly far-apart parts of the graph.
+
+4.2.3 Phase plot
+
+In order to understand the densiﬁcation and diameter properties of graphs produced
+by the Forest Fire Model, we have explored the full parameter space of the basic
+model in terms of its two underlying quantities: the forward burning probability p
+and the backward burning ratio r.
+
+In ﬁrst experiment we ﬁx the backward burning ratio r and vary the the forward
+burning probability p. Figure 7 shows how the densiﬁcation exponent and the eﬀective
+diameter depend on the value of p. In left plot we ﬁx the backward burning probability
+pb = 0.3, and in right plot we ﬁx backward burning ratio r = 0.5. We plot the
+Densiﬁcation Power Law exponent with dashed lines. The densiﬁcation exponent a
+
+Laws of graph evolution
+
+27
+
+very
+sparse
+graph
+
+2
+
+t
+n
+e
+n
+o
+p
+x
+e
+ 
+n
+o
+i
+t
+a
+c
+i
+f
+i
+s
+n
+e
+D
+
+1
+
+0
+0
+
+DPL
+
+clique−like
+graph
+
+Diameter
+
+2
+
+0
+
+r
+o
+t
+c
+a
+f
+ 
+r
+e
+t
+e
+m
+a
+D
+
+i
+
+very sparse
+graph
+
+2
+
+t
+n
+e
+n
+o
+p
+x
+e
+ 
+n
+o
+i
+t
+a
+c
+i
+f
+i
+s
+n
+e
+D
+
+1
+
+0
+0
+
+DPL
+
+clique−like
+graph
+
+Diameter
+
+2
+
+0
+
+r
+o
+t
+c
+a
+f
+ 
+r
+e
+t
+e
+m
+a
+D
+
+i
+
+0.8
+0.8
+0.2
+0.2
+Forward burning probability
+
+0.6
+0.6
+
+0.4
+0.4
+
+1
+1
+
+0.2
+0.2
+
+0.4
+0.4
+Forward burning probability
+
+0.6
+0.6
+
+0.8
+0.8
+
+Figure 7: We ﬁx backward burning probability and vary forward burning probability. Notice
+that each plot has diﬀerent vertical axis: DPL exponent on the left, and diameter growth on
+the right. Observe very sharp transition in DPL exponent and a narrow region, indicated by
+vertical dashed lines, where Forest Fire produces slowly densifying graphs with decreasing
+eﬀective diameter.
+
+is computed as in Section 3, by ﬁtting a relation of the form e(t) ∝ n(t)a. Notice a
+very sharp transition between no and very high densiﬁcation.
+
+We plot the Eﬀective diameter log-ﬁt factor α with solid dark line. We ﬁt a
+logarithmic function of the form diameter = α log t + β (where t is the current time,
+and hence the current number of vertices) to the last half of the eﬀective diameter
+plot; we then report the factor α. Thus, Diameter Factor α < 0 corresponds to
+decreasing eﬀective diameter over time, and α > 0 corresponds to increasing eﬀective
+diameter.
+
+Going back to Figure 7, notice that at low values of forward burning probability p,
+we observe increasing eﬀective diameter and no densiﬁcation (a = 1). As p increases,
+the eﬀective diameter grows less and less sharply. For a narrow band of p we observe
+decreasing eﬀective diameter, negative α (the small valley around p = 0.45). With
+high values of p the eﬀective diameter is constant (α ≈ 0), which means that the
+generated graph is eﬀectively a clique with eﬀective diameter 1 and DPL exponent
+a ≈ 2. Also, notice that sharp transition in DPL exponent and decreasing eﬀective
+diameter are very well aligned.
+
+This indicates that even the basic Forest Fire Model is able to produce sparse
+graphs (with densiﬁcation exponent near 1) in which the eﬀective diameter decreases.
+Figure 8 shows how the densiﬁcation exponent and the eﬀective diameter depend
+
+on the values of the Forest Fire parameters p and r.
+
+Figure 8(a) gives the contour plot of the densiﬁcation exponent a. The lower left
+part is for a = 1 (the graph maintains constant average degree), and upper right part
+is for a = 2 (the graph is “dense”, that is, the number of edges grows quadratically
+with the number of nodes, as, e.g., in the case of a clique). The contours in-between
+correspond to 0.1 increase in DPL exponent: the left-most contour corresponds to
+a = 1.1 and the right-most contour corresponds to a = 1.9 The desirable region is in-
+between; we observe that it is very narrow: a increases dramatically along a contour
+line, suggesting a sharp transition.
+
+J. Leskovec et al.
+
+a=2
+
+a=1
+
+0.4
+
+0.6
+Forward burning probability
+Densiﬁcation exponent
+
+0.8
+
+1
+
+0
+0.2
+
+0.4
+
+0.6
+Forward burning probability
+Diameter Factor
+
+0.8
+
+1
+
+Figure 8: Contour plots: The Densiﬁcation Power Law exponent a (left) and diameter log-
+ﬁt α factor (right) over the parameter space (forward-burning probability and backward
+burning ratio).
+
+a=1.3
+α=−0.05
+
+a=1.6
+α=−0.20
+
+28
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+i
+
+o
+i
+t
+a
+r
+ 
+g
+n
+n
+r
+u
+b
+ 
+d
+r
+a
+w
+k
+c
+a
+B
+
+0
+0.2
+
+i
+
+o
+i
+t
+a
+r
+ 
+g
+n
+n
+r
+u
+b
+ 
+d
+r
+a
+w
+k
+c
+a
+B
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+i
+
+o
+i
+t
+a
+r
+ 
+g
+n
+n
+r
+u
+b
+ 
+d
+r
+a
+w
+k
+c
+a
+B
+
+i
+
+o
+i
+t
+a
+r
+ 
+g
+n
+n
+r
+u
+b
+ 
+d
+r
+a
+w
+k
+c
+a
+B
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+Forward probability
+
+Forward probability
+
+Figure 9: We superimpose the Densiﬁcation Power Law exponent a and diameter log-ﬁt α
+factor over the parameter space.
+
+Figure 8(b) gives the contour plot for the factor α in the eﬀective diameter ﬁt, as
+deﬁned above. Each contour correspond to diameter factor α. We vary α in range
+−0.30 ≤ α ≤ 0.05, with step-size 0.05. Notice, the boundary between decreasing and
+increasing eﬀective diameter is very narrow.
+
+Last, we show ﬁgure 9, where we superimpose phase contours of DPL and eﬀective
+diameter over the Forest Fire parameter space. Left plot superimposes phase contours
+for Densiﬁcation Power Law exponent a = 1.3 and diameter log-ﬁt factor α = −0.05.
+Right plot superimposes contours for a = 1.6 and α = −0.30.
+In both cases we
+observe very good alignment of the two phase lines which suggests the same shape of
+phase boundary for Densiﬁcation Power Law exponent and Eﬀective Diameter.
+
+We observe similar type of behavior also with orphans and multiple ambassadors.
+These additional features in the model help further separate the diameter decrease/
+increase boundary from the densiﬁcation transition, and so widens the region of pa-
+rameters for which the model produces reasonably sparse graphs with decreasing
+eﬀective diameters.
+
+Laws of graph evolution
+
+29
+
+5 Densiﬁcation and the degree distribution over time
+
+Many real world graphs exhibit power-law degree distribution [3, 11]. As we saw in
+section 3 the average degree increases over time and the graphs densify. Here we
+analyze the fundamental relation between the densiﬁcation and the power-law degree
+distribution over time. And ﬁnd evidence that some of the real graphs obey the
+relations we ﬁnd.
+
+We analyze two cases: If the degree distribution of a time evolving graph is power-
+law and it maintains constant slope (power-law exponent) γ over time, then when
+1 < γ < 2 we observed Densiﬁcation Power Law with exponent
+
+Second, when the exponent of power-law degree distribution γ > 2, but we allow
+it to change over time, then we show that for a given densiﬁcation exponent a, degree
+exponent γn evolves with the size of the graph n as
+
+a = 2/γ.
+
+γn =
+
+4na−1 − 1
+2na−1 − 1
+
+This shows that Densiﬁcation Power Law and degree distribution are related and
+
+that one implies the other.
+
+5.1 Constant degree exponent over time
+
+First, we analyze the case where the graph maintains constant degree exponent of
+power law degree distribution. Power law distribution p(x) = cx−γ with exponent
+γ < 2 has inﬁnite expectation [29], i.e. as the number of samples increases, the
+mean also increases. Assuming that exponent (slope) of degree distribution does not
+change over time, a natural question to ask then is: what is the relation between the
+Densiﬁcation Power Law exponent and the degree distribution over time?
+
+The following theorem answers the question:
+
+Theorem 5.1 In a temporally evolving graph with power-law degree distribution hav-
+ing constant degree exponent γ over time, the Densiﬁcation Power Law Exponent a
+is:
+
+a
+
+=
+
+=
+=
+
+1
+
+2/γ
+2
+
+if γ > 2
+
+if 1 ≤ γ ≤ 2
+if γ < 1
+
+(4)
+
+(5)
+(6)
+
+Proof: Assume that at any time t the degree distribution of an undirected graph G
+follows a power law. This means the number of nodes Dd with degree d is Dd = cd−γ,
+where c is a constant.
+
+Given a maximum degree dmax in a graph and the previous power-law relation,
+
+we can now calculate the number of nodes n and number of edges e in the graph:
+
+J. Leskovec et al.
+
+30
+
+a is:
+
+dmax
+
+dmax
+
+n
+
+=
+
+cd−γ ≈
+
+d−γ = c
+
+d1−γ
+max − 1
+1 − γ
+
+e
+
+=
+
+cd1−γ ≈
+
+d1−γ = c
+
+dmax
+
+Xd=1
+1
+2
+
+Xd=1
+
+d=1
+
+Z
+
+dmax
+
+d=1
+
+Z
+
+d2−γ
+max − 1
+2 − γ
+
+Let the graph grow, so dmax → ∞. Then the Densiﬁcation Power Law exponent
+
+a = lim
+
+dmax→∞
+
+log(e)
+log(n)
+
+=
+
+γ log(dmax) + log(|d2−γ
+γ log(dmax) + log(|d1−γ
+
+max − 1|) − log(|2 − γ|)
+max − 1|) − log(|1 − γ|)
+
+Note, that since the slope of degree distribution is γ, we also have the relation
+
+log(c) = γ log(dmax). Now we have 3 cases:
+Case 1: γ > 2 We get no densiﬁcation:
+
+a =
+
+γ log(dmax) + o(1)
+γ log(dmax) + o(1)
+
+= 1
+
+Case 2: 1 < γ < 2 Here the interesting case happens and we observe graph
+
+densiﬁcation:
+
+a =
+
+γ log(dmax) + (2 − γ) log(dmax) + o(1)
+γ log(dmax) + o(1)
+
+=
+
+2
+γ
+
+Case 3: 1 < γ We get maximum densiﬁcation – graph is basically a clique and
+
+number of edges grows quadratically with the number of nodes:
+
+a =
+
+γ log(dmax) + (2 − γ) log(dmax) + o(1)
+γ log(dmax) + (1 − γ) log(dmax) + o(1)
+
+= 2
+
+5.2 Evolving degree distribution
+
+In previous section we assumed that the exponent γ of power-law degree distribution
+remains constant over time and found the range for power-law degree exponent γ,
+where it leads to densiﬁcation. Now we assume Densiﬁcation Power Law with expo-
+nent a and ask How should the power-law degree distribution exponent γ change over
+time to allow for densiﬁcation?
+
+We prove the following result:
+
+Theorem 5.2 Given a time evolving graph on n nodes that follows Densiﬁcation
+Power Law with exponent a > 1 and has Power-Law degree distribution with exponent
+γn > 2, then the degree exponent γn evolves with the number of nodes n as
+
+γn =
+
+4na−1 − 1
+2na−1 − 1
+
+(7)
+
+Laws of graph evolution
+
+31
+
+4
+10
+
+3
+10
+
+t
+n
+u
+o
+C
+
+2
+10
+
+1
+10
+
+0
+10
+
+0
+10
+
+2
+
+γ
+
+1.8
+
+ 
+t
+n
+e
+n
+o
+p
+x
+e
+ 
+e
+e
+r
+g
+e
+D
+
+1.6
+
+1.4
+
+1.2
+
+Node degree
+(a) Degree distribution
+
+5
+10
+
+1
+0
+
+1
+
+2
+Number of nodes
+
+4
+4
+x 10
+(b) Degree exponent over time
+
+3
+
+True
+Theorem 5.1
+
+Figure 10: Degree distribution and the degree exponent γ over time for the Email network.
+The network maintains constant γ over time. Also, γ < 2. We observe remarkably good
+agreement for Densiﬁcation Power Law exponent between Theorem 5.1 (a = 1.13), and we
+our measurements (a = 1.11) from ﬁgure 2(e).
+
+Proof: An undirected graph G on n nodes has e = 1
+
+2 n ¯d edges, where ¯d is the
+
+average degree in graph G. And the Densiﬁcation Power Law exponent a is
+
+a =
+
+log(e)
+log(n)
+
+=
+
+log(n) + log( ¯d) − log(2)
+log(n)
+
+In a graph with power-law degree distribution, p(x) = x−γ, with exponent γ > 2,
+
+the average degree ¯d is
+
+¯d ≈
+
+xp(x) dx = c
+
+x−γ+1dx =
+
+x−γ+2
+
+c
+2 − γ
+
+=
+
+γ − 1
+γ − 2
+
+.
+
+∞
+
+1
+Z
+
+∞
+
+1
+Z
+
+Now, substituting ¯d in equation 8 with the result from equation 9, and solving for
+
+∞
+
+1
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+γ, we obtain:
+
+(8)
+
+(9)
+
+(10)
+
+γn =
+
+4na−1 − 1
+2na−1 − 1
+
+5.3 Measurements on real graphs
+
+Next, given the analysis from previous section, we went back to our data and checked
+if any of graphs behaves according to results of theorems 5.1 and 5.2.
+
+First, we show an example of a graph where the evolution of degree distribution
+and Densiﬁcation Power Law exponent obey theorem 5.1. We use email network
+described in section 3.1.5. We found that degree distribution follows the power-law
+on its entire range and the slope remains constant over time.
+
+32
+
+4
+10
+
+3
+10
+
+t
+n
+u
+o
+C
+
+2
+10
+
+1
+10
+
+0
+10
+
+0
+10
+
+J. Leskovec et al.
+
+True
+Theorem 5.2
+
+γ
+
+ 
+t
+n
+e
+n
+o
+p
+x
+e
+ 
+e
+e
+r
+g
+e
+D
+
+3.5
+
+2.5
+
+3
+
+2
+
+1
+10
+
+2
+10
+Node degree
+(a) Degree distribution
+
+3
+10
+
+1.5
+
+0.5
+
+1
+Number of nodes
+
+3
+4
+x 10
+(b) Degree exponent over time
+
+2.5
+
+2
+
+Figure 11: Degree distribution and the degree exponent over time for the HEP–PH citation
+network. Power-law degree distribution exponent γ is decreasing over time. Notice a good
+ﬁt with the degree exponent as predicted by theorem 5.2 (plotted with dashed lines).
+
+Figure 10(a) shows that email network follows a clean power-law distribution. We
+ﬁt the the degree exponent γ using Maximum Likelihood Estimate (MLE) and plot
+its evolution over time in ﬁgure 10(b). Notice γ remains constant, which is also in
+accordance with results reported in [19].
+
+Also notice, that the average power-law degree exponent is γ = 1.76 < 2. Given
+γ, theorem 5.1 predicts the Densiﬁcation Power Law exponent a = 2/1.76 ≈ 1.13.
+The value we measured in section 3 ﬁgure 2(e) is a = 1.11, which is remarkably close
+to 1.13.
+
+Last, we show an example of a temporally evolving graph where the degree ex-
+ponent γ decreases over time. Figure 11(a) plots the degree distribution of the full
+HEP–PH citation network from section 3.1.1.
+
+Since in this case the degree distribution only follows a power-law in the tail, we
+applied the following procedure. For every year y, 1992 ≤ y ≤ 2002 we create a
+citation graph and measure exponent of degree distribution. We apply logarithmic
+binning and ﬁt the power-law degree distribution using MLE on the tail of degree
+distribution starting at minimum degree 10. We plot the resulting degree exponent γ
+over time as a function of the size of the graph in ﬁgure 11(b).
+
+Using dashed-lines we also plot the degree exponent γ as predicted by theorem 5.2.
+Since the graph does not exhibit a power-law degree distribution on the entire range,
+but only at the tail, we had to appropriately scale the result of theorem 5.2 with a
+manually chosen value.
+
+This indicates that for some temporally evolving graphs the degree distribution
+ﬂattens over time. This seems to be the case for HEP–PH citation network, where
+the evolution of degree exponent qualitatively follows the result of theorem 5.2.
+
+Laws of graph evolution
+
+33
+
+6 Conclusion
+
+Despite the enormous recent interest in large-scale network data, and the range of in-
+teresting patterns identiﬁed for static snapshots of graphs (e.g. heavy-tailed distribu-
+tions, small-world phenomena), there has been relatively little work on the properties
+of the time evolution of real graphs. This is exactly the focus of this work. The main
+ﬁndings and contributions follow:
+
+• The Densiﬁcation Power Law: In contrast to the standard modeling assump-
+tion that the average out-degree remains constant over time, we discover that
+real graphs have out-degrees that grow over time, following a natural pattern
+(Eq. (1)).
+
+• Shrinking diameters: Our experiments also show that the standard assumption
+of slowly growing diameters does not hold in a range of real networks; rather,
+the diameter may actually exhibit a gradual decrease as the network grows.
+
+• We show that our Community Guided Attachmentmodel can lead to the Den-
+
+siﬁcation Power Law, and that it needs only one parameter to achieve it.
+
+• We give the Forest Fire Model, based on only two parameters, which is able
+to capture patterns observed both in previous work and in the current study:
+heavy-tailed in- and out-degrees, the Densiﬁcation Power Law, and a shrinking
+diameter.
+
+• We notice that Forest Fire Model exhibits a sharp transition between sparse
+graphs and graphs that are densifying. Graphs with decreasing eﬀective diam-
+eter are generated around this transition point.
+
+• Finally, wind a fundamental relation between the temporal evolution of graph’s
+power-law degree distribution and the Densiﬁcation Power Law exponent. We
+also observe that real datasets exhibit this type of relation.
+
+Our results have potential relevance in multiple settings, including ’what if’ scenar-
+ios; in forecasting of future parameters of computer and social networks; in anomaly
+detection on monitored graphs; in designing graph sampling algorithms; and in real-
+istic graph generators.
+
+7 Acknowledgments
+
+We would like to thank Panayiotis Tsaparas of HIIT for useful suggestions, and
+Michalis Faloutsos and George Siganos of UCR, for help with the data and for early
+discussions on the Autonomous System dataset.
+
+This material is based upon work supported by the National Science Founda-
+tion under Grants No. IIS-0209107 IIS-0205224 INT-0318547 SENSOR-0329549 EF-
+0331657IIS-0326322 CCF-0325453, IIS-0329064, CNS-0403340, CCR-0122581, a David
+and Lucile Packard Foundation Fellowship, and also by the Pennsylvania Infrastruc-
+ture Technology Alliance (PITA), a partnership of Carnegie Mellon, Lehigh University
+and the Commonwealth of Pennsylvania’s Department of Community and Economic
+
+34
+
+J. Leskovec et al.
+
+Development (DCED). Additional funding was provided by donations from Hewlett-
+Packard, Intel and NTT.
+
+Any opinions, ﬁndings, and conclusions or recommendations expressed in this
+material are those of the author(s) and do not necessarily reﬂect the views of the
+National Science Foundation, or other funding parties
+
+References
+
+[1] J. Abello, A. L. Buchsbaum, and J. Westbrook. A functional approach to external
+In Proceedings of the 6th Annual European Symposium on
+
+graph algorithms.
+Algorithms, pages 332–343. Springer-Verlag, 1998.
+
+[2] J. Abello, P. M. Pardalos, and M. G. C. Resende. Handbook of massive data sets.
+
+Kluwer, 2002.
+
+pages 509–512, 1999.
+
+[3] R. Albert and A.-L. Barabasi. Emergence of scaling in random networks. Science,
+
+[4] R. Albert, H. Jeong, and A.-L. Barabasi. Diameter of the world-wide web. Nature,
+
+401:130–131, September 1999.
+
+[5] Z. Bi, C. Faloutsos, and F. Korn. The dgx distribution for mining massive,
+
+skewed data. In KDD, pages 17–26, 2001.
+
+[6] B. Bollobas and O. Riordan. The diameter of a scale-free random graph. Com-
+
+binatorica, 24(1):5–34, 2004.
+
+[7] A. Broder, R. Kumar, F. Maghoul, P. Raghavan, S. Rajagopalan, R. Stata,
+A. Tomkins, and J. Wiener. Graph structure in the web: experiments and models.
+In Proceedings of World Wide Web Conference, 2000.
+
+[8] D. Chakrabarti, Y. Zhan, and C. Faloutsos. R-mat: A recursive model for graph
+
+mining. In SDM, 2004.
+
+[9] F. Chung and L. Lu. The average distances in random graphs with given expected
+degrees. Proceedings of the National Academy of Sciences, 99(25):15879–15882,
+2002.
+
+[10] C. Cooper and A. Frieze. A general model of web graphs. Random Struct.
+
+Algorithms, 22(3):311–335, 2003.
+
+[11] M. Faloutsos, P. Faloutsos, and C. Faloutsos. On power-law relationships of the
+
+internet topology. In SIGCOMM, pages 251–262, 1999.
+
+[12] J. Gehrke, P. Ginsparg, and J. M. Kleinberg. Overview of the 2003 kdd cup.
+
+SIGKDD Explorations, 5(2):149–151, 2003.
+
+[13] B. H. Hall, A. B. Jaﬀe, and M. Trajtenberg. The nber patent citation data
+ﬁle: Lessons, insights and methodological tools. NBER Working Papers 8498,
+National Bureau of Economic Research, Inc, Oct. 2001.
+
+Laws of graph evolution
+
+35
+
+[14] B. A. Huberman and L. A. Adamic. Growth dynamics of the world-wide web.
+
+Nature, 399:131, 1999.
+
+[15] J. S. Katz. The self-similar science system. Research Policy, 28:501–517, 1999.
+
+[16] J. S. Katz. Scale independent bibliometric indicators. Measurement: Interdisci-
+
+plinary Research and Perspectives, 3:24–28, 2005.
+
+[17] J. M. Kleinberg. Small-world phenomena and the dynamics of information. In
+
+Advances in Neural Information Processing Systems 14, 2002.
+
+[18] J. M. Kleinberg, R. Kumar, P. Raghavan, S. Rajagopalan, and A. Tomkins. The
+web as a graph: Measurements, models, and methods. In Proc. International
+Conference on Combinatorics and Computing, pages 1–17, 1999.
+
+[19] G. Kossinets and D. J. Watts. Empirical analysis of an evolving social network.
+
+Science, 311:88 – 90, 2006.
+
+[20] R. Kumar, P. Raghavan, S. Rajagopalan, D. Sivakumar, A. Tomkins, and E. Up-
+fal. Stochastic models for the web graph. In Proc. 41st IEEE Symp. on Founda-
+tions of Computer Science, 2000.
+
+[21] R. Kumar, P. Raghavan, S. Rajagopalan, and A. Tomkins. Trawling the web for
+emerging cyber-communities. In Proceedings of 8th International World Wide
+Web Conference, 1999.
+
+[22] J. Leskovec, L. Adamic, and B. Huberman. The dynamics of viral marketing. In
+
+ACM Conference on Electronic Commerce, 2006.
+
+[23] J. Leskovec, D. Chakrabarti, J. M. Kleinberg, and C. Faloutsos. Realistic, math-
+ematically tractable graph generation and evolution, using kronecker multiplica-
+tion. In PKDD ’05, pages 133–145, 2005.
+
+[24] J. Leskovec, J. Kleinberg, and C. Faloutsos. Graphs over time: densiﬁcation
+laws, shrinking diameters and possible explanations. In KDD ’05, Chicago, IL,
+USA, 2005.
+
+[25] F. Menczer. Growing and navigating the small world web by local content.
+Proceedings of the National Academy of Sciences, 99(22):14014–14019, 2002.
+
+[26] S. Milgram. The small-world problem. Psychology Today, 2:60–67, 1967.
+
+[27] M. Mitzenmacher. A brief history of generative models for power law and log-
+
+normal distributions, 2004.
+
+Review, 45:167–256, 2003.
+
+[28] M. E. J. Newman. The structure and function of complex networks. SIAM
+
+[29] M. E. J. Newman. Power laws, pareto distributions and zipf’s law. Contemporary
+
+Physics, 46:323–351, December 2005.
+
+[30] A. Ntoulas, J. Cho, and C. Olston. What’s new on the web? the evolution of the
+web from a search engine perspective. In WWW Conference, pages 1–12, New
+York, New York, May 2004.
+
+36
+
+J. Leskovec et al.
+
+[31] Oregon. University of oregon route views project. online data and reports.
+
+http://www.routeviews.org.
+
+[32] C. R. Palmer, P. B. Gibbons, and C. Faloutsos. Anf: A fast and scalable tool for
+data mining in massive graphs. In SIGKDD, Edmonton, AB, Canada, 2002.
+
+[33] S. Redner. Citation statistics from more than a century of physical review.
+
+Technical Report physics/0407137, arXiv, 2004.
+
+[34] M. Schroeder. Fractals, Chaos, Power Laws: Minutes from an Inﬁnite Paradise.
+
+W.H. Freeman and Company, New York, 1991.
+
+[35] D. J. Watts, P. S. Dodds, and M. E. J. Newman. Collective dynamics of ’small-
+
+world’ networks. Nature, 393:440–442, 1998.
+
+[36] D. J. Watts, P. S. Dodds, and M. E. J. Newman. Identity and search in social
+
+networks. Science, 296:1302–1305, 2002.
+
+

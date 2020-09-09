@@ -1,0 +1,1009 @@
+7
+9
+9
+1
+ 
+t
+c
+O
+ 
+1
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+8
+2
+0
+0
+1
+7
+9
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+MZ-TH/97-30
+to appear in Comput. Phys. Commun.
+
+Parallelization of adaptive MC Integrators
+
+Richard Kreckel∗
+Dept. of Physics
+Mainz University
+55099 Mainz
+Germany
+
+August 12, 1997
+
+Abstract
+
+Monte Carlo (MC) methods for numerical integration seem to be embarassingly par-
+allel on ﬁrst sight. When adaptive schemes are applied in order to enhance convergence
+however, the seemingly most natural way of replicating the whole job on each processor
+can potentially ruin the adaptive behaviour. Using the popular VEGAS-Algorithm as
+an example an economic method of semi-micro parallelization with variable grain-size is
+presented and contrasted with another straightforward approach of macro-parallelization.
+A portable implementation of this semi-micro parallelization is used in the xloops-project
+and is made publicly available.
+
+keywords: parallel computing, grain-size, Monte Carlo integration, Tausworthe, GFSR.
+
+Computer and operating system tested: Convex SPP1200 (SPP-UX 4.2), intel x86 (Linux 2.0
+with SMP), DEC Alpha (OSF1 3.2 and Digital Unix), Sparc (Solaris 2.5), RS/6000 (AIX 4.0)
+
+Program Summary
+
+Title of program: pvegas.c
+
+Programming language: ANSI-C
+
+No. of lines in distributed routine: 530
+
+1
+
+Introduction
+
+The Monte Carlo Method frequently turns out to be the only feasible way to get numerical
+results of integrals when ill-behaved integrands are involved of which no a priori-knowledge
+about their behaviour is available.
+It not only handles step functions and gives reliable
+error estimates but also has the desireable feature that the rate of convergence is dimension-
+independent. In the framework of the xloops-project [1, 2], for instance, massive two-loop
+
+∗e-mail: Richard.Kreckel@Uni-Mainz.DE
+
+1
+
+Feynman-diagrams with exterior momenta are calculated analytically as far as possible with
+sometimes very ill-behaved integrals left for numerical evaluation over ﬁnite two- or three-
+dimensional volumes.
+
+If a function f needs to be integrated over a D-dimensional volume Ω, one can evaluate
+
+f (x) over N random sample-points xi with i
+
+1 . . . N
+
+and compute the estimate
+
+S(1) := |
+
+Ω
+|
+N Xi
+
+∈ {
+
+f (xi)
+
+}
+
+f (x) dx,
+
+→ ZΩ
+
+which has a convergence-rate of 1/√N
+
+1 for large N . Similarly,
+
+1
+N Xi
+has basically the same behaviour, if the probability density ρ(x) is normalized to unity in Ω:
+
+f (xi)
+ρ(xi)
+
+(2)
+
+:=
+
+−
+S(1)
+ρ
+
+ρ(x) dx = 1.
+
+ZΩ
+
+The introduction of the weight-function ρ is equivalent to a transformation in the integration
+variables
+
+∂P
+∂y (cid:12)
+(cid:12)
+(cid:12)
+where the transformation leaves the boundary ∂Ω unchanged.
+(cid:12)
+
+f (x) dx =
+
+f (P (y))
+
+ZP −1(Ω)
+
+ZΩ
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+dy
+
+The adaptive Monte Carlo Method now tries to eﬀectively improve the rate of convergence
+by choosing ρ(x) properly. As is well known, the modiﬁed variance σ for large N is given by:
+
+(1)
+
+(3)
+
+with
+
+1
+
+σ2 =
+
+S(2)
+ρ −
+
+(S(1)
+
+ρ )2
+
+(cid:17)
+
+N
+
+1 (cid:16)
+
+−
+
+S(2)
+
+ρ =
+
+1
+N Xi
+
+f (xi)
+ρ(xi) (cid:19)
+
+(cid:18)
+
+2
+
+.
+
+The Central Limit Theorem implies that for square integrable f (x) the distribution of S(1)
+ρ
+around the true value becomes Gaussian and σ in (3) is a reliable error-estimate. As every
+method of selecting a proper ρ must rely on information about the integrand, only approx-
+imate and/or iterative methods are practically in use. The popular vegas-algorithm uses
+two of these. We will sketch them in a brief discussion of vegas in Section 2. Section 3
+contains some warnings about a sometimes seen oversimpliﬁed macro-parallelized vegas and
+in Section 4 our approach is presented together with some real-world measurements of eﬃ-
+ciency. At some places explicit variable-names are mentioned for those readers familiar with
+G. P. Lepage’s original code [4].
+
+2 About VEGAS
+
+The two techniques used by vegas to enhance the rate of convergence are importance sampling
+Importance sampling tries to enhance a weight-function ρ(x) by
+and stratiﬁed sampling.
+drawing from previous iterations. It is well known, that the variance σ is minimized, when
+
+ρ(x) =
+
+f (x)
+|
+
+|(cid:30) ZΩ|
+
+f (x)
+|
+
+dx.
+
+2
+
+This method concentrates the density ρ where the function is largest in magnitude. Stratiﬁed
+sampling attempts to enhance the N −1/2-behaviour of MC integration by choosing a set of
+random numbers which is more evenly distributed than plain random numbers are. (Recall
+that the simplest method of stratiﬁcation would evaluate the function on a Cartesian grid
+and thus converge as N −1.) This is done by subdividing the volume Ω into a number k of
+and performing an MC integration over N/k sample-points
+hypercubes
+in each. The variance in each hypercube can be varied by shifting the boundaries of the
+hypercubes between successive iterations (Figure 1a shows an initial grid, 1b the grid at a
+later stage). The optimal grid is established when the variance is equal in all hypercubes.
+This method concentrates the density ρ where both the function and its gradient are large in
+magnitude. The split-up of Ω into k hypercubes turns out to be the key-point in eﬃciently
+parallelizing vegas.
+
+, i
+Gi}
+{
+
+1 . . . k
+
+∈ {
+
+}
+
+The way vegas iterates hypercubes across the whole volume is designed in a dimension-
+independent way. In eﬀect it just amounts to D loops packed into each other, each iterating
+from the lower limit of integration to the upper one. We’ll see in section 4 how this looping
+can be exploited for parallelization with variable grain-size. For a more thorough discussion
+of vegas the reader is referred to the literature [4, 3, 5].
+
+a)
+
+3
+
+b)
+
+3
+
+2
+
+1
+
+2
+
+1
+
+Figure 1: The adaptive behaviour of vegas. Equal numbers of points (traditionally, the
+variable npg counts them) are sampled in each hypercube.
+
+3 Macro-Parallelization
+
+The most straightforward approach to make use of a parallel machine with p processors is to
+simply replicate the whole job. Instead of having one processor calculate N sample-points, p
+instances of the integrator (“workers”) are started, each sampling N/p points. Subsequently,
+the results from each processor are averaged taking into account their diﬀering error-estimates.
+We call this approach macro-parallelization.
+
+It is immediately clear that this is trivial to implement and usually results in good perfor-
+mance since the amount of communication among processors is minimized. This approach,
+however, results in p diﬀerent grids, each less ﬁne than the original one. If the same number of
+points is sampled in each hypercube and the overall number of points are equal, the amount
+p−1. Fur-
+by which the grid will be coarser is given by the dilution of hypercubes which is
+thermore, in an extreme situation some of the workers might accidentally miss an interesting
+area and return wrong results way outside the estimated error-bounds and thus completely
+fail to adapt.
+
+≃
+
+3
+
+We have seen realizations of a slightly improved method which does not suﬀer from over-
+estimation of single partial results. This method spawns p workers, again each evaluating
+N/p points, and lets each evaluate the cumulative variables1 and send them to the parent
+which adds them and subsequently computes the new grid. This method will still suﬀer from
+coarse grids but it will adapt more cleanly. In eﬀect, it amounts to synchronizing the grids
+between workers.
+
+Table 1 exempliﬁes the problems typical for macro-parallelization. It shows the results
+of an integration over a unit-square. The test-function was a narrow Gaussian peak with
+width 10−3 and normalized such that the exact result of the integration is unity. All runs
+were typical vegas-calls: The ﬁrst 10 iterations were used only to reﬁne the grid, their results
+were discarded (entry-point 1 in vegas-jargon). In that particular case the macro-parallelized
+version took 5 iterations until every processor had “detected” the peak. The ones that failed
+to detect it returned very small values with small error-bounds and the common rules for
+error-manipulation then grossly overestimated the weight of these erroneous results. The
+unparallelized version in contrast was able to adapt to the function’s shape very early. The
+last 5 iterations were cumulative: each iteration inherited not only the grid but also the
+result of the previous one (entry-point 2). Note also that after the grids have adapted to
+the situation, the macro-parallelized vegas without synchronization still returns misleading
+error-bounds.
+
+15 iterations of two macro-parallelized vegas (with p = 16) integrating a sharp
+Table 1:
+Gaussian contrasted with an unparallelized run. Equal numbers of function calls were sampled
+in each run.
+
+macro-parallelized:
+
+macro-parallel. (sync.)
+
+unparallelized:
+
+calls:
+
+5 000
+
+16
+
+·
+
+20 000
+
+16
+
+·
+
+it.:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+
+4.2
+1.2
+1.9
+6.0
+5.7
+
+·
+·
+·
+·
+·
+
+10−36
+10−39
+10−35
+10−34
+10−20
+0.998361
+0.996855
+0.997329
+0.993738
+0.992781
+0.993782
+0.993844
+0.994918
+0.996218
+0.997030
+
+10−33
+10−33
+10−33
+10−33
+10−20
+
+2.2
+·
+3.5
+·
+5.0
+·
+5.0
+·
+5.7
+·
+0.000492
+0.000635
+0.001107
+0.002539
+0.001604
+0.001661
+0.001446
+0.001192
+0.001213
+0.001070
+
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+
+0.000086
+1.032088
+1.000428
+0.999933
+0.998949
+1.000323
+1.000582
+0.997636
+0.997168
+0.998939
+0.999631
+0.999705
+0.999693
+0.999611
+0.999720
+
+0.000069
+0.041060
+0.000283
+0.000143
+0.000187
+0.000980
+0.000676
+0.000311
+0.000160
+0.001081
+0.000827
+0.000355
+0.000325
+0.000316
+0.000255
+
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+
+0.537686
+0.993894
+1.000008
+0.999724
+1.001166
+0.999365
+1.000288
+1.000052
+1.000017
+1.000019
+1.000016
+0.999937
+0.999940
+0.999957
+0.999995
+
+0.537683
+0.013399
+0.000067
+0.000080
+0.001102
+0.000603
+0.000295
+0.000127
+0.000088
+0.000068
+0.000057
+0.000046
+0.000040
+0.000035
+0.000021
+
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+±
+
+The macro-parallelized version with grid-synchronization performs better than the one
+
+without but still is less able to adapt to the speciﬁc integrand, as expected.
+
+Of course the results of this extreme situation are less pronounced for better-behaved
+1The cumulative variables are the real scalars traditionally called ti and tsi as well as the real arrays d
+
+and di.
+
+4
+
+integrands but the general result always holds. It is just a manifestation of a fact well-known
+to people using vegas: Few large iterations generally result in better estimates than many
+small ones.
+
+4 Semi-Micro-Parallelization
+
+What is desired is a method that parallelizes the algorithm but still has the same numerical
+properties as the sequential version. As has been shown in the previous section, this cannot
+be achieved on a macroscopic level. Fortunately, vegas does oﬀer a convenient way to split up
+the algorithm and map it onto a parallel architecture. Still using a well-understood farmer-
+worker-model, our approach tries to distribute the hypercubes that make up the domain of
+integration to the workers.
+
+MC integration does not exhibit any boundaries which would need extensive communica-
+tion among workers but it does need some accounting-synchronization to guarantee that each
+hypercube is evaluated exactly once. A straightforward broadcast-gather-approach would re-
+quire one communication per hypercube and would thus generate an irresponsible amount
+of overhead spoiling eﬃcent scalability. We therefore suggest having each processor evaluate
+more than one hypercube before any communication is done. Let r be the number of equal
+fractions the whole volume is split up into. Ideally, we should require the number r of fractions
+to be much smaller than the number k of hypercubes
+
+: r
+
+k.
+
+The problem of dynamic load-balancing can in practice be solved by making the number
+
+Gi}
+{
+
+≪
+
+of fractions r much larger than the number of processors p:2 p
+
+r.
+
+≪
+
+We thus arrive at the constraint:
+
+p
+
+r
+
+≪
+
+≪
+
+k.
+
+(4)
+
+This inequality can be satisﬁed in the following convenient way opening up an algo-
+rithmically feasible way to implement it: Projecting the D-dimensional volume onto a Dk-
+dimensional subspace deﬁnes a set of Dk-dimensional sub-cubes. The set of original hyper-
+cubes belonging to the same sub-cube make up one fraction to be done by one worker in
+a single loop. We thus identify r with the number of sub-cubes. Because the hypercubes
+belonging to diﬀerent sub-cubes can be evaluated concurrently we call the Dk-dimensional
+subspace the parallel space and its orthogonal complement the D⊥-dimensional orthogonal
+space (D = Dk + D⊥). Choosing Dk =
+can be expected to satisfy (4)
+for practical purposes (Figure 2).
+
+and D⊥ =
+
+D/2
+⌋
+⌊
+
+D/2
+⌉
+⌈
+
+4.1 Random Numbers
+
+An important issue for every MC-eﬀort is the random number generator (RNG). There are
+two diﬀerent ways to tackle the problems arising in parallel simulations [10]:
+
+•
+
+One single RNG pre-evaluates a sequence of random numbers which are then assigned
+without overlap to the processors.
+
+2One might argue that letting r be an integer multiple of p would ﬁt best on p nodes. However, this is only
+valid if one assumes that the function exhibits the same degree of complexity in the whole volume and if each
+node is equally fast. Both assumptions are usually unjustiﬁed.
+
+5
+
+3
+
+2
+
+1
+
+Figure 2: Example for a parallelization of vegas with D = 3, Dk = 1 and D⊥ = 2. (The
+shaded volume is done by one processor.)
+
+•
+
+Every processor gets a RNG of its own and some method has to guarantee that no
+correlations spoil the result.
+
+A look at Amdahl’s Law shows that the second approach is the more attractive one. Amdahl’s
+Law relates the speedup S for parallel architectures with the number of processors p and the
+fraction of code α which is executed in parallel:
+
+Use of concurrently running RNGs increases α which in turn results in an improved speedup.
+Most compiler libraries provide linear congruential generators which generate sequential
+
+pseudorandom numbers by the recurrence
+
+S = ((1
+
+α) + p/α)−1 .
+
+−
+
+Xi+1 := (aXi + c) mod m
+
+with carefully selected a, c and m. Because of their short period and long-range correlations
+reported by De Matteis and Pagnutti [6] which make parallelization dangerous this type is
+not suited for large MC-simulations.
+
+For our case we therefore decided to build on a slightly modiﬁed shift register pseudoran-
+dom number generator (SR) [7, 8, 9, 10]. This widely employed class of algorithms (R250 is
+one example) generates random-bit sequences by pairwise XORing bits from some given list
+of P binary numbers x0, x1, . . . xP −1:
+
+xk := xk−P ⊕
+
+xk−P +Q
+
+(k
+
+P )
+
+≥
+
+⊕
+
+Here,
+
+represents the exclusive-or (XOR) operator and P and Q are chosen such that the
+trinomial 1 + xP + xQ is primitive modulo two. The so deﬁned ‘Tausworthe-sequence’ [7] is
+known to have periodicity 2P
+1. Thus, every combination of P bits occurs exactly once with
+the only exception being P subsequent zeros (which would return the trivial sequence of zeros
+only, if it occured). Tables of “magic-numbers” P and Q can be found in the literature [8, 10]
+and are provided with our program-sources. Note that owing to its exponential growth with
+P , the periodicity easily reaches astronomical lengths which can never be exploited by any
+machine.
+
+−
+
+Uniformly distributed random L-bit integers can now be constructed easily by putting
+with
+
+together columns of bits from several instances of the same Tausworthe-sequence
+
+xi}
+{
+
+6
+
+(5)
+
+(6)
+
+(7)
+
+predeﬁned delays dn ∈ {
+
+0 . . . 2P
+
+:
+1
+}
+−
+
+Xi =
+
+xi+dn2n.
+
+L−1
+
+Xn=0
+
+(8)
+
+Floating-point numbers in the range [0, 1) can subsequently be computed by dividing Xi by
+In the continuous limit of large L such a random-sequence will have mean ¯X = 1/2,
+2L.
+variance σ2 = 1/12 as well as the enormous length of the original bit-sequences which in
+turn guarantees D-space uniformity for D < P/L. In addition, this method is extremely fast
+because the machine’s word-size and XOR-operation from the native instruction-set can be
+exploited.
+
+The good properties of this class of generators can be ruined by improper initialization.
+Lewis and Payne [8] for instance, suggested initializing the Tausworthe-sequence with every
+bit set to one, introduce a common delay d = 100P between each column of bits and throw
+away the ﬁrst 5000P iterations in order to leave behind initial correlations. This is not only
+slow (even if a short-cut described by I. De´ak [10] is used), but also results in perspicuous
+correlations if P only becomes large enough. This is a direct result of the exponential growth
+of the period while the delay and initial iterations grow only linearly.
+
+A quicker and less cumbersome initialization procedure was suggested by Kirkpatrick
+and Stoll [9]. They noted that initializing the Tausworthe-sequence with random-bits from
+some other generator, will deﬁne an (unknown) oﬀset somewhere between 0 and 2P
+1 in
+the sequence (7) from which iteration can proceed. Initializing every column of bits in the
+integer-sequence (8) with such random-numbers deﬁnes diﬀerent oﬀsets and thus implicitly
+deﬁnes a set of delays
+as well as the starting-point of the whole sequence. This method
+dn}
+{
+does clearly not suﬀer from initial correlations.
+
+−
+
+The Method of Kirkpatrick and Stoll oﬀers a clean and eﬃcient way for parallelization:
+As many generators as there are processors can be initialized by random numbers from some
+generator, for example a simple and well-understood linear congruential one. Only the Xn, n
+0 . . . P
+{
+generators will produce the same sequence because they join the same set of delays
+be made arbitrary small by simply choosing P big enough.
+
+∈
+of each of the p generators need to be ﬁlled. The probability that two of these
+can
+
+dn}
+{
+
+1
+}
+
+−
+
+To rule out correlations among the p sequences is equivalent to assuming there are no
+interactions between the shift-register generator and the linear congruential generator. Indeed,
+the methods and the underlying theory are quite diﬀerent. The method is however still
+plagued by the known ﬂaws, common to all shift register generators. One examples is the
+triplet-correlation [11]. It can in principle be cured by an expansion of the method described
+in [12]. In the case of vegas however, we see no reason why high-quality RNGs should be
+needed at all and we therefore advocate using simple generators with P > 607: Stratiﬁcation
+lets short-range-correlations only take eﬀect within the hypercubes inside the rectangular grid
+where very few points are sampled and long-range-correlations become washed out by the grid
+shifting between iterations. This view is supported by the observation that correlations in
+SR-generators seem to have been discovered only in calculations more sophisticated than plain
+MC integration [11, 13, 14].
+
+4.2 Evaluation
+
+Figure 3 shows the eﬃciency at integrating a function consisting of the sum of 8 Dilogarithms
+computed with a method suggested in [15]. The parameters have been chosen such that all the
+
+7
+
+·
+
+·
+
+8
+
+≃
+
+215
+
+characteristic properties become visible in one single run. The ﬁve-dimensional volume was
+split up into a two-dimensional parallel space and a three-dimensional orthogonal space with
+106 points were evaluated in each iteration.
+each axis subdivided into 21 intervals. 2
+≃
+What we see are some minor ﬂuctuations modulated on a rather good overall eﬃciency. The
+SPP1200 consists of hypernodes with 8 processors running in real shared memory each, hence
+8 where the second hypernode across an interconnect is ﬁrst touched.
+the drop-oﬀ at p
+The behaviour for small p is thus machine-speciﬁc. The sawtooth for larger p, in contrast, is
+characteristic for the algorithm: As the test function does not involve steps or other changes in
+cost of evaluation, most processors terminate the job assigned to them rather simultaneously.
+So, at p = 40 we see each processor evaluating 11 of the w = 212 = 441 fractions and then one
+processor evaluating the single remaining one. The algorithm thus needs 12 times the time
+necessary for evaluating one fraction while at p = 41
+44 it needs only 11. This behaviour
+can easily be stopped by raising the dimension of the parallel space to three for instance, thus
+decreasing the grain-size. The obvious drawback is an incremented communication-overhead.
+The ideal split-up has to be determined individually for each combination of hardware and
+problem. For a given p, astute users will probably tune their parameters N and Dk judiciously
+in order to take advantage of one of the peaks in Figure 3.
+
+· · ·
+
+Eﬃciency on a 48-Processor Convex SPP1200
+
+5-D problem
+
+1
+
+0.95
+
+0.9
+
+0.85
+
+·
+
+)
+p
+t
+
+p
+(
+/
+1
+t
+
+8
+
+16
+24
+number of processors p
+
+32
+
+40
+
+Figure 3: Eﬃciency of a semi-micro parallelized version of vegas on the Convex Exemplar
+architecture. (See the article for a discussion of this curve.)
+
+5 Conclusion and availability
+
+We have shown, that for ill-behaved test functions in adaptive MC integrators it is essential to
+use large sets of sample-points at a time. Under these circumstances a macro-parallelization
+is not satisfying stringent numerical needs. For the xloops project [1, 2], we have developed
+a version of vegas which does parallelization on a smaller scale and has the same numerical
+properties as the original one. For D & 4 the grain-size of the algorithm becomes a parameter.
+
+8
+
+The algorithm can be used as a complete drop-in replacement for the common vegas. It
+is currently being used in xloops, where it does the last steps in integrating massive 2-loop
+Feynman diagrams.
+
+A portable implementation in ANSI-C of the outlined algorithm running on every modern
+SMP-Unix (either featuring Pthreads [16], Draft 4 Pthreads or CPS-threads) can be found
+at ftp://higgs.physik.uni-mainz.de/pub/pvegas/. Hints on how to use it can be found
+at the same place. Using the strutures outlined above, it should be easy to implement a
+mpivegas running on machines with distributed memory. Upon demand, we can provide
+such a routine, using the MPI message-passing standard [17].
+
+6 Acknowledgements
+
+It is a pleasure to thank Alexander Frink of ThEP for clarifying discussions about paralleliza-
+tion and his contribution to making the code stable and Karl Schilcher for making this work
+possible. I also wish to thank Bas Tausk and Dirk Kreimer of ThEP as well as Markus Tacke
+of our university’s computing-center and Burkhard D¨unweg of Max-Planck-Institute for poly-
+mer research for stimulating discussions. This work is supported by the ‘Graduiertenkolleg
+Elementarteilchenphysik bei hohen und mittleren Energien’ at University of Mainz.
+
+References
+
+ph/9611378
+
+[1] L. Br¨ucher, J. Franzkowski, A. Frink, D. Kreimer:
+
+Introduction to xloops, hep-
+
+[2] L. Br¨ucher: xloops, a package calculating one- and two-loop diagrams, Nucl. Instr. and
+
+Meth. in Phys. Res. A 389. 327-332, (1997)
+
+[3] G. P. Lepage: A New Algorithm for Adaptive Multidimensional Integration, J. Comput.
+
+Phys. 27, 192-203, (1978)
+
+[4] G. P. Lepage: VEGAS – An Adaptive Multi-dimensional Integration Program, Publica-
+
+tion CLNS-80/447, Cornell University, 1980
+
+[5] W. Press, S. Teukolsky, W. Vetterling, B. Flannery: Numerical Recipes in C, (second
+
+edition) Cambridge University Press, 1992.
+
+[6] A. De Matteis, S. Pagnutti, Parallelization of random number generators and long-range
+
+correlations, Numer. Math. 53, 595-608, (1988)
+
+[7] R. C. Tausworthe: Random numbers generated by linear recurrence modulo two, Math.
+
+Comput. 19, 201-209, (1965)
+
+[8] T. H. Lewis, W. H. Payne: Generalized feedback shift register pseudorandom number
+
+algorithm, J. of the Assoc. for Computing Machinery 20, 456-468, (1973)
+
+[9] S. Kirkpatrick, E. P. Stoll: A very fast shift-register sequence random number generator,
+
+J. Comput. Phys. 40, 517-526, (1981)
+
+[10] I. De´ak: Uniform random number generators for parallel computers, Parallel Computing
+
+15, 155-164, (1990)
+
+9
+
+[11] F. Schmid, N. B. Wilding: Errors in Monte Carlo Simulations using shift register ran-
+
+dom number generartors Int. Journ. Mod. Phys. C 6, 781-787, (1995)
+
+[12] A. Heuer, B. D¨unweg, A. Ferrenberg: Considerations on correlations in shift register
+pseudorandom number generators and their removal, Comput. Phys. Commun. 103,
+1-9, (1997)
+
+[13] I. Vattulainen, T. Ala-Nissila, K. Kankaala: Physical tests for random numbers in
+
+simulations, Phys. Rev. Lett. 73, 2513-2516, (1994)
+
+[14] P. D. Coddington: Analysis of random number generators using Monte Carlo simula-
+
+tion, Int. Journ. Mod. Phys. C 5, 547-560, (1994)
+
+[15] G. ’t Hooft, M. Veltman. Scalar one-loop integrals. Nucl. Phys. B 153, 365, (1979)
+
+[16] B. Nichols, D. Buttlar, J. Proulx Farrell: Pthreads Programming, O’Reilly, Sebastopol,
+
+[17] MPI: A Message-Passing Interface Standard, University of Tennessee, Knoxville, Ten-
+
+(1996)
+
+nessee, (1995)
+
+10
+
+

@@ -1,0 +1,1404 @@
+8
+9
+9
+1
+ 
+b
+e
+F
+ 
+4
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+9
+0
+0
+2
+0
+8
+9
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+THE ANDERSON MODEL OF LOCALIZATION: A CHALLENGE
+FOR MODERN EIGENVALUE METHODS∗
+
+ULRICH ELSNER‡, VOLKER MEHRMANN‡, FRANK MILDE§ , RUDOLF A. R ¨OMER§,
+AND MICHAEL SCHREIBER§
+
+Abstract. We present a comparative study of the application of modern eigenvalue algorithms
+to an eigenvalue problem arising in quantum physics, namely, the computation of a few interior
+eigenvalues and their associated eigenvectors for the large, sparse, real, symmetric, and indeﬁnite
+matrices of the Anderson model of localization. We compare the Lanczos algorithm in the 1987
+implementation of Cullum and Willoughby with the implicitly restarted Arnoldi method coupled
+with polynomial and several shift-and-invert convergence accelerators as well as with a sparse hy-
+brid tridiagonalization method. We demonstrate that for our problem the Lanczos implementation
+is faster and more memory eﬃcient than the other approaches. This seemingly innocuous problem
+presents a major challenge for all modern eigenvalue algorithms.
+
+Key words. Eigenvalue, eigenvector problems, Lanczos algorithm, Arnoldi algorithm, An-
+
+derson model of localization, shift-and-invert, polynomial convergence accelerators
+
+AMS subject classiﬁcations. 65F15, 65F50, 82B44, 65F10
+
+1. Introduction. In this paper we present a comparative study of the applica-
+tion of modern eigenvalue algorithms to an eigenvalue problem arising in quantum
+physics. The task is to compute a few (5–10) interior eigenvalues and the associ-
+ated eigenvectors of a family of structured large, sparse, real, symmetric, indeﬁnite
+matrices. The oﬀ-diagonal elements are equal to the oﬀ-diagonal elements of the
+7–point central diﬀerence approximation to the three-dimensional Poisson equation
+on the unit cube with periodic boundary conditions. The matrices diﬀer from each
+other only in the diagonal entries, which are suitably chosen random numbers.
+
+Previously this problem was often solved by using the 1987 Cullum and Wil-
+loughby implementation of the Lanczos algorithm [6, 7], in the following called
+CWI. But in the last 10 years several new eigenvalue methods have been developed
+and implemented as software packages, that seem, at least at ﬁrst glance, more
+appropriate than CWI, see, e.g., the recent survey and comparison given in [19].
+We apply these new codes to the described family of matrices and check whether
+they are faster and more memory eﬃcient than CWI. To our surprise, none of the
+tested codes is consistently better than CWI. As we show below, we ﬁnd only a
+single new code which is at least as fast as CWI. But this code needs two orders of
+magnitude more memory than CWI. We therefore believe that the described family
+of matrices will present an important new benchmark example and will hopefully
+lead to modiﬁcations and improvements for the current methods.
+
+The paper is organized as follows. In § 2 we describe the underlying quantum
+physics problem, i.e., the Anderson model of localization, and introduce the pa-
+rameters used in our study. In § 3 we brieﬂy review the Cullum/Willoughby version
+of the Lanczos method that has been previously used in the simulations for this
+model. We then give in § 4 a brief survey of more recent eigenvalue methods. In
+§ 5 we present comparative results for the diﬀerent methods and show that CWI is
+faster and needs less memory than all other approaches.
+
+2. The Anderson model of localization. The Anderson model of local-
+ization [1] is a convenient model for the investigation of electronic properties of
+disordered systems. Although it represents a severe simpliﬁcation of amorphous
+
+∗This work was supported by the Deutsche Forschungsgemeinschaft within the Sonder-
+
+forschungsbereich 393 “Numerische Simulation auf massiv parallelen Rechnern”.
+
+‡ Fakult¨at f¨ur Mathematik, Technische Universit¨at, D-09107 Chemnitz, Germany
+§Institut f¨ur Physik, Technische Universit¨at, D-09107 Chemnitz, Germany
+
+1
+
+2
+
+U. ELSNER, V. MEHRMANN, F. MILDE, R. R ¨OMER AND M. SCHREIBER
+
+materials and alloys, it has nevertheless become a paradigmatic model and is cur-
+rently widely used in the theoretical description of quantum mechanical eﬀects of
+disorder such as, e.g., spatial localization of electronic wave functions with increasing
+strength of disorder and the corresponding metal-insulator transitions [18, 21, 35].
+The quantum mechanical problem is represented by a Hamilton operator in the
+form of a real symmetric matrix A and the quantum mechanical wave functions
+are simply the eigenvectors of A, i.e., ﬁnite vectors x with real entries. E.g., for a
+simple cubic lattice with M = N × N × N sites, we have to solve the eigenvalue
+equation Ax = λx, which is given in site representation as
+
+(2.1)
+
+xi−1,j,k + xi+1,j,k + xi,j−1,k + xi,j+1,k + xi,j,k−1 + xi,j,k+1 + εi,j,kxi,j,k
+= λxi,j,k,
+
+with i, j, k denoting the cartesian coordinates of a site. The oﬀ–diagonal entries
+of A correspond to hopping probabilities of the electrons from one site to a neigh-
+boring site. For simplicity, we have set them all to unity in (2.1). The disorder is
+encoded in the random potential site energies εi,j,k on the diagonal of the matrix
+A. We consider only the case of εi,j,k being uniformly distributed in the interval
+[−w/2, +w/2]. This is a common simpliﬁcation, usually used in the studies of the
+Anderson model of localization with typical values of w ranging from 1 to 30. The
+boundary conditions are usually taken to be periodic, but hard wall and helical [28]
+boundary conditions are sometimes also used. According to the Gersgorin circle the-
+orem [13] every such matrix A has eigenvalues in the interval [−w/2 − 6, +w/2 + 6].
+Possible generalizations of the Anderson model include anisotropic [21] or even ran-
+dom hopping [9] and various choices of the distribution function of the site energies
+[14]. However, the graph of the matrix remains the same.
+
+Although the above matrix seems to be fairly simple, the intrinsic physics is
+surprisingly rich. For small disorder (w ≪ 16.5), the eigenvectors are extended,
+i.e., xi,j,k is ﬂuctuating from site to site but the envelope |x| is approximately a
+non-zero constant. For large disorder (w ≫ 16.5), all eigenvectors are localized, i.e.,
+the envelope |xn| of the nth eigenstate may be approximately written as exp[−|~r −
+~rn|/ln(w)] with ~r = (i, j, k)T and ln(w) denoting the localization length of the
+eigenstate at the speciﬁed strength w of the disorder. In Fig. 2.1, we show examples
+of such states for the Anderson model in one spatial dimension. Since extended
+states can contribute to electron transport, whereas localized states cannot, the
+Anderson model thus describes a metal-to-insulator transition: In three-dimensional
+samples at w = wc ≈ 16.5, the extended states at λ ≈ 0 vanish and no current can
+ﬂow. The eigenvector properties are also connected with the statistical properties
+of the spectrum σ(A) of A. In the extended regime one ﬁnds level repulsion, while
+in the localized regime the eigenvalues are uncorrelated resulting in level clustering.
+These results agree quantitatively with random matrix theory [18]. Directly at wc
+there is a so-called critical regime where the eigenvectors are multifractal entities
+[21, 29] showing characteristic ﬂuctuations of the amplitude on all length scales.
+In order to numerically distinguish these three regimes, namely localized, critical
+and extended behavior, one needs to (i) go to extremely large system sizes and (ii)
+average over many diﬀerent realizations of the disorder, i.e., compute eigenvalues
+or -vectors for many matrices with diﬀerent diagonals.
+
+In the present paper we concentrate on the computation of a few eigenvalues
+and corresponding eigenvectors for the physically most interesting case of critical
+disorder wc and in the center of σ(A), i.e., at λ = 0, for system sizes as large as
+possible. In Fig. 2.2, we show a histogram of σ(A) for diﬀerent disorders. Note the
+high density of states at λ = 0 in all cases. Therefore we have the further numerical
+challenge of distinguishing clearly the eigenstates in this high density region.
+
+A CHALLENGE FOR MODERN EIGENVALUE METHODS
+
+3
+
+0.4
+
+0.2
+
+xi
+
+0.0
+
+−0.2
+
+n(λ)
+
+500
+
+400
+
+300
+
+200
+
+100
+
+0
+
+−0.4
+
+0
+
+50
+
+100
+i
+
+150
+
+200
+
+Fig. 2.1.
+
+Extended (dashed line) and localized (thick solid line) eigenstate for a single
+realization of the Anderson model in one spatial dimension with N = 200 sites and periodic
+boundary conditions. For the localized eigenstate, we also show the exponential envelope with
+localization length l ≈ 12 (thin lines) according to § 2.
+
+10
+
+16.5
+
+20
+
+−10
+
+10
+
+0
+λ
+
+Fig. 2.2. Histogram n(λ) of eigenvalues for a single system with N 3 = 483 sites and w = 10
+(2), 16.5 (◦), and 20 (⋄). The bin width is 0.05. The lines are obtained by consecutively averaging
+20 bins.
+
+4
+
+U. ELSNER, V. MEHRMANN, F. MILDE, R. R ¨OMER AND M. SCHREIBER
+
+3. The Lanczos algorithm and the Cullum/Willoughby implementa-
+tion. As outlined in the last section, each of the matrices A is sparse, symmetric and
+indeﬁnite. Furthermore, the matrix-vector multiplication Ax can be written explic-
+itly as in (2.1) and is thus easily implemented. An ideal candidate for an algorithm
+taking advantage of nearly all these properties is the Lanczos algorithm [13]. This
+algorithm iteratively generates a sequence of orthogonal vectors vi, i = 1, . . . , K,
+such that V T
+K AVK = TK, with V = {v1, v2, · · · , vK} and TK a symmetric tridiagonal
+K × K matrix. One obtains the recursion
+
+(3.1)
+
+βi+1vi+1 = Avi − αivi − βivi−1,
+
+where αi = vT
+i Avi and βi+1 = vi+1Avi are the diagonal and subdiagonal entries of
+TK, v0 = 0 and v1 is an arbitrary starting vector. For K = M in exact arithmetic
+this is an orthogonal transformation to tridiagonal form that needs M matrix-vector
+multiplications. The eigenvalues of the tridiagonal matrix TK, also known as Ritz
+values, are then simply the eigenvalues of the matrix A and the associated Ritz
+vectors yield the eigenvectors [6, 7, 13, 22, 25].
+
+In ﬁnite precision arithmetic, however, the Lanczos vectors vi loose their or-
+thogonality after a small number of Lanczos iterations. Consequently, there appear
+so called “spurious” or “ghost” eigenvalues in σ(TK), which do not belong to σ(A).
+There are several solutions to this problem: total reorthogonalization of all
+Lanczos vectors against each other, selective reorthogonalization [23], or distin-
+guishing between good and spurious eigenvalues. While the reorthogonalization
+leads to an increase in memory requirements and computing time, since all or sev-
+eral of the vi need to be stored and reorthogonalized, the solution implemented
+in CWI [7] uses a simple and highly successful procedure to identify the spurious
+eigenvalues, thereby avoiding reorthogonalization. It thus only uses two Lanczos
+vectors in each iteration step and consequently the memory requirements are very
+small. An eigenvalue of TK is identiﬁed as being spurious if it is also an eigenvalue
+of the matrix T ′
+K which is constructed by deleting the ﬁrst row and column of TK.
+Still, the good eigenvalues produced may not yet have converged properly for a
+given K. So we further use the fact that good eigenvalues will be replicated in
+σ(TK) if K is large enough. We only accept eigenvalues as being good eigenvalues
+after they have been replicated at least once in σ(TK). Hence we usually need at
+least K ≥ 2M . Finally, in order to obtain the eigenvectors corresponding to these
+good eigenvalues of A, all Lanczos vectors must be computed a second time, again
+doubling the computational eﬀort.
+
+The convergence of the Lanczos algorithm is very fast for the eigenvalues close
+to min σ(A) and max σ(A). This is especially true if these eigenvalues are well
+separated. However, for eigenvalues in the interior of σ(A) and for eigenvalues which
+are not well separated the convergence is slow. Furthermore, the tridiagonal matrix
+TK becomes very large for an iteration in the interior of σ(A). Nevertheless, the CWI
+has been used to study the Anderson model of localization even at λ = 0 successfully
+for years [27, 29, 18, 14, 21, 35] and eigenstates for matrices with N = 100 can be
+obtained within a few weeks of computing time [34].
+
+We also remark that most of the computational eﬀort in the Lanczos algorithm
+is spent on the iteration of (3.1), i.e., on matrix-vector multiplications and vector
+additions. These can be easily parallelized and thus the CWI is well suited for
+parallel architectures. For example, the eigenspectra presented in Fig. 2.2 have
+been obtained by such a parallel version of CWI running for about 60 hours for
+each realization using 16 processors of a Parsytec GCC Power Plus.
+
+4. Modern approaches. Lately there has been much progress in eigenvalue
+methods mostly concentrating on non-symmetric matrices. We refer to [19] for
+a recent survey. The symmetric problem is usually assumed to be taken care of
+
+A CHALLENGE FOR MODERN EIGENVALUE METHODS
+
+5
+
+implicitly. But although our symmetric eigenvalue problem is well-conditioned [13],
+the fact that the eigenvalues are clustered in the neighborhood of λ = 0, our region
+of interest, creates diﬃculties for all numerical methods. Promising choices for
+possible replacements of the Cullum and Willoughby approach are the implicitly
+restarted Arnoldi method [19] and the hybrid tridiagonalization (HTD) algorithm
+of Cavers [4]. Another new approach is the Jacobi-Davidson method [3]. In the
+following we will pay special attention to the Arnoldi approach, since it allows the
+easy use of the shift-and-invert technique. We expect this to overcome the above
+mentioned clustering problem at λ = 0.
+
+4.1. Modifying the eigenproblem. The problem of slow convergence in the
+interior of σ(A) can be overcome by computing eigenvalues and eigenvectors for a
+modiﬁed eigenvalue problem f (A)x = f (λ)x. The function f is chosen such that the
+desired point λ in σ is mapped onto or close to the minimum or maximum of σ(f ).
+Furthermore, one should choose f , such that σ(f ) has well separated eigenvalues at
+min σ(f ) and max σ(f ).
+
+Among the many possible choices for f (A), we shall consider in the following:
+(i) polynomial convergence accelerators, where f (A) is chosen as a polynomial which
+has its maximum (or minimum) at λ. This moves λ to max σ(f (A)) (or min σ(f (A))
+resp.). We remark that occasionally these convergence accelerators are somewhat
+misleadingly called preconditioners. (ii) shift-and-invert with f (A) = (A − λI)−1
+and I the M × M identity matrix. This choice of f requires the additional solution
+of a linear system with A − λI in each step of the eigenvalue iteration [13, 25]. For
+the solution of this linear system there are again two alternatives: (ii.a) direct sparse
+solvers for A − λI. Unfortunately, not many direct solvers exist which can make
+eﬃcient use of the sparseness for indeﬁnite problems. (ii.b) iterative solvers using
+only matrix-vector multiplications with A − λI. The iterative methods promise to
+make large matrix sizes possible, since they beneﬁt in an optimal way from sparsity.
+Memory requirements and computational cost of a matrix-vector multiplication are
+proportional to the number of non-zeros and therefore proportional to M for our
+present problem. However, we note that in our case (A − λI) is indeﬁnite which
+will lead to slow convergence for most iterative solvers. Since the convergence of
+the iterative solver is dominated by the condition number of the linear system, one
+may employ preconditioners to accelerate its convergence [13].
+
+All these approaches result in a competition between smaller numbers of Lanc-
+zos or Arnoldi iterations and increased costs for each such iteration step. For this
+reason it is not a priori clear whether they will indeed give a net reduction in
+computation time.
+
+4.2. The implicitly restarted Arnoldi method. In a recent comparison
+[19] of diﬀerent Arnoldi based packages ArPack [20] was found to be the fastest
+and most reliable of the compared codes.
+
+When applied to symmetric eigenvalue problems, the main diﬀerence between
+the techniques in ArPack based on the Arnoldi iteration and the Lanczos iteration
+is an implicit restart technique. The Arnoldi method stores a number of Ritz
+vectors produced by the iterations and after a small number of steps initiates a
+restart which uses an implicit QR–algorithm for the small eigenvalue problem to
+create a new starting vector and to maintain orthogonality among the Ritz vectors.
+In contrast to the Lanczos algorithm more vectors have to be stored but spurious
+eigenvalues are avoided.
+
+The ArPack implementation further allows the easy use of additional acceler-
+ation methods such as polynomial convergence acceleration and shift-and-invert as
+outlined above. So ArPack is probably the best choice for a replacement of CWI.
+
+6
+
+U. ELSNER, V. MEHRMANN, F. MILDE, R. R ¨OMER AND M. SCHREIBER
+
+4.3. Other approaches. We have also studied the use of the HTD method [4]
+and the Jacobi/Davidson method [3]. The HTD method is a direct tridiagonaliza-
+tion method speciﬁcally designed for sparse matrices. This makes it an interesting
+approach for our purposes. However, it is not explicitly designed to compute only
+few interior eigenvalues and associated eigenvectors.
+
+The Jacobi/Davidson method appears to be another promising future direc-
+tion if it can be properly accelerated. The current version is designed for complex
+unsymmetric problems and to report comparative results would not be fair to this
+interesting new development. We intend to further study this method in the future.
+
+5. Results. After a short discussion of the speciﬁc implementations and pa-
+rameters, we now present the results of our comparison. The tests are performed
+on Hewlett-Packard HP9000 735/125 workstations for N 3 ≤ 243 and on a HP9000
+K460 with the fast PA8000 processor for N 3 ≥ 243. The latter machine allows
+us to use up to 1.9 GB RAM and is about 3.5 times faster.
+In order to obtain
+a fair comparison we always require that the eigenresidual of the computed eigen-
+value/eigenvector pair satisﬁes |Ax − λx| ≤ 10−8. The CPU times have been mea-
+sured using the Unix time command of the tcsh shell. Even for the largest system
+sizes considered, we have usually taken at least 5 diﬀerent realizations of disorder
+and averaged the resulting CPU times. Sometimes, when the CPU times for a given
+algorithm ﬂuctuate widely, we report the range of times instead of a simple average.
+We remark that the use of time introduces a further uncertainty into the results
+such that we always have an error of about 10%. The random number generators
+used are ran2 from [24] and the rand command from Matlab.
+
+5.1. The standard approach. For our particular problem we can reach M =
+803 = 512000 with CPU times of about two weeks on the K460 machine using
+CWI. However, keeping in mind the conﬁgurational averaging necessitated by the
+underlying physical problem, a reasonable upper limit for the matrix size is M =
+503 = 125000.
+
+In Table 5.1 we show the CPU times obtained for CWI in the center and at
+the edge of σ(A). Note that the computing times are nearly independent of the
+disorder parameter W , but, as expected, CWI is much faster at the edges of σ(A)
+than at λ = 0. In Table 5.2, we show the results for CWI at λ = 0 in dependence
+on the matrix size M .
+
+In the ArPack implementation of Lehoucq et al. [20] one has to set the pa-
+rameter NCV which is the largest number of basis vectors that will be used in the
+implicitly restarted Arnoldi process. In normal mode and in the interior of σ(A) we
+ﬁnd that the actual value of NCV heavily inﬂuences computing time as shown in
+Table 5.3. This dependence on NCV becomes less pronounced for eigenvalues close
+to min σ(A) and max σ(A) as shown in Table 5.4. However, since we do not know
+of any strategy to choose NCV optimally, this is a severe restriction of ArPack.
+Furthermore, as shown in Table 5.1, ArPack, working in normal mode, is much
+slower than CWI both in the center and at the edge of σ(A). It becomes too slow
+for practical use already at M = 123 = 1728 as shown in Table 5.2.
+
+In Tables 5.1 and 5.2 we also include CPU times for the HTD method. Note
+that we only show the CPU times needed to transform A to tridiagonal form.
+Nevertheless, we ﬁnd that HTD is much slower than CWI. We remark that when
+we use CWI to compute the full spectrum as in Fig. 2.2, it is still faster than HTD
+except for small system sizes M ≤ 123 = 1728.
+
+5.2. Polynomial convergence acceleration. As outlined above, polyno-
+mial convergence acceleration is usually a convenient choice to speed up the com-
+putation of eigenvalues and -vectors corresponding to a small region of σ(A). Here,
+we test a polynomial provided by D. Sorensen, one of the authors of ArPack, and
+
+A CHALLENGE FOR MODERN EIGENVALUE METHODS
+
+7
+
+M
+
+1000
+1000
+1000
+1728
+1728
+1728
+4096
+4096
+4096
+1000
+1000
+1000
+1728
+1728
+1728
+13824
+13824
+13824
+
+W
+
+10.0
+16.5
+20.0
+10.0
+16.5
+20.0
+10.0
+16.5
+20.0
+10.0
+16.5
+20.0
+10.0
+16.5
+20.0
+10.0
+16.5
+20.0
+
+2.4
+2.5
+2.4
+7.9
+7.8
+7.6
+
+43
+40
+40
+
+0.71
+0.77
+0.80
+0.94
+1.0
+1.1
+9.4
+9.2
+9.3
+
+CWI
+
+ArPack
+
+HTD
+
+240 – 2200
+230 – 1400
+140 – 1300
+1700 – 12000
+410 – 12000
+1100 – 20000
+
+22
+22
+23
+170
+170
+160
+2600
+2500
+2500
+22
+22
+23
+170
+170
+160
+
+0.78
+0.85
+0.89
+1.5
+1.7
+1.8
+
+57
+57
+71
+
+CPU times in seconds to compute 5 eigenvectors with CWI, ArPack, and HTD. The upper
+part of the table corresponds to eigenvalues in the interior of σ(A) at λ ≈ 0, the lower part
+corresponds to the 5 largest eigenvalues.
+
+Table 5.1
+
+M
+
+CWI
+
+1000
+1728
+4096
+13824
+13824
+27000
+91125
+110592
+
+2.5
+7.8
+
+40
+770
+220
+1000
+20000
+35000
+
+CWI+
+conv. acc.
+5.6
+
+11
+59
+1700
+
+ArPack
+
+230 – 1400
+410 –12000
+
+ArPack+
+conv. acc.
+
+4.9
+
+HTD
+
+22
+170
+2500
+
+10
+66
+1700
+550
+3500
+
+Table 5.2
+
+CPU times in seconds to compute at w = 16.5 the eigenvectors corresponding to the 5
+eigenvalues closest to λ = 0 with CWI, CWI with Chebyshev-polynomial acceleration, ArPack
+in normal mode, ArPack with Chebyshev-polynomial acceleration and HTD for various matrix
+sizes M . The CPU times in the upper (lower) part of the table have been measured on the HP
+735 (HP K460).
+
+C. Sun [31]. It is based on a Chebyshev-type polynomial given by the following
+recursion:
+
+(5.1)
+
+= 1
+p1(x)
+= a + bx2
+p2(x)
+pn+1(x) = 2(a + bx2)pn − pn−1
+
+2−x2
+
+1+x2
+
+1−x2
+
+2)/(x2
+
+2) and b = 2/(x2
+
+where a = (x2
+1). Also, pn is symmetric with a local
+maximum pn(0) > 1 at zero, |pn(x)| ≤ 1 in the intervals [x1, x2] and [−x2, −x1],
+and pn grows rapidly for |x| > x2 as shown, e.g., in Fig. 5.1 for n = 20. In general,
+one would like to have x1 and x2 chosen automatically in order to obtain a suitable
+function f as described in § 4. In all our present calculations we use n = 50 with
+(x1)2 = 0.005 and (x2)2 = 1.1 [max σ(A)]2 according to [31]. This polynomial
+convergence acceleration speeds up ArPack immensely as one can see in Table 5.2.
+Since λ = 0 is now mapped to max σ(p50(A)), the actual value of NCV is less
+important. We found NCV = 50 to be a good choice to make the execution times
+faster, although this requires more memory. Still CPU times are about a factor of
+
+8
+
+U. ELSNER, V. MEHRMANN, F. MILDE, R. R ¨OMER AND M. SCHREIBER
+
+CPU times in seconds to compute 5 eigenvectors with ArPack for 6 diﬀerent diagonals and
+
+3 choices of NCV for M = 1728 and w = 16.5 at λ = 0.
+
+NCV
+110
+4337
+2267
+1935
+755
+1811
+4704
+
+130
+9455
+3455
+3635
+1204
+11620
+2506
+
+90
+2577
+2011
+4190
+411
+2435
+8188
+
+Table 5.3
+
+1
+2
+3
+4
+5
+6
+
+w = 10
+20
+15
+44
+41
+65
+65
+60
+57
+62
+62
+76
+72
+45
+44
+70
+81
+60
+52
+48
+42
+
+NCV
+w = 16.5
+20
+15
+62
+63
+47
+43
+64
+54
+49
+44
+68
+72
+62
+56
+88
+72
+51
+49
+68
+58
+
+Table 5.4
+
+w = 20
+20
+15
+58
+56
+55
+49
+47
+44
+55
+49
+71
+76
+85
+87
+90
+108
+66
+70
+75
+99
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+
+CPU times in seconds to compute the eigenvectors corresponding to the 5 largest eigenvalues
+
+of A with ArPack for 9 diﬀerent diagonals and 2 choices of NCV with M = 13824.
+
+p20(x)
+
+25
+
+20
+
+15
+
+10
+
+5
+
+1
+−1
+
+−10
+
+−5
+
+5
+
+10
+
+−1 1
+x
+
+Fig. 5.1. Chebyshev polynomial p20(x) with x1 = 1 and x2 = 10.
+
+A CHALLENGE FOR MODERN EIGENVALUE METHODS
+
+9
+
+M
+
+CWI
+
+ArPack+
+conv. acc.
+
+1000
+1728
+4096
+13824
+27000
+91125
+110592
+
+0.24
+0.43
+1.0
+3.4
+6.5
+
+22
+27
+
+0.6
+1.2
+2.3
+6.6
+
+15
+
+ArPack+
+
+HTD
+
+1.4
+6.7
+
+13
+
+LU
+7.4
+
+18
+80
+
+BKP
+10
+22
+81
+
+7.8
+
+SuperLU MA27 MA27+HB
+0.8
+2.2
+8.6
+
+0.4
+0.9
+2.9
+
+19
+92
+
+70
+200
+1300
+2600
+
+22
+68
+500
+600
+
+Memory requirements in MB to compute at w = 16.5 the eigenvectors corresponding to the
+5 eigenvalues closest to λ = 0 for the diﬀerent diagonalizers (Names as in the text, HB indicates
+hard wall boundary conditions)
+
+Table 5.5
+
+M
+
+CWI
+
+1000
+1728
+4096
+13824
+13824
+27000
+91125
+
+2.5
+7.8
+
+40
+770
+220
+1000
+20000
+
+LU BKP
+74
+39
+300
+150
+1900
+1200
+
+ArPack+
+SuperLU MA27
+1.3
+5.0
+
+8.8
+
+28
+220
+
+MA27+HB
+0.88
+2.0
+9.8
+
+140
+58
+250
+4900
+
+39
+740
+260
+1300
+19000
+
+CPU times in seconds to compute at w = 16.5 the eigenvectors corresponding to the 5
+eigenvalues closest to λ = 0 with shift-and-invert ArPack and diﬀerent direct solvers. For easier
+comparison, we also include CWI. The CPU times in the upper (lower) part of the table have
+been measured on the HP 735 (HP K460).
+
+Table 5.6
+
+two larger than for CWI without any convergence acceleration. Unfortunately, CWI
+itself is not made faster by the use of this accelerator as also shown in Table 5.2.
+Although the number of Lanczos vectors needed to achieve convergence is reduced
+remarkably, the additional computational eﬀort now required for every Lanczos
+step becomes very large. At the end one needs even slightly more matrix-vector
+multiplications than without convergence acceleration.
+
+5.3. Shift-and-invert with direct solvers. We now discuss the use of the
+shift-and-invert mode of ArPack together with a direct solver for the linear system
+(A − λI)y = b. We ﬁrst note that although our matrix A is symmetric, it is
+not positive deﬁnite and thus we cannot use a sparse Cholesky decomposition.
+Unfortunately, there are only few packages available for sparse symmetric indeﬁnite
+problems [8]. Therefore we also investigated several packages for general sparse
+matrices.
+
+Meschach [32] is a freely available mathematical package written in C. There
+are three sparse factorization methods implemented in Meschach: Cholesky, LU,
+and Bunch-Kaufmann-Parlett (BKP). Cholesky factorization does not work due to
+the indeﬁniteness of A. LU and BKP are supposed to take advantage of the sparse-
+ness of our problem. However, we ﬁnd that they have huge memory requirements
+of the order of M 2 as shown in Table 5.5. So they are inapplicable for large system
+sizes. And even for small systems they turn out to be much too slow as shown in
+Table 5.6.
+
+The Harwell Subroutine Library [16] contains the sparse symmetric indeﬁnite
+solver MA27. As shown in Table 5.6, ArPack with MA27 is about as fast as
+CWI. In fact, MA27 seems to become faster than CWI for M ≥ 453 = 91125.
+Unfortunately we could not test this because of the huge memory requirements of
+MA27 as shown in Table 5.5.
+
+10
+
+U. ELSNER, V. MEHRMANN, F. MILDE, R. R ¨OMER AND M. SCHREIBER
+
+M
+
+CWI
+
+1000
+1728
+4096
+13824
+13824
+27000
+91125
+
+2.5
+7.8
+
+40
+770
+220
+1000
+20000
+
+ArPack+
+QMRX QMRL CPX
+85
+330
+2300
+
+93
+320
+
+68
+239
+1600
+35000
+12000
+
+CPU times in seconds to compute at w = 16.5 the eigenvectors corresponding to the eigen-
+values closest to λ = 0 with shift-and-invert ArPack and the iterative solvers from QMRPack.
+For easier comparison, we also include CWI. The CPU times in the upper (lower) part of the
+table have been measured on the HP 735 (HP K460).
+
+Table 5.7
+
+A noteworthy fact is that MA27 is much better for hard wall boundary condi-
+tions (HB). This can be explained by the fact that the bandwidth of the matrix is
+O(N 2) instead of O(N 3) as for periodic boundary conditions. However, on physical
+grounds, a calculation with HB is expected to be much more inﬂuenced by the ﬁnite
+size of the cubes considered. So although we can obtain larger system sizes here, the
+results for the interesting physical quantities may not be as reliable. Nevertheless,
+ArPack with MA27 for matrices with HB is faster than CWI for matrices with
+periodic boundary conditions. MA27 with HB is also faster than CWI with HB,
+since for CWI there is only a negligible diﬀerence in computing time between HB
+and periodic boundary conditions coming from the matrix-vector multiplication.
+
+SuperLU is a package by Demmel et al. [8] doing a sparse LU decomposition.
+Compared with CWI and MA27, SuperLU is much slower as shown in Table 5.6.
+Furthermore, it needs about one order of magnitude more memory than MA27 as
+shown in Table 5.5. SuperLU allows the input of diﬀerent preorderings in addition
+to the default minimum-degree ordering. We have tested a symmetric minimum
+degree ordering from the Matlab program and a nested dissection ordering com-
+puted by the Chaco package [17]. For some choices of diagonals we derive small
+savings in run time and/or memory but these are not consistent, i.e., the same kind
+of ordering speeds up the program for one choice of N and slows it down for N + 1.
+
+5.4. Shift-and-invert with iterative solvers. Considering the recent ad-
+vances in iterative solvers, we initially hoped that ArPack in shift-and-invert mode
+coupled with a modern iterative method for the solution of linear systems would be
+quite eﬃcient. As we will show below, this is not the case.
+
+The quasi-minimal-residual (QMR) technique should be one of the best iterative
+solvers for symmetric matrices that works using only matrix-vector multiplications
+if no preconditioning is used [12]. However, as shown in Fig. 2.2, our matrices
+are indeﬁnite with a nearly symmetric eigenvalue distribution around zero. This
+results in a very bad iteration count of about 2M for the solution of a single linear
+system of size M . The times and iteration numbers from three variants implemented
+in QMRPack [11], namely, QMR based on three-term Lanczos with and without
+look-ahead (QMRL/QMRX) and QMR based on coupled two-term Lanczos without
+look-ahead (CPX) are not very diﬀerent as shown in Table 5.7. For all three methods
+the iteration count is rather high. Consequently, we ﬁnd that ArPack in shift-and-
+invert mode coupled with QMRPack as iterative solver is about 20 times slower
+than CWI. The ArPack input parameter NCV was set to 15. We also ﬁnd that
+the implementation of QMR based on coupled two-term Lanczos with look-ahead
+does not converge for larger systems within 50000 iterations.
+
+In order to check if other iterative methods are perhaps more eﬃcient than
+QMR for our family of matrices, we have also tried several such iterative solvers
+
+A CHALLENGE FOR MODERN EIGENVALUE METHODS
+
+11
+
+M
+
+512
+1000
+1728
+2744
+4096
+
+M
+
+512
+1000
+1728
+2744
+4096
+
+QMR
+
+CGS
+
+Bi-CG
+
+Bi-CGSTAB
+
+796 – 999
+1705 – n.c.
+2918 – n.c.
+4809 – n.c.
+7270 – n.c.
+
+843 – n.c.
+1762 – n.c.
+n.c.
+n.c.
+n.c.
+
+809 – 980
+1701 – n.c.
+2932 – n.c.
+4775 – n.c.
+7401 – n.c.
+
+1006 – n.c.
+n.c.
+n.c.
+n.c.
+n.c.
+
+GMRES
+
+GMRES(5N )
+
+QMR+jac
+
+QMR+tri
+
+511– 512
+995–1000
+1723–1728
+2736–2744
+
+n.c.
+n.c.
+n.c.
+n.c.
+n.c.
+
+813 – n.c.
+n.c.
+n.c.
+n.c.
+n.c.
+
+295 – 569
+1389 – n.c.
+n.c.
+n.c.
+n.c.
+
+Table 5.8
+
+Number of iterations needed in Matlab in order to solve the linear system Ay = b. The
+abbreviations for the diﬀerent algorithms are explained in the text. The runs are aborted when
+the number of iterations is more than 2M . This case of no convergence is indicated by “n.c.”.
+
+using the Matlab programming environment. In addition to QMR, we have consid-
+ered the conjugate-gradient-squared method (CGS) [30], the BiConjugate-Gradient
+method (BiCG) [10], its stabilized variant (Bi-CGSTAB) [33] and the generalized-
+minimal-residual (GMRES(k)) method [26]. Furthermore, several general purpose
+preconditioners [2], i.e., the Jacobi (jac) preconditioner, the ILU(0) preconditioner
+and also the three main diagonals as the preconditioning matrix (tri) have been
+tested. Since the performance of Matlab programs cannot directly be compared
+to compiled programs, we only give the iteration count of each algorithm. One such
+iteration requires at least one matrix-vector multiplication and two inner products
+and is thus at least as expensive as one Lanczos step. We always use the built-in
+implementations of these algorithms as in Matlab v5.1.
+
+In Table 5.8, we show results obtained for various matrix sizes M . The ranges
+reﬂect the variations corresponding to 12 diﬀerent realizations of disorder on the
+diagonal of the matrices. Note that for the same M we use the same 12 diagonals
+for all algorithms. We always choose x0 = 0 as initial vector. The iteration count
+represents the number of iterations needed to solve the matrix equation Ax = y
+up to a relative accuracy of 10−8. We always stop the algorithms if after 2M
+iterations this accuracy has not been achieved. For practical restart values k ≤ 200,
+GMRES(k) does not converge at all within our iteration limit. With no restarts,
+GMRES needed M or slightly less iterations. But note that both memory and
+computing-time requirements for M steps of pure GMRES exceed those of a non-
+sparse direct solver.
+
+None of the tested preconditioners is consistently eﬀective. The Jacobi precon-
+ditioner in fact increases the iteration count most of the time. The ILU(0) pre-
+conditioner returns a singular matrix and consequently appears inapplicable. The
+tridiagonal preconditioner is more eﬀective, in some cases reducing the iteration
+count by up to 50%. But again there are examples where it fails to do anything.
+We remark that in general the iteration count is consistent with the results from
+QMRPack. To sum up, we ﬁnd that all of these iterative algorithms do not perform
+better that the QMR algorithm and consequently are no real alternative.
+
+Another idea is to work with the matrix A2 instead of A. Since it is symmetric
+and positive deﬁnite, we can now use the conjugate gradient method. But this
+squares the condition number of the linear system, which is already usually very
+large for A [15]. Hence more eﬀort has to be invested into the development of a
+good preconditioner. We ﬁnd for our matrices that while the iteration count is in
+general a bit less than for the methods mentioned above and the preconditioners
+
+12
+
+U. ELSNER, V. MEHRMANN, F. MILDE, R. R ¨OMER AND M. SCHREIBER
+
+are more consistently eﬀective we still need of the order of M steps with at least two
+matrix-vector multiplications for the solution of one linear system. And since the
+shift-and-invert ArPack still needs to solve several linear systems, all the iterative
+methods working on A2 were no match for CWI.
+
+6. Summary. We have tested several modern methods to compute a few inner
+eigenvectors of a very large sparse matrix corresponding to the Anderson model of lo-
+calization motivated within theoretical physics. Particularly the implicitly restarted
+Arnoldi method in connection with polynomial convergence acceleration and in
+shift-and-invert mode with several direct and iterative solvers for systems of linear
+equations is compared to the Cullum/Willoughby implementation of the Lanczos
+method. Despite the recent progress in linear system solvers we ﬁnd all considered
+modern methods to be inapplicable for very large system sizes, because either the
+computation times or the memory requirements are much to large. To sum up, we
+ﬁnd that CWI Lanczos is currently still the most eﬃcient method for the matrix
+type we are interested in. We emphasize that the CWI Lanczos, with our slight
+modiﬁcations as outlined in § 3, is a reliable tool for our problem. In particular, the
+problem of spurious eigenvalues which plague the original Lanczos algorithm, can
+be handled safely.
+
+Since large scale diagonalizations are widely used in theoretical physics — and
+also theoretical chemistry [5] — we would be happy to learn about any algorithm
+that does better than CWI for our matrices. We are especially interested in a
+preconditioner for the iterative methods which is suitably adapted to our problem.
+Certainly improved direct methods for our matrix type are also of great importance.
+We hope to have convinced the reader that it may be worthwhile to rethink seem-
+ingly easy problems like the present eigenproblem for real and symmetric matrices.
+
+Acknowledgments. We thank Iain Duﬀ for supplying us with Harwell’s
+MA27 routine and Dan Sorensen and Chao Sun for their polynomial convergence
+accelerator.
+
+REFERENCES
+
+[1] P. W. Anderson, Absence of diﬀusion in certain random lattices, Phys. Rev., 109 (1958),
+
+pp. 1492–1505.
+
+[2] R. Barrett, M. Berry, T. Chan, J. Demmel, J. Donato, J. Dongarra, V. Eijkhout,
+R. Pozo, C. Romine, and H. van der Vorst, Templates for the solution of linear
+systems, SIAM Publications, Philadelphia, 1994.
+
+[3] J. G. L. Booten, H. A. Van der Vorst, P. M. Meijer, and H. J. J. te Riele, A pre-
+conditioned Jacobi-Davidson method for solving large generalized eigenvalue problems,
+Tech. Rep. CWI-NM-R9414, Centrum voor Wiskunde en Informatica, Amsterdam, July
+1994.
+
+[4] I. A. Cavers, A hybrid tridiagonalization algorithm for symmetric sparse matrices, SIAM
+
+J. Matrix Anal. Appl., 15 (1994), pp. 1363–1380.
+
+[5] R. Chen and H. Guo, Benchmark calculations of bound states of HO2 via basis Lanczos
+
+algorithm, Chem. Phys. Lett., 277 (1997), pp. 191–198.
+
+[6] J. Cullum and R. A. Willoughby, Lanczos Algorithms for Large Symmetric Eigenvalue
+
+Computations, Volume 1: Theory, Birkh¨auser, Boston, 1985.
+
+[7]
+
+, Lanczos Algorithms for Large Symmetric Eigenvalue Computations, Volume 2: Pro-
+
+grams, Birkh¨auser, Boston, 1985. http://www.netlib.org/lanczos/.
+
+[8] J. Demmel,
+
+J. Gilbert,
+
+and X.
+
+Li,
+
+SuperLU Users’ Guide,
+
+1997.
+
+http://www.netlib.org/scalapack/prototype/superlu ug.ps.
+
+[9] A. Eilmes, R. A. R¨omer, and M. Schreiber, The Anderson model of localization with
+
+random hopping, Eur. Phys. J. B, 1 (1998). accepted for publication.
+
+[10] R. Fletcher, Conjugate gradient methods for indeﬁnite systems, in Proc. Dundee Biennal
+Conf. Numerical Analysis 1974, G. Watson, ed., Springer, Heidelberg, 1975, pp. 73–89.
+
+[11] R. Freund and N. Nachtigal, QMRPACK. http://www.netlib.org/linalg/.
+[12]
+
+, QMR: A quasi-minimal residual method for non-hermitian linear systems, Numer.
+
+Math., 60 (1991), pp. 315–339.
+
+A CHALLENGE FOR MODERN EIGENVALUE METHODS
+
+13
+
+[13] G. H. Golub and C. F. v. Loan, Matrix Computations, Johns Hopkins University Press,
+
+Baltimore and London, 3rd ed., 1996.
+
+[14] H. Grussbach and M. Schreiber, Determination of the mobility edge in the Anderson
+model of localization in three dimensions by multifractal analysis, Phys. Rev. B, 57
+(1995), pp. 663–666.
+
+[15] W. Hackbusch, Iterative Solution of Large Sparse Systems of Equations, vol. 95 of Applied
+
+Mathematical Sciences, Springer, Berlin, 1994.
+
+[16] Harwell subroutine library. http://www.dci.clrc.ac.uk/Activity.asp?HSL.
+[17] B.
+
+Hendrickson
+
+Leland,
+
+Chaco
+
+The
+
+R.
+
+sion
+ftp://ftp.cs.sandia.gov/pub/papers/bahendr/guide.ps.Z.
+
+Laboratories,
+
+National
+
+2,
+
+and
+Sandia
+
+User’s
+Albuquerque,
+
+Guide
+
+Ver-
+1995.
+
+[18] E. Hofstetter and M. Schreiber, Statistical properties of the eigenvalue spectrum of the
+
+three-dimensional Anderson hamiltonian, Phys. Rev. B, 48 (1993), pp. 16979–16985.
+
+[19] R. B. Lehoucq and J. A. Scott, An evaluation of software for computing eigenvalues of
+sparse nonsymmetric matrices, Tech. Rep. MCS-P547-1195, Argonne National Labora-
+tory, Argonne, 1996. ftp://info.mcs.anl.gov/pub/tech reports/reports/P547.ps.Z.
+submitted to ACM Trans. Math. Software.
+
+[20] R. B. Lehoucq, D. Sorensen, and C. Yang, ArPack users guide: Solution of large
+scale eigenvalue problems by implicitly restarted Arnoldi methods, tech. rep., Rice
+University, Department of Computational and Applied Mathematics, Houston, 1996.
+http://www.caam.rice.edu/software/ARPACK/ug.ps.
+
+[21] F. Milde, R. A. R¨omer, and M. Schreiber, Multifractal analysis of the metal-insulator
+
+transition in anisotropic systems, Phys. Rev. B, 55 (1997), pp. 9463–9469.
+
+[22] B. N. Parlett, The Symmetric Eigenvalue Problem, Prentice-Hall, Englewood Cliﬀs, 1980.
+[23] B. N. Parlett and D. S. Scott, The Lanczos algorithm with selective orthogonalization,
+
+Math. Comp., 33 (1979), pp. 217–238.
+
+[24] W. H. Press, B. P. Flannery, S. A. Teukolsky, and W. T. Vetterling, Numerical
+Recipes in FORTRAN, Cambridge University Press, Cambridge, 2nd ed., 1992.
+[25] Y. Saad, Numerical Methods for Large Eigenvalue Problems: Theory and Algorithms, Wiley,
+
+New York, 1992.
+
+[26] Y. Saad and M. Schultz, GMRES: A generalized minimal residual algorithm for solving
+
+nonsymmetric linear systems, SIAM J. Sci. Statist. Comput., 7 (1986), pp. 856–869.
+
+[27] M. Schreiber, Fractal eigenstates in disordered systems, Physica A, 167 (1990), pp. 188–198.
+[28] M. Schreiber, Multifractal characteristics of electronic wave functions in disordered sys-
+tems, in Computational Physics, K. H. Hoﬀmann and M. Schreiber, eds., Springer,
+Berlin, 1996, pp. 147–165.
+
+[29] M. Schreiber and H. Grussbach, Multifractal wave functions at the Anderson transition,
+
+Phys. Rev. Lett., 67 (1991), pp. 607–610.
+
+[30] P. Sonneveld, CGS, a fast Lanczos-type solver for nonsymmetric problems, SIAM J. Sci.
+
+Statist. Comput., 12 (1989), pp. 36–52.
+[31] D. Sorensen and C. Sun, private communications.
+[32] D. E. Stewart and Z. Leyk, Meschach. http://www.netlib.org/c/meschach/.
+[33] H. A. Van der Vorst, Bi-CGSTAB: A fast and smooth converging variant of Bi-CG for
+the solution of non-symmetric linear systems, SIAM J. Sci. Statist. Comput., 12 (1992),
+pp. 613–644.
+
+[34] I. K. Zharekeshev and B. Kramer, private communications.
+[35]
+
+, Asymptotics of universal probability of neighboring level spacings at the Anderson
+
+transition, Phys. Rev. Lett., 79 (1997), pp. 717–720.
+
+

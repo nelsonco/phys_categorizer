@@ -1,0 +1,1487 @@
+2
+0
+0
+2
+ 
+r
+a
+
+M
+ 
+9
+1
+ 
+ 
+]
+h
+p
+-
+o
+a
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+8
+5
+0
+3
+0
+2
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Exploiting Local Low Dimensionality of the
+Atmospheric Dynamics for Eﬃcient Ensemble
+Kalman Filtering
+
+Edward Ott,1 Brian R. Hunt, Istvan Szunyogh, Matteo Corazza,
+Eugenia Kalnay, D.J. Patil, and James A. Yorke
+University of Maryland College Park, Maryland, USA;
+
+February 15, 2014
+
+1Corresponding author: Institute for Research in Electronics and Applied Physics,
+
+University of Maryland, College Park, MD, 20742-2431, E-mail:eo4@umail.umd.edu
+
+Abstract
+
+Recent studies (Patil et al. 2001a, 2001b) have shown that, when the Earth’s
+surface is divided up into local regions of moderate size, vectors of the forecast
+uncertainties in such regions tend to lie in a subspace of much lower dimension
+than that of the full atmospheric state vector.
+In this paper we show how
+this ﬁnding can be exploited to formulate a potentially accurate and eﬃcient
+data assimilation technique. The basic idea is that, since the expected forecast
+errors lie in a locally low dimensional subspace, the analysis resulting from the
+data assimilation should also lie in this subspace. This implies that operations
+only on relatively low dimensional matrices are required. The data assimilation
+analysis is done locally in a manner allowing massively parallel computation to
+be exploited. The local analyses are then used to construct global states for
+advancement to the next forecast time. Potential advantages of the method are
+discussed.
+
+1 Introduction
+
+Atmospheric data assimilation (analysis) is the process through which an esti-
+mate of the atmospheric state is obtained by using observed data and a dynami-
+cal model of the atmosphere (e.g., Daley 1991; Kalnay 2002). The primary goal
+of data assimilation is to provide analyses that can be used as initial conditions
+in operational numerical weather predictions, but diagnostic studies, such as
+eﬀorts to detect changes in the Earth’s climate, are also often based on analyses
+instead of raw observed data.
+
+Since the early sixties operational weather prediction centers have been rou-
+tinely producing objective atmospheric analyses (Bergthorsson and Doos 1959;
+Cressman 1959; Gandin 1963). The analysis at a given time instant is a maxi-
+mum likelihood estimate of the atmospheric state, in which a short-term fore-
+cast, usually referred to as the background or ﬁrst guess ﬁeld, is used as a prior
+estimate of the atmospheric state (Lorenc 1986). Then, the observations are
+assimilated into the background ﬁeld by a statistical interpolation. This inter-
+polation is performed based on the assumptions that (i) the uncertainties in the
+background ﬁeld and the observations are normally distributed and that (ii)
+the covariance between diﬀerent components of the background (formally the
+the background covariance matrix ) and the covariances between uncertainties in
+the noisy observations (formally the observational error covariance matrix ) are
+known. In reality, however, the background and the observational error covari-
+ance matrices cannot be directly computed. The implementation of a data as-
+similation system, therefore, requires the development of statistical models that
+can provide estimates of the background and the observational error covariance
+matrices. The quality of a data assimilation system is primarily determined by
+the accuracy of these estimated error covariance matrices.
+
+In this paper, our attention is focused on improving the estimate of the
+background error covariance matrix. Current operational assimilation schemes
+assume that the background error covariances are stationary (do not change in
+time), homogeneous (do not vary with the physical location except for a possible
+weak dependence on geographical latitude), and isotropic (the covariance be-
+tween errors at diﬀerent locations decreases at the same rate in each direction
+with increasing distance). While these assumptions are obviously not always
+valid for the background errors, computational constraints so far have prevented
+the operational centers from introducing more realistic covariance models. The
+main diﬃculty has been to ﬁnd an algorithm that could accommodate the more
+realistic assumptions in a computationally eﬃcient way. Nevertheless, it is a
+well accepted view that the introduction of an adaptive background error co-
+variance matrix should lead to signiﬁcant improvements in weather analyses and
+the ensuing forecasts.
+
+The mathematically consistent technique to deﬁne an adaptive background
+covariance matrix is the Kalman Filter (Kalman 1960; Kalman and Bucy 1961)
+which utilizes the dynamical equations to evolve the most probable state and
+the error covariance matrix in time. Although the Kalman Filter approach
+has been successfully implemented for a wide range of applications and has
+
+1
+
+been considered for atmospheric data assimilation for a long while (Jones 1965;
+Petersen 1973; Ghil et al. 1981, Dee et al., 1985), the computational cost
+involved does not allow for an operational implementation in the foreseeable
+future (see Daley 1991 for details).
+
+The currently most popular approach to reduce the cost of the Kalman Filter
+is to use an ensemble of background forecasts to estimate the background error
+covariances. The usefulness of this so-called Ensemble Kalman Filter approach,
+has been demonstrated for simpliﬁed models of the atmosphere in a series of
+papers (e.g. Evensen 1994; Houtekamer and Mitchell 1998, 2001; Anderson and
+Anderson 1999; Hamill and Snyder 2000, Bishop et al. 2001, Hamill et al. 2001).
+The Ensemble Kalman Filter approach has the additional appeal of providing
+initial ensemble perturbations that are consistent with the analysis scheme.
+This is important because the currently implemented operational techniques
+to generate initial ensemble perturbations use no direct information about the
+analysis errors (Toth and Kalnay 1997; Molteni et al. 1996). These techniques
+are obviously suboptimal considering the goal of ensemble forecasting, which is
+to simulate the eﬀect of the analysis uncertainties on the ensuing forecasts
+
+Many Ensemble Kalman Filter schemes (Evensen and van Leeuwen 1996;
+Houtekamer and Mitchell 1998, 2001; Hamill and Snyder 2000, 2001) are based
+on the Monte Carlo approach: an ensemble of analyses is generated by using the
+ensemble of background ﬁelds (that were initiated from the preceding ensemble
+of analyses) and an ensemble of the randomly perturbed observed data. The
+main weakness of this approach is that the ensemble size must be large in order
+to accurately represent the probability distribution of the background errors.
+Thus a relatively large forecast ensemble has to be evolved in time, limiting the
+eﬃciency of the approach. The most recent papers demonstrated, however, that
+the required size of the ensemble can be reduced by ﬁltering the long distance
+covariances from the background ﬁeld (Houtekamer and Mitchell 1998, Hamill
+et al. 2001).
+
+Our paper is related to previous work that attempts to construct a simpliﬁed
+Kalman Filter by taking into account the dominant unstable directions of the
+phase space. The ﬁrst attempt along this line was a paper by Kalnay and Toth
+(1994), in which the conventional 3D-Var data assimilation was enhanced by
+a correction in the direction of a single bred vector. In Fisher (1998) the sta-
+tionary background error covariance matrix was augmented by a reduced-rank
+adaptive component. Fisher (1998) used the linearized version of the European
+Centre for Medium Range Weather Forecast (ECMWF) model to determine
+the directions that were the fastest growing during the 48-hour period ending
+at analysis time. Fisher (1998) then assumed that the adaptive component
+of the background covariance matrix was dominated by components along the
+fastest growing directions. Another notable attempt was made by Buehner
+(2001), who developed a technique to obtain low rank estimates of the analy-
+sis covariance matrix. Then, he generated an ensemble of normally distributed
+random analysis perturbations consistent with the analysis covariance matrix.
+In his approach the minimization was done with global ﬁelds. The Ensemble
+Transform Technique of Bishop et al. (2001) also uses global ﬁelds in each step
+
+2
+
+of the analysis, but in that technique none of the ﬁelds are randomized.
+
+In this paper, we propose an alternative approach to reduce the compu-
+tational cost of the Ensemble Kalman Filter. The development of this new
+technique was motivated by the ﬁnding of Patil et al. (2001a, 2001b) that syn-
+optic scale ensemble perturbations frequently evolve in locally low dimensional
+subspaces. In the new algorithm, there can be as few as one ensemble member
+for each of the low number of orthogonal directions spanning the local sub-
+spaces. Thus the ensemble size is small. Furthermore, the matrix computations
+involved in the analysis are performed in the local low dimensional subspaces
+leading to a further signiﬁcant improvement in computational eﬃciency.
+
+In the following sections we outline our new approach to data assimilation.
+We believe that this approach holds the possibility of signiﬁcant improvements
+in weather forecasts. For simplicity we restrict the discussion to a simplest
+version illustrating our basic ideas. Some notable features of our approach are
+the following:
+
+1. The data assimilation is done purely locally. This means that assimilations
+in each local region are independent, thus facilitating a massively parallel
+approach.
+
+2. Computations in each local region can be done in relatively low-dimensional
+
+subspaces, potentially greatly speeding the computations.
+
+3. With the parallelization feature (1) and the low dimensional feature (2),
+we anticipate that the frequency of analyses can be increased (e.g., from
+the current typical four times per day to 24 times per day). This would al-
+low eﬃcient use of observations currently nonsynchronous with the widely
+spaced analysis times (thus obviating the necessity of computationally
+costly schemes such as the four-dimensional variational data assimilation
+technique whose purpose is to account for nonsynchronous (‘asynoptic’)
+data).
+
+2 Local vectors and their covariance
+
+A model state of the atmosphere is given by a vector ﬁeld x(r, t) where r is two
+dimensional and runs over discrete values rmn (the grid in the physical space
+used in the numerical computations). Typically, the two components of r are
+the geographical longitude and latitude, and x at a ﬁxed r is a vector of all
+relevant physical state variables of the model (e.g., wind velocity components,
+temperature, surface pressure, humidity, etc., at all height levels included in the
+model). Let u denote the dimensionality of x(r, t) (at ﬁxed r); e.g., when ﬁve
+independent state variables are deﬁned at 28 vertical levels, u = 140.
+
+Motivated by the works of Patil et al. (2001a, 2001b) we introduce at each
+point local vectors xmn of the information x(rm+m′,n+n′ , t) for −l ≤ (m′, n′) ≤ l.
+That is, xmn(t) speciﬁes the model atmospheric state within a (2l+1) by (2l+1)
+patch of grid points centered at rmn. The dimensionality of xmn(t) is (2l + 1)2u.
+
+3
+
+r
+
+(2)
+
+(2)
+
+(cid:21)
+
+u
+
+mn
+
+mn
+
+r
+
+(1)
+
+(1)
+
+(cid:21)
+
+u
+
+mn
+
+mn
+
+(cid:22)x
+
+(t)
+
+b
+
+mn
+
+Figure 1: Probability ellipsoid for xb
+
+mn.
+
+We represent the construction of local vectors via a linear operator Mmn,
+
+Mmnx(r, t) = xmn(t).
+
+(1)
+
+(See comment 1 of section 5 for a generalization). We now consider local vectors
+obtained from the model as forecasts, and we denote these by xb
+mn (where the
+superscript b stands for “background”). We suppose that there is a probability
+distribution function for xb
+mn, t). A fundamental assumption
+is that this probability distribution can be usefully approximated as Gaussian,
+
+mn at time t, Fmn(xb
+
+Fmn(xb
+
+mn, t) ∼ exp
+
+[xb
+
+mn − ¯xb
+
+mn(t)]T [Pb
+
+mn(t)]
+
+−1[xb
+
+mn − ¯xb
+
+mn(t)]
+(cid:9)
+
+,
+
+(2)
+
+1
+2
+
+−
+
+(cid:8)
+
+mn(t) and ¯xb
+
+where Pb
+most probable state associated with Fmn(xb
+Graphically, the level set
+
+mn(t) are the local background error covariance matrix and
+mn, t) (see comment 2 of section 5).
+
+Fmn(xb
+
+mn, t) = e
+
+−1/2Fmn(¯xb
+
+mn(t), t)
+
+is an ellipsoid as illustrated in Figure 1. The equation of this probability ellipsoid
+is
+
+[xb
+
+mn − ¯xb
+
+mn(t)]T [Pb
+
+mn(t)]
+
+−1[xb
+
+mn − ¯xb
+
+mn(t)] = 1.
+
+As explained subsequently the rank of the (2l + 1)2u × (2l + 1)2u covariance
+matrix Pb
+mn(t) for our approximate probability distribution function Fmn is
+much less than (2l + 1)2u. Let
+
+(3)
+
+(4)
+
+(5)
+
+k = 2 in Figure 1. Thus Pb
+and the inverse [Pb
+
+mn(t) has a (2l + 1)2u − k dimensional null space ¯Smn
+mn(t)] lying in the k
+
+mn(t)]−1 is deﬁned for vectors [xb
+
+mn − ¯xb
+
+k = rank[Pb
+
+mn(t)];
+
+4
+
+mn(t)] is not in Smn.
+
+dimensional subspace Smn orthogonal to ¯Smn, with Fmn deﬁned to be zero if
+[xb
+
+mn − ¯xb
+In the data assimilation procedure we describe in this paper, the background
+mn(t)
+,
+
+error covariance matrix Pb
+are derived from a k member ensemble of global state ﬁeld vectors
+i = 1, 2, · · · , k; k > 1. The most probable state is given by
+
+mn(t) and the most probable background state ¯xb
+
+xb(i)(r, t)
+
+(cid:9)
+
+(cid:8)
+
+¯xb
+mn(t) = Mmn
+
+−1
+
+k
+(cid:2)
+
+k
+
+X
+i=1
+
+xb(i)(r, t)
+(cid:3)
+
+,
+
+and the local background error covariance matrix is given by
+
+Pb
+
+mn(t) = (k − 1)
+
+k
+
+−1
+
+X
+i=1
+
+δxb(i)
+
+mn (t)
+(cid:0)
+
+δxb(i)
+
+T
+mn (t)
+(cid:1)
+
+,
+
+where
+
+(8)
+
+δxb(i)
+
+mn (t) = Mmn[xb(i)(r, t) − ¯xb(r, t)].
+Patil et al. (2001a, 2001b), using 30-pair ensembles of bred vectors (Toth
+and Kalnay 1993, 1997), have found that forecast errors in the mid-latitude
+extratropics tend to lie in a low dimensional subset of the (2l + 1)2u dimensional
+local vector space. Thus we anticipate that we can approximate the background
+error covariance matrix by one of much lower rank than (2l + 1)2u, and this
+motivates our assumption that an ensemble of size of k, where k is substantially
+less than (2l +1)2u, will be suﬃcient to yield a good approximate representation
+of the background covariance matrix. Let the k nonzero eigenvalues of the rank
+k matrix Pb
+mn(t), where the convention for labeling the
+index j is
+
+mn(t) be denoted by λ(j)
+
+λ(1)
+mn(t) ≥ λ(2)
+
+mn(t) ≥ . . . ≥ λ(k)
+
+mn(t).
+
+Since Pb
+corresponding to the k eigenvalues (9). Thus
+
+mn(t) is a symmetric matrix, it has k orthonormal eigenvectors
+
+(cid:8)
+
+(9)
+
+u(j)
+
+mn(t)
+
+(cid:9)
+
+Pb
+
+mn(t) =
+
+mn(t)u(j)
+λ(j)
+
+mn(t)(u(j)
+
+mn(t))T ,
+
+(10)
+
+k
+
+X
+j=1
+
+which by deﬁnition is of rank k. In terms of u(j)
+of the probability ellipsoid (Figure 1) are given by
+
+mn and λ(j)
+
+mn, the principal axes
+
+The basic justiﬁcation for the approximation of the covariance by Pb
+mn(t) using
+an ensemble of size k is our supposition, supported by Patil et al. (2001b), that
+the the error variance in all other directions is much less than the variance,
+
+(6)
+
+(7)
+
+(11)
+
+(12)
+
+qλ(j)
+
+mnu(j)
+
+mn(t).
+
+k
+
+X
+j=1
+
+λ(j)
+mn(t),
+
+5
+
+in the directions {u(j)
+
+mn(t)}, j = 1, 2, . . . , k.
+
+For the purpose of subsequent computation, we introduce the projection
+from the (2l + 1)2u dimensional space of the local vector to the k dimensional
+space Smn spanned by the vectors {u(j)
+mn(t)}. We denote the operation of this
+projection by a superscribed circumﬂex. Thus for a (2l + 1)2u dimensional
+column vector w, the vector ˆw is a k dimensional column vector whose pth
+component is
+
+Similarly for a (2l + 1)2u by (2l + 1)2u matrix Y, the matrix ˆY is k by k and
+its pq element is
+
+ˆw
+(cid:0)
+
+(cid:1)p =
+
+u(p)
+(cid:0)
+
+mn(t)
+(cid:1)
+
+T w.
+
+ˆY
+(cid:2)
+
+(cid:3)pq =
+
+u(p)
+(cid:0)
+
+mn(t)
+(cid:1)
+
+T Yu(q)
+
+mn(t).
+
+To go back to the original (2l + 1)2u dimensional local vector space we introduce
+the k by (2l + 1)2u matrix,
+
+Qmn(t) =
+
+u(1)
+mn(t)|u(2)
+
+mn(t)| · · · |u(k)
+
+mn(t)
+(cid:9)
+
+.
+
+(cid:8)
+
+Then, for w in Smn,
+
+and, if Y is symmetric with rank k and null space ¯Smn,
+
+w = Qmn(t) ˆw
+
+Y = Qmn(t) ˆYQT
+
+mn(t).
+
+Note that
+
+ˆPb
+
+mn(t) = diag
+
+mn(t), λ(2)
+λ(1)
+(cid:2)
+
+mn(t), ..., λ(k)
+
+mn(t)
+(cid:3)
+
+,
+
+and thus it is trivial to invert.
+
+3 Data assimilation
+
+(13)
+
+(14)
+
+(15)
+
+(16)
+
+(17)
+
+(18)
+
+With section 2 as background, we now consider the assimilation of observational
+data to obtain a new speciﬁcation of the probability distribution of the local
+vector. In what follows, the notational convention of Ide et al. (1997) is adopted
+whenever it is possible.
+
+Let xa
+
+mn(t) be the random variable at time t representing the local vector
+after knowledge of the observations is taken into account. Furthermore, let
+yo
+mn(t) be the vector of observations within the local region, and assume that
+the errors in these observations are normally distributed with covariance matrix
+Rmn(t). We also assume that the expected observation vector ¯yo
+mn(t) can be
+written as a linear operator Hmn times the true local state of the atmosphere. (If
+there are s scalar observations in the local (2l + 1) by (2l + 1) region then ¯yo
+mn(t)
+is s dimensional and the rectangular matrix Hmn is s by (2l + 1)2u). Then since
+we have assumed the background (pre-analysis) state xb
+mn(t) to be normally
+distributed, it will follow below that xa
+mn(t) is also normally distributed. Its
+distribution is determined by the most probable state ¯xa
+mn(t) and the associated
+
+6
+
+covariance matrix Pa
+local analysis) and Pa
+
+mn(t). The data assimilation step determines ¯xa
+mn(t) (the local analysis covariance matrix ).
+
+mn(t) (the
+
+Since our approximate background covariance matrix Pb
+
+mn(t) has null space
+¯Smn, perturbations outside the k-dimensional subspace Smn are not allowed.
+Thus we do data assimilation in Smn, and ˆ¯xa
+mn(t) is the minimizer of the
+quadratic function,
+
+J
+
+ˆxa
+(cid:0)
+
+mn(t)
+(cid:1)
+
+=
+
++
+
+−1
+
+T ˆPb
+
+mn(t) − ˆ¯xb
+ˆxa
+(cid:2)
+ˆHmnˆxa
+(cid:2)
+ˆHmnˆxa
+(cid:2)
+
+mn(t)
+(cid:3)
+mn(t) − yo
+mn(t)
+(cid:3)
+mn(t) − yo
+mn(t)
+(cid:3)
+
+,
+
+mn(t) − ˆ¯xb
+ˆxa
+
+mn (t)
+(cid:2)
+T R−1
+mn(t) ×
+
+mn(t)
+(cid:3)
+
+and
+
+ˆPa
+
+ˆPb
+(cid:2)
+where ˆHmn = HmnQmn is k by s and maps the local vector ˆxa
+observations yo
+
+mn (t) + ˆHT
+
+mn(t) =
+
+ˆHmn
+
+mnR−1
+
+mn
+
+,
+
+−1
+(cid:3)
+
+−1
+
+mn(t). The solution to the minimization problem (19) is
+ˆ¯xa
+mn(t) =
+
+ˆPb
+
+−1
+
+mn
+
+×
+
+−1
+
+mn (t) + ˆHT
+mn (t)ˆ¯xb
+
+mnR−1
+mn(t) + ˆHT
+
+ˆHmn
+(cid:9)
+mnR−1
+mnyo
+
+−1
+
+ˆPb
+
+mn(t)
+(cid:9)
+
+.
+
+(cid:8)
+
+(cid:8)
+
+Going back to the local space representation, we have
+
+mn(t) to the local
+
+mn(t) = Qmn(t)ˆ¯xa
+¯xa
+mn(t) = Qmn(t) ˆPa
+Pa
+
+mn(t),
+mn(t)QT
+
+mn(t).
+
+(See comment 3 of section 5.) For future reference let
+of k orthonormal eigenvectors of Pa
+sponding set of k eigenvalues. Thus
+
+mn(t), and let
+
+(cid:8)
+
+v(i)
+mn(t)
+(cid:8)
+µ(i)
+mn(t)
+
+denote the set
+denote the corre-
+
+(cid:9)
+
+(cid:9)
+
+Pa
+
+mn(t) =
+
+mn(t)v(i)
+µ(i)
+
+v(i)
+mn(t)
+(cid:0)
+
+T
+mn(t)
+(cid:1)
+
+k
+
+X
+i=1
+
+4 Updating the background ﬁeld
+
+xa(i)(r, t)
+
+mn(t) and ¯xa
+We now wish to use the analysis information, Pa
+mn(t) to obtain
+an ensemble of global analysis ﬁelds
+; i = 1, 2, · · · , k. Once these
+(cid:8)
+ﬁelds are determined, they can be used as initial conditions for the atmospheric
+model. Integrating these global ﬁelds forward in time to the next analysis time
+t + ∆, we obtain the background ensemble
+. This completes the
+loop, and, if the procedure is stable, it can be repeated for as long as desired.
+Thus at each analysis time we are in possession of a global initial condition that
+can be used for making forecasts of the desired durations.
+
+xb(i)(r, t + ∆)
+
+(cid:9)
+
+(cid:8)
+
+(cid:9)
+
+Our remaining task is to specify the global analysis ﬁelds
+
+xa(i)(r, t)
+
+from
+
+(cid:8)
+
+(cid:9)
+
+our analysis information, Pa
+
+mn(t) and ¯xa
+xa(i)
+mn (t) = ¯xa
+
+mn(t). Let
+mn(t) + δxa(i)
+
+mn (t)
+
+(19)
+
+(20)
+
+(21)
+
+(22)
+
+(23)
+
+(24)
+
+(25)
+
+7
+
+denote k local analysis vectors, where
+
+k
+
+X
+i=1
+
+δxa(i)
+
+mn (t) = 0,
+
+and
+
+Pa
+
+mn = (k − 1)
+
+−1
+
+δxa(i)
+
+mn (t)
+(cid:2)
+
+δxa(i)
+
+mn (t)
+(cid:3)
+
+T
+
+.
+
+k
+
+X
+i=1
+
+(cid:9)
+
+(cid:8)
+
+(cid:9)
+
+mn (t)
+
+δxa(i)
+
+, and, by (27),
+
+xa(i)
+mn (t)
+(cid:8)
+
+Thus, by (26), the local analysis state ¯x(a)
+mn(t) (determined in Section 3) is the
+xa(i)
+mean over the local analysis ensemble
+gives
+mn (t)
+(cid:8)
+a representation of the analysis error covariance matrix. There are many choices
+for
+that satisfy (26) and (27). Since we wish to specify global ﬁelds
+that we think of as being similar to physical ﬁelds, we desire that these ﬁelds be
+slowly varying in m and n. That is, if Pa
+mn(t) is slowly varying, we do not want
+to introduce any artiﬁcial rapid variations in the individual δxa(i)
+mn (t) through
+our method of constructing a solution (26) and (27). For this purpose we regard
+the background vectors as physical states, and hence slowly varying in m and
+n. (This is a reasonable assumption since the background ensemble is obtained
+from evolution of the atmospheric model from time t − ∆ to time t.) Thus we
+are motivated to express the vectors δxa(i)
+
+mn (t) in the form
+
+(cid:9)
+
+δxa(i)
+
+mn (t) = Zmn(t)δxb(i)
+
+mn (t),
+
+(28)
+
+where the matrix Zmn(t) can be thought of as a generalized ‘rescaling’ of the
+original background ﬁelds. Thus, if Zmn(t) varies slowly with m and n, then so
+will δxa(i)
+mn (t). This ‘rescaling’ can be viewed as being similar to the technique
+employed in the breeding method (Toth and Kalnay, 1993) and in the Ensemble
+Transform Kalman Filter approach (Bishop et al., 2001; Wang and Bishop,
+2002). From (27), (28), and (7)
+
+Pa
+
+mn(t) = Zmn(t)Pb
+
+mn(t)ZT
+
+mn(t).
+
+This equation has the following solution for Zmn(t),
+
+Zmn(t) =
+
+1/2
+
+Pa
+(cid:2)
+
+mn(t)
+(cid:3)
+
+Pb
+
+mn(t)
+(cid:3)
+
+(cid:2)
+
+−1/2
+
+,
+
+where in (30), we take the positive square roots. Thus, from (10) and (24),
+
+Zmn(t) =
+
+C(pq)(t)
+
+X
+p,q
+
+C(pq)(t) =
+
+µ(p)
+mn(t)
+mn(t) h(cid:0)
+λ(q)
+
+v
+u
+u
+t
+
+v(p)
+
+T u(q)
+mn(t)
+(cid:1)
+
+mn(t)i h(v(p)
+
+mn(t)
+(cid:0)
+
+u(q)
+
+mn(t)
+(cid:1)
+
+T
+
+i
+
+To summarize the result at this point, the k local analysis ﬁelds are given by
+Equations (25), (28), (31), and (32). We emphasize that Zmn(t) deﬁned in
+
+(26)
+
+(27)
+
+(29)
+
+(30)
+
+(31)
+
+(32)
+
+8
+
+this way will be smoothly varying in m and n if P(a)
+comment 9 in Section 5 for further discussion.)
+
+mn(t) and P(b)
+
+mn(t) are. (See
+
+It now remains to construct an ensemble of global ﬁelds
+
+that
+can be propagated forward in time to the next analysis time. For this purpose
+we set
+
+(cid:8)
+
+(cid:9)
+
+xa(i)(r, t)
+
+xa(i)(rmn, t) = Jxa(i)
+
+(33)
+where J maps the (2l+1)2u dimensional local vector to the u dimensional vector
+giving the atmospheric state at the grid point rmn in the center of the patch,
+(see comment 10 of Section 5 for a generalization) and we apply (33) globally;
+i. e., at all grid points (m, n) of the atmospheric model. Thus (33) deﬁnes an
+ensemble of k global analysis ﬁelds xa(i)(r, t) for i = 1, 2, . . . , k.
+
+mn (t),
+
+5 Comments
+
+1. In formulating our local vectors via Eq. (1) we have used a square patch
+from the grid. That is, we use the vectors x(rm+m′,n+n′, t) for −l ≥
+(m′, n′) ≥ l. One could also employ other choices, for example, a circular
+patch with a given radius.
+
+2. We have used the hypothesis that the forecast errors are Gaussian in for-
+mulating our procedure. This type of reasoning is also inherent in current
+operational data assimilation schemes. In particular, these schemes use
+minimization of a quadratic form (like our Equation (19)), and this is
+strictly valid only for Gaussian distributions. An assumption of Gaussian
+forecast errors can only be justiﬁed if they evolve linearly; if they evolve
+nonlinearly, a Gaussian distribution at time t will evolve to a non-Gaussian
+distribution at time t + ∆. It should also be mentioned that the validity
+of the linearity assumption for the atmospheric model equations has been
+intensely investigated in the last decade. The most frequently cited papers
+on this subject (Vukicevic 1991; Errico et al. 1993) concluded that the lin-
+earized time evolution operator typically well approximates the evolution
+of the initial condition uncertainties up to 24-72 hours. The most recent es-
+timates (Gilmour et al. 2001) are less optimistic suggesting that the limit
+of linearity for the current operational ensembles is about 12-24 hours,
+but considering that a typical background ﬁeld is a 6-hour forecast (or an
+even shorter forecast; see comment 6) the linearity assumption seems to
+be very reasonable. Moreover, we view as beneﬁcial the restoration of the
+nonlinear dynamics via the nonlinear model integration of xa(i)(r, t) to
+obtain xb(i)(r, t + ∆). In particular, retention of the linear operator could
+lead to very fast nonphysical growth (to large amplitude) for some of the
+perturbations that would otherwise become saturated at low amplitude
+by the full nonlinear dynamics.
+
+3. Since the minimization in (19)-(21) is done in localized regions, there is no
+need for distance dependent ﬁltering to eliminate the inﬂuence of spurious
+long distance correlations.
+
+9
+
+(cid:8)
+
+(cid:9)
+
+µ(i)(r, t), ε
+
+4. It may prove useful to enhance the probability of error in directions that
+formally show only very small error probability, e.g., by replacing µ(i)(r, t)
+in (24) by max
+where ε is a small positive constant. One rea-
+son why one might do this is to account for model error. That is, our
+procedure has assumed that the model truly replicates the real atmo-
+spheric dynamics. If this was so, then a prediction of low error by our
+technique might be thought to be reliable. However, in the presence of
+model error, a prediction of very small error is probably unreliable, and
+ε might be thought of as a typical error due to the fact that the model
+is not perfect. Another unmodeled potential contributor to forecast error
+is subgrid scale dynamical ﬂuctuations (e. g., small scale turbulence, but-
+terﬂies, etc.) which may be regarded as acting in a way that is essentially
+similar to nondeterministic noise.
+
+5. Most operational weather prediction centers use three-dimensional varia-
+tional data assimilation (3D-Var) schemes, in which the background co-
+variance matrix is static, homogeneous, and isotropic, while the mini-
+mization of the quadratic form is done for global ﬁelds. These schemes
+use an elliptic balance equation to deﬁne the covariance between the hy-
+drodynamical state variables (vorticity, divergence, temperature, surface
+pressure) in the background covariance matrix. Although this approach
+is necessary to ﬁlter unrealistic gravity wave components from the analy-
+ses and the ensuing forecasts, the true atmosphere (and a state-of-the-art
+model based on the atmospheric primitive equations) may deviate realisti-
+cally from a balanced state. One major advantage of our technique (and,
+in general, of the Ensemble Kalman Filter approach) is that, instead of
+a prescribed balance equation, the nonlinear evolution of the ensemble
+deﬁnes the covariance between the diﬀerent state variables.
+
+6. Since the analysis at the diﬀerent locations is prepared independently
+in our technique, it could be easily and eﬃciently implemented on the
+massively parallel computers currently used by the operational prediction
+centers. Communications between the diﬀerent processors are needed only
+to piece together the local analyses into a global ﬁeld which is then evolved
+forward in time.
+
+7. Operational data assimilation systems assimilate observed data from a
+time window, typically deﬁned by the time interval (t − ∆/2, t + ∆/2). For
+the global forecasting systems, the usual value of ∆ is 6 hours, reﬂecting
+the fact that traditional components of the global observing network (e.g.,
+radiosonde and surface observing stations) take observations at regular
+times separated by 6-12 hours intervals (0000 UTC, 0600 UTC, 1200 UTC,
+and/or 1800 UTC). The handling of observations taken at times other
+than t is a major challenge for the 3D-Var schemes. This is an important
+problem since the number of these (asynoptic time) observations is dra-
+matically growing. Typical examples are remotely sensed (satellite and
+radar) observations, reports by commercial aircraft and ships, adaptive
+
+10
+
+observations collected during operational winter storm and hurricane re-
+connaissance programs. The accurate handling of these data will require
+the preparation of analyses more frequently (e.g., 24 times a day) than
+in the current operational practice (4 times a day). We expect that the
+computational eﬃciency of our technique would allow this even in an op-
+erational environment. Moreover, by performing analyses more frequently
+the need for a technique like 4D-Var (see comment 8) is obviated.
+
+8. Another direction of development is four-dimensional variational data as-
+similation (4D-Var, Lions 1971; Talagrand 1981), a technique already
+implemented operationally at the European Centre for Medium Range
+Weather Forecasts (ECMWF; Rabier et al. 2000; Mahfouf et al., 2000;
+Klinker et al. 2000) and Meteo France. In 4D-Var data assimilation the
+analysis is chosen so that the trajectory started from the analysis closely
+ﬁts the observed data not only at the analysis time but also over an ex-
+tended (6-12-hour) period. In other words, this technique ﬁts a phase tra-
+jectory instead of a phase point to the observations. Early formulations
+of the 4D-Var problem assumed that the linearized dynamical equation
+would impose a strong constraint on the analysis making it less sensitive
+to the particular choice of the background error covariance matrix (e.g.,
+Daley 1991). However, experience accumulated during the last decade
+shows that obtaining a reliable estimate of the background error covari-
+ance matrix is no less important in 4D-Var than in other data assimilation
+techniques.
+
+9. Given smooth global behavior of xb(i)
+
+T
+
+mn (t), Pa
+
+mn(t), and Pb
+
+u(i)
+mn(t)
+(cid:0)
+
+mn(t), as m and n
+are varied, we require spatially smooth global behavior of δxa(i)
+mn (t). This
+requirement will be met if Zmn(t) is globally smooth, and, by (31) and
+(32), this will be so if u(i)
+and v(i)
+are globally
+smooth. Note that the orthonormal vectors u(i)
+mn are deﬁned up
+to within an arbitrary factor of ±1, but that this factor is irrelevant in
+u(i)
+mn and v(i)
+mn
+mn
+may not be constructable as globally smooth ﬁelds; but will typically be
+required to suﬀer discontinuous changes of sign across curves in r space
+(these curves may be thought of as similar to branch cuts). However, such
+sign discontinuities do not aﬀect Zmn(t).
+
+. We can show that generically u(i)
+
+v(i)
+mn(t)
+mn(t)
+(cid:1)
+(cid:0)
+mn and v(i)
+
+mn(t)
+(cid:1)
+
+and v(i)
+mn
+
+u(i)
+mn
+(cid:0)
+
+v(i)
+mn
+(cid:0)
+
+T
+(cid:1)
+
+T
+(cid:1)
+
+T
+
+10. A more elaborate alternative to the method (33) for generating xa(i)(rmn, t)
+is to take into account all the atmospheric states at the point rmn obtained
+m−m′,n−n′ (|m′| ≤ l, |n′| ≤ l) that
+from each of the (2l + 1)2 local vectors xa(i)
+include the point rmn. For example, the u by u error covariance in each
+of these (2l + 1)2 states at rmn can be estimates from the corresponding
+analysis error covariance matrices Pa(i)
+m−m′,n−n′ (t). Using this information,
+the most probable xa(i)(rmn, t) can then be obtained from a minimization
+procedure like that in Section 3.
+
+11
+
+Acknowledgments
+This work was supported by the W. M. Keck Foundation and by the Oﬃce of
+Naval Research (Physics).
+
+References
+
+Anderson, J. L., and S. L. Anderson, 1999: A Monte Carlo implementation of
+the nonlinear ﬁltering problem to produce ensemble assimilations and forecasts.
+Mon. Wea. Rev., 127, 2741-2758.
+
+Bergthorsson, P., B. Doos, 1955: Numerical weather map analysis. Tellus, 7,
+329-340.
+
+Bishop, C. H., B. J. Etherton, and S. Majumdar, 2001: Adaptive sampling
+with the Ensemble Transform Kalman Filter. Part I: Theoretical aspects. Mon.
+Wea. Rev. 129, 420-436.
+
+Buehner, M., 2001: Improving the 3D-Var forecast error statistics: Ensemble
+statistics from the EFS and elements of a simpliﬁed Kalman Filter based on a
+variational approach. (manuscript)
+
+Cressman, G., 1959: An operational objective analysis system. Mon. Wea.
+Rev., 88, 327-342.
+
+Daley, R., 1991: Atmospheric data analysis. Cambridge University Press, New
+York.
+
+Dee, D., S. Cohn, A. Dalcher, and M. Ghil, 1985: An eﬃcient algorithm for
+estimating noise covariances in distributed systems. IEEE Trans. Automatic
+Control, 30, 1057-1065.
+
+Errico, R. M., T. Vukicevic, and K. Raeder, 1993: Examination of the accuracy
+of a tangent-linear-model. Tellus, 45A, 462-477.
+
+Evensen, G., and P. J. van Leeuwen, 1996: Assimilation of Geosat altimeter
+data for the Agulhas current using the ensemble Kalman Filter with a quasi-
+geostrophic model. Mon. Wea. Rev., 124, 85-96.
+
+Evensen, G., 1994: Sequential data assimilation with a nonlinear quasi-geostrophic
+model using Monte Carlo methods to forecast error statistics. J. Gophys. Res.,
+99(C5), 10 143-10 162.
+
+Fisher, M., 1998: Development of a simpliﬁed Kalman Filter. ECMWF Re-
+search Department Tech. Memo. 260, 16 pp. [Available from European Centre
+for Medium-Range Weather Forecasts, Shinﬁeld Park, Reading, Berkshire, RG2
+9AX, United Kingdom.]
+
+12
+
+Gilmour, I., L. A. Smith, R. Buizza, 2001: Linear regime duration: Is 24 hours
+a long time in synoptic weather forecasting? J. Atmos. Sci., 58, 3525-3539.
+
+Gandin, L., 1963: Objective analysis of meteorological ﬁelds. Gidromet, Leningrad;
+English translation: Israel Program for Scientiﬁc Translation, Jerusalem, 1965.
+
+Ghil, M., S. Cohn, J. Tavantzis, K. Bube, and E. Isaacson, 1981: Applications
+of estimation theory to numerical weather prediction. In Dynamic meteorology:
+data assimilation methods, L. Bengtsson, M. Ghil, and E. Kallen, eds. Springer-
+Verlag, New York, 139-224.
+
+Hamill, T. M., J. Whitaker, and C. Snyder, 2001: Distance-dependent ﬁltering
+of background error covariance estimates in an Ensemble Kalman Filter. Mon.
+Wea. Rev., 129, 2776-2790.
+
+Hamill, T. M., and C. Snyder, 2000: A hybrid ensemble Kalman ﬁlter-3D vari-
+ational analysis scheme. Mon. Wea. Rev., 128, 2905-2919.
+
+Houtekamer, P. L., and H. L. Mitchell, 2001: A sequential ensemble Kalman
+Filter for atmospheric data assimilation. Mon. Wea. Rev., 129, 796-811.
+
+Houtekamer, P. L., and H. L. Mitchell, 1998: Data assimilation using an ensem-
+ble Kalman Filter technique. Mon. Wea. Rev., 126, 796-811.
+
+Ide, K., P. Courtier, M. Ghil, and A. C. Lorenc, 1997: Uniﬁed notation for data
+assimilation: Operational, sequential, and variational. J. Meteor. Soc. Japan,
+75(1B), 181-189.
+
+Jones, R., 1965: An experiment in nonlinear prediction. J. Appl. Meteor., 4,
+701-705.
+
+Kalman, R., 1960: A new approach to linear ﬁltering and prediction problems.
+Trans. ASME, Ser. D, J. Basic Eng., 82, 35-45.
+
+Kalman, R., R. Bucy, 1961: New results in linear ﬁltering and prediction theory.
+Trans. ASME, Ser. D, J. Basic Eng., 83, 95-108.
+
+Kalnay, E., 2002: Atmospheric modeling, data assimilation, and predictability.
+Cambridge University Press (in print).
+
+Kalnay, E., and Z. Toth, 1994: Removing growing errors in the analysis. Preprints,
+10th AMS Conference on Numerical Weather Prediction, Portland, OR, 212-
+215.
+
+Klinker, E., F. Rabier, G. Kelly, and J.-F. Mahfouf, 2000: The ECMWF opera-
+tional implementation of four-dimensional variational assimilation. III: Exper-
+imental results and diagnostics with operational conﬁguration. Quart. J. Roy.
+Meteor. Soc., 126, 1191.
+
+Lions, J., 1971: Optimal control of systems governed by partial diﬀerential equa-
+
+13
+
+tions. Springer-Verlag, Berlin.
+
+Lorenc, A., 1986: Analysis methods for numerical weather prediction. Quart.
+J. Roy. Meteor. Soc., 112, 1177-1194.
+
+Mahfouf, J.-F., and F. Rabier, 2000: The ECMWF operational implementa-
+tion of four-dimensional variational assimilation. II: Experimental results with
+improved physics. Quart. J. Roy. Meteor. Soc., 126, 1171-1190.
+
+Molteni, F., R. Buizza, T. N. Palmer, and T. Petroliagis, 1996: The ECMWF
+ensemble prediction system: methodology and validation. Quart. J. Roy. Me-
+teor. Soc., 122, 73-119.
+
+Ott, E., 1993: Chaos in dynamical systems. Cambridge University Press, Cam-
+bridge, section 10.1.1., 339-344.
+
+Patil, D. J., B. R. Hunt, E. Kalnay, J. A. Yorke, and E. Ott, 2001b: Identiﬁcation
+of local low dimensionality of atmospheric dynamics. Submitted to Tellus.
+
+Patil, D. J., B. R. Hunt, E. Kalnay, J. A. Yorke, and E. Ott, 2001a: Local low
+dimensionality of atmospheric dynamics. Phys. Rev. Lett., 86, 5878-5881.
+
+Petersen, D., 1973: A comparison of the performance of quasi-optimal and
+conventional objective analysis schemes. J. Appl. Meteor., 12, 1093-1101.
+
+Rabier, F., H. Jarvinen, E. Klinker, J.-F. Mahfouf, and A. Simmons, 2000: The
+ECMWF operational implementation of four-dimensional variational assimila-
+tion. I: Experimental results with simpliﬁed physics. Quart. J. Roy. Meteor.
+Soc., 126, 1143-1170.
+
+Talagrand, O., 1981: On the mathematics of data assimilation. Tellus, 33,
+43-60.
+
+Toth, Z., and E. Kalnay, 1997: Ensemble forecasting at NCEP and the breeding
+method. Mon. Wea. Rev., 127, 1374-1377.
+
+Toth, Z., and E. Kalnay, 1993: Ensemble forecasting at NMC: The generation
+of perturbations. Bull. Amer. Meteorol. Soc., 74, 2317-2330.
+
+Vukicevic, T., 1991: Nonlinear and linear evolution of initial forecast errors.
+Mon. Wea. Rev., 119, 1602-1611.
+
+Wang, X., and C. H. Bishop, 2002: A comparison of breeding and Ensemble
+Transform Kalman Filter ensemble forecast schemes. Preprints, Symposium on
+Observations, Data Assimilation, and Probabilistic Prediction, Orlando, FL.,
+Amer. Meteor. Soc., J28-J31.
+
+14
+
+

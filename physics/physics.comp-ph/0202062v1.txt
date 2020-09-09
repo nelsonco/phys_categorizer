@@ -1,0 +1,1810 @@
+Parallel algorithm with spectral convergence for
+nonlinear integro-diﬀerential equations
+
+Bogdan Mihaila†
+† Physics Division, Argonne National Laboratory, Argonne, IL 60439
+
+E-mail: bogdan@theory.phy.anl.gov
+
+Ruth E. Shaw‡
+‡ Department of Applied Statistics and Computer Science, University of New
+Brunswick, Saint John, NB Canada E2L 4L5
+
+E-mail: reshaw@unbsj.ca
+
+Abstract. We discuss a numerical algorithm for solving nonlinear integro-diﬀerential
+equations, and illustrate our ﬁndings for the particular case of Volterra type equations.
+The algorithm combines a perturbation approach meant to render a linearized version
+of the problem and a spectral method where unknown functions are expanded in terms
+of Chebyshev polynomials (El-gendi’s method). This approach is shown to be suitable
+for the calculation of two-point Green functions required in next to leading order
+studies of time-dependent quantum ﬁeld theory.
+
+PACS numbers: 02.70.-c,02.30.Mv,02.60.Jh,02.70.Bf,02.60.Nm,02.60.Lj
+
+Submitted to: J. Phys. A: Math. Gen.
+
+2
+0
+0
+2
+ 
+b
+e
+F
+ 
+6
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+2
+6
+0
+2
+0
+2
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Parallel algorithm with spectral convergence
+
+2
+
+1. Introduction
+
+Astrophysical applications related to the physics of the early universe, as well as
+challenges posed by the physics programs at new heavy ion accelerators, have triggered a
+renewed interest in the understanding of real time processes in the context of quantum
+ﬁeld theory. With the advent of new computer technology and the recent success of
+new computational schemes, non-equilibrium phenomena which have been previously
+studied only in the framework mean-ﬁeld theory [1, 2, 3], are now being revisited, and
+more complex next to leading order approaches [4, 5, 6, 7] are being used in an attempt
+to clarify the role played by the rescattering mechanism, which is responsible for driving
+an out of equilibrium system back to equilibrium. Of particular interest is the study of
+the dynamics of phase transitions and particle production following a relativistic heavy-
+ion collision. One way of approaching this study is based on solving Schwinger Dyson
+equations within the closed time path (CTP) formulation [8]. This formalism has been
+recently shown to provide good approximations of the real time evolution of the system
+both in quantum mechanics and 1+1 dimensional classical ﬁeld theory [9], where direct
+comparisons with exact calculations can be performed.
+
+The key element in carrying out such studies is related to the calculation of
+the two-point Green function, which is solved for self-consistently with the equations
+of motion for the ﬁelds. The two-point Green function gives rise to Volterra-type
+integral or integro-diﬀerential equations.
+In the process of extending our study to
+encompass a higher number of spatial dimensions, i.e. 2+1 and 3+1 ﬁeld theory, we
+are faced with the challenge of coping with constraints dictated both by storage and
+time-related computational limits. Thus our interest in designing algorithms which
+feature spectral convergence in order to achieve convergence with minimum storage
+requirements.
+In addition, we also desire these algorithms to scale when ported to
+massively multiprocessor (MPP) machines, so that solutions can be obtained in a
+reasonable amount of time.
+
+Algorithms for Volterra integral and integro-diﬀerential equations usually start
+out at the lower end of the domain, a, and march out from x = a, building up the
+solution as they go [10]. Such methods are serial by nature, and are, in general, not
+suitable for parallel implementation on a MPP machine. Even so, clever approaches
+to already existing methods can provide algorithms that take advantage of a parallel
+processing computer: Shaw [11] has shown recently that once the starting values of
+the approximation are obtained, one can design a global approach where successive
+approximations of the solution over the entire domain x ∈ [a, b] can be evaluated
+simultaneously.
+
+In a recent paper [12] one of us has discussed a spectral method [13] of solving
+some types of equations of interest for the study of time-dependent nonequilibrium
+problems in quantum ﬁeld theory. The gist of the method consists in expanding out the
+unknown function in terms of Chebyshev polynomials on a suitable grid, thus reducing
+the problem to ﬁnding the numerical solution of a system of linear equations. The main
+
+Parallel algorithm with spectral convergence
+
+3
+
+advantage of this method over standard ﬁnite-diﬀerence type methods resides in the
+spectral character of its convergence. This is related in part to the fact that Chebyshev
+type methods use a non-uniform grid, while ﬁnite-diﬀerence methods require a uniform
+grid. Usually there is a trade-oﬀ between computational time and storage requirements,
+and a balanced solution must be reached on a case-by-case basis. Spectral methods
+are more expensive per point as the matrices may be considerably denser than in the
+ﬁnite-diﬀerence case, but we require considerably fewer grid points in order to achieve
+the same degree of accuracy. By expanding the unknown function on a compact support
+in Chebyshev polynomials and using a partition of the domain based either on the set
+of (N+1) extrema or the set of N zeros of TN (x) – the Chebyshev polynomial of ﬁrst
+kind of degree N – we in fact replace a continuous problem by a discrete one. For non-
+singular functions the discrete orthogonality and completeness relations for Chebyshev
+polynomials at the above grid points assure a defacto exact expansion for an arbitrary
+ﬁnite value N.
+In practice however, one has to compute derivatives and integrals of
+the unknown function at the collocation points, and the Chebyshev expansion provides
+only an approximation for these subsequent computations. These errors, together with
+the ﬁnite accuracy of numerical methods needed in conjunction with the Chebyshev
+expansion, conspire in order to deteriorate the accuracy of the solution at very small
+values of N.
+
+The paper is organized as follows: In Section 2, for comparison purposes, we start by
+reviewing a ﬁnite-diﬀerence approach for the numerical solution of Volterra type integro-
+diﬀerential equations. We review the general framework of the Chebyshev-expansion
+method in Section 3, and illustrate our approach for the case of Volterra integro-
+diﬀerential equations. In Section 4 we present a complete assessment of the convergence
+and computational cost of the proposed method for the case of a test problem, and
+compare with results obtained via the ﬁnite-diﬀerence method. In Section 5 we discuss
+the relevant aspects of a large-scale calculation arising in the study of time-dependent
+quantum ﬁeld theory, for which our numerical strategy is particularly suitable. We
+present our conclusions in Section 6.
+
+2. Stable multi-step method for Volterra type equations
+
+The type of problems arising in the study of time-dependent nonequilibrium quantum
+ﬁeld theory via a Schwinger-Dyson equation approach, can be formally reduced to the
+general case of a nonlinear Volterra integro-diﬀerential equation. Direct methods for
+solving nonlinear Volterra integral and integro-diﬀerential equations are inherently serial
+and therefore have not received much attention for use on a parallel computer. It is worth
+mentioning here the work of Crisci et al [14], who concentrated on the stability aspects of
+parallel iteration of Volterra-Runge-Kutta (VRK) methods for solving Volterra integral
+equations on parallel computers. VRK methods are step-by-step methods and can take
+advantage of parallel architecture. Sommeijer et al [15] covered the stability of parallel
+block methods for ordinary diﬀerential equations (ODE) and included equations of the
+
+Parallel algorithm with spectral convergence
+
+integro-diﬀerential type in their discussion.
+
+We summarize here a recent parallel algorithm [11], which concentrates on
+modifying the algorithmic side of the numerical solution process for use on a parallel
+processor while consciously utilizing methods that are known to be stable. The
+algorithm is in eﬀect an example of a higher-order ﬁnite-diﬀerence approach, and we
+use this approach to compare with the spectral method presented later in this paper.
+
+For illustration, let us consider a ﬁrst-order nonlinear Volterra integro-diﬀerential
+
+equation of the form
+
+y′(x) = F [x, y, Z[x; y]] ,
+
+x ∈ [a, b] ,
+
+with
+
+Z[x; y] =
+
+K[x, t; y(t)]dt ,
+
+x
+
+a
+Z
+
+and subject to the initial condition
+
+y(a) = y0 .
+
+Let IN be a partition of I=[a,b], where IN = {xN = a + nh, n = 0(1) N, Nh = (b − a)}.
+The problem is to ﬁnd approximations yn to the solution y(xn) of Eqs. (1–3) for each
+xn ∈ IN . A k-step method for an integro-diﬀerential equation of the form (1) is given
+by
+
+yn+1 = yn + h
+
+wjF (xn−j, yn−j, zn−j) , n = k(1) N ,
+
+k
+
+j=0
+X
+
+n−j
+
+i=0
+X
+
+h
+24
+
+h
+24
+
+where
+
+zn−j = h
+
+cn−j,iK(xn−j, xi, yi) ,
+
+j = 0(1) k ,
+
+y0 = y(a) .
+
+The weights wi depend on the k-step method selected and the weights ci,j are those of a
+standard quadrature formula for integrating a function whose value is known at equally
+spaced steps, such as a Newton-Cotes or Newton-Gregory quadrature rule. For our
+multi-step (k = 4) method [10] we choose the fourth order Adams-Bashforth predictor
+
+y0
+k+1 = yk +
+
+55 F (xk, yk, zk) − 59 F (xk−1, yk−1, zk−1)
+h
+
++ 37 F (xk−2, yk−2, zk−2) − 9 F (xk−3, yk−3, zk−3)
+
+,
+
+and the Adams-Moulton corrector
+
+yk+1 = yk +
+
+k+1, zk+1) + 19 F (xk, yk, zk)
+
+9 F (xk+1, y0
+h
+
+− 5 F (xk−1, yk−1, zk−1) + F (xk−2, yk−2, zk−2)
+
+,
+
+i
+
+i
+
+while the integral term (2) is calculated based on the Newton-Gregory quadrature
+formula. We use a fourth order Runge-Kutta method in order to start out the
+calculation.
+
+In order to make the algorithm suitable for parallel processing, it is useful to recall
+that a standard quadrature method based on an uniform grid for the integral term zi
+
+4
+
+(1)
+
+(2)
+
+(3)
+
+(4)
+
+(5)
+
+(6)
+
+(7)
+
+Parallel algorithm with spectral convergence
+
+5
+
+requires knowledge of the integrand function at the abscissas in the interval [x0, xi].
+This is obviously a serial process and not a good candidate for parallelization. It can
+be observed however, that once the starting values are obtained, all approximations zi
+with i = 0(1) k − 1 can simultaneously be evaluated up to and including xk−1. After
+that, once a value of yj corresponding to a new step xj is established via the predictor-
+corrector method, all values zi with i = j(1) N can also be evaluated simultaneously.
+This observation makes the following algorithm possible:
+
+(i) Find the starting values (yi, zi) with i = 0(1) k − 1
+
+add contributions to zi corresponding to (xj, yj), where j = 0(1) k − 1
+
+(ii) do i = k, N
+
+(iii) do i = k, N
+
+(a) predict yi
+(b) estimate zi from (xi, yi)
+(c) correct yi
+(d) do j = i, N
+
+update zj by adding the contribution corresponding to (xi, yi)
+
+The above numerical algorithm is implemented using the OpenMP style directives
+for the Portland Group’s pgf77 FORTRAN compiler, and reportedly shows good
+scalability on a shared-memory multiprocessor. The speedup of the ﬁnite diﬀerence
+method is best for a large number of grid points which, correspondingly, gives a better
+solution approximation. For example, with N=5120 and 4 processors the speedup is
+3.86,a good measure of processor utilization.
+
+While the preceding algorithm performs well on a shared memory platform, it
+does not port easily to an MPP machine. Before we comment on the eﬃciency of
+the algorithm, let us make two general comments: Firstly, we denote by Tcalc and
+Tcomm the time required to perform a ﬂoating-point operation and the time required
+to send a ﬂoating-point number, respectively. Secondly, we will ignore for simplicity the
+eﬀect of message sizes on communication costs, and assume throughout that the ratio
+Tcomm/Tcalc is independent of N.
+
+Returning now, to our proposed algorithm, we remark that the communication
+cost for the corresponding implementation involves only the integral terms. Even so,
+using the message-passing interface (MPI) protocol the communication cost is 4 log N
+for the starting values and up to N 2 for the remainder of the algorithm which gives
+a total of (N 2 + 4 log N)Tcomm. The total number of ﬂops depends on the speciﬁc
+application but a reasonable measure is the number of function evaluations which is
+given by (N 2 + 4N)Tcalc. The ratio of communication to computation
+
+N 2 + 4 log N
+N 2 + 4N
+
+Tcomm
+Tcalc
+
+approaches a constant value as N gets larger. The communication overhead problem
+can be relaxed by employing a spectral method discussed in the following section, the
+
+Parallel algorithm with spectral convergence
+
+improvement being especially signiﬁcant for a multidimensional problem of the type
+required by our nonequilibrium quantum ﬁeld theory calculations [9].
+
+3. Spectral method with Chebyshev polynomials
+
+Consider the N + 1 extrema of the Chebyshev polynomial of the ﬁrst kind of degree N,
+TN (x). This set deﬁnes a non-uniform grid in the interval [−1, 1], as
+
+˜xk = cos
+
+,
+
+k = 0(1) N .
+
+πk
+n !
+
+ 
+
+On this grid, the Chebyshev polynomials of degree i < n obey discrete orthogonality
+relations
+
+′′ Ti(˜xk)Tj(˜xk) = βi δi j ,
+
+N
+
+Xk=0
+
+where the constants βi are
+N
+2
+N ,
+
+βi = 
+
+
+,
+
+i 6= 0, N ,
+
+i = 0, N .
+
+Here, the summation symbol with double primes denotes a sum with both the ﬁrst
+and last terms halved. We approximate an arbitrary continuous function of bounded
+variation f (x) in the interval [−1, 1], as
+
+
+
+Eq. (10) is exact at x equal to ˜xk given by Eq. (8). Based on Eq. (10), we can also
+approximate derivatives and integrals as
+
+with
+
+and
+
+f (x) ≈
+
+′′ bj Tj(x) ,
+
+bj =
+
+2
+N
+
+′′ f (˜xk)Tj(˜xk) ,
+
+j = 0(1) N .
+
+N
+
+Xj=0
+
+N
+
+Xk=0
+
+N
+
+Xk=0
+
+f ′(x) ≈
+
+′′ f (˜xk)
+
+′′ Tj(˜xk) T ′
+
+j(x) .
+
+2
+N
+
+N
+
+Xj=0
+
+x
+
+−1
+
+Z
+
+f (t) dt ≈
+
+′′ f (˜xk)
+
+′′ Tj(˜xk)
+
+Tj(t) dt .
+
+N
+
+Xk=0
+
+2
+N
+
+N
+
+j=0
+X
+
+x
+
+−1
+
+Z
+
+In matrix format, we have
+
+x
+
+−1
+(cid:20)Z
+[f ′(x)]
+
+f (t) dt
+(cid:21)
+
+≈ ˜S [f ] ,
+
+≈ ˜D [f ] ,
+
+The elements of the column matrix [f ] are given by f (˜xk), k = 0(1) N. The right-
+x
+−1 f (t) dt and the
+hand side of Eqs. (14) and (15) give the values of the integral
+R
+
+6
+
+(8)
+
+(9)
+
+(10)
+
+(11)
+
+(12)
+
+(13)
+
+(14)
+
+(15)
+
+Parallel algorithm with spectral convergence
+
+7
+
+derivative f ′(x) at the corresponding grid points, respectively. The actual values of the
+elements of the matrices ˜S and ˜D can be derived using Eqs. (12, 13).
+
+In order to illustrate the Chebyshev algorithm, we consider again the case of a
+
+ﬁrst-order nonlinear Volterra integro-diﬀerential equation of the form
+
+y′(x) = F [x, y, Z[x; y]] ,
+x
+
+Z[x; y] =
+
+K[x, t; y(t)]dt ,
+
+x ∈ [a, b] ,
+
+a
+Z
+with the initial condition
+
+y(a) = y0 .
+
+Here we make no explicit restrictions on the actual form of the function F [x, y, Z[x; y]],
+so both linear and nonlinear equations are included. We determine the unknown function
+y(x) using a perturbation approach: We start with an initial guess of the solution y0(x)
+that satisﬁes the initial condition y0(a) = y0, and write
+
+y(x) = y0(x) + ǫ(x) ,
+
+with ǫ(x) being a variation obeying the initial condition
+
+ǫ(a) = 0 .
+
+(16)
+
+(17)
+
+(18)
+
+Hence, the original problem reduces to ﬁnding the perturbation ǫ(x), and improving the
+initial guess in a iterative fashion.
+
+We use the Taylor expansion of F [x, y, Z[x; y]] about y(x) = y0(x) and keep only
+
+the linear terms in ǫ(x) to obtain an equation for the variation ǫ(x)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+ǫ′(x) −
+
+∂F [x, y, Z[x; y]]
+∂y(x)
+
+ǫ(x)
+
+y(x)=y0(x)
+
+−
+
+∂F [x, y, Z[x; y]]
+∂Z[x; y]
+
+x
+
+a
+
+∂K[x, t; y(t)]
+∂y(x)
+
+ǫ(t)dt
+
+y(x)=y0(x)
+
+= −y′
+
+y(x)=y0(x) Z
+0(x) + F [x, y0(x), Z[x; y0(x)]] .
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+Equation (17) is of the general form (18)
+
+ǫ′(x) = q[x, ǫ(x)] + r(x) ,
+
+where
+
+and
+
+q[x, ǫ(x)] =
+
+∂F [x, y, Z[x; y]]
+∂y(x)
+
+ǫ(x)
+
+y(x)=y0(x)
+
++
+
+∂F [x, y, Z[x; y]]
+∂Z[x; y]
+
+x
+
+∂K[x, t; y(t)]
+∂y(x)
+
+a
+y(x)=y0(x) Z
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+0(x) − F [x, y0(x), Z[x; y]] ,
+
+r(x) = − y′
+
+ǫ(t)dt ,
+
+(cid:12)
+y(x)=y0(x)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+together with the initial condition given by (16). We replace Eqs. (18) and (16) by an
+integral equation, obtained by integrating Eq. (18) and using the initial condition (16)
+to choose the lower bound of the integral. We obtain
+
+ǫ(x) =
+
+q[t, ǫ(t)] dt +
+
+r(t)dt ,
+
+(19)
+
+x
+
+a
+Z
+
+x
+
+a
+Z
+
+Parallel algorithm with spectral convergence
+
+8
+
+which is in fact a linear Volterra integral equation of the second kind. Using
+the techniques developed in the previous section to calculate integrals, the integral
+equation (19) can be transformed into a linear system of equations. A practical
+implementation of this algorithm is illustrated via a test problem in the following section.
+
+4. Test problem
+
+Following Shaw [11], we consider the test problem
+x
+
+y(x) = xe1−y(x) −
+
+y(0) = y0 = 1 ,
+
+1
+
+(1 + x)2 − x −
+x ∈ [0, 1] ,
+
+0
+Z
+
+x
+
+(1 + t)2 e1−y(t)dt ,
+
+which has the exact solution
+
+y(x) =
+
+1
+1 + x
+
+.
+
+We shall use the initial guess y0(x) = y0 cos(x), so that y0(0) = y0. The equation for
+the variation ǫ(x) is
+
+ǫ(x) −
+
+te1−y0(t)ǫ(t)dt +
+
+x
+
+0
+Z
+
+x
+
+ds
+
+s
+
+se1−y0(t)
+(1 + t)2 ǫ(t)dt =
+
+0
+
+Z
+te1−y0(t) −
+
+0
+Z
+1
+(1 + t)2 − t
+
+#
+
+x
+
+0 "
+
+Z
+
+dt −
+
+x
+
+ds
+
+0
+Z
+
+0
+Z
+
+s
+
+se1−y0(t)
+(1 + t)2 dt .
+
+− y0(x) + y0 +
+
+In matrix format and using the Chebyshev expansion presented above, the variation
+ǫ(x) will be obtained as the solution of linear system of equations
+
+A [ǫ] = C ,
+
+with matrices A and C given as
+
+(20)
+
+(21)
+
+(22)
+
+(23)
+
+(24)
+
+Ai j = δi j − ˜Si j
+
+te1−y0(t)
+h
+
+j
+i
+e1−y0(t)
+(1 + t)2 #j
+
+"
+
++ ˜Si k ˜xk ˜Sk j
+
+Ci = − [y0(t)]i + y0 + ˜Si k
+
+− ˜Si k ˜xk ˜Sk ℓ
+
+e1−y0(t)
+(1 + t)2 #ℓ
+
+"
+
+i, j = 0(1) N ,
+
+te1−y0(t) −
+"
+
+1
+(1 + t)2 − t
+
+#k
+
+,
+
+.
+
+From a computational point of view the computer time is spent initializing the
+matrix elements Aij and Cj on one hand, and ﬁnding the solution of (24) on the other.
+On the ﬁrst matter, the calculation decouples nicely, and once we have the vector [y0],
+we can calculate {Ci, Aij, j = 0(1) N} in parallel for i = 0(1) N. The algorithm is as
+follows:
+
+(i) calculate [y0] = [y0] + [ǫ] ;
+(ii) broadcast [y0] ;
+
+Parallel algorithm with spectral convergence
+
+9
+
+(iii) do i = 0, N :
+
+(a) master to slave: send i ;
+(b) slave: compute {Ci, Aij, j = 0(1) N} ;
+(c) slave to master: return {Ci, Aij, j = 0(1) N}.
+
+Regarding the second step, i.e. solving the linear system of equations, the best
+choice is to use the machine speciﬁc subroutines, which generally outperform hand-
+coded solutions. When such subroutines are not available, as in the case of a Linux
+based PC cluster for instance, one can use one of the MPI implementations available
+on the market. We shall see that the eﬃciency of the equation solver is critical to
+the success of the parallel implementation of the Chebyshev-expansion approach.
+In
+order to illustrate this aspect we perform two calculations, ﬁrst using a LU factorization
+algorithm, and secondly using an iterative biconjugate gradient algorithm. These are
+standard algorithms [10] for solving systems of linear equations, but their impact on the
+general eﬃciency of the approach is quite diﬀerent.
+
+4.1. Serial case
+
+Figure 1 depicts the average CPU time required to complete the calculation for the
+various methods. Figure 2 illustrates the convergence of the two numerical methods.
+The spectral character of the method based on Chebyshev polynomials allows for an
+excellent representation of the solution for N > 12. We base our ﬁndings on a σ < 10−10
+criteria, where σ denotes the sum of all absolute departures of the calculated values from
+the exact ones, at the grid points.
+
+The number of iterations required to achieve the desired accuracy in the Chebyshev
+case is depicted in Fig. 3. The number of iterations becomes ﬂat for N > 12, and
+stays constant (17 iterations) even for very large values of N. The higher number of
+iterations corresponding to the lower values of N, represents an indication of a insuﬃcient
+number of Chebyshev grid points: the exact solution cannot be accurately represented
+as polynomial of degree N for x ∈ [0, 1]. It is interesting to note that for N = 12 − 16,
+a reasonable lower domain for the representation of the solution using Chebyshev
+polynomials, the reported CPU time is so small that for our test problem there is
+no real justiﬁcation for porting the algorithm to a MPP machine. This situation will
+change for multi-dimensional problems such as those encountered in our nonequilibrium
+quantum ﬁeld theory studies.
+
+4.2. Parallel case
+
+The LU factorization algorithm is an algorithm of order N 3 and consequently, most of the
+CPU time is spent solving the linear system of equations (see Fig. 4). As a consequence,
+a parallel implementation of the LU algorithm is very diﬃcult. Figure 5 shows how the
+average CPU time changes with the available number of processors. Here we use a very
+simple MPI implementation of the LU algorithm as presented in reference [16]. Even
+
+Parallel algorithm with spectral convergence
+
+10
+
+though we could certainly achieve better performance by employing a sophisticated LU
+equation solver, the results are typical. Since the actual size of the matrices involved
+is small, the communication overhead is overwhelming and the execution time does not
+scale with the number of processors.
+
+Fortunately, even for dense matrices and small values of the number of grid
+points N, one can achieve a good parallel eﬃciency. By employing an iterative method
+such as the iterative biconjugate gradient method, one can render the time required
+to solve the system of linear equations negligible compared with the time required to
+initialize the relevant matrices, which in turn is only slightly more expensive than the
+initialization process of the LU factorization algorithm. The initialization process can be
+parallelized using the algorithm presented above and the results are depicted in Fig. 6.
+It appears that by using the biconjugate gradient method the eﬃciency of the
+parallel code has improved considerably. However, the average CPU time saturates to
+give an overall speedup of 3.5 . This can be understood by analyzing the computation
+and communication requirements for our particular problem. The calculation cost
+to initialize the matrices A and C is roughly given by the number of ﬂoating-point
+multiplications and additions (7N 2 + 3N)Tcalc, while the communication cost is given
+by (N 2 + 2N)Tcomm. Therefore, the ratio of communication to computation is
+
+N 2 + 2N
+7N 2 + 3N
+
+Tcomm
+Tcalc
+
+.
+
+As in the ﬁnite-diﬀerence case, this ratio approaches a constant value as N gets larger
+and it becomes apparent that the communication overhead is still a problem.
+
+However, multi-dimensional applications such as those presented in [9] require
+complicated matrix element calculation. In such cases, the process of initializing the
+matrices A and C is quite involved, and the ratio of the communication time relative
+to the computation time becomes favorable. In addition, the matrix A becomes sparse
+and the size of the linear system of equations is substantially larger, thus one can also
+take advantage of existing parallel implementation of the iterative biconjugate gradient
+algorithm [17]. Such problems beneﬁt heavily from an adequate parallelization of the
+code. We will discuss such an example in the following section.
+
+5. Volterra-like integral equations for a two-point Green function
+
+Schwinger, Bakshi, Mahanthappa, and Keldysh [8] have established how to formulate an
+initial value problem in quantum ﬁeld theory. The formalism is based on a generating
+functional, and the evolution of the density matrix requires both a forward evolution
+from zero to t and a backward one from t to zero. This involves [18] both positive and
+negative time ordered operators in the evolution of the observable operators and the
+introduction of two currents into the path integral for the generating functional. Time
+integrals are then replaced by integrals along the closed time path (CTP) in the complex
+
+Parallel algorithm with spectral convergence
+
+time plane shown in Fig. 7. We have
+
+F (t) dt =
+
+F+(t) dt −
+
+F−(t) dt .
+
+∞
+
+0:C+
+
+Z
+
+∞
+
+0:C−
+
+Z
+
+C
+Z
+
+Using the CTP contour, the full closed time path Green function for the two point
+functions is:
+
+G(t, t′) = G>(t, t′) ΘC(t, t′) + G<(t, t′) ΘC(t′, t) ,
+
+in terms of the Wightman functions, G>,<(t, t′), where the CTP step function ΘC(t, t′)
+is deﬁned by:
+
+Θ(t, t′)
+0
+1
+Θ(t′, t)
+
+for t on C+ and t′ on C+ ,
+for t on C+ and t′ on C− ,
+for t on C− and t′ on C+ ,
+for t on C− and t′ on C− .
+
+ΘC(t, t′) = 
+
+
+
+For complete details of this formalism and various applications, we refer the reader to
+the original literature [8, 18], and we conﬁne ourselves to discussing how our Chebyshev-
+expansion approach is applied to the computation of the two-point Green function.
+
+For simplicity we consider now the quantum mechanical limit of quantum ﬁeld
+In this limit, we are generally faced with the problem of
+
+theory (0+1 dimensions).
+numerically ﬁnding the solution of equation
+
+G(t, t′) = G(t, t′) −
+
+dt′′ Q(t, t′′) G(t′′, t′) ,
+
+C
+Z
+
+Here, the Green functions, G(t, t′) and G(t, t′), are symmetric in the sense that
+G>(t, t′) = G<(t′, t), and obey the additional condition
+<,>(t, t′) = G<,>(t′, t) .
+
+G>,<(t, t′) = − G∗
+
+(28)
+
+The function Q(t, t′) obeys less stringent symmetries
+
+Q>,<(t, t′) = − Q∗
+
+<,>(t, t′) 6= Q<,>(t′, t) ,
+
+which is always the case when Q(t, t′) has the form
+
+Q(t, t′) =
+
+dt′′ A(t, t′′) B(t′′, t′) ,
+
+C
+Z
+
+where A(t, t′) and B(t, t′) satisfy (28).
+We can further write Eq. (28) as
+
+Re{G>(t, t′)} = − Re{G<(t, t′)} ,
+Im{G>(t, t′)} = Im{G<(t, t′)} ,
+
+or
+
+G>(t, t′) − G∗
+G>(t, t′) + G∗
+
+<(t, t′) = 2 Re{G>(t, t′)} ,
+<(t, t′) = 2 Im{G>(t, t′)} .
+
+11
+
+(25)
+
+(26)
+
+(27)
+
+(29)
+
+(30)
+
+(31)
+
+(32)
+
+(33)
+
+(34)
+
+Parallel algorithm with spectral convergence
+
+12
+
+Hence, a Green function G(t, t′) is fully determined by the component G>(t, t′) =
+Re{G>(t, t′)} + i Im{G>(t, t′)}, with t′ ≤ t. Thus, in order to obtain the solution
+of Eq. (27), we only need to solve
+
+G>(t, t′) = G>(t, t′) − 2
+
+dt′′ Re{Q>(t, t′′)} G>(t′′, t′)
+
++ 2
+
+dt′′ Q>(t, t′′) Re{G>(t′′, t′)} .
+
+(35)
+
+We separate the real and the imaginary part of (35) and obtain the system of integral
+equations
+
+Re{G>(t, t′)} = Re{G>(t, t′)} − 2
+
+dt′′ Re{Q>(t, t′′)}Re{G>(t′′, t′)}
+
+Im{G>(t, t′)} = Im{G>(t, t′)} − 2
+
+dt′′ Re{Q>(t, t′′)}Im{G>(t′′, t′)}
+
+t
+
+0
+Z
+
+t
+
+0
+Z
+
+dt′′ Re{Q>(t, t′′)}Re{G>(t′′, t′)}
+
+dt′′ Im{Q>(t, t′′)}Re{G>(t′′, t′)} .
+
+t
+
+0
+Z
+
+t′
+
+0
+Z
+
+t′
+
+t′
+
++ 2
+
+0
+Z
+
++ 2
+
+0
+Z
+
+The above system of equations must be solved for t′ ≤ t. The two equations are
+independent, which allows us to solve ﬁrst for the real part of G>(t, t′), and then use
+this result to derive the imaginary part of G>(t, t′).
+
+Despite their somewhat unusual form, the above equations are two-dimensional
+Volterra-like integral equations and our general discussion regarding the Chebyshev
+spectral method applies. We will perform a multi-step implementation of the formalism.
+Let
+
+ti = ti0(N −1)+i1 ,
+
+1 ≤ i1 ≤ N ,
+
+be the grid location corresponding to the collocation point i1 of the interval labelled i0+1.
+Then, the discrete correspondent of Eq. (35) is
+
+G>(ti, tj) = G>(ti, tj)
+N
+
+i0−1
+
+(36)
+
+(37)
+
+(38)
+
+[2 ˜SN k1]Re{Q>(ti, tk[=k0(N −1)+k1])}G>(tk, tj)
+
+Xk0=0
+N
+
+Xk1=1
+[2 ˜Si1k1]Re{Q>(ti, tk[=i0(N −1)+k1])} G>(tk, tj)
+
+[2 ˜SN k1]Q>(ti, tk[=k0(N −1)+k1])Re{G>(tk, tj)}
+
+Xk0=0
+N
+
+Xk1=1
+[2 ˜Sj1k1]Q>(ti, tk[=j0(N −1)+k1])Re{G>(tk, tj)} ,
+
+−
+
+−
+
++
+
++
+
+Xk1=1
+j0−1
+
+N
+
+Xk1=1
+
+with tj ≤ ti.
+
+We will refer now to Figs. 8 and 9. Equation (39) involves values of G>(tk, tj), for
+>(tj, tk), which relates to the values
+
+which tj > tk. In such cases, we use the symmetry G∗
+
+Parallel algorithm with spectral convergence
+
+13
+
+the two-point function located in the domain of interest. For the time interval (i0 + 1)
+the size of the linear system of equations we need to solve is
+
+(i0 + 1)(N − 1)[(i0 + 1)(N − 1) + 1] −
+
+i0(N − 1)[i0(N − 1) + 1]
+
+1
+2
+= i0(N − 1)2 +
+
+1
+2
+
+N(N − 1) ,
+
+1
+2
+
+or of order (i0 + 1
+
+2)(N − 1)2. In practice, the value of N is taken between 16 and 32.
+
+Tables 1 and 2 summarize the number of ﬂoating-point operations performed
+in order to compute the non-vanishing matrix elements corresponding to a given i
+and j, (j < i).
+
+We can now calculate the ratio of communication to computation time, by noticing
+that the numbers in the tables above get multiplied by N, corresponding to the number
+of collocation points in each time step and summing over the number of steps, i.e. we
+evaluate
+
+i0
+
+N
+
+if j > i0(N − 1)
+i
+h
+
++ N
+
+if j ≤ i0(N − 1)
+i
+
+.
+
+j0=1 h
+X
+In Table 3 we summarize all relevant estimates regarding the computation cost for
+In order to estimate the total communication and computation
+a ﬁxed value of i.
+cost, respectively, these numbers must be multiplied by an additional factor of N,
+corresponding to the number of possible values of i in a time step. This factor is
+not relevant for estimating the communication overhead, but it must be remembered
+when one infers the sparsity of the corresponding system of equations.
+
+To conclude we observe that the communication to computation ratio approaches
+
+1
+2(i0 + 1)
+
+Tcomm
+Tcalc
+
+for large values of i0. Therefore for this problem the communication overhead is reduced
+substantially in the later stages of the calculation.
+In practice, this ratio is actually
+much better, as we compute the functions G(t, t′) and Q(t, t′) on the ﬂy, and this adds
+considerably to the computational eﬀort. Finally the sparsity of the resulting systems
+of equations goes to 2/(i0N) for large values of i0 and N, which supports our choice for
+an iterative equation solver.
+
+6. Conclusions
+
+We have presented a numerical method suitable for solving non-linear integral and
+integro-diﬀerential equations on a massively multiprocessor machine. Our approach
+is essentially a standard perturbative approach, where one calculates corrections to
+an initial guess of the solution. The initial guess is designed to satisfy the boundary
+conditions, and corrections are expanded out in a complete basis of N Chebyshev
+polynomials on the grid of (N+1) extrema of TN (x), the Chebyshev polynomial of
+ﬁrst kind of degree N. The spectral character of the convergence of the Chebyshev-
+expansion approach is the key element in keeping low the number of grid points. From
+
+Parallel algorithm with spectral convergence
+
+14
+
+a computational point of view, each iteration involves two stages, namely initializing
+the relevant matrices and solving the linear system of equations. Both stages can be
+rendered parallel in a suitable manner, and the eﬃciency of the code increases when
+applied to complicated multi-step, multi-dimensional problems.
+
+The algorithm discussed in this paper represents the backbone of current investi-
+gations of the equilibrium and nonequilibrium properties of various phenomenological
+Lagrangeians. In particular we are interested in studying the properties of the chiral
+phase transition at ﬁnite density for a 2+1 dimensional four-fermion interaction as well
+as the dynamics od 2-dimensional QCD, with the ultimate goal of indirectly obtain-
+ing insights regarding the time evolution of a quark-gluon plasma produced following a
+relativistic heavy-ion collision.
+
+Acknowledgments
+
+The work of B.M. was supported in part by the U.S. Department of Energy, Nuclear
+Physics Division, under contract No. W-31-109-ENG-38. The work of R.S. was
+supported in part by the Natural Sciences and Engineering Research Council of Canada
+under grant No. OGP0170170. Parallel calculations are made possible by grants of
+time on the parallel computers of the Mathematics and Computer Science Division,
+Argonne National Laboratory. B.M. would like to acknowledge useful discussions with
+John Dawson and Fred Cooper.
+
+References
+
+[1] Kerman A K and Koonin S E 1976 Ann. Phys. 100 332
+Jackiw R and Kerman A K 1979 Phys. Lett. A 71 158
+Guth A H and Pi S-Y 1985 Phys. Rev. D 32 1899
+Cooper F, Pi S-Y, and Stancioﬀ P 1986 Phys. Rev. D 34 3831
+Pi S-Y and Samiullah M 1987 Phys. Rev. D 36 3128
+[2] Boyanovsky D and de Vega H J 1993 Phys. Rev. D 47 2343
+
+Boyanovsky D, de Vega H J, Holman R, Lee D-S, and Singh A 1995 Phys. Rev. D 51 4419
+Boyanovsky D, de Vega H J, Holman R, and Salgado J 1996 Phys. Rev. D 54 7570
+Boyanovsky D, Cormier D, de Vega H J, Holman R, Singh A, and Srednicki M 1997 Phys. Rev.
+D 56 1939
+Boyanovsky D, D’Attanasio M, de Vega H J, Holman R, and Lee D-S 1995 Phys. Rev. D 52
+6805
+Vautherin D and Matsui T 1997 Phys. Rev. D 55 4492
+Boyanovsky D, de Vega H J, Holman R, and Salgado J 1998 Phys. Rev. D 57 7388
+
+[3] Cooper F and Mottola E 1987 Phys. Rev. D 36 3114
+
+Cooper F, Kluger Y, Mottola E, and Paz J P 1995 Phys. Rev. D 51 2377
+Kluger Y, Cooper F, Mottola E, Paz J P, and Kovner A 1995 Nucl. Phys. A 590 581c
+Lampert M A, Dawson J F, and Cooper F 1996 Phys. Rev. D 54 2213
+Cooper F, Kluger Y, and Mottola E 1996 Phys. Rev. C 54 3298
+
+[4] Wetterich C 1997 Phys. Rev. Lett. 78 3598
+
+Bettencourt L and Wetterich C 1998 Phys. Lett. B 430 140
+Bonini G F and Wetterich C 1999 Phys. Rev. D 60 105026
+
+Parallel algorithm with spectral convergence
+
+15
+
+[5] Aarts G, Bonini G F, and Wetterich C 2001 Phys. Rev. D 63 025012
+[6] Cooper F, Habib S, Kluger Y, Mottola E, Paz J, and Anderson P 1994 Phys. Rev. D 50 2848
+
+Cooper F, Dawson J F, Habib S, Kluger Y, Meredith D, and Shepard H 1995 Physica D 83 74
+
+[7] Berges J and Cox J 2001 Phys. Lett. B 517 369
+
+Berges J 2001 Controlled nonperturative dynamics of quantum ﬁelds out of equilibrium Nucl.
+Phys. A (in press)
+
+[8] Schwinger J 1961 J. Math. Phys. 2 407
+
+Bakshi P M and Mahanthappa K T 1963 J. Math. Phys. 4 1; ibid. 4 12 (1963)
+Keldysh L V 1964 Zh. Eksp. Teo. Fiz. 47 1515 [1965 Sov. Phys. JETP 20 1018]
+Zhou G, Su Z, Hao B and Yu L 1985 Phys. Rep. 118 1
+
+[9] Mihaila B, Dawson J F, and Cooper F 1997 Phys. Rev. D 56 5400
+
+Mihaila B, Athan T, Cooper F, Dawson J F, and Habib S 2000 Phys. Rev. D 62 125015
+Mihaila B, Dawson J F, and Cooper F 2001 Phys. Rev. D 63 096003
+Blagoev K, Dawson J F, Cooper F, and Mihaila B 2001 Phys. Rev. D 64 125003
+
+[10] Press W H, Teukolsky S A, Vetterling W T, and Flannery B P 1992 Numerical Recipes in
+FORTRAN : the art of scientiﬁc computing, (New York: Cambridge University Press)
+[11] Shaw R E 2000 A parallel algorithm for nonlinear Volterra integro-diﬀerential equations,
+
+Proceedings of the 2000 ACM Symposium on Applied Computing, Volume 1, 86
+
+[12] Mihaila B and Mihaila I 2002 Numerical approximations using Chebyshev polynomial expansions:
+
+El-gendi’s method revisited J. Phys. A: Math. Gen. 35 731
+
+[13] El-gendi S E 1969 Comput. J. (UK) 12 282
+[14] Crisci M R, van der Houwen P J, Russo E and Vecchio A 1993 J. of CAM 45 169-180.
+
+Vecchio A 1993 Highly stable parallel Volterra Runge-Kutta methods, Rapp. Tecnico n. 102,
+Istituto per Applicazioni Della Matematica, Consiglio Nazionale Delle Ricerche, via P. Castellino,
+111, 80131 Napoli, Italy
+
+[15] Sommeijer B P, Couzy W and van der Houwen P J 1992 Appl. Numer. Math 9 267
+[16] IBM Redbooks 1999, RS/6000 SP: Practical MPI Programming IBM Corporation, Austin, TX
+[17] da Cunha R D and Hopkins T R 1995 Applied Numerical Mathematics 19 33
+
+da Cunha R D and Hopkins T R 1993 Transputer Communications 1 111
+
+[18] Cooper F, Dawson J F, Habib S, Kluger Y, Meredith D, and Shepard H 1995 Physica D 83 74
+
+Parallel algorithm with spectral convergence
+
+16
+
+integral
+ti
+0 dtk
+tj
+0 dtk
+R
+total
+R
+ti
+0 dtk
+tj
+0 dtk
+R
+total
+R
+
+integral
+ti
+0 dtk
+tj
+0 dtk
+R
+total
+R
+ti
+0 dtk
+tj
+0 dtk
+R
+total
+R
+
+Table 1. Summary regarding the calculation of ReG(ti, tj) at step i0 + 1
+domain
+j ≤ i0(N − 1)
+j ≤ i0(N − 1)
+
+non-zero elements
+N
+0
+N+1
+(i0 + 1)(N − 1) + 1
+(i0 + 1)(N − 1) + 1
+(i0 + 1)(N − 1) + 2
+
+additions
+i0N
+(j0 + 1)N
+(i0 + j0 + 1)N + 1
+i0
+i0
+(i0 + 1)(N + 1)
+
+multiplications
+(2i0 + 1)N
+(2j0 + 1)N
+2(i0 + j0 + 1)N
+(i0 + 1)N
+(i0 + 1)N
+2(i0 + 1)N
+
+j > i0(N − 1)
+j > i0(N − 1)
+
+Table 2. Summary regarding the calculation of ImG(ti, tj) at step i0 + 1
+domain
+j ≤ i0(N − 1)
+j ≤ i0(N − 1)
+
+non-zero elements
+N
+0
+N+1
+(i0 + 1)(N − 1) + 1
+0
+(i0 + 1)(N − 1) + 2
+
+additions
+i0N
+(j0 + 1)N
+(i0 + j0 + 1)N + 1
+i0
+(i0 + 1)N
+(i0 + 1)(N + 1)
+
+multiplications
+(2i0 + 1)N
+(2j0 + 1)N
+2(i0 + j0 + 1)N
+(i0 + 1)N
+(2i0 + 1)N
+(3i0 + 2)N
+
+j > i0(N − 1)
+j > i0(N − 1)
+
+Table 3. Global communication and computation data regarding the calculation of
+G(ti, tj) at step i0 + 1
+ﬂoating-point numbers to be sent
+(3i0 + 1.5)N 2 − (3i0 + 0.5)N
+(3i0 + 1.5)N 2 − (3i0 + 0.5)N
+
+ﬂoating-point operations
+(5.5i0 + 2)(i0 + 1)N 2 + Ni0
+[(5.5i0 + 2)(i0 + 1) + i0]N 2 + Ni0
+
+equation
+ReG(t, t′)
+ImG(t, t′)
+
+Parallel algorithm with spectral convergence
+
+17
+
+2
+
+10
+
+10
+
+1
+
+]
+s
+[
+
+t
+
+-1
+
+10
+
+-2
+
+10
+
+-3
+
+10
+
+10
+
+s
+
+10
+
+1
+
+10
+
+10
+
+10
+
+-2
+
+-4
+
+-6
+
+-8
+
+-10
+
+-12
+
+10
+
+10
+
+-14
+
+10
+
+-16
+
+10
+
+100
+
+1000
+
+10000
+
+N
+
+Figure 1. Average CPU time versus the number of grid points for the Chebyshev
+expansion approach using the either LU decomposition (squares) or the biconjugate
+gradient method (crosses), and ﬁnite-diﬀerence approach (circles).
+
+1
+
+10
+
+1000
+
+10000
+
+100
+
+N
+
+Figure 2. Convergence of the Chebyshev result (ﬁlled) compared with the ﬁnite-
+diﬀerence result (empty), versus the number of grid points.
+
+Parallel algorithm with spectral convergence
+
+18
+
+2
+
+4
+
+6
+
+8
+
+10
+
+12
+
+14
+
+16
+
+N
+
+Figure 3. Number of iterations versus the number of grid points for the Chebyshev
+method.
+
+90
+
+80
+
+70
+
+60
+
+50
+
+40
+
+30
+
+20
+
+10
+
+2
+
+10
+
+10
+
+-1
+
+10
+
+-2
+
+10
+
+]
+s
+[
+
+t
+
+1
+
+50
+
+100
+
+150
+
+200
+
+250
+
+300
+
+350
+
+400
+
+450
+
+500
+
+N
+
+Figure 4. Total CPU time (ﬁlled) and CPU time spent carrying out the LU
+decomposition (empty), versus the number of grid points (1 CPU case).
+
+Parallel algorithm with spectral convergence
+
+19
+
+Figure 5. Scaling of the average CPU time with the number of available processors
+for the Chebyshev expansion approach and the LU factorization algorithm (N=500).
+
+Figure 6. Scaling of the average CPU time with the number of available processors for
+the Chebyshev expansion approach and the biconjugate gradient algorithm (N=500).
+
+Parallel algorithm with spectral convergence
+
+20
+
+t - plane
+
+Figure 7. Complex time contour C for the closed time path integrals.
+
+t’
+t’
+
+2N < j
+
+ib
+
+N < j
+
+2Nb
+
+1b bj N
+
+k = 00
+
+k = 10
+
+k =i =2
+0
+0
+
+i
+i
+
+t
+t
+
+Figure 8. G(tk, tj) contributions to the integral
+
+ti
+0 Q(ti, tk)G(tk, tj)dtk, with tj ≤ ti.
+
+R
+
+Parallel algorithm with spectral convergence
+
+21
+
+t’
+t’
+
+2N < j
+
+ib
+
+N < j
+
+2Nb
+
+1b bj N
+
+k = 00
+
+k = 10
+
+k =i =2
+0
+
+0
+
+i
+
+t
+t
+
+Figure 9. G(tk, tj) contributions to the integral
+
+tj
+0 Q(ti, tk)G(tk, tj)dtk, with tj ≤ ti.
+
+R
+
+

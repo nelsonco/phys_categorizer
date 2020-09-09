@@ -1,0 +1,2266 @@
+Permutation sampling in Path Integral Monte Carlo
+
+Massimo Boninsegni
+
+Department of Physics, University of Alberta
+
+Edmonton, Alberta T6G 2J1, Canada
+
+(Dated: January 11, 2013)
+
+Abstract
+
+A simple algorithm is described to sample permutations of identical particles in Path Integral
+
+Monte Carlo (PIMC) simulations of continuum many-body systems. The sampling strategy illus-
+
+trated here is fairly general, and can be easily incorporated in any PIMC implementation based
+
+on the staging algorithm. Although it is similar in spirit to other prescriptions, it diﬀers from
+
+those in some key aspects. It allows one to sample permutations eﬃciently, even if long paths (e.g.,
+
+hundreds, or thousands of slices) are needed. We illustrate its eﬀectiveness by presenting results
+
+of a PIMC calculation of thermodynamic properties of superﬂuid 4He, in which a very simple
+
+approximation for the high-temperature density matrix was utilized.
+
+PACS numbers: 02.70.Ss, 05.30.-d., 67.40.-w
+
+5
+0
+0
+2
+ 
+n
+u
+J
+ 
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+0
+2
+0
+6
+0
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+1
+
+I.
+
+INTRODUCTION
+
+The Path Integral Monte Carlo method is arguably the most powerful numerical technique
+
+to calculate thermodynamic properties of continuum (i.e., non-lattice) quantum many-body
+
+systems at ﬁnite temperature.1 For Bose systems, it is the only known, generally applicable
+
+theoretical method essentially free from approximations. Numerical estimates yielded by
+
+PIMC are aﬀected by a statistical error, as well as by systematic errors, due to the ﬁnite
+
+size of the simulated system and to imaginary time discretization. In most cases, however,
+
+the computational resources typically available nowadays allow one to render the size of all
+
+of these errors insigniﬁcant in practice.
+
+The most notable application of PIMC to date, is the study of the superﬂuid (SF) tran-
+
+sition in liquid 4He by Ceperley and Pollock,2 whose results have become the standard
+
+reference for all theoretical calculations on SF helium; but numerous applications to other
+
+Bose systems have been reported in the literature, over the past two decades.
+
+No general formulation exists as yet of PIMC (nor of any other Quantum Monte Carlo
+
+method), capable of overcoming the sign problem, that has so far made it impossible to
+
+obtain equally high quality results for Fermi systems. Even for fermions, however, PIMC
+
+proves a valid option, allowing one to obtain approximate estimates, of accuracy at least
+
+comparable to that aﬀorded by other methods.3
+
+Physical eﬀects of interest in quantum many-body systems are almost invariably asso-
+
+ciated with quantum statistics; for example, superﬂuidity in 4He is intimately connected
+
+to long exchange cycles of helium atoms. Because a direct summation of all N! permuta-
+
+tions of N indistinguishable particles is unfeasible, except for very small values of N, within
+
+PIMC quantum statistics is included by performing a statistical sampling of permutations.
+
+Thus, an all-important ingredient of any practical implementation of PIMC is an eﬃcient
+
+procedure to carry out such a sampling.
+
+Since the pioneering study of Ref. 2, there has been relatively little experimentation
+
+with implementations of PIMC diﬀering, in some of the more important aspects, from the
+
+one described in Ref. 1, henceforth referred to as CP. The CP implementation has come
+
+to be regarded as “canonical”, especially when studying quantum many-body systems in
+
+the highly degenerate regime (i.e. at low temperature). It is based on an accurate (“pair-
+
+product”) high-temperature density matrix, allowing one to observe convergence of the
+
+2
+
+physical estimates with a relatively low number of imaginary time “slices” (of the order
+
+of 40 for superﬂuid 4He at a temperature T =1 K). Two slightly diﬀerent procedures have
+
+been proposed and utilized, in the context of CP, to perform the sampling of permutations,
+
+both of which are thoroughly described in Ref. 1. To our knowledge, no systematic, quan-
+
+titative assessment of the relative merits and advantages of these two sampling strategies
+
+has yet been oﬀered; it is also unclear to what extent their eﬀectiveness and applicability
+
+are problem-dependent, and/or hinge on the use of the above-mentioned high-temperature
+
+density matrix.
+
+In this work, we illustrate a new method to sample permutations of indistinguishable
+
+particles in PIMC simulations.
+
+It bears some similarities with one of the two strategies
+
+described in Ref. 1, but diﬀers from these in some important technical aspects. We also
+
+deem it easier to implement, and may be potentially more eﬃcient, even though, naturally,
+
+this speculation will need to be supported by systematic comparisons with the other existing
+
+options.
+
+As an illustrative application of our sampling method, we have carried out a PIMC
+
+simulation of liquid 4He in the SF regime, i.e., we have repeated the original calculation of
+
+Ref. 2. SF helium is the accepted test bench for quantum Monte Carlo calculations, since
+
+it is the most extensively studied quantum ﬂuid, for which eﬀects of quantum statistics
+
+manifest themselves at the macroscopic level. In order to make the test more signiﬁcant,
+
+and help expose any deﬁciency or merit of the permutation sampling procedure, we have
+
+not utilized the pair-product high-temperature density matrix; rather we opted for a much
+
+simpler form, which requires a substantially larger number of imaginary time slices,
+
+in
+
+order to observe convergence of the estimates. Besides providing results for energetic and
+
+structural quantities, which we compare to those of Ref. 2, we have also attempted to
+
+furnish here some quantitative information, which should help assess the eﬃciency of our
+
+method in sampling the space of all possible entangled many-particle paths (i.e., including
+
+permutations). It is our hope that this will provide a baseline for future, more extensive
+
+comparisons of diﬀerent approaches. Somewhat interestingly, our results show that the
+
+PIMC simulation of SF 4He is feasible, albeit at a higher computational cost, even with a
+
+relatively simple PIMC implementation. Doubtless, this is also in part due to advances in
+
+computing hardware, which enable what may have been prohibitive two decades ago, when
+
+the ﬁrst such simulation was carried out.
+
+3
+
+The remainder of this manuscript is organized as follows: in the next section, we provide
+
+a detailed description of our computational methodology.
+
+In the following sections, we
+
+illustrate our results, and outline our conclusions and outlook.
+
+II. METHODOLOGY
+
+The PIMC methodology is fairly mature, and extensively described in Ref. 1, to which
+
+we refer readers interested in a thorough, comprehensive illustration. Our speciﬁc imple-
+
+mentation is largely based on the ideas and methods presented therein. Nevertheless, at the
+
+risk of some redundancy, we provide a somewhat detailed description of our implementation
+
+here. This will hopefully facilitate the task of others who may wish to repeat our study
+
+and/or experiment with our algorithm to sample permutations.
+
+Consider a quantum many-body system of N identical, point-like particles of mass m,
+
+described by the following Hamiltonian:
+
+N
+
+ˆH =
+
+λ
+
+−
+
+Xi=1 ∇
+
+2
+i +
+
+Xi<j
+
+V (
+
+ri −
+
+|
+
+)
+
+rj|
+
+(1)
+
+where λ = ¯h2/2m.
+
+Implicit in the above model is the assumption that the interactions
+
+among particles can be accurately represented by a pairwise, central potential (the V term
+
+in (1)). Although this is obviously an approximation, it is commonly made in theoretical
+
+studies of most quantum ﬂuids. In any case, it is not a requirement for the applicability of
+
+PIMC, nor of our speciﬁc implementation. In the following, it is assumed that particles in
+
+the system obey Bose statistics.4 The system is assumed to be enclosed in a vessel, shaped
+
+as a parallelepiped, with periodic boundary conditions in all directions, and to be held in
+
+thermal equilibrium at a temperature T .
+
+The thermodynamic average of a physical quantity formally represented by an operator
+ˆO (for simplicity assumed diagonal in the coordinate representation) is expressed as follows:
+
+O
+
+=
+
+h
+
+i
+
+1
+Z Z
+
+dR O(R) ρ(R, R, β)
+
+(2)
+
+where β=1/T (we work with units where the Boltzmann constant kB=1), and R
+r1, r2, ...rN }
+{
+particles.
+
+≡
+is a conﬁguration of the system, speciﬁed by the positions of all the N
+
+is the many-body density matrix, and
+
+(2), ρ(R, R′, β)
+
+In Eq.
+
+e−β ˆH
+
+R′
+
+R
+
+,
+
+Z =
+
+dR ρ(R, R, β) is the partition function.
+
+≡ h
+
+|
+
+|
+
+i
+
+R
+
+4
+
+A Monte Carlo evaluation of (2) consists of generating a large set of random many-
+
+particle conﬁgurations
+
+, p = 1, ..., M, statistically sampled from a probability density
+
+Rp}
+
+{
+
+proportional to ρ(R, R, β); the thermal average (2) can thus be estimated as a statistical
+
+average over the set of values
+
+O(Rp)
+
+{
+
+.
+
+}
+
+An explicit expression for the density matrix ρ(R, R, β) is unavailable for any non-trivial
+
+many-body system; however, one can still generate the set
+
+, by sampling discrete many-
+
+Rp}
+
+{
+
+particle paths Xp through conﬁguration space, i.e.,
+
+Xp ≡ {
+
+R0p, R1p, R2p, ... RLp}
+
+Paths are formally deﬁned in the imaginary time interval 0
+
+τ
+
+β, i.e., Rj ≡
+
+≤
+
+≤
+
+R(jδτ ),
+
+with Lδτ = β, and are randomly drawn from a probability distribution ¯ρ(X) given by
+
+¯ρ(X)
+
+¯ρ(R0, R1, R2, ...RL) =
+
+ρ◦(Rj, Rj+1, δτ )
+
+≡
+
+L−1
+
+Yj=0
+
+(3)
+
+(4)
+
+where ρ◦ is an (analytically known) approximation to the true many-body density matrix,
+
+constructed to be asymptotically exact in the “high temperature” δτ
+
+0 limit. It can be
+
+→
+
+shown that in that limit (L
+
+), each conﬁguration Rp visited by paths is statistically
+
+sampled from a distribution proportional to ρ(R, R, β).
+
+→ ∞
+
+The conﬁguration R(β), i.e., that corresponding to the end of the path in imaginary
+
+time, must coincide with R(0), except for a permutation P of the particle labels (1 through
+
+N). The possibility of permutations of particles must be allowed, in order to incorporate in
+
+the calculation the eﬀects of particle indistinguishability and Bose statistics. Consequently,
+
+although many-particle paths are periodic in imaginary time, i.e., the conﬁguration R(jδτ +
+
+qβ) (q being an arbitrary integer) is identical with R(jδτ ) (in that particles occupy identical
+
+positions), individual particle labels can be diﬀerent. Stated diﬀerently, single particle paths
+
+r1(jδτ )...rN (jδτ ) can become “entangled”, as a result of permutations.
+
+Permutations normally become important at suﬃciently low temperature; at high tem-
+
+perature, only the identity permutation contributes signiﬁcantly to thermal averages. At
+
+low temperature, however, permutations underlie phenomena such as superﬂuidity and Bose
+
+Condensation in liquid helium and, presumably, in all other superﬂuids.
+
+In an actual calculation implementing the above computational scheme, one must neces-
+
+sarily work with a ﬁnite value of L; in principle, one ought to carry out the L
+
+limit
+
+→ ∞
+
+5
+
+by extrapolating numerical results obtained with diﬀerent values of L. In practice, this pro-
+
+cedure proves quite cumbersome, especially when one is interested in many thermodynamic
+
+points. Thus, one typically performs all calculations (at a given temperature) with a single
+
+value of L, chosen suﬃciently large so that estimates may be expected to coincide with the
+
+extrapolated values, within some small tolerance. For reasons of eﬃciency, it is desirable
+
+that such “optimal” value of L not be too large (a few hundred slices at the most); thus, it
+
+is advantageous to work with as accurate as possible a “high-temperature density matrix”
+
+ρ◦, which will allow one to achieve convergence of the numerical estimates without resorting
+
+The importance of this issue was demonstrated by Ceperley and Pollock,2 who proposed the
+
+to impractically large values of L.
+
+following form for ρ◦:
+
+ρ◦(R, R′, δτ ) = AF (R, R′, δτ )
+
+exp
+
+u(ri −
+
+(cid:20)−
+
+rj, r′
+
+i −
+
+r′
+j, δτ )
+
+(cid:21)(cid:27)
+
+(cid:26)Yi<j
+
+where AF (R, R′, δτ ) =
+distinguishable, non-interacting particles, with
+
+i=1 ρF (ri, r′
+
+Q
+
+N
+
+i, δτ ), is the exact density matrix of a system of N
+
+ρF (ri, r′
+
+i, δτ ) =
+
+√4πλδτ
+
+(cid:18)
+
+(cid:19)
+
+−3/2
+
+r′
+i)2
+(ri −
+4λδτ
+
+(cid:21)
+
+exp
+
+(cid:20)−
+
+and where u is obtained by imposing that ρ◦ be the exact density matrix for a system of
+
+two interacting particles. For PIMC calculations of highly quantal, hard-sphere-like systems
+
+such as condensed Helium, the form (5) for ρ◦ aﬀords a tremendous increase in eﬃciency,
+
+with respect to other, simpler forms for ρ◦ (such as the so-called primitive approximation;
+
+In this work, we have not made use of the high-temperature density matrix (5), choosing
+
+for details, see Ref. 1).
+
+instead the following form:
+
+where
+
+V (R)
+
+i<j V (
+
+ri −
+
+|
+
+rj|
+
+≡ P
+
+Rj, and
+
+ρ◦(Rj, Rj+1, δτ ) = AF (Rj, Rj+1, δτ ) exp
+
+δτ U(Rj)
+
+(cid:20)−
+
+(cid:21)
+
+U(Rj) =
+
+2V (Rj)
+3
+
++ ˜V (Rj)
+
+) being the total potential energy of the system in the conﬁguration
+
+˜V (Rj) =
+
+2V (Rj)
+3
+
++
+
+2λ(δτ )2
+9
+
+N
+
+Xi=1
+
+(
+
+∇iV (Rj))2
+
+6
+
+(5)
+
+(6)
+
+(7)
+
+(8)
+
+(9)
+
+if j is odd, and zero if j is even. Here,
+
+∇iV (R) is the gradient of the total potential energy for
+the conﬁguration R, with respect to the coordinates of the ith particle. This is a particular
+
+case of a more general expression, which can be shown5,6 to be accurate up to terms of order
+τ 5 in the expansion of the exact density matrix ρ(R, R′, τ ) in powers of τ .
+
+Using the form (8) instead of the (superior) pair-product approximation (5), results in
+
+a substantially larger value of L required to achieve convergence. For the speciﬁc physical
+
+system that we have chosen to test our algorithm, namely superﬂuid 4He, the number L
+
+of imaginary time slices needed is as much as 16 times greater than if (5) had been used.
+
+The reason for our choice is that our interest in primarily methodological. Speciﬁcally, we
+
+wish to separate the relative contributions to the eﬀectiveness of a PIMC implementation,
+
+of the permutation sampling procedure and of the high-temperature density matrix utilized.
+
+A more stringent test is provided of our sampling scheme,
+
+if it can be shown to work
+
+satisfactorily with a fairly simple approximation for ρ◦.
+
+A. Path Sampling
+
+The generation of the set of many-particle paths
+
+, with p = 1, 2, ...M, can be conve-
+
+Xp}
+
+{
+
+niently carried out using the Metropolis algorithm. According to the standard procedure,7
+
+one performs a random walk through the space of N-particle paths X, deﬁned above, start-
+
+ing from an initial point X◦. The Xp’s are then the points sequentially visited by the random
+
+walk.
+
+{
+
+Let Xl be the lth element of the set
+
+; in order to generate Xl+1, one samples a
+
+Xp}
+modiﬁcation of the path Xl, involving new positions of one or more particles at several
+points (i.e., conﬁgurations) along Xl. Let X ⋆
+l ) be the probability with which X ⋆
+of Xl, and let T (Xl →
+l
+proposed new path is accepted, thereby becoming the next point of the random walk (as
+Xp}
+
+l be the path arising from such modiﬁcation
+
+well as the next element Xl+1 of the set
+
+is sampled from Xl. The
+
+), with probability
+
+X ⋆
+
+{
+
+W (Xl →
+
+X ⋆
+l )
+
+≡
+
+¯ρ(X ⋆
+l )
+¯ρ(Xl)
+
+T (X ⋆
+l →
+T (Xl →
+
+Xl)
+X ⋆
+l )
+
+(10)
+
+This is simply done by drawing a random number χ between zero and one; if W (Xl →
+X ⋆
+Xl.
+l ) > χ, then Xl+1 ≡
+Of fundamental importance to the eﬃciency, unbiasedness and correctness of the algo-
+
+X ⋆
+l , otherwise Xl+1 ≡
+
+7
+
+rithm, are the elementary moves whereby one generates the “trial” path X ⋆
+
+l starting from
+Xl. In our PIMC implementation, two diﬀerent types of moves are performed. A detailed
+
+descriptions of these moves is oﬀered in the next two subsections.
+
+1. “Wiggle” type moves
+
+These moves modify the current path Xl by just altering the path of one particle, ran-
+
+domly chosen. Random displacements are applied to a number s
+
+1 of consecutive positions
+
+−
+
+of that particle along its path. This can be thought of as “chopping oﬀ” a portion of path,
+
+and replacing it with a diﬀerent segment. The maximum number of positions modiﬁed by
+
+the update is L
+
+1, as the two ends of the portion are left unchanged. Because paths are
+
+−
+
+periodic, it is possible to update a portion of path of a single particle that will include the
+
+zeroth or Lth positions.8
+
+In order to illustrate this type of move in detail, let us assume that a particle has been
+
+selected, and let the portion of path to be updated include the positions rk+1...rk+s−1, where
+
+k < L
+
+1 is an integer number, and s = 2m is chosen so that 2
+
+0
+
+≤
+
+−
+
+s
+
+≤
+
+≤
+
+L. Let r′
+
+k+1...r′
+
+k+s−1
+
+be the tentative new positions of the particle, selected according to some (yet unspeciﬁed)
+
+probabilistic criterion, expressed by a sampling function T . For notation purposes, we also
+deﬁne r′
+
+k+s = rk+s. Based on (8) and (10), the acceptance probability of the
+
+k = rk and r′
+
+move will be
+
+k+j, r′
+
+s−1
+j=0 ρF (r′
+k+j )
+s−1
+j=0 ρF (rk+j, rk+j+1, δτ ) e−δτ U (Rk+j )
+
+k+j+1, δτ ) e
+
+−δτ U (R′
+
+T (X ′
+T (X
+
+X)
+X ′)
+
+→
+→
+
+W = Q
+Q
+
+having deﬁned R′ as the conﬁguration that diﬀers from R only by the displacement of
+the chosen particle from r to r′, X
+≡
+k+1, ...R′
+R0, R1, ...Rk, R′
+k+s−1, Rk+s, ...RL is the proposed new path. There is considerable
+freedom in choosing the sampling probability T ,7 but it is clearly advantageous to do so in
+
+R0, R1, ...RL is the current path, whereas X ′
+
+≡
+
+a way that will simplify the expression (11). An obvious choice is
+
+T (X
+
+→
+
+X ′) =
+
+ρF (r′
+
+k+j, r′
+
+k+j+1, δτ )
+
+which reduces the acceptance probability (11) to
+
+W = exp
+
+δτ
+
+(cid:20)−
+
+U(R′
+(cid:18)
+
+k+j)
+
+−
+
+U(Rk+j)
+
+(cid:19)(cid:21)
+
+s−1
+
+Yj=0
+
+s−1
+
+Xj=0
+
+8
+
+(11)
+
+(12)
+
+(13)
+
+(14)
+
+(15)
+
+The probability T so deﬁned can be conveniently sampled by means of the “staging”
+
+algorithm.9 The idea is as follows: T is given by a product of s = 2m Gaussian terms,
+
+namely
+
+T (X
+
+→
+
+′
+
+)
+
+X
+
+exp
+
+(cid:20)−
+
+∝
+
+(r′
+
+k −
+
+r′
+k+1)2
+4λδτ
+
+(cid:21) ×
+
+exp
+
+(cid:20)−
+
+(r′
+
+k+1 −
+(r′
+
+r′
+k+2)2
+(cid:21)
+4λδτ
+r′
+k+s)2
+k+s−1 −
+4λδτ
+
+...
+
+(cid:21)
+
+...
+
+×
+
+exp
+
+(cid:20)−
+
+Using some simple algebra10 it is possible to re-organize this product in the following,
+
+“hyerarchical” form:
+
+T
+
+(cid:21) ×
+
+(cid:20)−
+
+∝
+(r′
+
+(r′
+
+(cid:20)−
+
+(r′
+
+exp
+
+k+s/4 −
+
+r′
+k+s)2
+k −
+4sλδτ
+¯r′
+k,k+s/2)2
+sλδτ /2
+¯r′
+k,k+s/4)2
+sλδτ /4
+¯r′
+k+s/2,k+3s/4)2
+sλδτ /4
+
+k+s/8 −
+
+(cid:21)
+
+(cid:21)
+
+(cid:21)
+
+exp
+
+(cid:20)−
+
+exp
+
+(cid:20)−
+
+exp
+
+(cid:20)−
+
+exp
+(r′
+
+(r′
+
+(r′
+
+k+3s/4 −
+
+k+3s/8 −
+
+exp
+
+× (cid:26)
+
+(cid:20)−
+
+exp
+
+× (cid:26)
+
+(cid:20)−
+
+(r′
+
+k+5s/8 −
+
+exp
+
+(cid:20)−
+
+(r′
+
+(cid:21)
+
+k+s/2 −
+
+¯r′
+k,k+s)2
+sλδτ
+¯r′
+k+s/2,k+s)2
+(cid:21)(cid:27)
+sλδτ /2
+¯r′
+k+s/4,k+s/2)2
+sλδτ /4
+¯r′
+k+3s/4,k+s)2
+sλδτ /4
+¯r′
+k,k+s/8)2
+sλδτ /8
+
+(cid:21)(cid:27)
+
+...
+
+(cid:21)
+
+(cid:21)
+
+k+7s/8 −
+
+(r′
+
+k+s/16 −
+
+exp
+
+× (cid:26)
+
+(cid:20)−
+
+where we have deﬁned ¯r′
+
+(r′
+
+α + r′
+
+α,β ≡
+
+β)/2. All distances are assumed to be computed
+
+with periodic boundary conditions, using the minimum image convention. Expression (15)
+
+immediately suggests a sequential, multi-level procedure to generate trial random positions
+of the particle being displaced. Since r′
+
+k+s = rk+s, the ﬁrst factor in (15)
+does not enter the sampling in this type of move. Thus, one starts by generating a new
+“midpoint” position r′
+¯r)2/2σ2
+
+k+s/2, by sampling a three-dimensional Gaussian distribution function
+k+s)/2. It is
+
+0], with semi-width σ0 =
+
+∝
+customary to refer to the generation of the new midpoint as the zeroth level (l = 0).
+
+sλδτ /2, centered at ¯r
+
+k = rk and r′
+
+k + r′
+
+exp[
+
+(r′
+
+(r
+
+−
+
+−
+
+≡
+
+q
+
+One then proceeds to the ﬁrst level (l = 1), where the two random positions r′
+
+k+s/4
+
+k+3s/4 are sampled from Gaussian distribution functions of semi-width σ1 =
+
+and r′
+centered at positions (r′
+k+s)/2. At the next level (l = 2), one
+generates four new positions and so on. The lth level involves the generation of 2l new
+positions, sampled from Gaussian distribution functions of semi-width σl = √2−l−1sλδτ .
+
+k+s/2)/2 and (r′
+
+k+s/2 + r′
+
+k + r′
+
+sλδτ /4,
+
+q
+
+This “bisection” procedure ends when new positions of the particle have been generated at
+
+k + 1, k + 2, ..., k + s
+
+1. The last level is obviously l = m
+
+1.
+
+−
+
+−
+
+9
+
+The proposed new path X ′ may be either accepted or rejected following an acceptance
+
+test based on (13).
+
+It proves much more eﬃcient, however, to break down this global,
+
+ﬁnal acceptance test, into m
+
+1 intermediate acceptance tests, each following every level
+
+−
+
+of update. Speciﬁcally, after completing the lth level one proceeds to the next level with
+
+probability
+
+W (l
+
+l + 1) = exp
+
+δτ
+
+→
+
+(cid:20)−
+
+Xj ǫ level l
+
+(cid:18)
+
+U(R′
+
+k+j)
+
+U(Rk+j)
+
+(cid:19)(cid:21)
+
+−
+
+(16)
+
+aborting the the process (i.e., rejecting the proposed new path in its entirety) on the ﬁrst
+
+negative outcome of an acceptance test. It is simple to see that the overall acceptance prob-
+
+ability for the new path remains the same, given by (13), on breaking down the acceptance
+
+test by levels as explained above. The improvement in eﬃciency comes from the fact that the
+
+ﬁnal acceptance is mostly inﬂuenced by the largest displacements, e.g., that of the midpoint.
+
+Thus, one can reject early (i.e., after the ﬁrst level), and with relatively little computational
+
+eﬀort, moves that most likely will eventually be rejected anyway.
+
+The value of s (namely the length of the portion of path that is updated) is set to ensure an
+
+optimally eﬃcient sampling. The minimum possible value is s = 2, which gives the highest
+
+acceptance rate, but at the same time also produces a modest path update (a single point
+
+of the path is modiﬁed). This becomes ineﬃcient at low temperature, as paths can be fairly
+
+long (e.g., several hundred slices) and such “single-slice” updating can result in a very slow
+
+diﬀusion through conﬁguration space, and consequently in undesirably long equilibration
+
+and auto-correlation times. It is therefore advantageous to take s as large as possible, while
+
+still ensuring a reasonably high acceptance rate for multi-level moves (acceptance rate is
+
+a rapidly decreasing function of s).
+
+In our algorithm, we typically adjust s so that the
+
+acceptance rate remains roughly between 20% and 50%.
+
+2. “Permute” type moves
+
+These moves involve a group of 1 < n
+
+N particles. They are similar to the wiggle type
+
+moves, in that corresponding portions of the paths of the n particles are modiﬁed, at s
+
+1
+
+−
+
+consecutive points. An additional aspect, however, is that the modiﬁed portion of the path
+
+of a particle in the group will connect, at k + s, to the path of a diﬀerent particle, among
+
+the n selected. This elementary move clearly allows one to sample permutations of the N
+
+particles in the system, over the imaginary time interval [0, β].
+
+≤
+
+10
+
+The basic scheme of the move is as follows: ﬁrst, a permutation of particle labels at k + s
+
+is sampled; the number n of particles involved in this permutation (henceforth referred to
+
+as the cycle) is not chosen a priori, but can vary from 2 to N. Once the permutation is
+
+selected, new single-particle paths are constructed, in a way completely analogous to that
+used in the “wiggle” moves. Finally, the new many-particle path X ′ so obtained is accepted
+
+with probability given by (11). Again, it proves convenient to choose a sampling probability
+
+for the permutation that will in turn simplify the acceptance probability. Going back to
+
+Eq. (15), the ﬁrst term of the product is now used to sample permutations, whereas the
+
+remaining terms are used to construct paths consistent with the permutations that have
+
+been sampled.
+
+The sampling of a permutation is a recursive process in which particles are successively
+
+added to the cycle. The addition of a single particle includes an acceptance test, and the
+
+sampling of the particle from a table. One begins by selecting a random particle, say the
+
+νth for deﬁniteness. Based on (15), a table is constructed, K (1)
+
+νω , with entries as follows:
+
+K (1)
+
+νω = ρF (rνk, rωk+s, sδτ ) (1
+
+δνω)
+
+−
+
+where rνk is the position of the νth particle particle at point k, whereas rωk+s is that of the
+
+ωth particle at point k + s11.
+
+At this point, a ﬁrst acceptance test is performed, namely the process will continue on to
+
+the next stage (i.e., selection of the permutation partner for particle ν) with probability
+
+(17)
+
+(18)
+
+C (1) =
+
+Q1
+Q1 + ρF (rνk, rνk+s, sδτ )
+
+where Q1 =
+
+ω K (1)
+νω .
+
+P
+
+If the acceptance test fails, then the process is aborted, i.e., the
+
+permutation move is rejected. Suppose, instead, that a positive outcome is obtained; an
+
+entry α is then sampled from the table K (1), with probability Πα = K (1)
+
+να /Q1. We see
+from (17) that particle ν itself is sampled with probability zero, i.e., the sampling of a
+
+“non-identical” permutation is forced here. The particle labeled α is selected as the second
+member of the permutation cycle being constructed. That means that, in the trial path X ′,
+
+the path of particle ν will go through rνk at the kth point and through rαk+s at point k + s.
+
+At this point, one has to sample a new position of particle α at k + s. Just as for particle
+
+ν, one constructs a table
+
+K (2)
+
+αω = ρF (rαk, rωk+s, sδτ ) (1
+
+δαω)
+
+−
+
+(19)
+
+11
+
+and another acceptance test analogous to (18) is carried out, based on the probability
+
+C (2) =
+
+Q2
+Q2 + ρF (rαk, rαk+s, sδτ )
+
+(20)
+
+with Q2 =
+µ is sampled with probability Πµ = K (2)
+
+αω (Again, the process is aborted if this acceptance test fails). An entry
+αµ /Q2; in this case, particle ν is sampled with ﬁnite
+
+P
+
+ω K (2)
+
+probability, as the cycle can close on the initial particle, whereas particle α is now excluded
+
+from the sampling, as no two particles can occupy the same position at point k + s. At this
+
+point, if µ = ν, then the permutation cycle is closed, and it includes two particles, namely
+
+ν and α. If, on the other hand, µ
+
+= ν, then one must ﬁnd another particle γ, which will
+
+become a member of the cycle, such that rµk = rγk+s. Again, one constructs a table K (3) as
+
+above, the only diﬀerence being that now both α and µ are excluded from consideration, as
+
+both rαk+s and rµk+s are already taken:
+
+K (3)
+
+µω = ρF (rµk, rωk+s, sδτ ) (1
+
+δαω −
+
+−
+
+δµω)
+
+A new acceptance/rejection test is performed, based on a probability C (3) deﬁned analo-
+
+gously to (18)-(20):
+
+C (3) =
+
+Q3
+Q3 + ρF (rµk, rµk+s, sδτ ) + ρF (rµk, rαk+s, sδτ )
+
+with Q3 =
+with probability Πγ = K (3)
+
+ω K (3)
+
+P
+
+µγ /Q3.
+
+µω , and in case of success, one proceeds to sample entry γ from table K (3),
+
+At this point, the basic idea should be clear: This procedure is iterated until the cycle is
+ﬁnally closed, namely until particle ν is obtained from the sampling of the table K (n−1). Two
+
+fundamental aspects of the above scheme to sample permutation cycles, are the exclusion
+
+from the tables K of the entries corresponding to particles that are already in the cycle, and
+
+the acceptance/rejection tests based on the probabilities C preceding each particle selection.
+
+The sum at the denominator of C (n) must include, besides Qn, free-particle density matrices
+associated to all the entries excluded in the sampling table K (n).
+
+Once a complete cycle has been obtained, one must construct trial paths for all particles
+
+in the cycle, consistent with the selected new positions at slice k + s. This second part is
+
+done in exactly the same way as for the “wiggle” moves. Speciﬁcally, new midpoint positions
+
+are ﬁrst sampled for all particles in the cycles, using the same sampling probability; then,
+
+new positions at k + s/2 and k + 3s/4 are sampled, and so on, with acceptance tests as in
+
+(21)
+
+(22)
+
+12
+
+6
+(16) after each level of path update. Note that the value of U at points k and k + s remains
+
+unchanged, as no particle is displaced at these points; only particle labels are altered at
+
+point k + s. It is a simple matter to show that the path sampling probability arising from
+
+the above scheme is indeed consistent with (10).
+
+The above scheme to sample permutations is similar to that described in Ref. 1; the main
+
+diﬀerence, possibly signiﬁcant, is that one need include, in any of the acceptance tests, a
+
+sum of terms representing all n starting points of the cyclic permutation. Moreover, in our
+
+algorithm the “diagonal” move, namely the one in which particle labels are left unchanged
+
+from k to k + s, is by construction excluded from the sampling.
+
+Just as in the “wiggle” moves, s must be chosen appropriately, namely, long enough that
+
+non-trivial permutation cycles can be sampled with appreciable probability. If s is small,
+
+particularly if one is working with a small value of δτ , the functions ρF are negligible small
+
+for distances of the order of the average distance between particles, rendering it exceedingly
+
+unlikely to go beyond the ﬁrst acceptance test (Eq. 18). On the other hand, taking s too
+
+long, while allowing for large permutation cycles being sampled, results in very low overall
+
+acceptance for these cycles, much for the same reasons why acceptance falls for the “wiggle”
+
+moves as well if s is too large. In the calculations whose results are illustrated in the next
+
+section, we have generally found that the optimal choice of s is generally the same as for
+
+the “wiggle” moves.
+
+Even when s is optimally chosen, typical values of acceptance for permutations are low.
+
+One tries to keep the eﬃciency reasonable by attempting a large number permutational
+
+moves, which can be done fairly rapidly within the relatively simple scheme outlined above.
+
+We typically attempt several tens of thousands of permutations between two consecutive sets
+
+of “wiggle” type moves, in which full updates of the paths of all particles are attempted.
+
+III. RESULTS
+
+We now describe the results of our PIMC simulations of condensed bulk 4He at low
+
+temperature (1 K
+
+T
+
+4K), obtained with the algorithm described in the previous section.
+
+≤
+
+≤
+
+The model Hamiltonian for the system of interest is given by (1). For the purpose of
+
+comparing our results with existing calculations,1,2 we used an early version of the Aziz
+potential12 to describe the interaction between a pair of 4He atoms (λ=6.0596 K˚A2).
+
+13
+
+We have computed several energetic and structural properties of the system. We have
+
+observed convergence of the energy estimates with a value of the “imaginary time step”
+δτ =1/640 K−1. All of the results presented in this section are obtained with this value of δτ .
+
+We estimate any residual, systematic error on the energy arising from our path discretization,
+
+to be worth no more than 0.1 K per 4He atom. For structural properties, we have observed
+
+that estimates obtained with (up to four times) larger values of δτ are indistinguishable,
+
+within statistical uncertainties, from those obtained with the above-mentioned value of δτ .
+
+We found our optimal value of s, for both “wiggle” and “permute” type moves, to be
+
+s = 6.14 Accordingly, the length of the portion of path that is updated on each move is
+2s = 64 imaginary time slices, which corresponds to an imaginary time interval of 0.1 K−1,
+
+with our choice of time step.
+
+The number of particles in our simulated sysyem is N = 64, i.e., the same with Ref. 2.
+
+A. Energetics
+
+The energy estimators utilized in this work are those described, for instance, in Ref. 6.
+
+Speciﬁcally, the average kinetic energy per particle K is obtained as
+
+K
+
+h
+
+i ≈
+
+1
+2δτ −
+
+L2
+4λβ2 (cid:28)(cid:18)
+
+2
+
+rk −
+
+rk+1(cid:19)
+
++
+
+(cid:29)
+
+2λβ2
+9L3
+
+L/2
+
+N
+
+Xk=1
+
+Xi=1
+
+2
+
+(cid:28)(cid:18)∇iV (R2k(cid:19)
+
+(cid:29)
+
+where
+
+...
+i
+
+h
+
+stands for statistical average, (rk −
+
+rk+1)2 is the square distance between the
+
+positions of a particle at adjacent points along the path. The potential energy per particle
+
+is instead obtained as
+
+v
+
+h
+
+i
+
+v
+
+h
+
+i ≈
+
+2
+NL
+
+L/2
+
+Xk=1
+
+V (R2k−1)
+
+Both relations (23) and (24) are approximate, approaching the exact results only in the
+
+limit L
+
+, δτ
+
+0. The above kinetic energy estimator is not the most eﬃcient; it
+
+→ ∞
+
+→
+
+is known that the so-called “virial” estimator yields more accurate results (i.e., smaller
+
+statistical errors), given the same amount of computing time.13 However, the estimator
+
+(23) has been most commonly adopted in previous calculations of this type. In all of our
+
+calculations, we estimated the contribution to the potential energy attributed to particles
+
+outside the main simulation cell by assuming that the pair correlation function g(r) equals
+
+one outside the cell.
+
+(23)
+
+(24)
+
+14
+
+TABLE I: Kinetic and potential energy per atom of condensed bulk 4He, computed by PIMC
+
+at diﬀerent thermodynamic conditions. The simulated system comprises 64 particles. Results in
+
+parentheses are from Ref. 2.
+
+T (K) ρ (˚A−3) L
+
+kinetic (K)
+
+potential (K)
+
+1.1765 0.02182 544 14.123
+
+0.028
+
+1.379 0.02182 466 14.201
+
+0.024
+
+1.600 0.02183 400 14.334
+
+0.034
+
+1.818 0.02186 352 14.468
+
+0.059
+
+2.000 0.02191 320 14.862
+
+0.071
+
+(14.17
+
+0.08)
+
+(14.23
+
+0.08)
+
+(14.40
+
+0.08)
+
+(14.71
+
+0.08)
+
+(15.05
+
+0.08)
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+0.0025
+
+0.04)
+
+0.0029
+
+0.08)
+
+0.0037
+
+0.04)
+
+0.0060
+
+0.04)
+
+0.0078
+
+0.04)
+
+0.0072
+
+21.3127
+
+21.35
+
+−
+(
+−
+21.3195
+
+21.35
+
+−
+(
+−
+21.3435
+
+21.39
+
+−
+(
+−
+21.3913
+
+21.44
+
+−
+(
+−
+21.4810
+
+21.57
+
+−
+(
+−
+21.5791
+
+−
+(
+−
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+(15.75
+
+0.08)
+
+21.60
+
+0.04)
+
+2.353 0.02191 272 15.821
+
+0.062
+
+Table I summarizes our results for the energetics of bulk 4He, at diﬀerent temperatures,
+
+for a simulated system of N = 64 atoms, which is the same size as that of Ref. 2. Shown
+
+in parentheses are the corresponding results from Ref. 2. The estimates are in agreement,
+
+within the statistical uncertainties of the two calculations. Amusingly, our statistical errors
+
+on the kinetic energy are not much smaller than those of Ref. 2, in spite of the fact that
+
+our calculation beneﬁts of two more decades of advances in computing hardware. This is
+
+not too surprising, however, as the calculation of the kinetic energy, especially based on the
+
+estimator (23), is known13 to be the place where the limitations are most evident of using
+
+less-than optimal a high-temperature density matrix ρ◦, such as the one used in this work.
+
+Still, the results of our calculation seem altogether satisfactory, giving us conﬁdence that
+
+the PIMC algorithm, including the new permutation sampling engine, perform correctly.
+
+15
+
+Bosons
+Distinguishable
+
+D
+
+ 1.0
+
+ 0.8
+
+ 0.6
+
+ 0.4
+
+ 0.2
+
+ 0.0
+
+ 0.0
+
+ 0.1
+
+ 0.2
+
+ 0.3
+
+ 0.4
+
+ 0.5
+
+τ (Κ  )−1
+
+FIG. 1: Imaginary time diﬀusion coeﬃcient D(τ ), deﬁned in Eq. (25), computed by PIMC for bulk
+
+4He (solid line) and for an ensemble of distinguishable (i.e., no permutations allowed) 4He atoms
+
+at the same density (dashed line). The temperature is T =2 K. Statistical errors on both curves
+are of the order of 10−3 or less.
+
+B. Single-particle diﬀusion in imaginary time
+
+We observe excellent agreement between our results and those of Ref. 2 for structural
+
+properties, such as the pair correlation function; however, eﬀects of quantum statistics on
+
+these quantities are small,1 and therefore their computation does not provide a particularly
+
+signiﬁcant test of an algorithm to simulate indistinguishable quantum particles.
+
+More telling are measures of the diﬀusion of particles in imaginary time. Fig. 1 shows
+
+results for the quantity D(τ ), deﬁned as
+
+D(τ ) =
+
+(cid:28)(cid:18)
+
+2
+
+(cid:19)
+
+(cid:29)
+
+r(τ )
+
+r(0)
+
+−
+6λτ
+
+(25)
+
+...
+i
+
+h
+
+where
+
+stands for statistical average. The two curves shown in the ﬁgures represent values
+
+of D computed by PIMC for bulk 4He (solid line), as well as for a system of distinguishable
+
+4He atoms, both at a temperature T =2 K. While in the ﬁrst case 4He atoms are treated
+
+as bosons, and therefore permutations are included, in the second case no permutations of
+
+particles are allowed. Obviously, because in the latter case one must have r(β) = r(0), i.e.,
+
+single-particle paths must close onto themselves, it must be D(β) = 0. On the other hand,
+
+if permutations are allowed, single-particle paths can become entangled, and one may have
+
+a ﬁnite value of D(β). Moreover, D is greater, at all imaginary times, in the case of Bose
+
+16
+
+statistics; this is fairly intuitive, as the fact that particles are indistinguishable enhances the
+
+degree of delocalization of each individual particle.
+
+C. Superﬂuid density
+
+We have also computed the 4He superﬂuid density ρS, using the well-known “winding
+number” estimator.15 At the lowest temperature considered in this work, namely T =1.1765
+
+K, our result is 1.02
+
+0.10, which is in agreement with experiment and with the PIMC
+
+±
+
+result of Ref. 15. We obtained this result with a number of slices L = 544. It should also
+
+be mentioned that it appears possible to obtain a reasonably accurate estimate of ρS using
+
+considerably fewer imaginary time slices (the result obtained with L = 136 is indistinguish-
+
+able, within statistical uncertainties, from the one quoted above), and that reducing L also
+
+causes a signiﬁcant reduction of the statistical error on ρS. In general, however, if L becomes
+
+relatively large, namely of the order of a few hundred, lengthy simulations are required in
+
+order to reduce statistical error to an acceptable size (e.g., 0.05 or less). This problem seems
+
+common to other PIMC implementations as well, and it is not clear to us to what extent it
+
+may signal an ineﬃciency of our sampling method.
+
+D. Statistics of Permutations and Permutation Cycles
+
+In order to characterize the performance of the permutation sampling algorithm, one
+
+may also look at quantities easily accessible in a simulation, which may not directly relate
+
+to anything measurable but provide a possible baseline for comparison of diﬀerent algo-
+
+rithms. Table 2 provides statistics of permutation acceptance for a PIMC simulation of 64
+
+4He atoms at T =1.1765 K (the lowest temperature considered here). The total number of
+
+permutations attempted in this run is 4.5
+
+105, and the fraction of accepted permutations
+
+(of any cycle length) is approximately 0.4%. Permutations were sampled over an imaginary
+time interval of length 0.1 K−1.
+
+As one can see from the second column, 2-particle permutations are sampled overwhelm-
+
+ingly more than others; however, the rate of acceptance of attempted permutations is essen-
+
+tially constant, independent of n. This is found to be the case at all temperatures considered
+
+in this study. One may think that it would be beneﬁcial to increase the rate at which permu-
+
+×
+
+17
+
+TABLE II: Permutation statistics for a PIMC simulation of bulk liquid 4He at T=1.1765 K and a
+density ρ = 0.02182 ˚A−3. The second column indicates the percentage of attempted permutations
+
+involving n particles, sampled as explained in II A 2. The third column yields the percentage of
+
+attempted permutations that are accepted. The total number of attempted permutations for this
+
+run is 4.5
+
+105. The last column shows the probability of occurrence of permutation cycles of
+
+length n of atoms in the simulation.
+
+n fraction of attempted permutations (%) fraction of accepted permutations (%)
+
+×
+
+2
+
+3
+
+4
+
+5
+
+> 5
+
+82.2
+
+12.5
+
+3.5
+
+0.1
+
+1.7
+
+1
+
+0.1
+
+0.01
+
+0.001
+
+0.0001
+
+y
+t
+i
+l
+i
+
+b
+a
+b
+o
+r
+P
+
+0.38
+
+0.46
+
+0.27
+
+0.54
+
+0.00
+
+T=1.2 K
+
+T=1.6 K
+
+T=2.0 K
+
+0
+
+10 20 30 40 50 60 70
+
+cycle length
+
+FIG. 2: Probability for a single particle to belong to a permutation cycle including n particles,
+
+in a PIMC simulation of 64 4He atoms at saturated vapor pressure and at three diﬀerent low
+
+temperatures.
+
+tations of more than two particles are sampled, since they presumably enhance the diﬀusion
+
+of the random walk through path space. Indeed, it is straightforward to generalize our sam-
+
+pling algorithm, so that permutations including more than two particles will be sampled
+
+more often. In practice, however, we found that including pair permutations is beneﬁcial, in
+
+that it leads to a greater overall rate of acceptance of attempted permutations. How much
+
+of this is problem- or algorithm-dependent is diﬃcult to say. Both quantities shown in Table
+
+18
+
+2 are rapidly decreasing functions of the temperature, as expected.
+
+Although they are not sampled directly, permutation cycles involving large numbers of par-
+
+ticles can and do occur, as a result of sampling many permutations involving few particles.
+
+Fig. 2 shows a histogram of probability for a particle to be part of a permutation cycle of
+
+length n (i.e., involving n particles) in a PIMC simulation carried out with the methodology
+
+illustrated above, at three diﬀerent low temperatures below the λ-transition. Although the
+
+data are somewhat noisy, these results are in quantitative agreement with those of Ceperley1
+
+for the same system, using the CP methodology. As the temperature is lowered, the proba-
+
+bility that a particle will belong to a cycle of length n becomes independent of n.
+
+IV. CONCLUSIONS
+
+A new algorithm to perform the sampling of permutations of indistinguishable particle in
+
+Path Integral Monte Carlo simulations was introduced. This procedure is similar, in spirit,
+
+to existing methods, but diﬀers in some important aspects, and may have some advantages.
+
+We have tested it by performing a PIMC simulation of liquid 4He at low temperature,
+
+in the superfuid regime. Aside from the permutation sampling scheme, the rest of the
+
+PIMC methodology utilized here is not optimized for 4He calculations. In particular, it is
+
+worth repeating that much better options exist for the high-temperature density matrix,
+
+which can drastically reduce the number of time slices needed for convergence. Still, the
+
+calculation proves quite feasible with currently available, moderately powerful workstations.
+
+It should also be noted that, while the use of a more accurate high-temperature density
+
+matrix (speciﬁcally, the pair-product approximation (5)) greatly enhances the eﬃciency of
+
+calculations for a highly quantal, hard-sphere-like system such as helium, for other condensed
+
+systems such as molecular hydrogen, which feature a lesser degree of zero-point motion, or
+
+Coulomb system, for which the interaction potential is considerably less “stiﬀ”, the high-
+
+temperature density matrix utilized here and Eq. (5) may be of comparable eﬃciency.
+
+For comparison with existing calculations we limited the size of the system studied to N=64
+
+particles, but it should be mentioned that simulations of systems with as many as four times
+
+more particles are also possible, with a reasonable amount of computer time (of the order
+
+of a month per thermodynamic point).
+
+We have attempted to furnish as much quantitative information as possible, that may help
+
+19
+
+assess the relative eﬃciency of the permutation scheme proposed here against existing ones.
+
+Obviously, a direct comparison of results provided by implementations only diﬀering by the
+
+permutation scheme adopted, is also desirable. It is our hope that such a comparison will
+
+be soon carried out.
+
+Acknowledgments
+
+This work was supported in part by the Petroleum Research Fund of the American
+
+Chemical Society under research grant 36658-AC5, by the Natural Sciences and Engineering
+
+Research council of Canada (NSERC) under research grant G121210893. The author wishes
+
+to acknowledge useful discussions with Saverio Moroni.
+
+1 D. M. Ceperley, Rev. Mod. Phys. 67, 275 (1995).
+
+2 D. M. Ceperley and E. L. Pollock, Phys. Rev. Lett. 56, 351 (1986).
+
+3 See, for instance, D. M. Ceperley in Monte Carlo and Molecular Dynamics of Condensed Matter
+
+Systems, Ed. K. Binder and G. Ciccotti, Editrice Compositori (Bologna, Italy, 1996).
+
+4 Our permutation sampling algorithm is equally applicable to fermions, although it does not
+
+solve the sign problem.
+
+5 S. A. Chin, Phys. Lett. A 226, 344 (1997).
+
+6 S. Jang, S. Jang, and G. A. Voth, J. Chem. Phys. 115, 7832 (2001).
+
+7 See, for instance, J. M. Thijssen, Computational Physics, Cambridge University Press (Cam-
+
+bridge, UK 1999), p. 278-280.
+
+8 Note that r0 need not coincide with rL for any given particle, due to the presence of permuta-
+
+tions. Therefore, it is necessary that path entanglement, arising from permutations, be properly
+
+taken into account. That means that, on proceeding past the Lth position, one must be sure to
+
+reconnect the path of the particle, back at the ﬁrst slice, in a way that is consistent with the
+
+current permutation of particle labels.
+
+9 E. L. Pollock and D. M. Ceperley, Phys. Rev. B 30, 2555 (1984).
+
+10 It all can be derived using the identity (a
+
+b)2 + (b
+
+c)2 = (a
+
+c)2/2 + 2(b
+
+−
+
+−
+
+−
+
+¯b)2, where
+
+−
+
+¯b = (a + c)/2.
+
+20
+
+11 We emphasize that all distances in (17) are computed by taking the periodic image of each
+
+particle that is closest to particle 1. Thus, as a result of permutation sampling, paths cross
+
+over into adjacent simulation cells. This aspect is crucial in estimating the superﬂuid density,
+
+or imaginary time diﬀusion of individual particles. For details, see Ref. 1.
+
+12 R. A. Aziz, V. P. S. Nain, J. S. Carley, W. L. Taylor and G. T. McConville, J. Chem. Phys. 70,
+
+4330 (1979).
+
+13 C. Chakravarty, M. C. Gordillo and D. M. Ceperley, J. Chem. Phys. 109, 2123 (1998).
+
+14 For “permute” type moves, we deﬁne the optimal value of s that for which the rate of acceptance
+
+of attempted permutations is greatest.
+
+15 E. L. Pollock and D. M. Ceperley, Phys. Rev. B 36, 8343 (1987).
+
+21
+
+

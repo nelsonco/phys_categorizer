@@ -1,0 +1,1478 @@
+6
+0
+0
+2
+ 
+n
+a
+J
+ 
+9
+1
+ 
+ 
+]
+s
+c
+i
+t
+p
+o
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+3
+4
+1
+1
+0
+6
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Benchmark of FEM, Waveguide and FDTD Algorithms
+for Rigorous Mask Simulation
+
+Sven Burger ab, Roderick K¨ohle c, Lin Zschiedrich ab, Weimin Gao d,
+Frank Schmidt ab, Reinhard M¨arz be, Christoph N¨olscher f
+a Zuse Institute Berlin, Takustraße 7, D – 14 195 Berlin, Germany
+DFG Forschungszentrum Matheon, Straße des 17. Juni 136, D – 10 623 Berlin, Germany
+b JCMwave GmbH, Haarer Straße 14a, D – 85 640 Putzbrunn, Germany
+c Inﬁneon Technologies AG, MP PD CS ATS,
+Balanstraße 73, D – 81 541 M¨unchen, Germany
+d Sigma-C Software AG, Thomas-Dehler-Straße 9, D – 81 737 M¨unchen, Germany
+e Inﬁneon Technologies AG, COM CAL D TD RETM PI,
+Balanstraße 73, D – 81 541 M¨unchen, Germany
+f Inﬁneon Technologies SC300 GmbH&Co OHG, IFD P300LM,
+K¨onigsbr¨ucker Straße 180, D – 01 099 Dresden, Germany
+
+Copyright 2005 Society of Photo-Optical Instrumentation Engineers.
+This paper has been published in Proc. SPIE 5992, pages 378-389 (2005), (25th Annual BACUS Symposium on
+Photomask Technology, J. T. Weed, P. M. Martin, Eds.) and is made available as an electronic reprint with
+permission of SPIE. One print or electronic copy may be made for personal use only. Systematic or multiple
+reproduction, distribution to multiple locations via electronic or other means, duplication of any material in this
+paper for a fee or for commercial purposes, or modiﬁcation of the content of the paper are prohibited.
+
+ABSTRACT
+
+An extremely fast time-harmonic ﬁnite element solver developed for the transmission analysis of photonic crystals
+was applied to mask simulation problems. The applicability was proven by examining a set of typical problems
+and by a benchmarking against two established methods (FDTD and a diﬀerential method) and an analytical
+example. The new ﬁnite element approach was up to 100× faster than the competing approaches for moderate
+target accuracies, and it was the only method which allowed to reach high target accuracies.
+
+Keywords: Photomask simulation benchmark, photolithography, phase shift mask, FEM, FDTD
+
+1. INTRODUCTION
+The complexity of modern photolithography makes extensive simulations indispensable.1 Modern lithography
+simulators include modules describing illumination, transfer of the optical ﬁeld through the mask and aberrating
+optical system of the lithographic equipment, the propagation inside the photoresist, the processes leading to
+the resist image and – in advanced systems – the etching processes leading to the etched image. After nearly
+two decades of lithography simulation, most of the modules along the simulation chain have attained a high
+degree of maturity. However, the simulation of light propagation through phase shift masks, also applied for the
+stand-alone analysis of masks and mask tolerances, is still challenging in terms of both computational time and
+accuracy of the results.
+
+The computation of the print image of a whole chip remains extremely demanding although approximations,
+multi-threading and even hardware accelerators are applied to reduce the runtime of simulations. Rigorous
+
+Corresponding author: S. Burger
+
+URL: http://www.zib.de/nano-optics/
+Email: burger@zib.de
+
+simulations are restricted today to small areas and even those simulations suﬀer from the high computational
+eﬀort. At the same time, the progress on the semiconductor roadmap forces the need of rigorous 3D simulations, in
+particular also for alternating and attenuated phase masks. Experimental investigations of the polarization eﬀects
+in Hyper NA immersion lithography2 support this assertion. Further, the demand to assess the process stability
+by exploring several dose/defocus conditions in the process window sharpens the shortage of computational
+resources.
+
+Keeping this background in mind, we evaluated a frequency-domain ﬁnite-element method (FEM) solver for
+Maxwell’s equations which has been successfully applied to a wide range of electromagnetic ﬁeld computations
+In
+including optical and microwave waveguide structures, surface plasmons, and nano-structured materials.
+addition, the activity was motivated by a preceding, successful benchmarking3 against MPB, a widely used and
+highly sophisticated plane-wave solver used for the Bloch mode analysis of photonic crystals.4
+
+In this contribution, the new FEM solver is benchmarked against an analytical result which is fairly realistic
+for lithography, and against two competing algorithms commonly applied for the simulation of ”thick” phase
+masks. For the simulation of periodic mask patterns in lithography the most prominent rigorous simulation
+methods include the ﬁnite-diﬀerence time domain algorithm (FDTD)5, 6 and the modal methods such as the
+diﬀerential method7, 8 or the closely related rigorous coupled wave analysis (RCWA).9 The methods diﬀer in
+the way Maxwell’s equations are numerically solved and how the boundary conditions of the interfaces to the
+unbound regions above and below the mask are established. We will give a brief description of the algorithms to
+give a rough idea about the relevant parameters inﬂuencing simulation speed and accuracy in the next paragraph.
+A brief description of FEM will be given in Section 2.
+
+The FDTD approach discretizes Maxwell’s equations in both time and space and solves the scattering prob-
+lem by simulating the ﬁeld evolution through time until the time-harmonic steady-state solution is reached. The
+interfaces to the unbound regions are formed by perfectly matched layers (PML). Space and time discretization
+are interdependent (“magic steps”). Speed and accuracy of the simulation depend on the space and time dis-
+cretization, the total time period and on the PML parameters. The diﬀerential method describes the propagating
+ﬁelds inside the mask by a plane wave expansion. Maxwell’s equations are thus converted into a system of linear
+ordinary diﬀerential equations (ODEs) relating the scattered waves at the upper and lower mask interfaces.
+Speed and accuracy depend on the number of plane waves and on the resolution used for ODE integration.
+
+This paper is organized as follows: Section 2 introduces the concept of the FEM solver. Section 3 presents
+several proofs of applicability including 3D simulations, 2D simulations for light scattering oﬀ line masks under
+conical incidence, and adaptive reﬁnement of FEM meshes. Section 4 shows benchmark results of the three
+diﬀerent solvers for a mask with dense lines and spaces illuminated at normal incidence. Section 5 veriﬁes the
+accuracy of the FEM solver by examining a closely related toy example oﬀering an anlytical solution.
+
+2. FREQUENCY-DOMAIN FEM ANALYSIS FOR PHOTOMASK SIMULATIONS
+
+This paper considers light scattering oﬀ a system which is periodic in the x− and y−directions and is enclosed
+by homogeneous substrate (at zsub) and superstrate (at zsup) which are inﬁnite in the −, resp. +z−direction.
+Light propagation in the investigated system is governed by Maxwell’s equations where vanishing densities of free
+charges and currents are assumed. The dielectric coeﬃcient ε(~x) and the permeability µ(~x) of the considered
+photomasks are periodic and complex, ε (~x) = ε (~x + ~a), µ (~x) = µ (~x + ~a). Here ~a is any elementary vector
+of the periodic lattice.10 For given primitive lattice vectors ~a1 and ~a2 an elementary cell Ω ⊂ R3 is deﬁned
+as Ω =
+× [zsub, zsup]. A time-harmonic ansatz with frequency ω and
+magnetic ﬁeld H(~x, t) = e−iωtH(~x) leads to the following equations for H(~x):
+
+~x ∈ R2 | x = α1~a1 + α2~a2; 0 ≤ α1, α2 < 1
+(cid:8)
+
+(cid:9)
+
+• The wave equation and the divergence condition for the magnetic ﬁeld:
+
+∇ ×
+
+1
+ε(~x)
+
+∇ × H(~x) − ω2µ(~x)H(~x) = 0,
+
+∇ · µ(~x)H(~x) = 0,
+
+~x ∈ Ω,
+
+~x ∈ Ω,
+
+(1)
+
+(2)
+
+• Transparent boundary conditions at the boundaries to the substrate (at zsub) and superstrate (at zsup),
+∂Ω, where H in is the incident magnetic ﬁeld (plane wave in this case), and ~n is the normal vector on ∂Ω:
+
+(3)
+
+(4)
+
+1
+ε(~x)
+
+(cid:18)
+
+∇ × (H − H in)
+
+× ~n = DtN (H − H in),
+
+~x ∈ ∂Ω.
+
+(cid:19)
+
+The DtN operator (Dirichlet-to-Neumann) is realized with the PML method.11 This is a generalized
+formulation of Sommerfeld’s radiation condition; it can be realized alternatively by the Pole condition
+method.12
+
+• Periodic boundary conditions for the transverse boundaries, ∂Ω, governed by Bloch’s theorem10:
+
+where the Bloch wavevector ~k ∈ R3 is deﬁned by the incoming plane wave H in.
+
+H(~x) = ei~k·~xu(~x),
+
+u(~x) = u(~x + ~a),
+
+Similar equations are found for the electric ﬁeld E(~x, t) = e−iωtE(~x); these are treated accordingly.
+The ﬁnite-element method solves Eqs. (1) – (4) in their weak form, i.e., in an integral representation. The
+computational domain is discretized with triangular (2D) or tetrahedral (3D) patches. The functional spaces
+are discretized using Nedelec’s edge elements, which are vectorial functions of polynomial order (typically second
+order) deﬁned on the triangular or tetrahedral patches.13
+In a nutshell, FEM can be explained as expand-
+ing the ﬁeld corresponding to the exact solution of Equation (1) in the basis given by these elements. This
+leads to a large sparse matrix equation (algebraic problem). For details on the weak formulation, the choice
+of Bloch-periodic functional spaces, the FEM discretization, and our implementation of the PML method we
+refer to previous works.11, 14, 15 To solve the algebraic problem on a personal computer either standard linear
+algebra decomposition techniques (LU-factorization, e.g., package PARDISO16) or iterative methods17 are used,
+depending on problem size. Due to the use of multi-grid algorithms, the computational time and the memory
+requirements grow linearly with the number of unknowns.
+
+From the users’s point of view, the FEM approach presented here oﬀers the following advantages:
+
+• The expansion into localized functions (shared with any FEM and FD approach) is adequate for step index
+
+proﬁles occuring in masks.
+
+• The ﬂexibiltiy of triangulations (shared with any FEM approach) allows for the simulation of mask imperfec-
+tions such as sloped etch proﬁles and for adaptive mesh-reﬁnement strategies leading to faster convergence.
+
+• The frequency domain approach (shared with any PW method) is adequate for monochromatic or nearly
+
+monochromatic illumination.
+
+step index proﬁles.
+
+• Edge elements provide ”built-in” dielectric boundary conditions crucial for a high precision simulation of
+
+• The mathematical structure of the algebraic problem allows for the use of very eﬃcient numerical solvers,
+i.e., numerical methods where the computational eﬀort grows linearly with the number of unknowns only.
+
+• The FEM discretization is characterized by two parameters, the mesh width h and the thickness of the
+PML layer ρ. It is mathematically proven that the FEM approach converges with a ﬁxed convergence rate
+towards the exact solution of Maxwell-type problems for mesh width h → 0, and ρ → ∞.13, 18 This allows
+to easily check whether the attained results can be trusted.
+
+These advantages result not only in an increased attainable accuracy, but – via the reduced number of unknowns
+– also in a signiﬁcantly reduced computational eﬀort at moderate target accuracies required for lithography
+simulation. The investigated FEM solver JCMharmony includes adaptive grid reﬁnement, higher order, 3D
+Nedelec elements, advanced periodic and transparent boundary conditions and ﬂexible interfaces to the drivers
+and for postprocessing. Typical computation times for 3D problems are 30 seconds for problems with N ≈ 30 000
+unknowns and 5 minutes for problems with N ≈ 150 000 unknowns solved on an actual standard 64 bit personal
+computer (AMD Opteron). Typical computation times for 2D problems are given in Table 2.
+
+3. FEATURES OF THE FEM SOLVER
+
+The range of applications of the FEM approach was examined by means of several characteric tasks in mask
+simulation.
+
+3.1. Conical Incidence
+
+Here we investigate line masks illuminated under conical indicence (i.e., oblique incidence with respect to both
+mask plane and grating lines). This is crucial for the accurate simulation of oﬀ-axis source points for dipole,
+quadrupole or annular illumination. Figure 1 shows the schematics the geometry of the problem. The geometrical,
+material and source parameters are given in Table 1 (data set 1). The geometry does not depend on the y-
+component, therefore Eqn. (1) reduces to a simpler equation where 2D diﬀerential operators act on the 3D
+electric, resp. magnetic ﬁelds. Nevertheless, the problem is simulated without any approximations.
+
+Figure 1. Schematics of the geometry of a periodic linemask: The computational domain consists of a line of width w
+(at center of the line), height h and sidewall angle β, on a substrate material SiO2, surrounded by air. The geometry is
+periodic in x-direction with a pitch of px and it is independent on the y-coordinate. The refractive indices of the diﬀerent
+present materials are denoted by n1 (line), n2 (substrate) and n3 (air), n3 = 1.0.
+
+h
+
+z
+
+x
+
+i = −1
+i = 0
+i = +1
+
+air
+
+line
+
+β
+
+substrate
+
+w
+
+px
+
+i
+
+i
+
+n
+o
+s
+s
+m
+s
+n
+a
+r
+T
+
+0.25
+
+0.2
+
+0.15
+
+0.1
+
+0.05
+
+0
+−0.4
+
+−0.3
+
+−0.2
+
+−0.1
+
+0.1
+0
+Inclination [sin(α)]
+
+0.2
+
+0.3
+
+0.4
+
+Figure 2. Diﬀraction of a plane wave under conical incidence. Intensities of the transmission to the central diﬀraction
+orders (T = | ~A(~ki)|2, i = −1, 0, +1) in dependence on the inclination angle α, where ~A(~ki) is deﬁned in Eqn. (5). The
+angle of rotation is constantly θ = 20◦.
+
+The performance of the FEM solver is demonstrated by a parameter scan for varied inclination angle α of
+the source (S-polarization). The wavevector ~k of the incident plane wave is attained by a rotation of the vector
+
+parameter
+px
+w
+β
+α
+Θ
+λ0
+h
+n1
+n2
+
+data set 1
+400 nm
+200 nm
+86◦
+−25◦ . . . +25◦
+20◦
+
+data set 2
+200 – 800 nm
+px/2
+
+data set 4
+800 nm
+400 nm
+
+data set 3
+400 nm
+200 nm
+90◦
+0◦
+0◦
+
+193.0 nm
+65.4 nm
+2.52 + 0.596i
+1.56306
+
+Table 1. Parameter settings for the simulations in Sections 3.1 (data set 1), 3.2 (set 2), 3.3 (set 3) and 4 (set 4).
+
+(0, 0, 2π/λ) (where λ = λ0/n2, vacuum wavelength λ0, refractive index n2) around the y-axis by the inclination
+angle α and a subsequent rotation around the z-axis by the rotation angle Θ. In this scan we ﬁx the rotation,
+Θ = 20◦ and vary the inclination, α = −25 . . . 25, further parameters are given in Table 1. This yields an incident
+wave vector which is scanned from ~k ≈ (−2.021, −0.736, 4.612)107/m to ~k ≈ (2.021, 0.736, 4.612)107/m. Figure 2
+shows the normalized magnitude of the Fourier coeﬃcients corresponding to the zero and ﬁrst diﬀraction orders
+of the scattered light ﬁeld in dependence on the angle of incidence. A typical computation time for a single
+data point in this scan was 15 sec (N ≈ 3 × 104 unknowns, adaptive grid reﬁnement, computation on a personal
+computer/Intel Pentium IV, 2.5 GHz), resulting in a total time of roughly 1 h for the scan with 200 data points.
+
+3.2. Degree of Polarization of Light Transmitted through a Line Mask
+
+We have performed a scan over diﬀerent geometrical parameters by varying the pitch and the linewidth of a
+line-mask. Geometrical, material and source parameters are again given in Fig. 1 and in Table 1 (data set 2).
+Since the plane of incidence is normal to the grating lines (ky = 0), TE- and TM-polarization is supported, i.e.,
+the problem becomes scalar.
+
+0.1
+
+0
+
+−0.1
+
+−0.2
+
+−0.4
+
+−0.5
+
+−0.6
+
+P
+O
+D
+
+−0.3
+
+n=1
+
+n=0
+
+ = 2 λ
+← p
+0
+x
+
+ = 3 λ
+← p
+/n
+2
+0
+x
+
+ = 3 λ
+← p
+0
+x
+
+ = 5 λ
+← p
+/n
+2
+0
+x
+
+0.02
+
+0.01
+
+P
+O
+D
+
+0
+
+−0.01
+
+−0.02
+
+ = 3 λ
+← p
+/n
+2
+0
+x
+
+ = 2 λ
+← p
+0
+x
+
+200
+
+300
+
+400
+
+500
+
+600
+
+700
+
+800
+
+350
+
+360
+
+390
+
+400
+
+a)
+
+ [nm]
+Mask pitch p
+x
+
+b)
+
+380
+370
+ [nm]
+Mask pitch p
+x
+
+Figure 3. (a) Degree of polarization in dependence on mask pitch (px) for light diﬀracted to the zero (i = 0) and ﬁrst
+(i = 1) diﬀraction order. Several strong Wood’s anomalies are indicated at px = N λ. (b) Enlargement of a detail.
+
+Figure 3 shows the degree of polarization of the zero and ﬁrst transmitted diﬀraction orders, deﬁned as
+DOP = (IT E − IT M )/(IT E + IT M ) in dependence on the pitch px. The strong Wood anomalies,7
+some of
+which are also veriﬁed by Teuber et al.,2 are caused by the excitation of waves traveling along the mask surface.
+We have constructed transparent boundary conditions for the whole range of investigated pitches, including
+’regular’ regions where the transmitted diﬀraction orders correspond to plane waves with a nonzero z-component
+
+of the wavevector and regions close to Wood’s anomalies where certain diﬀraction orders cannot propagate as
+plane waves anymore. We are currently implementing an adaptive strategy for the PML implementation of the
+transparent boundary conditions in order to automatically account for such eﬀects.
+
+The average computation time for a single data point in this scan was about 3.5 sec (N ≈ 1−4×104 unknowns,
+depending on geometry size, yielding a relative error of the diﬀraction intensities of less than 1%; computation
+on a personal computer/Intel Pentium IV, 2.5 GHz), resulting in a total time of roughly 75 min for the scan with
+1200 data points. Similar results are obtained with the solvers SOLID E and Delight (see Section 4), however,
+the Wood’s anomalies are not or less accurately resolved.
+
+3.3. Adaptive Grid Reﬁnement
+
+By reﬁning the resolution of the geometry-triangulation the accuracy of the solution is increased. FEM-solvers use
+as a standard a regular grid reﬁnement, i.e., in 3D each tetrahedron of the discretization is reﬁned to eight smaller
+tetrahedra, in 2D each triangle of the discretization is reﬁned to four smaller triangles. However, FEM meshes
+also allow for adaptive strategies where only certain elements of the triangulation are reﬁned. The investigated
+solver JCMharmony uses a residuum-based error-estimator19 for adaptive grid reﬁnement. Obviously, adaptive
+grid reﬁnement is especially useful when the sought solutions are geometrically localized, or when the geometry
+exhibits sharp features, like discontinuities in the refractive index distribution.
+
+−1
+
+10
+
+−2
+
+10
+
+−3
+
+10
+
+−4
+
+10
+
+−5
+
+10
+
+−6
+
+10
+
+r
+o
+r
+r
+
+E
+ 
+e
+v
+i
+t
+a
+e
+R
+
+l
+
+−7
+
+10
+
+3
+10
+
+i = 0, Adaptive
+i = 1, Adaptive
+i = 0, Regular
+i = 1, Regular
+
+4
+10
+
+5
+10
+Number of unknowns
+
+6
+10
+
+Figure 4. Comparison adaptive vs. regular FEM grid reﬁnement. Relative error of the transmission intensity in the zero
+(circles) and ﬁrst (squares) order of TM-polarized light incident onto a periodic line mask, calculated with the FEM solver
+JCMharmony. Solid lines correspond to automatic adaptive reﬁnement, dotted lines correspond to regular reﬁnement.
+
+We compare the diﬀerent reﬁnement strategies by observing the convergence of the solutions obtained for
+increased grid resolution (i.e., increased number of unknowns). The setting is similar to the one in Section 3.2, the
+parameters are given in Table 1 (data set 3), and the incident light is TM-polarized. Fig. 4 shows the convergence
+of the relative error of the light intensity, ∆I = |IN,i − Iinf,i|/Iinf,i, in two diﬀerent diﬀraction orders for adaptive
+and for regular grid reﬁnement. Here, IN,i denotes the light intensity in the ith diﬀraction order calculated from
+a solution with N unknowns, Iinf,i denotes the intensity calculated on a very ﬁne grid (quasi-exact solution).
+In this example, the use of the error estimator and adaptive reﬁnement yields two orders of magnitude in the
+accuracy of the error for a number of unknowns of N ∼ 105.
+
+3.4. Fully 3D Simulations
+
+As a true 3D example, we have examined the transmission through a mask with a periodic 3D pattern as shown
+in Figure 6a (“chequerboard pattern”). It is illuminated by a plane wave incident from top. The parameters
+h, n1, n2, n3, and λ0 are the same as in the previous examples. The mask is discretized by a tetrahedral
+mesh supporting second order Nedelec elements.13 The inital triangulation is shown in Figure 6b. After two
+
+Figure 5. Unit cell (920 nm × 800 nm × 85.4 nm) of a periodic mask pattern (a) built up from absorbing material (dark
+gray, n1) and air (light gray) and its initial tetrahedral triangulation (b). The mask is illuminated at normal incidence.
+The graphs (c) and (d) show the (projected) vectorial solution and the corresponding intensity gray scale map on a cross
+section well below the output side of the mask, (e) and (f) show intensity maps for cross sections in the middle and at
+the input side of the mask, respectively (white: low intensity, black: high intensity). (See original publication for images
+with higher resolution.)
+
+reﬁnement steps, the discretization led to a linear system with 2.7 · 106 unknows. A cross section of the 3D
+vectorial solution (c) and cross sections through the 3D intensity distribution (d-f) are also shown in Fig. 5. One
+cleary observes the expected discontinuous behavior of the electric ﬁeld at material interfaces. For more details
+on 3D FEM computations we refer to a previous work.20
+
+4. BENCHMARK OF DIFFERENT RIGOROUS METHODS
+
+We have performed a benchmark of the previously described FEM solver JCMharmony and two other advanced
+methods, which are also commercially available: The Finite-Diﬀerence Time-Domain solver SOLID E,21 and the
+solver Delight,8 which relies on a waveguide-method. In this benchmark we have investigated light propagation
+through a phase mask. The geometry of the problem is outlined schematically in Figure 1. A plane electromag-
+netic wave is incident onto the computational domain with a wavelength of λ, a wavevector of ~k = (0, 0, +2π/λ)
+and a polarization of ~H = (0, Hy, 0), with Hy = n1/2
+· 1 V/m
+(TE). The geometrical and material parameters are denoted in Table 1 (data set 4).
+
+· 1 A/m (TM), resp. ~E = (0, Ey, 0), Ey = n
+
+−1/2
+2
+
+2
+
+For a quantitative assessment of the diﬀerent simulation methods we investigate the internal convergence
+behavior of the simulation results, i.e., the deviation of the simulation results from the highest eﬀort result
+obtained with the same method. It turnes out that in all cases the accuracy of the ﬁeld representation inside the
+computational domain dominates the convergence speed. For FDTD both space and time resolution are aﬀected
+since the stability of the method requires aligning time resolution with spatial resolution. For the diﬀerential
+method, the spatial resolution is determined by the number of Fourier coeﬃcients – since the grating considered
+here exhibits discontinuities in the material distribution, evanescent waves play an important role for correctly
+approximating the ﬁelds in the mask. For the FEM solver, the accuracy of the solution depends on the number
+of unknowns which is given by the number of geometrical patches (triangles in 2D) and by the parameters
+of the polynomial functions deﬁned on the ﬁnite elements. The focus of the benchmarking is to compare the
+convergence speed rather than absolute runtime, i.e., the accuracy gain obtained by an increase in runtime.
+
+JCMharmony (regular reﬁnement, TE)
+t[units] ℜ(F C0)
+
+JCMharmony (regular reﬁnement, TM)
+t[units] ℜ(F C0)
+
+JCMharmony (adaptive reﬁnement, TE)
+t[units] ℜ(F C0)
+
+JCMharmony (adaptive reﬁnement, TM)
+t[units] ℜ(F C0)
+
+5.9
+8.0
+14.2
+30.7
+83.9
+238.4
+
+6.1
+8.7
+13.7
+21.4
+39.1
+63.3
+112.7
+185.5
+323.9
+549.7
+
+-0.16969573
+-0.15784440
+-0.15751644
+-0.15749704
+-0.15749576
+-0.15749568
+
+-0.16635461
+-0.15969388
+-0.15733135
+-0.15753513
+-0.15748778
+-0.15749761
+-0.15749472
+-0.15749585
+-0.15749560
+-0.15749569
+
+SOLID E (TE)
+t[units] ℜ(F C0)
+
+-0.2582035
+-0.2528993
+-0.2561597
+-0.2582230
+-0.2607888
+-0.2610307
+-0.2621858
+
+7.8
+13.9
+39.8
+192.3
+1178.7
+2109.6
+12169.9
+Delight (TE)
+t[units] ℜ(F C0)
+
+2.9
+4.0
+5.6
+12.0
+23.4
+44.4
+124.3
+587.0
+1800.2
+
+-0.16846924
+-0.16292394
+-0.15993653
+-0.15843702
+-0.15802117
+-0.15784463
+-0.15770936
+-0.15764073
+-0.15762403
+
+ℑ(F C0)
+0.24799014
+0.26773822
+0.26927004
+0.26937915
+0.26938618
+0.26938662
+
+ℑ(F C0)
+0.25218040
+0.26077231
+0.26825170
+0.26904719
+0.26931712
+0.26937208
+0.26938188
+0.26938548
+0.26938635
+0.26938657
+
+ℑ(F C0)
+0.2073675
+0.1670695
+0.1580582
+0.1603459
+0.1537159
+0.1552241
+0.1537540
+
+ℑ(F C0)
+0.26716937
+0.27139397
+0.27081034
+0.27004071
+0.26980806
+0.26971301
+0.26964098
+0.26960489
+0.26959612
+
+|F C0|
+0.30049251
+0.31080317
+0.31195799
+0.31204238
+0.31204780
+0.31204814
+
+|F C0|
+0.30210728
+0.30578478
+0.31098574
+0.31177509
+0.31198416
+0.31203656
+0.31204356
+0.31204724
+0.31204786
+0.31204810
+
+|F C0|
+0.3311651
+0.3031011
+0.3009986
+0.3039571
+0.3027199
+0.3036965
+0.3039435
+
+|F C0|
+0.31585022
+0.31654209
+0.31451221
+0.31308828
+0.31267728
+0.31250606
+0.31237558
+0.31230977
+0.31229378
+
+5.9
+8.0
+14.2
+30.7
+84.5
+239.2
+
+6.5
+9.2
+14.6
+22.8
+38.6
+63.4
+109.5
+181.8
+312.7
+516.5
+
+-0.22884477
+-0.22041911
+-0.21964384
+-0.21950479
+-0.21946245
+-0.21944684
+
+-0.22657994
+-0.22010390
+-0.22002495
+-0.21943271
+-0.21950100
+-0.21944800
+-0.21944616
+-0.21943960
+-0.21943846
+-0.21943773
+
+SOLID E (TM)
+t[units] ℜ(F C0)
+
+9.1
+13.5
+38.6
+170.2
+1103.6
+1938.8
+11785.0
+Delight (TM)
+
+-0.2342025
+-0.2512106
+-0.2586513
+-0.2572943
+-0.2622736
+-0.2609029
+-0.2618512
+
+ℜ(F C0)
+-0.21385244
+-0.21239923
+-0.21631258
+-0.21957244
+-0.22051428
+-0.22081221
+-0.22088603
+-0.22067944
+-0.22048563
+
+ℑ(F C0)
+0.26037940
+0.27107079
+0.27189080
+0.27184885
+0.27181601
+0.27180433
+
+ℑ(F C0)
+0.26033139
+0.26697463
+0.27095147
+0.27137278
+0.27175820
+0.27177929
+0.27179933
+0.27179803
+0.27179904
+0.27179869
+
+ℑ(F C0)
+0.2523403
+0.2257843
+0.2177905
+0.2210333
+0.2131887
+0.2143467
+0.2107800
+
+ℑ(F C0)
+0.24047966
+0.24108101
+0.24383531
+0.25051824
+0.25495307
+0.25792098
+0.26158676
+0.26517225
+0.26692949
+
+|F C0|
+0.34665164
+0.34937652
+0.34952543
+0.34940542
+0.34935327
+0.34933438
+
+|F C0|
+0.34512447
+0.34600748
+0.34903536
+0.34898982
+0.34933252
+0.34931563
+0.34933006
+0.34932493
+0.34932501
+0.34932427
+
+|F C0|
+0.3442767
+0.3377652
+0.3381319
+0.3391991
+0.3379894
+0.3376608
+0.3361462
+
+|F C0|
+0.32181258
+0.32129968
+0.32595520
+0.33312377
+0.33708696
+0.33953095
+0.34237154
+0.34498657
+0.34621564
+
+Table 2. Computation times, real and imaginary parts and magnitudes of the 0th Fourier coeﬃcients Ay(~kF C = 0) for
+polarizations TE and TM and for the three benchmarked methods. Geometrical and material parameters are denoted in
+Table 1 (data set 4). For each method, increased computation time corresponds to a higher spatial resolution. Please
+note that with Delight, both, TE and TM modes are computed simultaneously, JCMharmony was used with regular and
+with adaptive grid reﬁnement. Units of the Fourier coeﬃcients are [V/m] (TE), resp. [A/m] (TM).
+
+Therefore, other settings of the simulators were conservatively chosen in order to avoid any inﬂuence on the
+accuracy. This means, we expect that a more aggressive tuning of these parameters or implementations might
+slightly reduce the absolute runtime for all methods.
+
+As output we monitor the coeﬃcients of the Fourier decomposition of the solution at the output boundary of
+the computational domain. The square of the Fourier coeﬃcients is proportional to the power of light diﬀracted
+into the corresponding diﬀraction order of the periodic mask.
+
+The Fourier coeﬃcient of the y-component of the investigated ﬁeld ~f = ~E, resp. ~H is deﬁned as
+
+Ay(~kF C ) =
+
+fy(x, y, z0) exp(−i~kF C~x)dx ,
+
+(5)
+
+1
+px Z
+
+px/2
+
+−px/2
+
+where ~kF C is the projection of the wavevector of the investigated diﬀraction order onto the x−y−plane (~kF C =
+0 for zero order and perpendicular incidence). Table 2 lists the Fourier coeﬃcients for TE and TM polarization,
+obtained from the solutions of the the three benchmarked solvers with diﬀerent resolutions. JCMharmony has
+been used in adaptive and in regular grid reﬁnement mode (see Section 3.3). To ease the use of Table 2, we have
+marked the already converged digits in bold.
+
+0
+10
+
+−1
+
+10
+
+−2
+
+10
+
+−3
+
+10
+
+−4
+
+10
+
+−5
+
+10
+
+r
+o
+r
+r
+e
+ 
+e
+v
+i
+t
+a
+e
+R
+
+l
+
+0
+10
+
+−1
+
+10
+
+−2
+
+10
+
+−3
+
+10
+
+−4
+
+10
+
+−5
+
+10
+
+r
+o
+r
+r
+e
+ 
+e
+v
+i
+t
+a
+e
+R
+
+l
+
+JCMharmony
+Delight
+Solid−E
+
+1
+10
+
+−6
+
+10
+
+0
+10
+
+a)
+
+2
+10
+Time [units]
+
+3
+10
+
+−6
+
+10
+
+0
+10
+
+4
+10
+
+b)
+
+2
+10
+Time [units]
+
+3
+10
+
+4
+10
+
+JCMharmony 
+Delight
+Solid−E
+
+1
+10
+
+Figure 6. Relative error (∆A0) of the 0th complex Fourier coeﬃcient vs. normalized computation time for TM-polarization
+(a) and TE-polarization (b). Circles correspond to results obtained with JCMharmony (with adaptive (a), resp. regular
+(b) grid reﬁnement mode), triangles to Delight and squares to SOLID E. The corresponding data is listed in Table 2.
+
+Figure 6 shows the convergence of the diﬀerent methods. Plotted is the relative error of the 0th order complex
+
+Fourier coeﬃcient, Ay(0), of the simulated ﬁeld components,
+
+∆A0 =
+
+|Ay(0) − ˜Ay(0)|
+| ˜Ay(0)|
+
+,
+
+(6)
+
+where ˜Ay(0) denotes the complex Fourier coeﬃcient computed at highest spatial resolution with the correspond-
+ing method, vs. computation time. Since the computations were carried out on diﬀerent platforms, computation
+time is given in units of a Matlab FFT run on the same platform. One unit of time corresponds to approx. 0.25 sec
+on a personal computer (Intel Pentium IV, 2.5 GHz). In spite of the respective internal convergence, we observe
+that the intensities of the 0th order diﬀraction computed with the three methods diﬀer signiﬁcantly (> 2%),
+especially for TM polarization. For that reason, we benchmarked the FEM solver using an example providing
+an analytical solution (see Section 5). The speed of convergence of the three methods diﬀers also signiﬁcantly.
+
+It can be seen from Fig. 6 (or, alternatively, Table 1) that the convergence behavior of the benchmarked
+solvers diﬀers for TE and TM polarization. In the case of TM polarization, the FEM solver JCMharmony is
+the only one to reach target accuracies ∆A0 < 10−3. For a low target accuracy of ∆A0 > 10−2 computation
+times are comparable for all three solvers, for a moderate target accurracy of ∆A0 ≈ 2 · 10−3 JCMharmony
+is about 100× faster than Delight. SOLID E reaches an accuracy of about ∆A0 ≈ 10−2. For low resolutions
+(computation time < 10 units) the loading of the code requires a signiﬁcant amount of the total computation
+time (for SOLID E also the loading of the GUI which takes about 6 time units). In the case of TE polarization
+the convergence behavior of Delight is better than in the TM case, being slightly faster than JCMharmony at low
+target accuracies ∆A0 > 1%, comparable at intermediate target accuracies ∆A0 ≈ 1%, and about 20× slower
+
+than JCMharmony at high target accuracies of ∆A0 ≈ 10−4. Please note that in the TM case adaptive grid
+reﬁnement yields a gain in convergence for the FEM solver JCMharmony, while in the TE case it is not superior
+to regular grid reﬁnement (see also Section 3.3).
+
+5. BENCHMARKING WITH AN ANALYTICAL SOLUTION
+
+The attainable absolute accuracy of the ﬁnite element solver was assessed using an example which is close
+enough to lithography applications and allows for a fully vectorial 2D quasi-analytic solution by means of a
+series expansion with proven convergence. The geometry is depicted in Fig. 7. It consists of dense lines and
+spaces in an inﬁnitely thin membrane mask of perfectly conducting metal embedded in free space. The metal
+layer covers the xy–plane, the strips of the grating are oriented in y-direction. The grating is illuminated from
+the top by a TM polarized plane wave, i.e., Hy,in = exp(−ikzz − iωt). Geometry plus incident wave imply
+the following properties: (A) Hy does not depend on the y-direction which allows us to write Hy = Hy(x, z),
+Maxwell’s equations separate for the Hy-component yielding a Helmholtz equation, (B) the ﬁeld is periodic in
+x with period 2L, (C) the condition Hy(x, 0) = 1 holds true inside the gap, |x| < a, whereas the condition
+∂nHy(x, 0) = 0 holds true outside this gap, a < |x| < L. Altogether, the time harmonic Maxwell’s equations for
+the magnetic ﬁeld component Hy reduce to
+
+∂xxu + ∂zzu + k2Hy = 0
+
+for (x, z) ∈ [−L, L] × R−
+
+Hy(−L, z) = Hy(L, z)
+∂nHy(x, 0) = 0
+Hy(x, 0) = 1
+
+for a ≤ |x| ≤ L
+for |x| ≤ a
+
+(periodicity in x)
+
++ radiation condition for the scattered ﬁeld.
+
+Periodicity in x justiﬁes the Fourier expansion Hy(x, z) =
+
+N −1
+−N cn(z) exp(inπx/L). Inserted into (7) we obtain
+
+P
+
+periodic boundary
+
+transparent boundary
+
+perfect conductor
+
+z
+
+2a
+
+2L
+
+x
+
+200
+
+100
+
+0
+
+−100
+
+−200
+
+−200
+
+−100
+
+0
+
+100
+
+200
+
+Figure 7. Left: Geometry of the problem reduced to a 2D scheme in the x, z plane. Right:
+superposition of incident and scattered ﬁeld (black: low intensity, white: high intensity).
+
+Intensity plot of the
+
+the ordinary diﬀerential equation c′′
+general solution
+
+n(z) = ((nπ/L)2 − k2)cn(z) for the unknown coeﬃcients cn(z). It has the
+
+cn(z) =
+
+an exp(
+an exp(i
+
+(cid:26)
+
+(nπ/L)2 − k2z) + bn exp(−
+k2 − (nπ/L)2z) + bn exp(−i
+
+(nπ/L)2 − k2z) for k2 < (nπ/L)2
+k2 − (nπ/L)2z) for (nπ/L)2 < k2
+
+.
+
+p
+p
+
+p
+p
+
+|
+|
+
+H
+−
+
+M
+E
+F
+,
+y
+
+t
+c
+a
+x
+e
+
+,
+y
+
+H
+
+|
+|
+ 
+r
+o
+r
+r
+e
+
+−2
+
+10
+
+−3
+
+10
+
+−4
+
+10
+
+3
+10
+
+4
+10
+
+Number of Unknowns
+
+5
+10
+
+Figure 8. Convergence of the FEM approach towards the analytic solution. (See original publication for images with
+higher resolution.)
+
+The coeﬃcients an, bn have to be chosen such that a proper radiation condition holds true. This implies bn = 0
+since we ﬁrstly require decaying solutions in case of (nπ/L)2 > k2 and z −→ −∞, and secondly, outgoing
+solutions in case of (nπ/L)2 < k2 and z −→ −∞. Based on the ansatz for Hy, the derived explicit solutions for
+the coeﬃcients cn in terms of coeﬃcients an, an uniform sampling, xn = −L + nL/N, n = −N, . . . , N − 1, we
+obtain 2N equations for 2N unknowns an:
+
+Hy(xn, 0) = 1 =
+
+aneinπxn/L
+
+for n such that |xn| ≤ a
+
+∂nHy(xn, 0) = 0 =
+
+an
+
+(nπ/L)2 − k2einπxn/L
+
+for n such that a ≤ |xn| ≤ L .
+
+Xn
+
+Xn
+
+p
+
+The numerical solution of this system supplies the quasi-analytic reference solution Hy(x, 0) with |x| ≤ L. The
+reference solution was computed with N = 212 ensuring an error less than 10−6 with respect to the mean
+n (Hy,N (xn) − Hy,exact(xn))2, on the interval −L ≤ y ≤ L at
+quadratic error, ||Hy,N − Hy,exact|| := 1/N
+z = 0. The reference solution was then compared to FEM solutions with increasing number of unknowns, where
+exactly the geometry depicted in Fig. 7 was used. The convergence results are presented in Fig. 8. The ﬁrst
+FEM solution was obtained for 587 unknowns yielding an error 1.506 · 10−2 , the last solution was computed
+with 82 303 unknowns yielding an error 3.158 · 10−4. This proves that the FEM solver JCMharmony produces
+simulation results which converge to the exact solution of the scattering problem. The current implementations
+of the other solvers did not allow to examine this example with these.
+
+qP
+
+6. CONCLUSIONS
+
+We have benchmarked a FEM solver for mask simulations against two other rigorous methods (FDTD and
+waveguide method). The FEM solver allowed to reach high accuracies which were not accessible with the other
+methods. The computation time for phase mask simulations at moderate target accuracies was up to two orders
+of magnitude lower when using the FEM solver compared to the other methods. Further we have performed a
+benchmark of the FEM solver against an analytically accessible problem, and we have shown the wide range of
+applications of the solver by examining several typical simulation problems.
+
+ACKNOWLEDGMENTS
+
+We acknowledge ﬁnancial support by the Ministry of Education and Research of the Federal Republic of Germany
+(Project No. 01M3154D), by the DFG Research Center Matheon, and by the priority programme SPP 1113 of
+the Deutsche Forschungsgemeinschaft, DFG.
+
+REFERENCES
+
+1. A. Erdmann, “Process optimization using lithography simulation,” Proc. SPIE 5401, p. 22, 2004.
+2. S. Teuber, K. Bubke, I. H¨ollein, R. Ziebold, and J. H. Peters, “Determination of mask induced polarization
+
+eﬀects occurring in Hyper NA immersion lithography,” Proc. SPIE 5754, p. 543, 2005.
+
+3. R. M¨arz, S. Burger, S. Golka, A. Forchel, C. Herrmann, C. Jamois, D. Michaelis, and K. Wandel, “Planar
+high index-contrast photonic crystals for telecom applications,” in Photonic Crystals - Advances in Design,
+Fabrication and Characterization, K. B. et al., ed., pp. 308–329, Wiley-VCH, 2004.
+
+4. S. G. Johnson and J. D. Joannopoulos, “Block-iterative frequency-domain methods for Maxwell’s equations
+
+in a planewave basis,” Opt. Express 8(3), p. 173, 2001.
+
+5. A. Taﬂove and S. Hagness, Computational Electrodynamics: The Finite-Diﬀerence Time-Domain Method,
+
+6. A. Erdmann and C. M. Friedrich, “Rigorous diﬀraction analysis for future mask technology,” Proc. SPIE
+
+2nd Ed., Artech House, 2000.
+
+4000, p. 684, 2000.
+
+7. R. Petit, Electromagnetic Theory of Gratings, Springer-Verlag, 1980.
+8. H. Kirchauer, Photolithography Simulation. PhD thesis, TU Vienna, 1998.
+9. M. G. Moharam, “Coupled-wave analysis of two-dimensional dielectric gratings,” Proc. SPIE 883,
+
+p. 8/22611, 1988.
+
+10. K. Sakoda, Optical Properties of Photonic Crystals, Springer-Verlag, Berlin, 2001.
+11. L. Zschiedrich, R. Klose, A. Sch¨adle, and F. Schmidt, “A new ﬁnite element realization of the perfectly
+matched layer method for Helmholtz scattering problems on polygonal domains in 2D,” J. Comp. Phys., in
+press , 2005.
+
+12. T. Hohage, F. Schmidt, and L. Zschiedrich, “Solving Time-Harmonic Scattering Problems Based on the
+
+Pole Condition I: Theory,” SIAM J. Math. Anal. 35(1), pp. 183–210, 2003.
+
+13. P. Monk, Finite Element Methods for Maxwell’s Equations, Claredon Press, Oxford, 2003.
+14. S. Burger, R. Klose, A. Sch¨adle, F. Schmidt, and L. Zschiedrich, “FEM modelling of 3d photonic crystals
+and photonic crystal waveguides,” in Integrated Optics: Devices, Materials, and Technologies IX, Y. Sidorin
+and C. A. W¨achter, eds., 5728, pp. 164–173, Proc. SPIE, 2005.
+
+15. L. Zschiedrich, S. Burger, R. Klose, A. Sch¨adle, and F. Schmidt, “JCMmode: An adaptive ﬁnite element
+solver for the computation of leaky modes,” in Integrated Optics: Devices, Materials, and Technologies IX,
+Y. Sidorin and C. A. W¨achter, eds., 5728, pp. 192–202, Proc. SPIE, 2005.
+
+16. O. Schenk et al., “Parallel sparse direct linear solver PARDISO.” Department of Computer Science, Uni-
+
+versit¨at Basel.
+
+17. P. Deuﬂhard, F. Schmidt, T. Friese, and L. Zschiedrich, Adaptive Multigrid Methods for the Vectorial
+Maxwell Eigenvalue Problem for Optical Waveguide Design, pp. 279–293. Mathematics - Key Technology
+for the Future, Springer-Verlag, Berlin, 2003.
+
+18. M. Lassas and E. Somersalo, “On the existence and convergence of the solution of PML equations.,” Com-
+
+puting No.3, 229-241 60(3), pp. 229–241, 1998.
+
+19. V. Heuveline and R. Rannacher, “A posteriori error control for ﬁnite element approximations of elliptic
+
+eigenvalue problems,” J. Adv. Comp. Math. 15, p. 107, 2001.
+
+20. S. Burger, L. Zschiedrich, R. Klose, A. Sch¨adle, F. Schmidt, C. Enkrich, S. Linden, M. Wegener, and C. M.
+Soukoulis, “Numerical investigation of light scattering oﬀ split-ring resonators.” Proc. SPIE 5955, pp. 18-26,
+2005.
+
+21. C. Kalus, S. List, A. Erdmann, R. Gordon, M. McCallum, and A. Semmler, “Benchmarking of available
+rigorous electromagnetic ﬁeld simulators for phase-shift mask applications,” Microelectronic engineering 57,
+p. 79, 2001.
+
+

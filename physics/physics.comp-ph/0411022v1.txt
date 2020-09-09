@@ -1,0 +1,3946 @@
+4
+0
+0
+2
+ 
+v
+o
+N
+ 
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+2
+2
+0
+1
+1
+4
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+A discontinuous Galerkin method for strain
+gradient-dependent damage: Study of
+interpolations, convergence and two dimensional
+problems
+
+Luisa Molari
+DISTART, Universit`a di Bologna,
+Viale Risorgimento 2, 40136 Bologna, Italy
+
+Garth N. Wells
+Faculty of Civil Engineering and Geosciences, Delft University of Technology,
+Stevinweg 1, 2628 CN Delft, The Netherlands
+
+Krishna Garikipati
+Department of Mechanical Engineering, University of Michigan,
+Ann Arbor, Michigan 48109, USA
+
+Francesco Ubertini
+DISTART, Universit`a di Bologna,
+Viale Risorgimento 2, 40136 Bologna, Italy
+
+February 2, 2008
+
+Abstract
+
+A discontinuous Galerkin method has been developed for strain gradient-
+dependent damage. The strength of this method lies in the fact that it allows
+the use of C0 interpolation functions for continuum theories involving higher-
+order derivatives, while in a conventional framework at least C1 interpolations
+are required. The discontinuous Galerkin formulation thereby oﬀers signiﬁcant
+potential for engineering computations with strain gradient-dependent models.
+When using basis functions with a low degree of continuity, jump conditions
+arise at element edges which are incorporated in the weak form.
+In addition
+to the formulation itself, a detailed study of the convergence properties of the
+method for various element types is presented, an error analysis is undertaken,
+and the method is also shown to work in two dimensions.
+
+1
+
+1 Introduction
+
+The nucleation and growth of cracks can be described by continuum damage
+mechanics. In this approach, an internal variable is included in the constitutive
+law to represent the evolution of microstructural damage (Kachanov, 1958).
+The material moduli degrade with the increase of this parameter, which could
+be either scalar or tensorial in character. A scalar internal variable is commonly
+used to model damage degradation for cases in which the material remains
+isotropic. A tensorial form of the internal variable is used for the anisotropic
+case.
+
+Damage degradation can manifest itself in progressive material softening, for
+which reason numerical results based upon classical continuum mechanics are
+characterised by a pathological mesh dependence (Willam, 1984; Baˇzant, 1986).
+As the material softens, deformations localise within bands of ﬁnite thickness,
+which is viewed as the smearing out of a crack (Rashid, 1968; Baˇzant and Oh,
+1983). However, the width of bands is intimately related to the element size.
+As the mesh is reﬁned the band width decreases, tending to zero in the limit.
+The result of this is seen in load-displacement response with slopes that are
+increasingly negative with mesh reﬁnement in the softening regime. The origin
+of this pathology lies in the loss of ellipticity of the material tangent modulus
+tensor for softening inelastic continuum models in the absence of rate eﬀects
+(Rice, 1976).
+
+The last two decades have witnessed a great deal of work in ‘regularised’ con-
+tinuum models to avoid the loss of ellipticity in the presence of material soften-
+ing. Among these are the strain gradient models (Aifantis, 1984; Coleman and Hodgdon,
+1985; Triantafyllidis and Aifantis, 1986; Peerlings et al., 1996), nonlocal models
+(Baˇzant and Pijaudier-Cabot, 1988; de Vree et al., 1995; Borino et al., 2003),
+localisation limiters (Lasry and Belytchko, 1998), and Cosserat models (de Borst and Sluys,
+1991), to identify but a fraction of a vast body of literature.
+
+By various techniques, each of these models introduces an intrinsic length
+scale to the continuum theory. When the material softens, the localisation band
+width is controlled by this length scale, rather than the element size. As a
+result, the mesh size-dependency, described above, is eliminated.
+
+In this paper we aim to address numerical issues associated with some strain
+gradient models. This class of models involves strains and strain gradients as
+kinematic terms. In some models work conjugate couple stresses are also iden-
+tiﬁed. Dimensional considerations lead to the introduction of intrinsic length
+scales associated with the strain gradients. The presence of strain gradient
+terms alters the mathematical character of the governing diﬀerential equations,
+elevating them to a higher order (at least locally). A numerical complication
+arises from the higher order character of the governing diﬀerential equations, as
+standard C0 interpolation functions often do not furnish suﬃcient continuity.
+
+The obvious approach, that is to employ interpolation functions with higher-
+order continuity (C1 and higher), has not proven fruitful. Finite element meth-
+ods with these interpolations are expensive and diﬃcult to construct. There
+exists some work with mixed formulations for this purpose (Shu et al., 1999;
+
+2
+
+Zervos et al., 2001). However, the very simplest two-dimensional elements in-
+volve up to 28 degrees of freedom, placing them beyond the realm of prac-
+ticability. Some authors have applied element-free Galerkin methods, on the
+basis of the arbitrary degree of continuity that they can provide (Askes et al.,
+2000). However, this class of methods introduces complications in the applica-
+tion of boundary conditions and is somewhat less eﬃcient than the ﬁnite element
+method, and its implementation involves a reformulation of the dominant ﬁnite
+element architecture, making its widespread use less attractive.
+In addition,
+just as high-order continuity can be diﬃcult to achieve, excessive continuity can
+also be a drawback for many models, particularly at internal boundaries where
+the order of the governing diﬀerential equation changes.
+
+In this work we seek to expand upon recent developments in discontinu-
+ous Galerkin methods for strain gradient-dependent theories (Engel et al., 2002;
+Wells et al., 2004). The great advantage of this class of methods is the ability
+to use C0 interpolation functions for the displacement when solving continuum
+theories involving higher-order derivatives. In cases where other considerations
+make it advantageous to also interpolate strain-like quantities, the approach can
+allow interpolated ﬁelds that are discontinuous across elements (Wells et al.,
+2004).
+
+The content of this paper is organised as follows. The strain gradient damage
+model of interest is described in Section 2, with special attention paid to the
+boundary conditions. The Galerkin formulation for this model is presented in
+Section 3. The convergence behaviour of the model in one dimension is examined
+both analytically and numerically in Section 4, and the section is concluded with
+one- and two-dimensional examples. Conclusions are then drawn in Section 5.
+
+2 Gradient damage
+
+Consider a body Ω, which is an open subset in Rn, where n is the spatial
+dimension. The boundary of the body is denoted by Γ = ∂Ω, and the outward
+unit normal to Γ is denoted by n. We consider quasi-static equilibrium of the
+body, which is governed by
+
+∇ ·
+
+σ + f = 0
+σn = h
+u = g
+
+in Ω,
+on Γh,
+on Γg,
+
+where σ is the stress tensor, f is the body force, h is the prescribed traction
+on the boundary Γh and g is the prescribed displacement on the boundary Γg.
+The boundary Γ is partitioned such that Γ = Γg
+. For
+isotropic damage, it is suﬃcient to introduce a single scalar damage variable,
+1. Considering that D = 0 implies no damage and D = 1
+D, satisfying 0
+corresponds to a completely damaged material point, the stress-strain relation
+is of the form
+
+Γh and Γg
+
+Γh =
+
+D
+
+≤
+
+≤
+
+∩
+
+∪
+
+∅
+
+(1)
+
+(2)
+(3)
+
+(4)
+
+σ = (1
+
+D) C:ε,
+
+−
+
+3
+
+(5)
+
+(6)
+
+(7)
+
+(8)
+(9)
+
+where C is the elasticity tensor and ε is the strain tensor, ε =
+su. The
+scalar damage variable, D, is related to a scalar strain measure, ¯ε, through the
+Kuhn-Tucker conditions:
+
+∇
+
+ε
+
+κ
+
+−
+
+≤
+
+0,
+
+˙κ
+
+0,
+
+˙κ(¯ε
+
+κ) = 0,
+
+≥
+
+−
+
+where D = D(κ). The scalar strain measure ¯ε of interest here arises from a
+so-called explicit gradient damage formulation.
+In this approach, the strain
+measure is deﬁned to be
+
+ε = εeq + c2
+
+2εeq,
+
+∇
+
+where c is an intrinsic length scale, and εeq is a suitably chosen invariant of the
+local strain tensor.
+
+For material points at which damage is developing, the governing equation
+is nonlinear and fourth-order in the displacement. In undamaged or unloading
+regions ( ˙κ = 0), the governing equation is linear and second-order. Recognising
+the fourth-order form of the diﬀerential equation (at least in sub-regions of Ω)
+leads to the question of appropriate boundary conditions. Possible boundary
+conditions (in addition to the usual boundary conditions on the displacement
+and traction) include:
+
+εeq ·
+∇
+εeq) nd)
+·
+
+(
+
+(
+∇
+
+∇
+
+εeq = q
+nd = r
+nd = s
+
+on Γε,
+on Γε′,
+on Γε′′ ,
+
+∅
+
+∅
+
+∪
+
+∪
+
+∩
+
+∩
+
+∩
+
+Γε′
+
+, Γε
+
+, Γε′
+
+Γε′ =
+
+Γε′′ =
+
+Γε′′ =
+
+Γε′′ = Γd, Γε
+
+, and nd
+where Γε
+∅
+indicates the unit outward normal to the boundary of the damaged domain, Γd.
+These boundary conditions supplement the standard displacement and traction
+boundary conditions on Γ.
+If the entire body Ω is damaging, then Γd = Γ.
+Commonly however, damage is localised. In this case interface conditions arise
+on the boundaries which are internal to Ω (the boundaries to sub-domains where
+˙κ > 0 and ˙κ = 0 meet). When the body force is smooth, continuity of u and
+σnd are natural continuity conditions. At the interface between damaging and
+elastic regions, an additional condition is required on the damage domain. The
+need for extra boundary conditions is made particularly clear by the analytical
+solution presented in later in Section 4.2.1. In the adopted formulation, this
+nd across the damage-
+extra condition will come from implied continuity of
+elastic boundary.
+
+εeq·
+∇
+
+3 Galerkin formulation
+
+In developing a weak formulation for eventual ﬁnite element solution, the equi-
+librium equation (1) and the equation for ε (6) are considered separately. The
+nonlinear fourth-order equation resulting from insertion of the constitutive equa-
+tions into the equilibrium equation could potentially be cast in a weak form,
+with integration by parts applied twice. The formulation would be speciﬁc
+
+4
+
+(10)
+
+(11)
+
+(12)
+
+nel
+
+Ω =
+
+Ωe,
+
+e
+
+Ω =
+
+Ωe,
+
+nel
+
+e=1
+[
+
+nb
+
+e
+
+Γ =
+
+Γi,
+
+to the chosen dependence of damage on κ, which is typically complex. Fur-
+thermore, the complexities associated with a moving elastic-damage boundary
+(which is the interface between second- and fourth-order sub-domains) would
+be signiﬁcant. Hence, it is convenient to treat the two equations separately.
+
+The body Ω is partitioned into nel non-overlapping elements Ωe such that
+
+e=1
+[
+where Ωe is a closed set (i.e., it includes the boundary of the element). The
+elements Ωe (which are open sets) satisfy the standard requirements for a ﬁnite
+element partition. A domain
+
+Ω is also deﬁned:
+
+Ω does not include element boundaries. It is also useful to deﬁne the
+
+where
+‘interior’ boundary
+
+e
+
+Γ,
+
+e
+
+i=1
+[
+where Γi is the ith interior element boundary and nb is the number of internal
+inter-element boundaries.
+
+e
+
+Consider now the function spaces
+
+h,
+
+S
+
+V
+
+h and
+
+h,
+
+S
+
+V
+
+h =
+h =
+h =
+
+W
+
+uh
+i ∈
+wh
+i ∈
+qh
+
+H 1 (Ω)
+H 1 (Ω)
+L2 (Ω)
+
+∈
+
+uh
+i |Ωe ∈
+wh
+(cid:12)
+i |Ωe ∈
+(cid:12)
+qh
+(cid:12)
+|Ωe ∈
+(cid:12)
+
+Pk1 (Ωe)
+∀
+Pk1 (Ωe)
+
+Pk2 (Ωe)
+
+(cid:8)
+
+(cid:8)
+
+(cid:8)
+
+∀
+e
+
+∀
+
+,
+
+(cid:9)
+
+W
+e, ui = gi on Γg
+
+e, wi = 0 on Γg
+
+,
+
+,
+
+(cid:9)
+
+(cid:9)
+
+(13)
+
+(14)
+
+(15)
+
+where Pk represents the space of polynomial ﬁnite element shape functions of
+h represent usual, C0 continuous ﬁnite element
+order k. The spaces
+shape functions. Note that the space
+
+h contains discontinuous functions.
+
+h and
+
+V
+
+S
+
+(cid:12)
+(cid:12)
+
+3.1 Standard Galerkin weak form
+
+The standard, continuous Galerkin problem for the equilibrium equation (1) is
+of the form: given εh
+
+h, ﬁnd uh
+
+such that
+
+n
+
+h
+
+∈ W
+
+∈
+
+S
+
+(cid:0)
+
+(cid:1)
+wh
+
+swh:
+
+1
+
+D
+
+εh
+
+C:
+
+suh dΩ
+
+h dΓ = 0
+
+wh
+
+n
+
+h
+
+, (16)
+
+−
+
+ZΩ ∇
+ZΓh
+where it was already assumed that uh is C0 continuous (see equation (13)). A
+second Galerkin problem is constructed to solve for ε (equation (6)). It consists
+
+V
+(cid:0)
+
+(cid:1)(cid:1)
+
+∇
+
+−
+
+∈
+
+∀
+
+(cid:1)
+
+(cid:0)
+
+(cid:0)
+
+·
+
+W
+
+5
+
+of: given uh
+
+n
+
+h
+
+, ﬁnd εh
+
+h such that
+
+∈
+
+S
+(cid:0)
+
+−
+
+ZΩ
+
+qhεh dΩ
+
+ZΩ
+
+∈ W
+
+(cid:1)
+qhεh
+
+eq dΩ +
+
+qh
+
+c2
+
+·
+
+∇
+
+εh
+eq dΩ
+
+ZΩ ∇
+
+−
+
+ZΓ
+
+qhc2
+
+εh
+eq ·
+
+∇
+
+n dΓ = 0
+
+qh
+
+∀
+
+∈ W
+
+h.
+
+(17)
+
+Recall that discontinuities in qh and εh across
+Γ are permitted. At this stage, the
+only boundary conditions implied by the formulation are on the displacement
+ﬁeld (by construction) and the traction. Discussion regarding the enforcement
+of ‘non-standard’ boundary conditions is delayed until the following section.
+
+e
+
+Two problems exist in the preceding Galerkin formulation. The ﬁrst is that
+the weight function qh can be discontinuous, hence
+qh is not necessarily square-
+integrable on Ω. This problem can be circumvented easily by requiring C0 con-
+h. The second problem, which is less easily solved,
+tinuity of the functions in
+is that εh
+εh
+eq everywhere in
+Ω requires that the displacement ﬁeld uh be C1 continuous if singularities are
+H 1 (Ω) (see equation (13)), it is not
+to be avoided on
+necessarily C1 continuous.
+
+W
+eq is computed from
+
+suh. Therefore, calculating
+
+Γ. However, since uh
+
+∇
+
+∇
+
+∇
+
+∈
+
+e
+
+3.2 Discontinuous Galerkin form
+
+The approach advocated here avoids the need for C1 continuity of the dis-
+placement ﬁeld by imposing the required degree of continuity in a weak sense.
+Before proceeding with the formulation, jump and averaging operations are de-
+ﬁned. The jump in a ﬁeld a across a surface (which is associated with a body)
+is given by:
+
+a
+
+J
+
+K
+
+= a1 ·
+
+n1 + a2 ·
+
+n2,
+
+where the subscripts denote the side of the surface and n is the outward unit
+n2 in the geometrically linear case). The average of a
+normal vector (n1 =
+ﬁeld a across a surface is given by:
+
+−
+
+=
+
+a
+h
+
+i
+
+a1 + a2
+2
+
+.
+
+W
+
+ZΩ
+
+Consider now the problem (Wells et al., 2004): given uh
+h such that
+
+n
+
+h
+
+, ﬁnd εh
+
+∈
+
+S
+(cid:0)
+
+(cid:1)
+
+qhεh dΩ
+
+qhεh
+
+eq dΩ +
+
+qh
+
+c2
+
+·
+
+∇
+
+εh
+eq dΩ
+
+−
+
+qhc2
+
+εn
+eq ·
+
+∇
+
+n dΓ
+
+−
+
+ZΩ
+
+−
+
+Γ
+Z
+
+e
+
+qqhy
+
+c2
+
+·
+
+Ω ∇
+Z
+εh
+e
+eq
+
+dΓ
+
+qh
+
+·
+
+(cid:11)
+
+∇
+
+(cid:10)
++
+
+Γ
+
+Z
+
+−
+
+Γ
+Z
+qqhy
+
+e
+·
+
+∇
+
+(cid:10)
+qεh
+
+(cid:11)
+αc2
+h
+
+ZΓ
+c2 qεh
+
+eqy dΓ
+
+eqy dΓ = 0
+
+qh
+
+∀
+
+∈ W
+
+h,
+
+(20)
+
+where α is a penalty-like parameter, and h is the element dimension. No gra-
+eq or qh appear in terms integrated over Ω (which includes interior
+dients of εh
+
+e
+
+(18)
+
+(19)
+
+∈
+
+6
+
+boundaries) in equation (20), hence the continuity requirements on the spaces
+
+h and
+
+h are suﬃcient.
+
+S
+
+W
+
+Equation (20) resembles the ‘interior penalty’ method, which belongs to the
+discontinuous Galerkin family of methods (Arnold et al., 2002). Terms have
+been added to the weak form that for a conventional elasticity problem would
+lead to a symmetric formulation. Symmetry is however not of relevance here as
+the functions qh and εh
+eq will generally come from diﬀerent function spaces. This
+h contains discontinuous
+formulation is general for the case in which the space
+h are C0 continuous, the
+functions. However, note if all functions in the space
+formulation is still valid, with terms relating to the jump in εh
+eq remaining. The
+formulation would then resemble a continuous/discontinuous Galerkin method
+(Engel et al., 2002).
+
+W
+W
+
+The solution of the gradient enhanced damage problem requires the simul-
+taneous solution of equations (16) and (20), which are coupled. Considering the
+higher-order boundary condition (
+Γd, the problem
+involves: ﬁnd uh
+
+εeq) n)
+(
+∇
+h such that
+
+n = 0 on Γ
+
+and εh
+
+∩
+
+n
+
+h
+
+·
+
+∈
+
+S
+(cid:0)
+
+(cid:1)
+
+∇
+∈ W
+
+swh:
+
+1
+
+D
+
+εh
+
+C:
+
+suh dΩ
+
+−
+
+∇
+
+wh
+
+h dΓ
+
+·
+
+−
+
+ZΩ
+
+−
+
+ZΓh
+
+ZΩ ∇
+
+(cid:0)
+
++
+
+(cid:1)(cid:1)
+
+(cid:0)
+α2h2
+
+ZΓ∩Γd
+
+wh
+
+∇ ·
+
+∇
+
+(cid:16)
+
+(cid:16)
+
+∇
+(cid:0)
+
+eq
+
+(cid:17)(cid:17)
+
+(cid:1)
+
+n
+
+Ec2
+
+·
+
+wh
+
+f dΩ
+
+·
+
+εh
+eq
+
+n dΓ
+
+∇ ·
+(cid:0)
+= 0
+
+∇
+(cid:0)
+
+∀
+
+wh
+
+(cid:1)(cid:1)
+∈
+
+n
+
+h
+
+,
+
+(21)
+
+V
+
+(cid:0)
+
+(cid:1)
+
+qhεh dΩ
+
+qhεh
+
+eq dΩ +
+
+qh
+
+c2
+
+·
+
+∇
+
+εh
+eq dΩ
+
+−
+
+qhc2
+
+εh
+eq ·
+
+∇
+
+n dΓ
+
+ZΩ
+
+−
+
+ZΩ
+
+−
+
+Γ
+Z
+
+e
+
+qqhy
+
+c2
+
+·
+
+Ω ∇
+Z
+εh
+e
+eq
+
+dΓ
+
+(cid:11)
+αc2
+h
+
+Γ
+Z
+
+∇
+
++
+
+(cid:10)
+
+−
+
+Γ
+Z
+qqhy
+e
+
+qh
+
+∇
+
+(cid:10)
+qεh
+
+·
+
+·
+
+(cid:11)
+
+ZΓ
+c2 qεh
+
+eqy dΓ
+
+eqy dΓ = 0
+
+qh
+
+∀
+
+∈ W
+
+h,
+
+(22)
+
+e
+
+·
+
+(
+
+∇
+
+∇
+
+εeq) n)
+
+where α2 is a penalty parameter which attempts to impose the boundary con-
+n = 0, and E is Young’s modulus. The enforcement of this
+dition (
+boundary condition is not in the spirit of discontinuous Galerkin methods, as
+the resulting Galerkin problem is not consistent, in the same sense that penalty
+methods are not consistent (the restoration of consistency would require an ap-
+proach analogous to Nitsche’s method). However, this is of no consequence for
+the considered problems due to a fortuitous choice of interpolation, as will be
+shown later. Preserving consistency while imposing the non-standard boundary
+condition weakly is complex due to the nonlinear dependency on ε. This is
+a topic requiring further investigation. Boundary conditions are not explicitly
+Γ as the necessary conditions are implied implicitly in the formu-
+applied on Γd
+lation, as will be shown in examining consistency of the proposed formulation.
+The weak enforcement of the non-standard boundary condition proposed here
+has not been tested numerically.
+
+−
+
+7
+
+The nonlinear equations in (21) and (22) are coupled through the dependence
+of D on εh and the dependency of εh on uh. Linearisation of these equations is
+discussed in Wells et al. (2004).
+
+3.3 Consistency of the discontinuous formulation
+
+Having added non-standard terms to the weak form, it is important to prove
+consistency of the method. Applying integration by parts to the integral over
+Ω in equation (20) yields
+
+e
+
+Ω ∇
+Z
+
+e
+
+qh
+
+c2
+
+·
+
+∇
+
+εh
+eq dΩ =
+
+qhc2
+
+2εh
+
+eq dΩ +
+
+∇
+
+qhc2
+
+εh
+eq ·
+
+∇
+
+n dΓ
+
+−
+
+Ω
+
+Z
+
++
+
+qh
+e
+
+c2 q
+
+Γ
+Z
+
+(cid:10)
+
+(cid:11)
+
+ZΓ
+εh
+eqy dΓ +
+
+∇
+
+qqhy
+
+c2
+
+·
+
+Γ
+Z
+
+∇
+(cid:10)
+
+(cid:11)
+
+εh
+eq
+
+dΓ.
+
+(23)
+
+Inserting this expression into equation (20), and employing standard variational
+arguments, the following Euler-Lagrange equations can be identiﬁed:
+
+e
+
+e
+
+ε
+
+−
+
+εeq −
+c2
+
+c2
+
+∇
+εeq
+J
+c2
+
+J∇
+
+2εeq = 0
+n = 0
+
+K ·
+εeq
+
+K
+
+= 0
+
+in
+
+Ω,
+
+on
+
+on
+
+Γ,
+e
+Γ.
+e
+
+(24)
+
+(25)
+
+(26)
+
+Equation (24) is the original problem over element interiors (see equation (6)).
+Equations (25) and (26) impose continuity of the corresponding ﬁelds across
+element boundaries. The Galerkin form (equation (20)) can therefore be seen
+as the weak imposition of these Euler-Lagrange equations.
+
+e
+
+4 Analysis and examples
+
+The formulation outlined in Section 3 has been analysed, and tested for various
+problems. Elements are diﬀerentiated on the basis of the interpolation order
+for uh (which is always C0 continuous), the interpolation order for εh, and the
+continuity of εh. For example, an element with cubic shape functions for uh
+and C0 continuous, quadratic shape functions for εh is denoted P 3/P 2(C0). An
+element with quadratic shape functions for uh and discontinuous, linear shape
+functions for εh is denoted P 2/P 1(C−1).
+
+For one-dimensional examples, εeq = ε.
+
+4.1 Convergence for the elastic case in one dimension
+
+For an elastic problem, there exists a one-way coupling between the two weak
+equations (21) and (22). In this section, the approximation of ε, for given a
+solution to equation (21), is examined. For an elastic bar, the fundamental
+problem is a second-order diﬀerential equation, and the second weak equation
+provides a projection of the solution to the equilibrium equation (and its relevant
+derivatives) onto the basis for ε.
+
+8
+
+Figure 1: Element patch for error analysis of P 2/P 1(C0) formulation.
+
+d2e−5
+
+δe−2
+
+d2e−5
+
+δ2e−5
+
+u
+up
+
+u
+up
+
+Inter-element d-node
+
+Mid-element d-node
+
+Inter-element δ-node
+
+h
+
+h
+
+Inter-element d-node
+
+Mid-element d-node
+
+Inter-element δ-node
+
+d2e+5
+
+δe+3
+
+d2e+5
+
+δ2e+4
+
+Figure 2: Element patch for error analysis of P 2/P 1(C−1) formulation.
+
+4.1.1 Error analysis for the mixed strain ﬁeld
+
+ε
+
+k
+
+k
+
+−
+
+−
+
+εh
+
+Here, an analysis for the L2-error in εh,
+c2ε,xx
+, where ε is the exact
+strain ﬁeld, is performed.
+In order to compare with numerical solutions, we
+have solved an elastic problem with a forcing function chosen such that ε has
+a localised character to it. The analysis rests upon the crucial result that the
+one-dimensional ﬁnite element displacement ﬁeld, uh, is nodally-exact when the
+shape functions are derived from Lagrange polynomials (Strang and Fix, 1973).
+Consider the interpolation combinations P k+1/P k(C0) and P k+1/P k(C−1).
+Let the nodal values of εh corresponding to element e be denoted by δk(e−1)+1,
+. . . , δke+1 for the C0 case, and by δ(k+1)(e−1)+1, . . . , δ(k+1)e for the C−1 case.
+The values of uh at the nodes corresponding to this element are d(k+1)(e−1)+1,
+. . . , d(k+1)e+1. The nodal displacements coincide with the exact solution. The
+discrete matrix form of equation (22) reveals the stencil relating the δ- and d-
+values. In the C0 case,
+d(k+1)(e−3)+1, . . . ,
+d(k+1)(e+2)+1}
+depend on
+d(k+1)(e−3)+1, . . . , d(k+1)(e+2)+1}
+{
+Consider a nodally-exact, 5(k+1)th-order polynomial interpolant of the exact
+solution. This ﬁeld is denoted by up. Figure 1 shows a patch of 5 elements,
+nodes for the d- and δ- degrees of freedom, uex and up for the P 2/P 1(C0)
+interpolation combination. Figure 2 depicts the situation for the P 2/P 1(C−1)
+interpolation combination.
+
+depend on
+δ(k+1)(e−1)+1, . . . , δ(k+1)e}
+
+δk(e−1)+1, . . . , δke+1}
+
+{
+, and in the C−1 case,
+
+; i.e., on 5k + 6 d-values.
+
+{
+
+{
+
+Let εp denote the strain ﬁeld arising from up. Using the triangle inequality
+
+the error can be bounded as follows:
+
+εh
+
+k
+
+ε
+
+−
+
+−
+
+c2ε,xx
+
+kΩ ≤ k
+
+εh
+
+εp
+
+c2εp
+
+,xxkΩ +
+
+k
+
+−
+
+−
+
+εp + c2εp
+
+,xx −
+
+ε
+
+−
+
+c2ε,xx
+
+kΩ. (27)
+
+9
+
+(28)
+
+(29)
+
+(30)
+
+(31)
+
+Since up is of order 5(k + 1), and is nodally-exact over Ωe, ﬁnite element inter-
+polation theory (Oden and Carey, 1984) leads to the result
+
+εp
+
+k
+
+−
+
+c2εp
+
+,xx −
+
+ε
+
+−
+
+c2ε,xx
+
+kΩ ≤
+
+Ch5(k+1)−2,
+
+where C is a constant, independent of h.
+
+The ﬁrst term on the right-hand side in (27) is estimated using the stencil for
+each interpolation combination. The 5(k + 1)th-order polynomial interpolant,
+up(x), can be written as
+
+up(x) =
+
+An
+
+x
+
+(e +
+
+)h
+
+5(k+1)
+
+n=0
+X
+
+−
+
+(cid:18)
+
+1
+2
+
+n
+
+,
+
+(cid:19)
+
+where (e + 1/2)h is the midpoint of Ωe with the ﬁrst node of the mesh at x = 0.
+The nodal exactness of uh allows
+to be written in
+terms of An. On combining with the stencil,
+(for the
+δk(e−1)+1, . . . , δke+1}
+(for the C−1 case) can therefore be
+C0 case) and
+expressed in terms of An. Using the interpolation functions for εh, it is then a
+trivial matter to exactly evaluate
+
+δ(k+1)(e−1)+1, . . . , δ(k+1)e}
+εp
+−
+2
+Ωe was evaluated for each interpolation
+,xxk
+
+dk(e−3)+1, . . . ,dk(e+2)+1}
+{
+
+εp
+combination. The results are:
+
+For convenience,
+
+εh
+k
+c2εp
+
+,xxkΩe .
+
+c2εp
+
+εh
+
+−
+
+−
+
+−
+
+{
+
+k
+
+{
+
+εh
+
+k
+
+−
+
+εp
+
+−
+
+c2εp
+
+,xxk
+
+2
+Ωe =
+
+A3
+
+2 + 2A3A5c2 +
+
+A5
+
+2c4
+
+h5 + O(h7);
+
+500
+9
+
+P 3/P 2(C0)
+
+P 2/P 1(C0)
+
+P 3/P 2(C−1)
+
+P 2/P 1(C−1)
+
+•
+
+•
+
+•
+
+•
+
+(cid:19)
+
+(cid:19)
+
+εh
+
+k
+
+−
+
+εp
+
+−
+
+c2εp
+
+,xxk
+
+2
+Ωe =
+
+A3
+
+2 + 22A3A5c2 + 120A5
+
+2c4
+
+h5 + O(h7);
+
+εh
+
+k
+
+−
+
+εp
+
+−
+
+c2εp
+
+,xxk
+
+2
+Ωe =
+
+1936
+27 −
+
+704
+27
+
+(cid:18)
+
+64
+27
+
+(cid:19)
+
+α +
+
+α2
+
+A4
+
+2c4h3 + O(h5); (32)
+
+εh
+
+k
+
+−
+
+εp
+
+−
+
+c2εp
+
+,xxk
+
+2
+Ωe =
+
+4
+27
+
+2
+
+A2
+
+4
+3
+
+−
+
+A2A4c2 + 3A4
+
+2c4
+
+h3
+
+(cid:19)
+
+(cid:18)
+A2A4c2
+
+−
+
++
+
+4
+3
+
+(cid:18)
+
+(cid:19)
+
+6A4
+
+2c4
+
+αh3 + 3A4
+
+2c4α2h3; and (33)
+
+9
+500
+
+(cid:18)
+
+21
+20
+
+(cid:18)
+
+10
+
+P 1/P 0(C−1)
+
+•
+
+εh
+
+k
+
+−
+
+εp
+
+−
+
+c2εp
+
+,xxk
+
+2
+Ωe = 36
+
+1
+
+−
+
+2α + α2
+
+A3
+
+2c4h + O(h3).
+
+(34)
+
+For each case listed above, the higher-order terms in h have a ﬁnite maximum
+m(Ω), where m(Ω) is a measure of the length of the total
+C5,
+
+power, O(hl), and h
+domain. Therefore it follows that there exist constants
+C51, such that for the P 3/P 2(C0) element
+
+C31,
+
+C1,
+
+C3,
+
+C2,
+
+C4,
+
+≤
+
+(cid:0)
+
+(cid:1)
+
+εh
+
+εp
+
+c2εp
+
+2
+Ωe ≤
+
+,xxk
+
+−
+
+−
+
+C1h5,
+
+e
+
+e
+
+e
+
+e
+
+e
+
+e
+(35)
+
+e
+
+k
+for the P 2/P 1(C0) element
+
+for the P 3/P 2(C−1) element
+
+εh
+
+k
+
+εp
+
+c2εp
+
+2
+Ωe ≤
+
+,xxk
+
+−
+
+−
+
+εh
+
+k
+
+−
+
+εp
+
+−
+
+c2εp
+
+2
+
+,xxk
+
+Ωe ≤ (
+
+if α = 5.5
+otherwise,
+
+for the P 2/P 1(C−1) element
+
+−
+and for the P 1/P 0(C−1) element,
+
+−
+
+k
+
+εh
+
+εp
+
+c2εp
+
+2
+Ωe ≤
+
+,xxk
+
+C4h3
+
+α,
+
+∀
+
+e
+C2h5,
+
+e
+
+C3h5
+C31h3
+e
+e
+
+e
+
+εh
+
+k
+
+−
+
+εp
+
+−
+
+c2εp
+
+2
+
+,xxk
+
+Ωe ≤ (
+
+if α = 1
+
+C5h3
+C51h otherwise,
+e
+e
+
+C1, . . . ,
+
+where the constants
+C51 are independent of h (if u is suﬃciently regular)
+and element number e (since the constants can be chosen to be the maximum
+over all elements). For elements of a uniform size, in each mesh there are
+nel = m(Ω)/h elements. Therefore,
+
+e
+
+e
+
+εh
+
+k
+
+εp
+
+c2εp
+
+2
+Ω ≤
+
+,xxk
+
+−
+
+−
+
+m(Ω)
+h
+
+εh
+
+max
+e k
+
+−
+
+εp
+
+−
+
+c2εp
+
+,xxk
+
+2
+Ωe,
+
+leading to, for the P 3/P 2(C0) element
+
+−
+for the P 2/P 1(C0) element
+
+k
+
+−
+for the P 3/P 2(C−1) element
+
+k
+
+εh
+
+εh
+
+εp
+
+c2εp
+
+2
+Ω ≤
+
+,xxk
+
+−
+
+m(Ω)
+
+C1h4,
+
+εp
+
+c2εp
+
+2
+Ω ≤
+
+,xxk
+
+−
+
+m(Ω)
+
+e
+C2h4,
+
+e
+
+εh
+
+k
+
+−
+
+εp
+
+−
+
+c2εp
+
+2
+
+,xxk
+
+Ω ≤ (
+
+m(Ω)
+m(Ω)
+
+if α = 5.5
+otherwise,
+
+C3h4
+C31h2
+e
+e
+
+11
+
+(36)
+
+(37)
+
+(38)
+
+(39)
+
+(40)
+
+(41)
+
+(42)
+
+(43)
+
+convergence rate
+Element type
+P 1/P 0(C−1) (α = 1)
+O
+P 1/P 0(C−1) (α
+O
+= 1)
+P 2/P 1(C0)
+O
+P 2/P 1(C−1)
+O
+P 3/P 2(C0)
+O
+P 3/P 2(C−1) (α = 5.5) O
+P 3/P 2(C−1) (α
+= 5.5) O
+
+h1
+h0
+(cid:0)
+h2
+(cid:0)
+h1
+(cid:0)
+h2
+(cid:0)
+h2
+(cid:0)
+h1
+(cid:0)
+(cid:0)
+Table 1: Analytical convergence rates in terms of
+
+(cid:1)
+(cid:1)
+(cid:1)
+(cid:1)
+(cid:1)
+(cid:1)
+(cid:1)
+ε
+
+εh
+
+k
+
+−
+
+kΩ for various elements.
+
+for the P 2/P 1(C−1) element
+
+εh
+
+k
+
+εp
+
+c2εp
+
+2
+Ωe ≤
+
+,xxk
+
+−
+
+−
+
+m(Ω)
+
+C4h2
+
+α,
+
+∀
+
+(44)
+
+and for the P 1/P 0(C−1) element
+
+e
+
+2
+
+k
+
+−
+
+εp
+
+εh
+
+c2εp
+
+C5h2
+C51h0
+e
+0 in (28), each of equations (41)–(45) can be combined with (28),
+e
+and constants C1, C2, C3, C31, C4, C5, C51 can be found, independent of h,
+such that for the P 3/P 2(C0) element
+
+if α = 1
+otherwise.
+
+m(Ω)
+m(Ω)
+
+Ωe ≤ (
+
+Since k
+
+,xxk
+
+(45)
+
+−
+
+≥
+
+−
+for the P 2/P 1(C0) element
+
+k
+
+−
+for the P 3/P 2(C−1) element
+
+k
+
+εh
+
+εh
+
+εp
+
+c2εp
+
+2
+Ω ≤
+
+,xxk
+
+−
+
+m(Ω)C1h4,
+
+εp
+
+c2εp
+
+2
+Ω ≤
+
+,xxk
+
+−
+
+m(Ω)C2h4,
+
+εh
+
+k
+
+−
+
+εp
+
+−
+
+c2εp
+
+2
+
+,xxk
+
+Ω ≤ (
+
+m(Ω)C3h4
+m(Ω)C31h2
+
+if α = 5.5
+otherwise,
+
+for the P 2/P 1(C−1) element
+
+εh
+
+k
+
+εp
+
+c2εp
+
+2
+Ω ≤
+
+,xxk
+
+−
+
+−
+
+m(Ω)C4h2
+
+α,
+
+∀
+
+and for the P 1/P 0(C−1) element,
+
+εh
+
+k
+
+−
+
+εp
+
+−
+
+c2εp
+
+2
+
+,xxk
+
+Ω ≤ (
+
+m(Ω)C5h2
+m(Ω)C51h0
+
+if α = 1
+otherwise.
+
+The results of the analysis are summarised in Table 1.
+
+12
+
+(46)
+
+(47)
+
+(48)
+
+(49)
+
+(50)
+
+6
+6
+Figure 3: Quadratically tapering bar.
+
+4.1.2 Observed convergence rates
+
+The convergence rate estimates from the previous section are now compared with
+observed rates. To do this, the convergence of ε is examined for the quadratically
+tapering bar shown in Figure 3. Considering that the origin is located as the
+centre of the bar, the cross section A is given by
+
+A(x) = A1 + γ2A1
+
+x2
+L2 ,
+
+where γ controls the ratio between A1 and A2 (γ2 = (A2 −
+A1) /A1). This
+problem can be equivalently formulated as a rod with unit cross-section and
+loading f which varies along the rod, which allows the convergence analysis
+from the previous section to be carried over for this case. The exact solution
+for ε along the bar is:
+
+and the exact solution of ε,xx is:
+
+ε =
+
+P L2
+EA1 (L2 + γ2x2)
+
+,
+
+ε,xx =
+
+2P L2γ2
+
+L2
+3γ2x2
+EA1 (L2 + γ2x2)3
+
+−
+
+(cid:0)
+
+.
+
+(cid:1)
+
+The term εh involves both ε and ε,xx. The ε component involves the standard
+L2 projection of εh (coming from the solution of the equilibrium equation) onto
+the basis for εh. This projection does not involve any of the element interface
+terms that have arisen in the discontinuous Galerkin formulation. Of special
+interest is the approximation of the ε,xx term. To examine numerically the
+convergence of this term, the weak form corresponding to:
+
+(51)
+
+(52)
+
+(53)
+
+(54)
+
+is solved, as it is the ε,xx term that dominates the convergence rate. However,
+in practice, the convergence rate of ε may appear to dominate due to a large
+diﬀerence in the constants in the error inequality. Taking equation (22) and
+
+ε,xx = 0
+
+ε
+
+−
+
+13
+
+x
+x
+,
+ε
+
+−0.02
+
+−0.03
+
+ 0.02
+
+ 0.01
+
+ 0
+
+−0.01
+
+−0.04
+
+−0.05
+
+−0.06
+
+−0.07
+
+−0.08
+
+−50 −40 −30 −20 −10
+
+ 10
+
+ 20
+
+ 30
+
+ 40
+
+ 50
+
+ 0
+x
+
+Figure 4: Exact solution for ε,xx.
+
+removing terms related to the projection of εh, we solve the following problem:
+ﬁnd uh
+
+h such that
+
+h and εh
+
+∈ S
+
+∈ W
+,xEuh
+wh
+
+ZΩ
+
+,x dΩ
+
+−
+
+whP
+
+x=L = 0
+|
+
+wh
+
+∀
+
+∈ V
+
+h,
+
+(55)
+
+ZΩ
+
+qhεh dΩ +
+
+,xεh
+qh
+
+,x dΩ
+
+qhεh
+
+,xn dΓ
+
+qqhy
+
+εh
+,x
+
+dΓ
+
+Ω
+
+Z
+
+e
+Γ
+Z
+
+−
+
+qh
+,x
+
+(cid:10)
+
+(cid:11)
+
+−
+
+ZΓ
+qεhy dΓ +
+
+−
+
+Γ
+Z
+qqhy qεhy dΓ = 0
+e
+
+(cid:10)
+
+(cid:11)
+
+α
+h
+
+Γ
+Z
+
+qh
+
+∀
+
+∈ W
+
+h.
+
+(56)
+
+e
+
+e
+
+For the parameters A1 = 1 mm2, A2 = 0.1 mm2, L = 50 mm, E = 1 MPa
+and P = 1 N, the convergence behaviour is examined for a range of elements. To
+gain insight, the form of the exact solution is shown in Figure 4. The L2-norm of
+the computed error for a range elements is shown in Figure 5 for the case α = 1.
+If the error is computed by integrating over the entire bar (
+50 < x < 50),
+as in Figure 5, the results are polluted by errors at the boundaries of the bar.
+In Figure 5, the convergence behaviour represents primarily how rapidly the
+computed solution approaches the exact solution at the boundaries. However,
+when simulating a tapered damaging bar, the error at the boundaries of the
+bar is of little consequence as damage develops at the centre, and ε at the
+boundaries plays no role (presuming that the deviation from the exact solution
+is not suﬃcient to induce spurious damage development). Excluding the error
+at the end of the bar by integrating over
+40 < x < 40, the convergence
+behaviour is more predictable, as can be seen in Figure 6. From Figure 6, it
+can be concluded that the convergence rate for all elements is consistent with
+the predicted rates (as summarised in Table 1).
+
+−
+
+−
+
+The eﬀect of α on convergence for the P 2/P 1
+
+element is shown in
+Figure 7. As expected, the convergence rate is unaﬀected by α. For the
+
+C−1
+
+(cid:0)
+
+(cid:1)
+
+14
+
+k
+
+h
+ε
+
+−
+x
+x
+,
+ε
+
+k
+
+ 1
+
+ 0.1
+
+ 0.01
+
+ 0.001
+
+ 0.0001
+
+ 1e−05
+
+ 10
+
+P 1/P 0 (C−1 )
+P 2/P 1(C0 )
+P 2/P 1 (C−1 )
+P 3/P 2(C0 )
+P 3/P 2 (C−1 )
+
+ 100
+nel
+
+ 1000
+
+Figure 5: Convergence for the problem ε = ε,xx with α = 1 on the domain
+
+50 < x < 50.
+
+−
+
+1
+
+1
+
+1
+
+2
+
+ 0.1
+
+ 0.01
+
+k
+
+h
+ε
+
+−
+x
+x
+,
+ε
+
+k
+
+ 0.001
+
+ 0.0001
+
+ 1e−05
+
+ 10
+
+P 1/P 0 (C−1 )
+P 2/P 1(C0 )
+P 2/P 1 (C−1 )
+P 3/P 2(C0 )
+P 3/P 2 (C−1 )
+
+15
+
+ 100
+nel
+
+ 1000
+
+Figure 6: Convergence for the problem ε = ε,xx with α = 1 on the domain
+
+40 < x < 40.
+
+−
+
+1
+
+1
+
+α = 1
+α = 2
+α = 3
+α = 4
+α = 5
+
+k
+
+h
+ε
+
+−
+x
+x
+,
+ε
+
+k
+
+ 0.1
+
+ 0.01
+
+ 0.001
+
+ 0.0001
+
+ 10
+
+ 100
+nel
+
+ 1000
+
+Figure 7: Convergence of the P 2/P 1
+the domain
+
+40 < x < 40 for the problem ε = ε,xx.
+
+C−1
+
+−
+
+(cid:0)
+
+(cid:1)
+
+element for diﬀerent values of α on
+
+C−1
+
+P 3/P 2
+element, the convergence behaviour for diﬀerent α is shown in
+Figure 8. From Figure 8, it is clear the convergence rate increases by one order
+for α = 6. This is close to the predicted value of α = 5.5.
+
+(cid:0)
+
+(cid:1)
+
+4.2 Convergence for the inelastic case in one dimension
+
+The formulation is now examined for the inelastic case. Again, the quadratically
+tapering bar is considered, which leads to damage development at the centre of
+the bar. For a particular relationship between D and κ, it is possible to solve
+the problem analytically, which provides the basis for numerical convergence
+tests.
+
+4.2.1 Analytical solution
+
+Consider again the bar shown in Figure 3, where the shaded region indicates
+the damaged zone and x =
+w is the location of the damage–elastic boundary.
+For convenience, the force P is expressed as
+
+±
+
+where β governs the magnitude of the applied load and κ0 is the value of κ at
+which damage is ﬁrst induced. In the undamaged part of the bar, the strain
+response is given by
+
+and within the damaged zone by,
+
+(57)
+
+(58)
+
+(59)
+
+P =
+
+1
+
+β2
+
+EA1κ0,
+
+−
+
+(cid:0)
+
+(cid:1)
+
+ε =
+
+P
+EA
+
+,
+
+P
+D) EA
+
+.
+
+ε =
+
+(1
+
+−
+
+16
+
+ 0.1
+
+ 0.01
+
+k
+
+h
+ε
+
+−
+x
+x
+,
+ε
+
+k
+
+ 0.001
+
+ 0.0001
+
+ 1e−05
+
+ 10
+
+α = 1
+α = 2
+α = 4
+α = 5.5
+α = 5.8
+α = 6
+α = 6.2
+α = 6.5
+
+1
+
+1
+
+2
+
+1
+
+ 100
+nel
+
+ 1000
+
+Figure 8: Convergence of the P 3/P 2
+the domain
+
+40 < x < 40 for the problem ε = ε,xx.
+
+C−1
+
+−
+
+(cid:0)
+
+(cid:1)
+
+element for diﬀerent values of α on
+
+With the intention of ﬁnding an analytical solution, a simple damage law is
+assumed,
+
+0
+
+if κ
+
+κ0
+≤
+if κ > κ0.
+
+1
+
+D =
+
+κ0
+κ
+The relationship in equation (60) is the analogy of perfect plasticity for the case
+c = 0, in the sense that it yields a plateau in the load–displacement response
+once the elastic limit has been exceeded. Assuming that no unloading takes
+place in the damaged zone, κ = ε, that is
+
+(60)
+
+(
+
+−
+
+κ = ε + c2ε,xx
+
+w < x < w.
+
+−
+
+(61)
+
+Inserting equations (61) and (60) into equation (59), the following ordinary
+diﬀerential equation is obtained:
+
+1
+
+−
+
+(cid:18)
+
+P
+κ0EA
+
+c2 P
+
+κ0EA
+
+ε
+
+−
+
+(cid:19)
+
+ε,xx = 0
+
+w < x < w,
+
+(62)
+
+−
+
+which governs the response in the damaged zone. The general solution to the
+above equation for x > 0 is given by:
+
+M
+
+β2L
+4cγ√1+β2
+
+,
+
+γx2
+Lc√1+β2
+
+W
+
+β2L
+4cγ√1+β2
+
+,
+
+γx2
+Lc√1+β2
+
+ε = C1
+
+(cid:18)
+
+(cid:19)
+
++ C2
+
+(cid:18)
+
+(cid:19)
+
+,
+
+(63)
+
+,
+
+1
+4
+√x
+
+,
+
+1
+4
+√x
+
+where M and W are Whittaker’s functions (Abramowitz and Stegun, 1965), and
+C1 and C2 are integration constants. The integration constants can be obtained
+by considering boundary conditions at x =
+w. The ﬁrst considered condition
+is symmetry about x = 0. Expanding equation (63) in a Taylor series about
+
+±
+
+17
+
+ 0.001
+
+k
+
+ 0.0001
+
+h
+ε
+
+−
+
+ε
+
+k
+
+ 1e−05
+
+ 1e−06
+
+ 1e−07
+
+ 10
+
+P 1/P 0 (C−1 )
+P 2/P 1(C0 )
+P 2/P 1 (C−1 )
+P 3/P 2(C0 )
+P 3/P 2 (C−1 )
+
+1
+
+1
+
+1
+
+2
+
+1
+
+3
+
+ 100
+nel
+
+2π
+
+Figure 9: Error in εh for the damaging bar.
+
+ 1000
+
+x = 0, and requiring that odd terms vanish, the following relation is obtained:
+
+C1 = C2
+
+,
+
+(64)
+
+Γ
+
+1
+4 −
+
+−β2L2+cγ√1+β2
+4c√1+γβ2
+
+(cid:18)
+where Γ is the Gamma function. The second considered condition is:
+
+(cid:19)
+
+(65)
+
+(66)
+
+(67)
+
+which implies
+
+= 0
+
+at x = w,
+
+ε,x
+J
+
+K
+
+ε,x =
+
+P
+EA
+
+at x = w.
+
+(cid:19),x
+Finally, the location of the elastic–damage boundary can be determined by
+requiring that
+
+(cid:18)
+
+κ = κ0
+
+at x = w.
+
+For the sake of brevity, the expressions for C1, C2 and w have been omitted.
+
+4.2.2 Damage convergence results
+
+The convergence behaviour of various elements for the outlined test problem
+is now examined. For the tests, the following parameters are adopted: γ = 3,
+103 MPa, c = 1 mm and A1 = 1 mm2
+β = 5/29, L = 100 mm, E = 200
+10−3.
+and κ0 = 1
+In calculating the error, the Gamma function has been
+computed numerically.
+
+×
+
+×
+
+The results of the error analysis, for various elements, are shown in Figure 9.
+For the P 1/P 0
+elements, α = 1, α = 4
+and α = 6, respectively. These choices draw upon the observed convergence
+results for the elastic case. For all the elements, the solution converges. Once a
+
+and P 3/P 2
+
+, P 2/P 1
+
+C−1
+
+C−1
+
+C−1
+
+(cid:1)
+
+(cid:1)
+
+(cid:0)
+
+(cid:0)
+
+(cid:1)
+
+(cid:0)
+
+18
+
+level of reﬁnement has been reached, the convergence rate is linear. Moreover,
+for a given interpolation order, continuous and discontinuous interpolations yield
+similar results.
+
+4.2.3 Non-trivial damage response
+
+The quadratically tapering bar is now examined for a non-trivial softening rela-
+tionship. For the tapered bar the relevant parameters are: γ = 3, A1 = 1 mm2,
+10−4, κc = 0.0125, and c = 1 mm.
+Young’s modulus E = 20
+The functional form of the damage variable is speciﬁed to be
+
+103 MPa, κ0 = 1
+
+×
+
+×
+
+κ0(κc
+κ(κc
+
+κ)
+κ0)
+
+−
+−
+
+−
+
+if κ
+
+κ0
+
+≤
+
+if κ0 < κ < κc
+
+if κ
+
+κc,
+
+≥
+
+0
+
+1
+
+1
+
+D = 
+
+
+
+(68)
+
+which leads to a linear softening relationship for c = 0. The numerical per-
+formance of the formulation has previously been demonstrated in Wells et al.
+(2004) for continuous, piecewise linear uh and constant εh, discontinuous across
+element boundaries (the P 1/P 0(C−1) element). The formulation was shown
+numerically to converge to a benchmark solution. Here, the formulation is ex-
+tended for a range of diﬀerent element types.
+
+The motivation behind the considered strain gradient-dependent model is
+regularisation in the presence of strain softening. Without strain gradient eﬀects
+(c = 0), computed results are pathologically mesh-dependent; the result of which
+is manifest in the load–displacement responses. Therefore, each of the elements
+which to this point have been examined are tested, and the load-displacement
+responses reported for meshes with 20, 40, 80, 160 and 320 elements. For the
+P 3/P 2(C−1) element, the numerical tests are performed with meshes of 20, 40,
+80 and 160 elements. To provide a reference solution, the response computed
+using 160 P 3/P 2
+elements is included in all ﬁgures.
+
+C0
+
+(cid:1)
+
+(cid:0)
+
+The load-displacement responses for the two elements using a continuous in-
+terpolation of εh are shown in Figure 10. As the mesh is reﬁned, the computed
+response for both element types converges towards to the reference solution.
+The load-displacement responses for three elements using a discontinuous inter-
+polation of εh are shown in Figure 11. Again, for the P 1/P 0
+element,
+α = 1, for the P 2/P 1
+element, α = 4, and for the P 3/P 2
+element,
+α = 6. It is clear, for all elements, that the load–displacement response con-
+verges to the reference solution with mesh reﬁnement. To further examine the
+computed results, the damage proﬁles for the two continuous elements and the
+three discontinuous elements are compared in Figures 12 and 13, respectively.
+For all cases, the 160 element mesh is considered. Clearly, the damage proﬁles
+are nearly identical for all element types.
+
+C−1
+C−1
+(cid:1)
+(cid:1)
+
+C−1
+
+(cid:0)
+(cid:0)
+
+(cid:1)
+
+(cid:0)
+
+19
+
+20
+40
+80
+160
+320
+ref.
+
+ 25
+
+ 20
+
+ 15
+
+ 10
+
+ 5
+
+ 25
+
+ 20
+
+ 15
+
+ 10
+
+ 5
+
+P
+
+P
+
+ 0
+
+ 0
+
+ 0.01
+
+ 0.02
+
+ 0.03
+
+ 0.05
+
+ 0.06
+
+ 0.07
+
+ 0.08
+
+20
+40
+80
+160
+320
+ref.
+
+ 0
+
+ 0
+
+ 0.01
+
+ 0.02
+
+ 0.03
+
+ 0.05
+
+ 0.06
+
+ 0.07
+
+ 0.08
+
+Figure 10: Load–displacement response for (a) P 2/P 1
+elements.
+
+C0
+
+and (b) P 3/P 2
+
+C0
+
+(cid:0)
+
+(cid:1)
+
+(cid:0)
+
+(cid:1)
+
+ 0.04
+u
+(a)
+
+ 0.04
+u
+(b)
+
+20
+
+20
+40
+80
+160
+320
+ref.
+
+ 0
+
+ 0
+
+ 0.01
+
+ 0.02
+
+ 0.03
+
+ 0.05
+
+ 0.06
+
+ 0.07
+
+ 0.08
+
+ 0.04
+u
+(a)
+
+ 0
+
+ 0
+
+ 0.01
+
+ 0.02
+
+ 0.03
+
+ 0.05
+
+ 0.06
+
+ 0.07
+
+ 0.08
+
+ 0.04
+u
+(b)
+
+20
+40
+80
+160
+320
+ref.
+
+20
+40
+80
+160
+ref.
+
+ 25
+
+ 20
+
+ 15
+
+ 10
+
+ 5
+
+ 25
+
+ 20
+
+ 15
+
+ 10
+
+ 5
+
+ 25
+
+ 20
+
+ 15
+
+ 10
+
+ 5
+
+P
+
+P
+
+P
+
+ 0
+
+ 0
+
+ 0.01
+
+ 0.02
+
+ 0.03
+
+ 0.05
+
+ 0.06
+
+ 0.07
+
+ 0.08
+
+Figure 11: Load–displacement response for (a) P 1/P 0
+and (c) P 3/P 2
+elements.
+
+C−1
+
+C−1
+
+, (b) P 2/P 1
+
+C−1
+
+(cid:0)
+
+(cid:1)
+
+(cid:0)
+
+(cid:1)
+
+(cid:0)
+
+(cid:1)
+
+ 0.04
+u
+(c)
+
+21
+
+ 0
+−100
+
+−50
+
+ 0
+x
+
+ 50
+
+ 100
+
+Figure 12: Damage proﬁles for the εh-continuous elements, computed using 160
+elements.
+
+P 2/P 1 (C0 )
+P 3/P 2 (C0 )
+
+P 1/P 0 (C−1 )
+P 2/P 3 (C−1 )
+P 3/P 2 (C−1 )
+
+ 1
+
+ 0.9
+
+ 0.8
+
+ 0.7
+
+ 0.6
+
+ 0.5
+
+ 0.4
+
+ 0.3
+
+ 0.2
+
+ 0.1
+
+ 1
+
+ 0.9
+
+ 0.8
+
+ 0.7
+
+ 0.6
+
+ 0.5
+
+ 0.4
+
+ 0.3
+
+ 0.2
+
+ 0.1
+
+D
+
+D
+
+ 0
+−100
+
+−50
+
+ 0
+x
+
+ 50
+
+ 100
+
+Figure 13: Damage proﬁles for the εh-discontinuous elements, computed using
+160 elements.
+
+22
+
+P
+
+3
+
+5
+
+5
+
+Figure 14: Three-point bending specimen.
+
+4.3 Three-point bending test
+
+(cid:0)
+
+C0
+
+To conclude the numerical validations, a three-point bending test is performed
+using a P 2/P 1
+element. The element is triangular, with degrees of freedom
+for uh located at the vertexes and at the mid-sides, and degrees of freedom
+for εh located only at the vertexes of the element. The choice of a quadratic
+interpolation of uh means that the penalty term for imposing the non-standard
+boundary condition in equation (21) vanishes, and the non-standard boundary
+condition is satisﬁed by construction (see equation (21)). The equivalent strain
+is taken as the trace of the strain tensor,
+
+(cid:1)
+
+εeq = trace (ε) .
+
+(69)
+
+This choice does not reﬂect a strong physical motivation, rather it is chosen for
+illustrative purposes as it allows for relatively simple linearisation of the method
+(which can become extremely complex when c
+
+= 0).
+
+×
+
+×
+
+×
+
+10−4, and κc = 1.25
+
+104 MPa, Poisson’s ratio ν = 0, κ0 = 1
+
+The three-point bending test is performed for two diﬀerent meshes with c
+= 0
+and c = 0. The adopted geometry for the three-point bending test is shown in
+Figure 14, and the adopted material parameters are: Young’s modulus E =
+10−2. For
+20
+10−2 mm. Computations are stopped
+gradient-dependent simulations, c = 8
+×
+when damage reaches unity at any point in the mesh, and damage development
+at the supports is prevented. The computed damage contours for the four cases
+are shown in Figure 15. From the damage contours, it is clear that the computed
+results are similar for the two meshes with c
+= 0. In the absence of regularising
+eﬀects (c = 0), the result is clearly aﬀected by the discretisation. The load–
+displacement responses for the various cases are shown in Figure 16. Recall
+that a computation is halted when damage reaches unity at a material point.
+For the gradient-dependent case, the responses for the two meshes are similar.
+For the case c = 0, the responses are also similar, which is somewhat in contrast
+to what is normally expected for a strain softening problem. The responses are
+similar in this case due to the spurious development of two cracks for the ﬁner
+mesh (in contrast to the single main crack for the coarse mesh). This is evident
+from the damage contours in Figure 15.
+
+23
+
+6
+6
+6
+(a)
+
+(b)
+
+Figure 15: Damage contours for two meshes (a) with gradient eﬀects (c
+and (b) without gradient eﬀects (c = 0).
+
+= 0)
+
+P
+
+ 1.5
+
+ 3
+
+ 2.5
+
+ 2
+
+ 1
+
+ 0.5
+
+ 0
+
+ 0
+
+ 0.001
+
+ 0.002
+
+ 0.003
+
+ 0.004
+
+ 0.005
+
+ 0.006
+
+ 0.007
+
+Figure 16: Load–displacement responses for two diﬀerent meshes.
+
+coarse c = 0
+coarse c 6= 0
+fine c = 0
+fine c 6= 0
+
+u
+
+24
+
+6
+5 Conclusions
+
+A discontinuous Galerkin formulation for a strain gradient-dependent damage
+model has been investigated for a range of diﬀerent ﬁnite elements. The model
+allows the numerical solution of a continuum problem which would classically re-
+quire C1 interpolations with a simple C0 or even discontinuous basis. Examples
+demonstrate robust performance for a range of polynomial orders and degrees
+of continuity of the interpolation functions, and are supported by rigorous error
+analysis. Speciﬁcally, lower-order interpolations perform well and are relatively
+simple to construct. The convergence properties of the proposed method have
+been examined for the elastic case, for which the observed rates are consis-
+tent with the theoretically predicted rates. The formulation has been observed
+numerically to converge also for damage problems. Finally, the formulation
+was applied successfully to a two-dimensional problem. While the approach is
+promising, several issues remain. Diﬃculties which must be resolved for other
+gradient models include the eﬀective imposition of boundary conditions on the
+ﬁxed boundary of a body, and at moving boundaries internal to a body. The
+development of thermodynamically consistent models would assist in this sense,
+as the higher-order kinematic gradients have a natural partner in the energetic
+sense.
+
+Acknowledgements
+
+LM and FU acknowledge the support of University of Bologna, GNW acknowl-
+edges the support of the Netherlands Technology Foundation (STW), and KG
+acknowledges support from the US National Science Foundation by way of grant
+no. CMS0087019, and from Sandia National Laboratory. The support from
+Sandia National Laboratory includes a Presidential Early Career Award.
+
+References
+
+Abramowitz, M., Stegun, I. A. (Eds.), 1965. Handbook of Mathematical Func-
+
+tions. Dover Publications, Inc., New York.
+
+Aifantis, E. C., 1984. On the microstructural origin of certain inelastic models.
+
+Journal of Engineering Materials Technology 106, 326–334.
+
+Arnold, D. N., Brezzi, F., Cockburn, B., Marini, D., 2002. Uniﬁed analysis
+of discontinuous Galerkin methods for elliptic problems. SIAM Journal on
+Numerical Analysis 39 (5), 1749–1779.
+
+Askes, H., Pamin, J., de Borst, R., 2000. Dispersion analysis and element-
+free Galerkin solutions of second- and fourth-order gradient-enhanced damage
+models. International Journal for Numerical Methods in Engineering 69 (6),
+811–832.
+
+25
+
+Baˇzant, Z. P., 1986. Mechanics of distributed cracking. Applied Mechanics Re-
+
+views 39, 675–705.
+
+Baˇzant, Z. P., Oh, B., 1983. Crack band theory for fracture of concrete. RILEM
+
+Materials and Structures 16 (93), 155–177.
+
+Baˇzant, Z. P., Pijaudier-Cabot, G., 1988. Nonlocal continuum damage, localiza-
+tion instability and convergence. Journal of Applied Mechanics 55, 287–293.
+
+Borino, G., Failla, B., Parrinello, F., 2003. A symmetric nonlocal damage theory.
+
+International Journal of Solids and Structures 40, 3621–3645.
+
+Coleman, B. D., Hodgdon, M. L., 1985. On shear bands in ductile materials.
+
+Archives for Rational Mechanics and Analysis 90, 219–247.
+
+de Borst, R., Sluys, L. J., 1991. Localisation in a Cosserat continuum under
+static and dynamic loading conditions. Computer Methods in Applied Me-
+chanics and Engineering 90, 805–827.
+
+de Vree, J. H. P., Brekelmans, W. A. M., van Gils, M. A. J., 1995. Compari-
+son of non-local approaches in continuum damage mechanics. Computers and
+Structures 55 (4), 581–588.
+
+Engel, G., Garikipati, K., Hughes, T. J. R., Larson, M. G., Mazzei, L., Tay-
+lor, R. L., 2002. Continuous/discontinuous ﬁnite element approximations of
+fourth-order elliptic problems in structural and continuum mechanics with ap-
+plications to thin beams and plates, and strain gradient elasticity. Computer
+Methods in Applied Mechanics and Engineering 191 (34), 3669–3750.
+
+Kachanov, L. M., 1958. On creep rupture time. IZV Akad Nauk SSSR Otd.
+
+Tech. Nauk 8, 26–31.
+
+Lasry, D., Belytchko, T., 1998. Localization limiters in transient problem. In-
+
+ternational Journal of Solids and Structures 24 (6), 581–597.
+
+Oden, J. T., Carey, G. F., 1984. Finite Elements: Mathematical Aspects. Vol-
+
+ume IV. Prentice-Hall, Englewood Cliﬀs, N.J.
+
+Peerlings, R. H. J., de Borst, R., Brekelmans, A. M., de Vree, J. H. P., 1996.
+Gradient enhanced damage for quasi-brittle materials. International Journal
+for Numerical Methods in Engineering 39, 3391–3403.
+
+Rashid, Y. R., 1968. Ultimate strength analysis of prestressed concrete pressure
+
+vessels. Nuclear Engineering and Design 7, 334–344.
+
+Rice, J. R., 1976. The localization of plastic deformation. In: Koiter, W. T.
+(Ed.), Theoretical and Applied Mechanics. North Holland Publishing Co.,
+pp. 207–220.
+
+26
+
+Shu, J. Y., King, W. E., Fleck, N. A., 1999. Finite elements for materials with
+strain gradient eﬀects. International Journal for Numerical Methods in Engi-
+neering 44, 373–391.
+
+Strang, G., Fix, G. J., 1973. An Analysis of the Finite Element Method.
+
+Prentice-Hall, New Jersey.
+
+Triantafyllidis, N., Aifantis, E. C., 1986. A gradient approach to localization of
+
+deformation: I hyperelastic materials. Journal of Elasticity 16, 225–237.
+
+Wells, G. N., Garikipati, K., Molari, L., 2004. A discontinuous Galerkin formu-
+lation for a strain gradient-dependent continuum model. Computer Methods
+in Applied Mechanics and Engineering 193 (33-35), 3633–3645.
+
+Willam, K., 1984. Experimental and computational aspects of concrete fracture.
+In: Owen, R., Hinton, E., Bi´cani´c (Eds.), Proc. Int. Conf. Comp. Aided Anal.
+and Design of Concrete Structures. Pineridge Press, Swansea, U.K., pp. 33–
+70.
+
+Zervos, A., Papanastasiou, P., Vardoulakis, I., 2001. A ﬁnite element displace-
+ment formulation for gradient elastoplasticity. International Journal for Nu-
+merical Methods in Engineering 50, 1369–1388.
+
+27
+
+

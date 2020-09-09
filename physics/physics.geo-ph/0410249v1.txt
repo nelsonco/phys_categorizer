@@ -1,0 +1,3411 @@
+4
+0
+0
+2
+ 
+t
+c
+O
+ 
+6
+2
+ 
+ 
+]
+h
+p
+-
+o
+e
+g
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+9
+4
+2
+0
+1
+4
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Multigrid iterative algorithm using
+pseudo-compressibility for three-dimensional
+mantle convection with strongly variable
+viscosity
+
+Masanori Kameyama, Akira Kageyama and Tetsuya Sato
+
+Earth Simulator Center, Japan Agency for Marine-Earth Science and Technology
+(JAMSTEC), Yokohama, 236-0001, Japan
+
+Abstract
+
+A numerical algorithm for solving mantle convection problems with strongly variable
+viscosity is presented. Equations for conservation of mass and momentum for highly
+viscous and incompressible ﬂuids are solved iteratively by a multigrid method in
+combination with pseudo-compressibility and local time stepping techniques. This
+algorithm is suitable for large-scale three-dimensional numerical simulations, be-
+cause (i) memory storage for any additional matrix is not required and (ii) vector-
+ization and parallelization are straightforward. The present algorithm has been in-
+corporated into a mantle convection simulation program based on the ﬁnite-volume
+discretization in a three-dimensional rectangular domain. Benchmark comparisons
+with previous two- and three-dimensional calculations including the temperature-
+and/or depth-dependent viscosity revealed that accurate results are successfully re-
+produced even for the cases with viscosity variations of several orders of magnitude.
+The robustness of the numerical method against viscosity variation can be signiﬁ-
+cantly improved by increasing the pre- and post-smoothing calculations during the
+multigrid operations, and the convergence can be achieved for the global viscosity
+variations up to 1010.
+
+Key words: mantle convection, variable viscosity, pseudo-compressibility,
+multigrid method, local time-stepping
+
+1 Introduction
+
+The Earth’s mantle is the spherical shell composed of silicate rocks, and it
+ranges from approximately 5-50km to 2900km depth. Although the mantle
+behaves like an elastic solid on short time scales, it acts like a highly viscous
+
+Preprint submitted to Elsevier Science
+
+October 24, 2004
+
+ﬂuid on long time scales. The mantle also acts as a heat engine, and it is in a
+convective motion in order to transport the heat from the hot interior to the
+cool surface [1,2]. The mantle convection is observed as the motion of tectonic
+plates at the Earth’s surface. The motion of surface plates, in turn, drives
+seismicity, volcanism and mountain building at the plate margins. Thus, the
+mantle convection is the origin of the geological and geophysical phenomena
+observed at the Earth’s surface. A major tool for understanding the mantle
+convection is numerical analysis. It has been playing an important role in the
+study of mantle convection, since a numerical simulation of mantle convection
+ﬁrst arose [3,4].
+
+Mantle convection requires diﬀerent numerical techniques from those for or-
+dinary ﬂuids such as water because of its rheological properties. The viscosity
+of mantle materials is estimated as high as 1022 Pa s [1,5]. Since the man-
+tle materials is highly viscous, both the nonlinear and time-derivative terms
+of velocity can be ignored in the equation of motion. This implies that the
+ﬂow in the mantle is described by a steady-state Stokes ﬂow balancing among
+the buoyancy force, pressure gradient and viscous resistance. Taken together
+with the assumption of incompressibility, one needs to solve elliptic diﬀeren-
+tial equations for velocity and pressure at every timestep. In addition, the
+viscosity of mantle material varies by several orders of magnitude depending
+on temperature, pressure, and stress [6,7]. The strong variation in viscosity
+makes numerical techniques for ordinary isoviscous ﬂuids, such as the spectral
+method [8,9], unﬁt for the numerical modeling of mantle convection. In order
+to get deep insights into the mantle convection, it is very important to de-
+velop eﬃcient numerical techniques that can deal with the steady-state ﬂow
+of highly viscous and incompressible ﬂuids with a strongly variable viscosity.
+
+The eﬃciency of numerical simulations of mantle convection strongly relies on
+numerical methods used for solving elliptic diﬀerential equations. One of the
+most eﬃcient methods is the multigrid iteration [10]. The multigrid concept
+has been successfully applied to a wide range of problems, including calcu-
+lations of incompressible ﬂuid ﬂow [11,12,13]. During the last two decades,
+various numerical models of mantle convection have been developed where the
+multigrid method is utilized. There are two strategies to apply the multigrid
+method to this problem, depending on how the steady-state Stokes equations
+are solved.
+
+The ﬁrst strategy solves the Stokes equations by splitting into the separate
+equations for velocities and pressure. The discretized equations for velocity
+components (or their proxy) are solved by the multigrid method, while the
+pressure is eliminated or solved separately. Parmentier et al. [14] developed
+convection models of isoviscous ﬂuid in three-dimensional Cartesian geometry.
+By using a streamfunction formulation, the Stokes equations are reduced to a
+pair of Poisson equations which are solved by multigrid iterations. Baumgard-
+
+2
+
+ner and his colleagues developed convection models for ﬂuids with constant
+[15] and moderately variable viscosity [16,17] in a three-dimensional spherical
+geometry. They solved the elliptic equations for velocity components using a
+multigrid method, while the pressure ﬁelds are prescribed by the equation of
+state. Moresi and his colleagues [18,19] developed a model for convection prob-
+lems with strongly variable viscosity in two- and three-dimensional Cartesian
+geometry. The Stokes equations are solved separately for velocity and pressure
+by so-called Uzawa iterative scheme. The iteration for velocity is carried out
+by a multigrid method, while a conjugate gradient scheme is used for pressure
+iteration.
+
+The second strategy, on the other hand, solves the Stokes equations for veloc-
+ity and pressure as a whole by the multigrid technique. The key issue of this
+strategy is a choice of the smoothing algorithm which reduces the errors of
+solution on a particular grid. Several methods for solving incompressible ﬂuid
+ﬂows have been utilized as a smoothing algorithm. Trompert and Hansen
+[20,21] and Albers [22] developed numerical methods for convection problems
+with variable viscosity in three-dimensional Cartesian geometry. The Stokes
+equations are solved by a multigrid method where the SIMPLER algorithm
+[23] is employed as a smoothing operation. Auth and Harder [24] used the
+symmetric coupled Gauss-Seidel (SCGS) method [25] as a smoothing opera-
+tion in the multigrid method for solving the Stokes equation. Tackley [26,27]
+employed a similar smoothing method where the velocity and pressure ﬁelds
+are updated in a somewhat coupled manner, and his method has been success-
+fully applied to a variety of convection problems [27,28], including calculations
+with extremely variable viscosity [29,30,31].
+
+In this paper, we present a solution algorithm for the three-dimensional man-
+tle convection, following the second strategy where the Stokes equations are
+solved as a whole by the multigrid method. In Section 2 we introduce our so-
+lution algorithm based on the pseudo-compressibility method [32]. A notable
+feature of our algorithm is its simplicity and intuitiveness. This feature makes
+the algorithm easily ﬁt to a smoothing operation of the multigrid iterations. In
+addition, taken together with the local time-stepping method, a strong vari-
+ation in viscosity can be handled without a severe increase in computational
+costs. In Section 3, we develop a numerical model of mantle convection that
+can deal with a strongly variable viscosity based on the algorithm presented
+in Section 2 together with the multigrid technique. In order to demonstrate
+the validity and eﬃciency of our algorithm, we carry out several calculations
+for the mantle convection with a strongly variable viscosity. In this paper, an
+application of our algorithm is the thermal convection in a three-dimensional
+rectangular domain. It can be easily applied to the numerical models for more
+realistic problems of mantle convection, such as spherical shell geometry and
+thermo-chemical convection and so on.
+
+3
+
+2 Iterative Algorithm for mantle convection
+
+We consider thermal convection of a highly viscous and incompressible ﬂuid
+with a strongly variable Newtonian viscosity in a three-dimensional Cartesian
+geometry (x1=x, x2=y, x3=z). The nondimensional forms of the fundamental
+equations are [33,34, for example];
+
+∂
+∂xj "
+
+η
+
+∂vj
+∂xi
+
+ 
+
++
+
+∂vi
+∂xj !#
+
++
+
+−
+
+= Ra T δi3
+
+(i, j = 1, 2, 3),
+
+∂p
+∂xi
+∂vk
+∂xk
+∂T
+∂xi
+
+= 0 (k = 1, 2, 3),
+
+∂T
+∂t
+
++ vi
+
+=
+
++ q,
+
+∂2T
+∂x2
+j
+
+where vi (i = 1, 2, 3) are ﬂuid velocities in i-th direction, p pressure, η viscosity,
+T temperature, Ra the Rayleigh number, and q is the internal heating rate.
+We assumed that x3-axis is the vertical axis pointing upward. Boussinesq
+approximation is employed in the energy equation (3) and, hence, the eﬀects
+of adiabatic and viscous heating are ignored.
+
+2.1 Overview of the iterative algorithm
+
+In the following, we consider the solution algorithm for the conservation equa-
+tions of momentum (1) and mass (2). In order to simplify the solution algo-
+rithm, the energy equation (3) is solved separately from Eqs. (1) and (2): the
+temperature T at new time is calculated using the velocity at old time in the
+advection term. This algorithm solves Eqs. (1) and (2) for the velocity and
+pressure at new time using the new temperature. In addition, the viscosity η
+at new time is already known by some means and kept unchanged while the
+velocity and pressure are computed. Because of these assumptions, Eqs. (1)
+and (2) are taken to be linear with respect to velocity and pressure.
+
+The discretized equations of (1) and (2) can be written in a matrix form of
+
+(1)
+
+(2)
+
+(3)
+
+(4)
+
+Ax = b,
+
+where
+
+4
+
+A
+
+≡
+
+C11 C12 C13 G1
+
+C21 C22 C23 G2
+
+C31 C32 C33 G3
+
+D1 D2 D3 0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+v1
+
+v2
+
+v3
+
+p
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+0
+
+0
+
+0
+
+
+
+
+
+
+
+
+
+
+
+
+
+.
+
+
+
+
+
+
+
+
+
+
+
+
+
+, x
+
+≡
+
+,
+
+b
+
+≡
+
+Ra θ
+
+(5)
+
+In (5), vi (i = 1, 2, 3) are the vectors of unknown ﬂuid velocities in i-direction,
+p the vector of unknown pressures, θ the vector of known temperatures, Cij
+(i, j = 1, 2, 3) the matrices representing the spatial discretization of velocities
+for calculating viscous stress, Gi (i = 1, 2, 3) the matrices representing the
+discretization of the pressure gradient, Di (i = 1, 2, 3) the matrices represent-
+ing the discretization of the divergence of velocity, and 0 is the zero matrix
+or zero vector. One of the major diﬃculties in solving (4) is that a zero block
+appears in the main diagonal in A. This implies that basic iterative methods
+for solving linear simultaneous equations (such as Jacobi and Gauss-Seidel
+methods) which make use of the inverse of the main diagonal fail to solve (4).
+
+The algorithm for solving (4) that we propose in this paper is another kind of
+iterative method: Let xn be an approximate at n-th iteration (n = 0, 1, 2,
+).
+We then calculate the approximate at the iteration (n + 1) by,
+
+· · ·
+
+xn+1 = xn + T (b
+
+Axn).
+
+−
+
+(6)
+
+Here a regular matrix T is introduced so as to control the convergence rate
+of (6), and is chosen to be a diagonal matrix whose nonzero elements are
+positive. This iterative procedure is used together with the multigrid method,
+and is repeated until xn converges to a steady solution. It is obvious that
+the steady solution of (6) satisﬁes (4), and that it does not depend on T . In
+addition, the presence of zero block in the main diagonal of A does not spoil
+the convergence of this iterative procedure.
+
+This iterative algorithm is suitable for large-scale numerical simulations on
+massively parallel computers and, in particular, massively vector-parallel su-
+percomputers because (i) the procedure (6) consists of multiplication of matri-
+ces and vectors and summation of vectors and, hence, can be easily vectorized
+and parallelized, and (ii) large memory storage for the matrix T is not re-
+quired, since T is a diagonal matrix.
+
+Another beneﬁt of the iterative procedure (6) is that it is easily implemented
+into the multigrid method. This is because the procedure (6) is quite similar
+to that representing the basic iterative methods which are commonly used as
+a smoothing operator of the multigrid method. Suppose an iterative procedure
+
+5
+
+for (4) by Jacobi method;
+
+xn+1 = xn + D−1(b
+
+Axn)
+
+(n = 0, 1, 2
+
+−
+
+),
+
+· · ·
+
+(7)
+
+where a matrix D is the main diagonal of A. The two procedures (6) and
+(7) are the same except that the diagonal matrix T is used in (6) in place of
+D−1 in (7). Therefore, the iterative procedure (6) can be used as a smoothing
+operator of the multigrid method in a similar manner to Jacobi method.
+
+In the following subsections, we will introduce the ideas which led us to the
+iterative procedure (6). We will also discuss an appropriate choice of the matrix
+T , which is a key parameter in this procedure.
+
+2.2 Ingredient 1: pseudo-compressibility method for highly-viscous, incom-
+
+pressible ﬂuids
+
+When the matrix T is diagonal, Eq. (6) can be explicitly written as (i, j, k =
+1, 2, 3),
+
+∂pn
+∂xi
+
++
+
+∂
+∂xj "
+
+η
+
+∂vn
+j
+∂xi
+
+ 
+
++
+
+∂vn
+i
+∂xj !#
+
++ Ra T δi3
+
+,
+
+)
+
+vn+1
+i = vn
+
+i + τvi
+
+pn+1 = pn
+
+τp
+
+−
+
+(−
+∂vn
+k
+∂xk
+
+,
+
+where τvi (i = 1, 2, 3) and τp are the diagonal elements appearing in T .
+
+In order to discuss the physical meaning of these equations more clearly, we
+introduce the following “auxiliary” set of equations;
+
++
+
+∂
+∂xj "
+
+η
+
+∂vj
+∂xi
+
+ 
+
++
+
+∂vi
+∂xj !#
+
++ Ra T δi3,
+
+Mvi
+
+∂vi
+∂˜t
+∂p
+∂˜t
+
+=
+
+=
+
+∂p
+∂xi
+∂vk
+∂xk
+
+−
+
+−
+
+.
+
+K
+
+Here ˜t is analogous to time, Mvi (i = 1, 2, 3) and K are positive constants
+analogous to density and compressibility, respectively. These equations come
+from the modiﬁcation of the “auxiliary” set of equations used in the pseudo-
+compressibility method [32], which is used to solve steady-state ﬂow of incom-
+pressible ﬂuid with high Reynolds number. The diﬀerence between Eqs. (10)
+and (11) and those employed for high Reynolds-number ﬂow is that the non-
+linear term of velocity has been eliminated in (10), because the viscosity of
+
+(8)
+
+(9)
+
+(10)
+
+(11)
+
+6
+
+mantle materials is signiﬁcantly high and, in other words, the Reynolds num-
+ber is signiﬁcantly small.
+
+By discretizing (10) and (11) in the direction of ˜t by a ﬁrst-order explicit
+scheme, we get
+
+(12)
+
+(13)
+
+(14)
+
+(15)
+
+Mvi
+
+K
+
+vn+1
+i −
+∆˜t
+
+pn+1
+
+vn
+i
+
+pn
+
+−
+∆˜t
+
+∂pn
+∂xi
+∂vn
+k
+∂xk
+
+=
+
+−
+
+=
+
+−
+
+.
+
++
+
+∂
+η
+∂xj "
+
+∂vn
+j
+∂xi
+
+ 
+
++
+
+∂vn
+i
+∂xj !#
+
++ RaT δi3,
+
+We notice that Eqs. (12) and (13) and Eqs. (8) and (9) are identical if we
+choose τvi and τp as,
+
+τvi = ∆˜t/Mvi,
+
+τp = ∆˜t/K.
+
+In other words, τvi and τp are “eﬀective” timesteps for the evolution of vi and
+p, respectively.
+
+The iterative procedure given by (12) and (13) converges to an incompressible
+ﬂow ﬁeld regardless of the choice of Mvi and K. To show this more clearly,
+we here assume that Mvi, K and η are constant. From Eqs. (10) and (11) we
+obtain the pseudo-temporal evolution of
+
+v as,
+
+∂2
+∂˜t2 (
+
+∇ ·
+
+v) =
+
+1
+KM ∇
+
+2(
+
+∇ ·
+
+v) +
+
+2η
+M
+
+∂
+∂˜t
+
+∇ ·
+
+2 (
+
+∇ ·
+
+v)
+
+.
+
+i
+
+∇
+h
+
+M.) The ﬁrst term of the right-hand side represents the
+(Here we denote Mvi ≡
+eﬀect of propagation of “pseudo-sound wave” whose velocity is 1/√KM , and
+the second term represents the eﬀect of diﬀusion due to viscosity. This equation
+v is characterized by a
+indicates that the pseudo-temporal evolution of
+v approaches to an asymptotic value (= 0)
+decaying oscillation. Therefore,
+as ˜t increases to inﬁnity. Consequently, the procedure of (12) and (13) leads
+v = 0, as long as the numerical integration
+the steady velocity ﬁeld with
+scheme is stable.
+
+∇ ·
+
+∇ ·
+
+∇ ·
+
+We also note that the iterative procedure (8) and (9) should be used in combi-
+nation with multigrid method [10]. Recall that we are trying to ﬁnd a steady-
+state solution of evolution equations (10) and (11) through a repetition of
+temporal integration, which inevitably requires a large number of iterations.
+Moreover, the elliptic nature of (10) for velocities vi results in a slow re-
+duction in their errors, particularly in their smooth components with large
+spatial wavelengths. By incorporating into the multigrid procedure, we are
+able to obtain a suﬃciently fast convergence. In fact, the multigrid technique
+
+7
+
+is adopted in most of recent numerical analysis using pseudo-compressibility
+method [35,36, for example].
+
+2.3 Ingredient 2: local time stepping method for strongly variable viscosity
+
+In most of previous numerical analysis using pseudo-compressibility method
+[35,36,37,38, for example], the viscosity of ﬂuids has been assumed to be con-
+stant. In this subsection, we apply this method for the cases with a strong
+variation in viscosity.
+
+The convergence rate of the original pseudo-compressibility method deterio-
+rates in proportion to the viscosity variation in the entire domain, when the
+spatial variation in viscosity is introduced. This is because the viscosity η is a
+diﬀusion coeﬃcient for vi in Eq. (10). The spatial variation in η results in the
+spatial variation in the local convergence rate of vi. The values of vi in the re-
+gion with smaller η reach to an appropriate solution only very slowly, whereas
+the values in the region with larger η converge quickly. This suggests that the
+convergence should be accelerated particularly in the region with small η.
+
+Here we try to accelerate the convergence for the case with a spatial variation
+in η by controlling the stepping of the pseudo-time ˜t in accordance with η.
+This idea is known as the local time stepping method, which is used to obtain
+steady-state solution of evolutionary equations. This method allows updating
+each variable using a timestep which is based on the local numerical stability
+criterion. We thus spatially vary the eﬀective timesteps τvi and τp in (8) and
+(9) in accordance with η.
+
+The spatial variation of τvi and τp can be estimated from the local numerical
+stability criterion of (15). In the following derivation, we assume for simplicity
+that Eq. (15) holds even in the case of variable viscosity. From the criterion
+v (the second term in the right-hand side of (15)) we
+of the diﬀusion of
+require that the nondimensional parameter α deﬁned by
+
+∇ ·
+
+is suﬃciently small. Here ∆ is the mesh size. Similarly, from the criterion of
+the pseudo-sound propagation we require that the nondimensional parameter
+β deﬁned by
+
+α
+
+≡
+
+2η/M
+∆2/∆˜t
+
+1/√KM
+∆/∆˜t
+
+β
+
+≡
+
+8
+
+(16)
+
+(17)
+
+is suﬃciently small. By substituting (16) and (17) into (14) we get
+
+τvi =
+
+∆˜t
+M
+
+=
+
+α
+2
+
+∆2
+η
+
+,
+
+τp =
+
+∆˜t
+K
+
+=
+
+2β2
+α
+
+η.
+
+Here we assumed Mvi = M.
+
+When τvi and τp are deﬁned by (18), the spatial variations of the diﬀusion of
+velocity components and the pseudo-sound propagation become more modest
+than that of viscosity. Equation (18) implies that M (
+Mvi in (10)) and K
+are taken to be proportional to η and η−1, respectively. By assuming that
+η/M and Kη are constant in (10) and (11), we obtain the pseudo-temporal
+v in the presence of spatial variation in η as,
+evolution of
+
+≡
+
+∇ ·
+
+∂2
+∂˜t2 (
+
+∇ ·
+
+v) =
+
+2(
+
+1
+KM ∇
+∂
+1
+KM
+∂xi "
+∂
+η
+∂xi "
+M
+
+v) +
+
+∇ ·
+
+∂(ln η)
+∂xi
+∂(ln η)
+∂xj
+
++
+
++
+
+2(
+
+∇ ·
+
+v)
+
+i
+
+2η
+M
+
+∂
+∂˜t
+
+(
+
+∇ ·
+
+∇
+h
+v)
+
+#
+
+∂
+∂˜t  
+
+∂vj
+∂xi
+
++
+
+∂vi
+∂xj !#
+
+.
+
+(18)
+
+(19)
+
+The ﬁrst and second terms in the right-hand side of (19) are equivalent with
+those in the right-hand side of (15). Note that the eﬀects of spatial variation in
+η appear in the third and fourth terms in the form of ln η. Thus we expect that
+v reduces to zero in the entire computational domain at a rate comparable
+
+∇ ·
+to that for the case with constant η.
+
+Another constraint for τvi and τp can be obtained directly from (6). Let en
+xn
+respectively. From (6), we get the evolution equations for en and rn as,
+
+≡
+Axn to be the error and the residual at n-th iteration,
+
+A−1b and rn
+
+≡
+
+−
+
+−
+
+b
+
+en+1 = (I
+
+T A)en,
+
+rn+1 = (I
+
+AT )rn,
+
+−
+
+−
+
+(20)
+
+where I is the identity matrix. These equations indicate that the convergence
+A−1. (In this sense, the ma-
+rate of (6) becomes optimal when T = Topt
+trix T can be regarded as a “preconditioner” for Eq. (4).) In the present
+algorithm using local time stepping, we approximate T
+Topt by a diagonal
+matrix. In addition, Equation (20) implies that the necessary condition for
+the convergence is that the spectral radius of the matrix I
+T A (or, identi-
+AT ) is smaller than one. Indeed, this condition is identical to the
+cally, I
+Courant-Friedrichs-Lewy (CFL) condition of Eqs. (12) and (13), i.e., α < αc
+and β < βc where αc and βc are threshold values.
+
+−
+
+≡
+
+−
+
+≃
+
+9
+
+3 Results
+
+The algorithm described in the previous section has been incorporated into a
+mantle convection simulation program in a three-dimensional rectangular do-
+main. We carried out several calculations for thermal convection with strongly
+variable viscosity, in order to demonstrate the validity and eﬃciency of the
+iterative algorithm.
+
+3.1 Details of numerical method
+
+The basic equations are discretized by the ﬁnite volume method. A staggered
+grid is used; temperature and pressure are located at the center of the grid
+cells, while the velocity components are at the center of the cell faces normal
+to the direction of the velocity components. A uniform mesh is employed. The
+basic equations are nondimensionalized with a length scale of h (height of the
+box), time scale of h2/κ (where κ is thermal diﬀusivity), temperature scale of
+∆T (temperature drop across the box), and pressure scale of ηoκ/h2 (where
+ηo is reference viscosity). In the following subsections, we present two kinds
+of calculations. First is to obtain the instantaneous ﬂow ﬁelds for prescribed
+distributions of buoyancy and viscosity, and second is to obtain the temporal
+developments of thermal convection.
+
+When the purpose is to obtain the ﬂow ﬁelds, we only solve the conservation
+equations for momentum (1) and mass (2). These equations are solved by the
+multigrid method based on correction-storage algorithm, because of the linear
+nature of (4). The smoothing operation at each grid level is carried out by (6).
+The diagonal elements of T for unknown velocities (τvi) were chosen to be 0.5
+times the inverse of the corresponding diagonal elements of A, while those for
+unknown pressures (τp) are to be 0.25 times the viscosity at the corresponding
+cell centers. The values of τvi and τp deﬁned thus are approximately equal to
+those with α = β = 1
+8 in (18). (We observed that the iteration by (6) diverged
+when τvi or τp is larger than the above values.) A linear interpolation is used in
+both ﬁne-to-coarse (restriction) and coarse-to-ﬁne (prolongation) operations.
+The values of viscosity at cell centers on coarser grids is calculated by a linear
+interpolation from those on the ﬁner grids by one grid level. On the other
+hand, the values of viscosity at the midpoints of cell edges on each grid level,
+which are necessary to calculate viscous shear stress, are calculated by an
+interpolation proposed by Ogawa et al. [34] from the values at cell centers on
+the same grid level. Since the aim of this paper is to demonstrate the eﬃciency
+and robustness of the smoothing algorithm (6), only the V-cycle is used in
+the present calculations, although more complicated multigrid iteration cycles
+(such as W-, F-cycles) are expected to be more robust [24,22, for example].
+
+10
+
+When the purpose is to obtain a time-dependent or steady-state convection, we
+solve the energy equation (3) in addition to Eqs. (1) and (2). In the calculations
+presented in this paper, the internal heating rate q is taken to be zero. The
+energy equation is discretized by a ﬁrst-order Euler method in time. An upwind
+scheme, called power-law scheme [23], is used to evaluate the contributions of
+heat transport by advection and conduction. The discretized equation for T is
+solved by a fully implicit scheme when we seek for a steady-state convection,
+or by a fully explicit scheme when we seek for a time-dependent convection.
+
+3.2 Benchmark comparison
+
+In order to test the validity of our numerical code, we compare our results
+with those of earlier studies [39,40,34]. The temperature T is ﬁxed at 0 and
+1 at the top (z = 1) and bottom (z = 0) boundaries, respectively, while the
+vertical side walls are adiabatic. In most cases, the viscosity η is assumed to
+be dependent on temperature T and depth (1
+
+z) as,
+
+−
+
+η = ηt exp[
+
+ET T + Ep(1
+
+z)],
+
+−
+
+−
+
+(21)
+
+where ηt is the viscosity at the top surface (z = 1, T = 0), and ET and Ep
+are constants describing the temperature- and depth-dependence of viscosity,
+respectively.
+
+3.2.1 Benchmark for two-dimensional convection
+
+First we present the benchmark comparison with Blankenbach et al. [39] for
+the cases of steady-state convection in two-dimensional rectangular domains
+of aspect ratio (width/depth) λ. We carried out calculations of ﬁve cases listed
+in Table 1. Cases 1a to 1c are the convection of isoviscous ﬂuid in a square
+box (λ = 1), Case 2a is the convection of ﬂuids with temperature-dependent
+viscosity in a square box, and Case 2b is the convection with temperature-
+and depth-dependent viscosity in a box of λ = 2.5. The impermeable and
+shear-stress-free conditions are adopted along the all boundaries. The initial
+conditions are chosen to make single convective cell with an ascending ﬂow
+along the left-side wall (x = 0). We carried out these calculations by varying
+the number of mesh divisions in x- and z-directions, while the mesh division
+in y-direction was kept to 1, in order to obtain two-dimensional ﬂow patterns
+in the x-z plane.
+
+We summarized in Table 1 the parameter values and mesh divisions employed
+in the present calculations, and the obtained values of (i) Nusselt number Nu,
+(ii) root-mean-square velocity Vrms, and (iii) vertical temperature gradient q1
+
+11
+
+Table 1
+Benchmark comparison with Blankenbach et al. [39]. See the text as for the meaning
+of the symbols.
+
+mesh
+
+16
+
+16
+
+×
+
+32
+
+32
+
+×
+
+64
+
+64
+
+×
+
+(a) Case 1a (constant viscosity, Ra = 104, λ = 1)
+
+×
+
+128
+
+128
+
+benchmark standard
+
+4.726885
+
+4.840006
+
+4.872745
+
+4.881429
+
+4.884409
+
+0.000010
+
+41.755217
+
+42.560118
+
+42.785441
+
+42.844667
+
+42.864947
+
+0.000020
+
+7.695426
+
+7.966605
+
+8.036044
+
+8.053536
+
+8.059384
+
+0.000003
+
+0.887088
+
+0.664927
+
+0.608154
+
+0.593695
+
+0.588810
+
+0.000003
+
+(b) Case 1b (constant viscosity, Ra = 105, λ = 1)
+
+9.235550
+
+10.082608
+
+10.394786
+
+10.495490
+
+10.534095
+
+0.000010
+
+181.18346
+
+189.19219
+
+191.98526
+
+192.87381
+
+193.21454
+
+0.00010
+
+14.424512
+
+17.764322
+
+18.731196
+
+18.990358
+
+19.079440
+
+0.000040
+
+3.441283
+
+1.425553
+
+0.898253
+
+0.767465
+
+0.722751
+
+0.000020
+
+(c) Case 1c (constant viscosity, Ra = 106, λ = 1)
+
+13.505592
+
+18.963003
+
+20.884342
+
+21.604074
+
+21.972465
+
+0.000020
+
+675.69469
+
+780.80943
+
+814.68028
+
+827.43096
+
+833.98977
+
+0.00020
+
+16.63581
+
+31.21463
+
+41.44228
+
+44.72368
+
+45.96425
+
+0.00030
+
+9.836338
+
+6.941879
+
+2.477731
+
+1.255997
+
+0.877170
+
+0.000010
+
+(d) Case 2a (Rat = 104, ET = ln(103), Ep = 0, λ = 1)
+
+10.3634
+
+10.4780
+
+10.1666
+
+10.0862
+
+372.2759
+
+457.4738
+
+475.5292
+
+478.9647
+
+10.0660
+
+±
+480.4334
+
+0.00020
+
+0.1000
+
+±
+
+17.42173
+
+20.41169
+
+18.33101
+
+17.72910
+
+17.53136
+
+0.00400
+
+2.25932
+
+1.16135
+
+1.03954
+
+1.01498
+
+1.00851
+
+0.00020
+
+14.1505
+
+20.2221
+
+25.3614
+
+26.6611
+
+26.8085
+
+0.0100
+
+7.036967
+
+4.248769
+
+1.557456
+
+0.743177
+
+mesh
+
+40
+
+16
+
+×
+
+80
+
+32
+
+×
+
+160
+
+64
+
+×
+
+320
+
+128
+
+×
+
+(e) Case 2b (Rat = 104, ET = ln(16384), Ep = ln(64), λ = 2.5)
+
+0.497380
+
+0.000100
+
+±
+benchmark standard
+
+7.4020
+
+7.2761
+
+7.0450
+
+6.9605
+
+201.478
+
+171.085
+
+175.343
+
+172.806
+
+6.9299
+
+±
+171.755
+
+0.0005
+
+0.020
+
+±
+
+18.4789
+
+30.6337
+
+20.9644
+
+19.0478
+
+18.4842
+
+0.0100
+
+0.37860
+
+0.17729
+
+0.18048
+
+0.17873
+
+0.17742
+
+0.00003
+
+14.5474
+
+14.7261
+
+14.7092
+
+14.3514
+
+14.1682
+
+0.0050
+
+3.51882
+
+1.28403
+
+0.79348
+
+0.66355
+
+0.61770
+
+0.00005
+
+12
+
+N u
+
+Vrms
+
+q1 (= q3)
+
+q2 (= q4)
+
+N u
+
+Vrms
+
+q1 (= q3)
+
+q2 (= q4)
+
+N u
+
+Vrms
+
+q1 (= q3)
+
+q2 (= q4)
+
+N u
+
+Vrms
+
+q1
+
+q2
+
+q3
+
+q4
+
+q1
+
+q2
+
+q3
+
+q4
+
+N u
+
+Vrms
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+Figure 1
+
+Fig. 1. Isothermal surfaces obtained for the benchmark calculations of stationary
+convections in Busse et al. [40]. (a) Case 1a is for constant viscosity, while (b) Case
+2 is for modestly temperature-dependent viscosity whose viscosity contrast is 20.
+The calculations were carried out with (a) 64
+64 mesh
+divisions.
+
+64 and (b) 64
+
+32
+
+64
+
+×
+
+×
+
+×
+
+×
+
+to q4 at (x, z) = (0, 1), (λ, 1), (λ, 0), and (0, 0), respectively. We also show in
+Table 1 the results from the benchmark standard [39]. Table 1 shows that the
+agreement between the results of our calculations and benchmark standards
+is satisfactory for all the values. We conclude that the present numerical code
+accurately handles two-dimensional convection of ﬂuids with both constant
+and variable viscosity.
+
+3.2.2 Benchmark for three-dimensional convection with modest viscosity vari-
+
+ation
+
+Second, we compare our results with those of Busse et al. [40] for the cases of
+steady-state convection with both constant (Case 1a) and modestly temperature-
+dependent viscosity (Case 2) in a three-dimensional rectangular box of a
+1.
+Figure 1 shows the convective ﬂow patterns for both cases. Case 1a is a bi-
+104 in a box of a = 1.0079
+modal convection of isoviscous ﬂuid with Ra = 3
+and b = 0.6283, while Case 2 is a square-cell convection in a cube (a = b = 1)
+with modestly temperature-dependent viscosity. In Case 2, the viscosity η
+depends on temperature T as,
+
+×
+
+×
+
+×
+
+b
+
+η(T ) = exp
+Q = 225
+
+(cid:20)
+ln(rη) −
+
+Q
+0.5 + G
+
+Q
+T + G −
+0.25 ln(rη), G = 15
+
+,
+
+(cid:21)
+ln(rη) −
+
+0.5.
+
+(22)
+
+Here, the viscosity contrast rη is set to be 20, and the Rayleigh number deﬁned
+104. In these cases the top and bottom
+by the viscosity for T = 0.5 is 2
+surfaces are assumed to be rigid (v1 = v2 = v3 = 0), while the vertical side
+walls are planes of mirror symmetry. The initial conditions are chosen to make
+single ascending and descending ﬂow at (x, y) = (0, 0) and (a, b), respectively.
+
+×
+
+We summarize the result of benchmark comparison for three-dimensional con-
+vection in Table 2. We calculated the values of (i) Nu and Vrms, (ii) vertical
+velocity w and temperature T at speciﬁed points at mid-depth of the con-
+
+13
+
+Table 2
+Benchmark comparison with Busse et al. [40]. See the text as for the meaning of
+the symbols.
+
+(a) Case 1a (constant viscosity, Ra = 3
+
+104, a = 1.0079, b = 0.6283)
+
+32
+
+16
+
+32
+
+32
+
+64
+
+128
+
+64
+
+128
+
+benchmark standard
+
+mesh
+
+N u
+
+Vrms
+
+16
+
+16
+
+8
+×
+×
+3.7373
+
+42.047
+
+×
+×
+3.6019
+
+41.382
+
+×
+64
+
+×
+×
+3.5549
+
+41.104
+
+w(0, 0, 0.5)
+
+122.919
+
+120.451
+
+117.880
+
+w(0, b, 0.5)
+
+20.044
+
+33.693
+
+38.566
+
+T (0, 0, 0.5)
+
+0.79161
+
+0.80376
+
+0.80262
+
+T (0, b, 0.5)
+
+0.57314
+
+0.60324
+
+0.61434
+
+Q(0, 0)
+
+Q(a, 0)
+
+Q(0, b)
+
+Q(a, b)
+
+7.68656
+
+7.08517
+
+6.82042
+
+1.85083
+
+1.60300
+
+1.53359
+
+2.75670
+
+2.96542
+
+3.10916
+
+0.74943
+
+0.70104
+
+0.70778
+
+N u
+
+Vrms
+
+×
+×
+3.0870
+
+35.350
+
+×
+×
+3.0503
+
+35.161
+
+×
+×
+3.0419
+
+35.130
+
+w(0, 0, 0.5)
+
+154.076
+
+162.020
+
+164.814
+
+w(0, b, 0.5)
+
+-25.662
+
+-26.446
+
+-26.650
+
+w(a, b, 0.5)
+
+-59.973
+
+-58.731
+
+-58.360
+
+T (0, 0, 0.5)
+
+0.88286
+
+0.89803
+
+0.90323
+
+T (0, b, 0.5)
+
+0.51736
+
+0.50170
+
+0.49724
+
+T (a, b, 0.5)
+
+0.25785
+
+0.24417
+
+0.24052
+
+Q(0, 0)
+
+Q(a, 0)
+
+Q(a, b)
+
+6.09608
+
+5.90091
+
+5.85018
+
+1.80145
+
+1.73607
+
+1.71942
+
+0.78762
+
+0.77281
+
+0.76952
+
+×
+×
+3.5419
+
+41.026
+
+116.964
+
+39.994
+
+0.80169
+
+0.61761
+
+6.74082
+
+1.51460
+
+3.15671
+
+0.71225
+
+128
+
+×
+×
+3.0399
+
+35.124
+
+165.631
+
+-26.703
+
+-58.260
+
+0.90474
+
+0.49606
+
+0.23957
+
+5.83783
+
+1.71508
+
+0.76869
+
+3.5374
+
+0.0005
+
+40.999
+
+0.004
+
+116.625
+
+0.030
+
+40.500
+
+0.030
+
+±
+
+±
+
+±
+
+±
+
+0.80130
+
+0.00005
+
+0.61876
+
+0.00005
+
+6.7127
+
+0.0500
+
+1.5080
+
+0.0500
+
+3.1740
+
+0.0500
+
+0.7140
+
+0.0500
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+3.0393
+
+0.0050
+
+35.13
+
+0.05
+
+±
+
+±
+
+±
+
+±
+
+165.9
+
+1.0
+
+-26.72
+
+0.1
+
+-58.23
+
+0.1
+
+0.90529
+
+±
+0.0010
+
+0.49565
+
+0.0010
+
+0.23925
+
+0.0010
+
+5.834
+
+0.015
+
+1.714
+
+0.015
+
+0.768
+
+0.015
+
+±
+
+±
+
+±
+
+±
+
+±
+
+±
+
+(b) Case 2 (modestly temperature-dependent viscosity, a = b = 1)
+
+mesh
+
+16
+
+16
+
+16
+
+32
+
+32
+
+32
+
+64
+
+64
+
+64
+
+128
+
+128
+
+benchmark standard
+
+vecting vessel (z = 0.5), and (iii) vertical temperature gradient Q at speciﬁed
+points at the top surface (z = 0). We also show in Table 2 the results from
+the benchmark standard [40]. The agreement between the obtained results
+and the benchmark standard is satisfactory for all of the values. In particular,
+we obtained a good agreement for Case 2. We thus conclude that the present
+numerical code accurately handles three-dimensional convection of ﬂuids with
+
+14
+
+Table 3
+Comparison of the ﬂow patterns, Nusselt numbers N u and the minimum mesh sizes
+in z-direction dzmin between the present method (“KKS”) and Ogawa et al. [34]
+(“OSZ”). Note that in OSZ [34] the mesh spacing was taken to be non-uniform
+with ﬁner resolution near the boundaries so as to improve the accuracy in N u.
+
+Case Rat
+
+rη
+
+pattern
+
+code
+
+KKS
+
+mesh
+
+32
+
+16
+
+32
+
+dzmin
+
+×
+×
+0.03125
+
+64
+
+32
+
+64
+
+×
+
+×
+
+0.015625
+
+128
+
+64
+
+128
+
+×
+
+×
+
+0.0078125
+
+1
+
+4
+
+10
+
+105
+
+103
+
+103
+
+1
+
+102
+
+103
+
+WL-3D N u
+
+WL-2D N u
+
+WL-3D N u
+
+9.816
+
+4.060
+
+4.961
+
+10.071
+
+10.101
+
+4.077
+
+4.921
+
+4.073
+
+4.932
+
+KKS
+
+Case Rat
+
+rη
+
+pattern
+
+code
+
+mesh
+
+32
+
+16
+
+32
+
+dzmin
+
+×
+×
+0.03125
+
+64
+
+32
+
+64
+
+×
+
+×
+
+0.015625
+
+128
+
+64
+
+128
+
+×
+
+×
+
+0.0078125
+
+16
+
+103
+
+3.2
+
+103 WL-3D N u
+
+5.284
+
+5.271
+
+5.271
+
+×
+
+rη
+
+Case Rat
+
+pattern
+
+code
+
+KKS
+
+17
+
+18
+
+102
+
+32
+
+3.2
+
+104
+
+SL-3D
+
+×
+105
+
+SL-3D
+
+mesh
+
+32
+
+16
+
+32
+
+dzmin
+
+N u
+
+N u
+
+×
+×
+0.03125
+
+3.561
+
+3.119
+
+64
+
+32
+
+64
+
+×
+
+×
+
+0.015625
+
+128
+
+64
+
+128
+
+×
+
+×
+
+0.0078125
+
+3.631
+
+3.174
+
+3.659
+
+3.197
+
+OSZ
+
+14
+
+24
+
+×
+3.2
+
+22∗
+×
+10−2
+
+×
+9.72
+
+4.13
+
+4.96
+
+OSZ
+
+18
+
+44
+
+×
+1.7
+
+30∗
+×
+10−2
+
+×
+5.37
+
+OSZ
+
+18
+
+44
+
+×
+1.3
+
+30∗
+×
+10−2
+
+×
+3.61
+
+3.17
+
+Fig. 2. Isothermal surfaces for several cases listed in Table 3 obtained by
+three-dimensional convection with strongly temperature-dependent viscosity sim-
+ilar to Ogawa et al. [34]. The calculations were carried out with 64
+64 mesh
+divisions.
+
+32
+
+×
+
+×
+
+mildly variable viscosity.
+
+Figure 2
+
+15
+
+3.2.3 Benchmark for three-dimensional convection with strong viscosity vari-
+
+ation
+
+×
+
+×
+
+We also carried out the calculations similar to Ogawa et al. [34] in order to test
+our code for a much stronger temperature-dependence of viscosity. A steady-
+state convection in a box of 1.7
+0.5
+1 is considered. The impermeable
+and shear-stress-free conditions are adopted along the all boundaries. We car-
+ried out calculations for several cases of Ogawa et al. [34] with several mesh
+divisions. In these calculations we varied Rat, the Rayleigh number deﬁned
+with ηt, and the viscosity contrast rη = exp(ET ) between the top and bottom
+boundaries, as listed in Table 3. Figure 2 shows the convective ﬂow patterns
+for several cases. We obtained the same ﬂow patterns and the change in ﬂow
+patterns depending on Rat and rη as in Ogawa et al. [34]. The convective ﬂow
+patterns are classiﬁed into three-dimensional whole-layer convection (WL-3D)
+for Case 1 (Rat = 105 and rη = 1), two-dimensional roll of whole-layer con-
+vection (WL-2D) for Case 4 (Rat = 103 and rη = 102), again in WL-3D for
+Case 16 (Rat = 103 and rη = 3.2
+103), and in three-dimensional stagnant-lid
+convection (SL-3D) for Case 18 (Rat = 32 and rη = 105).
+
+×
+
+We summarize the comparison of the ﬂow patterns and Nusselt numbers Nu
+obtained by the present code (“KKS”) and those by Ogawa et al. [34] (“OSZ”)
+in Table 3. The values of Nu obtained by both codes agree within at most
+4% deviation for all cases. The largest deviation for Case 1 may come from
+the diﬀerences in adopted mesh sizes. The present calculations are carried out
+with the minimum mesh size in z-direction of 1/128, which is more than four
+times ﬁner than that employed in Ogawa et al. [34]. It is most likely that a
+ﬁner spatial resolution is required for Case 1 than that employed in Ogawa et
+al. [34] in order to resolve the thermal boundary layers.
+
+3.3 Robustness and eﬃciency of multigrid iteration against spatial variation
+
+in viscosity
+
+To demonstrate the robustness and eﬃciency of the present algorithm against
+the spatial variation in viscosity, we performed convergence tests similar to
+Albers [22]. Here we solve Eqs. (1) and (2) only for prescribed distributions of
+buoyancy and viscosity. The distributions of buoyancy and viscosity are given
+by assuming the Rayleigh number Rat and the temperature-dependence of
+viscosity ET for a prescribed distribution of temperature. (The distributions of
+temperature used for the tests will be introduced below.) We take into account
+the change of the viscosity variation in the convecting vessel by increasing
+the global viscosity contrast rη = exp(ET ) from 1 to 1010, and estimate a
+threshold value of rη (hereafter denoted by rc
+η) below which the multigrid
+iteration converges. The values of velocity and pressure are initially set to zero,
+
+16
+
+Figure 3
+
+Fig. 3. Distributions of temperature used for convergence tests. These temperature
+distributions were obtained by three-dimensional time-dependent simulation of ther-
+mal convection of ﬂuids with temperature-dependent viscosity in a cubic box. The
+employed mesh division is 64
+64. In (a) the several isothermal surfaces are
+shown, while in (b) the horizontally-averaged temperature Th (black lines) and the
+maximum of
+
+at height z (red lines) are plotted as a function of z.
+
+64
+
+×
+
+×
+
+grad(T )
+|
+|
+
+and are iteratively updated until the L2-norm of the residual r = b
+Ax in
+Eq. (4) becomes smaller than that of b by eight orders of magnitude. All of
+the calculations were done with equally-spaced 64
+64 mesh divisions
+and 6 grid levels, where the grid is coarsest for the grid level ℓ = 1 and ﬁnest
+for ℓ = 6. The mesh spacing is successively doubled as ℓ decreases, and the
+mesh spacing is 1/2 for grid level ℓ = 1.
+
+64
+
+×
+
+−
+
+×
+
+|
+
+|
+
+grad(T )
+
+We used three distributions of temperature (hereafter denoted by Tempera-
+tures A, B, and C). In Figure 3 we present (a), in the left column, several
+isothermal surfaces and (b), in the right column, the plots of the horizontally-
+averaged temperature Th and the maximum of the magnitude of local temper-
+max at each height z, for these temperatures. The
+ature gradient
+temperature ﬁelds are taken from snapshots of a three-dimensional time-
+dependent thermal convection of ﬂuid with temperature-dependent viscosity
+in a cubic box. The Rayleigh number Rat deﬁned by viscosity ηt is 103, and
+ET = ln(105) is assumed. In temperature A, which is taken from an early stage
+10−4), the convective
+of the temporal evolution (nondimensional time t = 5.4
+ﬂow occurs only in the lowermost part of the box, and the local variation in
+the temperature is very small in the entire box (see the top panel of Figure
+10−2), the cold ﬂuid with T < 0.5 sinks into
+3b). In temperature B (t = 1.52
+the hot interior, and a large local variation in temperature occurs around the
+descending ﬂow near the bottom surface (see the middle panel of Figure 3b).
+10−2), the interior of the box is nearly isothermal
+In temperature C (t = 3.6
+and, as can be also seen from the smaller
+max than in Temperature B,
+the temperature contrast between the descending ﬂow and the surroundings
+becomes smaller.
+
+grad(T )
+
+×
+
+×
+
+×
+
+|
+
+|
+
+In addition, to ﬁnd an appropriate implementation of the present algorithm
+for the multigrid operation, we employed four diﬀerent types of smoothing
+procedures during the multigrid V-cycles. In these types, we varied the number
+of iterations Ns by (6) for the pre- and post-smoothing calculations at each
+grid level, as listed in Table 4. In Type 0, Ns is taken to be 8 at all grid levels,
+
+17
+
+Table 4
+Numbers of pre- and post-smoothing calculations Ns on grid level ℓ employed in the
+various types of the smoothing procedures in this study. Here Ngrid is the number of
+employed grids and rη is the magnitude of global viscosity contrast. In the present
+calculations Ngrid is taken to be 6.
+
+Type
+
+Ns(ℓ) on grid level ℓ
+
+0
+
+1
+
+2
+
+3
+
+8
+
+×
+[ln(rη) + 1]
+
+[ln(rη) + 1]
+
+8
+2Ngrid−ℓ
+
+2Ngrid−ℓ
+4Ngrid−ℓ
+
+8
+
+8
+
+×
+
+×
+
+×
+
+×
+
+Figure 4
+
+Fig. 4. Convergence behavior for various values of global viscosity contrast rη and
+for temperature ﬁelds in Figure 3 by using various types of smoothing procedures
+listed in Table 4. In (a) the number of V-cycles NV is plotted against rη. In (b)
+the measure of total computational cost in the smoothing procedures Ws is plotted
+rc
+against rη. The values are plotted only for rη
+η, below which the multigrid
+iteration converges.
+
+≤
+
+and is the smallest among the four types employed in these tests. In Type 1,
+Ns depends on the grid level ℓ. The value of Ns is taken to be equal to that
+in Type 0 at the ﬁnest grid (ℓ = 6), and is successively doubled as the grid
+becomes coarser. In Types 2 and 3, in contrast, Ns is assumed to be dependent
+on both the grid level ℓ and the global viscosity contrast rη. In both types,
+Ns at the ﬁnest grid is taken to be [ln(rη) + 1] times larger than that in Type
+1, and the values of Ns is successively multiplied by two and four as the grid
+becomes coarser in Types 2 and 3, respectively.
+
+We compared the convergence behaviors of diﬀerent types of smoothing proce-
+dures, for three distributions of T and various values of rη. In Figure 4 we show
+the plots against rη of (a) the number of V-cycles NV and (b) the function Ws
+given by,
+
+6
+
+Ws =
+
+Xℓ=1
+
+n(ℓ)
+
+m(ℓ)
+
+×
+
+m(ℓ = 6)
+
+,
+
+(23)
+
+where n(ℓ) is the total number of iterations by (6) in the smoothing proce-
+
+18
+
+Figure 5
+
+Fig. 5. Comparison in the evolution of the L2-norm of residuals on the ﬁnest grid
+(grid level ℓ = 6) during the initial ﬁve multigrid V-cycles between the case with
+the smoothing procedures of (a) Type 1 and (b) Type 0. Both calculations were
+performed with Temperature A and rη = 104. The red lines indicate the evolutions
+obtained by the smoothing calculations on the grid level ℓ = 6, while the blue arrows
+indicate the changes of residuals for ℓ = 6 due to the coarse-grid correction.
+
+4
+
+×
+
+≡
+
+rc
+η, below which the multigrid iteration converges.
+
+(64/26−ℓ)3 is the number of elements of
+dures on grid level ℓ, and m(ℓ)
+the unknown vector x (i.e., the number of unknown variables; see (6)) on grid
+level ℓ. The numerator in (23) represents the total number of updating oper-
+ations of unknown variables during the entire multigrid iterations, while the
+denominator represents the number of updating operation during one smooth-
+ing calculation at the ﬁnest grid (ℓ = 6). Namely, Ws is the measure of the
+computational cost of the multigrid iterations, and it indicates that the to-
+tal computational cost spent in the smoothing procedures during the entire
+multigrid iterations is equal to that virtually spent in Ws-times smoothing
+calculations on the ﬁnest grid. In the ﬁgure, the values are plotted only for
+rη ≤
+The comparisons of rc
+η for diﬀerent types of smoothing procedures in Figure
+4 show that the value of rc
+η becomes larger from Types 0 to 3 for all tem-
+η is 103 for Temperature A, and 102 for
+perature distributions. For Type 0, rc
+η increases to 107
+Temperatures B and C. By changing from Types 0 to 1, rc
+for Temperature A, and to 103 for Temperatures B and C. The value of rc
+η
+signiﬁcantly increases by further changing to Types 2 and 3. For Type 2, rc
+η is
+larger than 1010 for Temperature A, and 106 for Temperatures B and C. For
+η is larger than 1010 for Temperature A, and 108 for Temperatures
+Type 3, rc
+B and C. From the comparison between these types, we conclude that the
+robustness of the multigrid iteration is improved by increasing Ns. In partic-
+ular, a signiﬁcant improvement is obtained for large rη by increasing Ns in
+proportion to [ln(rη) + 1].
+
+The multigrid iteration becomes more robust against rη for larger Ns, since
+larger number of iterations of (6) can reduce the errors more eﬀectively. To
+see this more clearly, we show in Figure 5 the evolution of the L2-norm of
+residual during the multigrid iteration on the ﬁnest grid (ℓ = 6) for the cases
+(a) where the iteration converged with Type 1, and (b) where the iteration
+diverged with Type 0. For Type 1 where the multigrid iteration converges
+(Figure 5a), the L2-norm of residual on the ﬁnest grid is signiﬁcantly reduced
+
+19
+
+after coming back from the smoothing on coarser grids. Even if the resid-
+ual is increased during the smoothing calculations on the ﬁnest grid (it can
+sometimes happen in this kind of decaying oscillation system; see eq. (15)
+or (19)), it is signiﬁcantly reduced by the coarse-grid correction. As a result,
+the residual is successively reduced by the multigrid iterations. For Type 0,
+where the multigrid iteration diverges (Figure 5b), in contrast, the L2-norm of
+residual on the ﬁnest grid is increased after coming back from the smoothing
+on coarser grids. The smoothing calculations on the ﬁnest grid reduces the
+residual, except for the ﬁrst multigrid iteration. However, the decrease in the
+residual by the smoothing calculations is too small to overcome the increase
+by the coarse-grid correction. As a result, the residual is successively increased
+by the multigrid iterations. From the comparison between these cases, we con-
+clude that suﬃcient number of smoothing calculations are necessary on coarser
+grids in order to ensure the convergence of multigrid iteration when a large
+spatial variation in viscosity is involved.
+
+Figure 4 also shows that the convergence rates of our method diﬀer between
+the types of smoothing procedures. The comparison in the convergence rates
+between Types 0 and 1 for small rη indicates that a successive increase in
+Ns to coarser grids signiﬁcantly reduces the number of V-cycles NV (Figure
+4a) as well as the computational cost Ws (Figure 4b). This stabilizing eﬀect
+of increasing the number of smoothing iterations on coarser grids is in agree-
+ment with the features of previous results using multigrid methods [20,22, for
+example]. The comparison between Types 1 to 3 in Figure 4a indicate that
+NV is signiﬁcantly reduced by increasing Ns in proportion to [ln(rη) + 1]. This
+feature is also consistent with the earlier results [20,22, for example]. As can
+be seen in Figure 4b, however, the computational cost Ws of smoothing cal-
+culations increases as Ns becomes larger from Types 1 to 3. This is because
+the cost of smoothing calculations during one V-cycle becomes signiﬁcantly
+larger.
+
+|
+
+|
+
+grad(T )
+
+We also note from Figure 4 that the convergence behavior diﬀers between the
+prescribed temperature ﬁelds. This diﬀerence may reﬂect the diﬀerence in the
+magnitude of the local temperature gradient
+shown in Figure 3b.
+The diﬀerent temperature distributions provide the diﬀerent distributions of
+viscosity. The distribution of viscosity determines the nature of the coeﬃcient
+matrix A in (4) and, hence, determines the convergence behavior of (6). In
+particular, a larger
+generates a larger local variation of viscosity for
+given rη, and makes the convergence of (6) more diﬃcult. The convergence
+behaviors presented in Figure 4 are qualitatively consistent with the above
+conjecture. The multigrid iteration converges most easily for Temperature
+A with the smallest
+, and least easily for Temperature B with the
+η is the largest for Temperature
+largest
+A for any type of smoothing procedures. Although the values of rc
+η are the
+same for Temperatures B and C when the same type of smoothing procedures
+
+|
+. In Figure 4, the value of rc
+
+grad(T )
+
+grad(T )
+
+grad(T )
+
+|
+
+|
+
+|
+
+|
+
+|
+
+20
+
+is employed, the number of V-cycles NV is smaller for Temperature C than
+for Temperature B, except for the case with Type 2 for Temperature C and
+rη = 106. These convergence behaviors are also consistent with those in the
+earlier studies [21,22, for example].
+
+4 Discussion and concluding remarks
+
+We developed a numerical algorithm for solving mantle convection problems
+with strongly variable viscosity. Equations for conservation of mass and mo-
+mentum for highly viscous and incompressible ﬂuids are solved iteratively by a
+multigrid method in combination with pseudo-compressibility and local time
+stepping techniques. In order to demonstrate its eﬃciency, the present algo-
+rithm has been implemented into a mantle convection simulation program
+based on the ﬁnite-volume discretization in a three-dimensional rectangular
+domain. Benchmark comparison with previous two- and three-dimensional
+calculations including the temperature- and/or depth-dependent viscosity re-
+vealed that accurate results are obtained even for the cases with viscosity
+variations of several orders of magnitude. We could also signiﬁcantly improve
+the robustness of the numerical method against a spatial variation in viscosity
+by increasing the pre- and post-smoothing calculations in the multigrid oper-
+ations. We achieved convergence even for the viscosity contrasts up to 1010,
+although the convergence rate deteriorates with increasing viscosity variations.
+The present algorithm can be further applied to the numerical models under
+more realistic conditions, such as spherical shell geometry and so on.
+
+The results of convergence tests described in Section 3.3 suggest that the
+convergence of multigrid method in combination with the present algorithm is
+determined by the accuracy of the coarse-grid correction when a large spatial
+variation in viscosity is incorporated. In the present convergence tests, the
+accuracy of coarse-grid correction was improved by increasing the amount of
+smoothing calculations on coarser grids during one multigrid iteration. This
+strategy always works, since the present iterative procedure never diverges as
+long as the local time stepping satisﬁes the CFL condition (see Section 2.3).
+However, it turned out that total computational costs signiﬁcantly increased as
+the magnitude of viscosity contrast becomes larger (see Figure 4b). Therefore,
+one needs to further accelerate the rate convergence of (6) in order to improve
+the eﬃciency of smoothing calculations and, in turn, to improve the accuracy
+of coarse-grid correction.
+
+The discussion in Section 2.3 also suggests that the rate of convergence of the
+present smoothing algorithm can be accelerated by choosing the matrix T in
+(6) more properly. As has been pointed out in Section 2.3, the matrix T acts as
+a “preconditioner” for (4). That is, the convergence of (6) becomes faster as T
+
+21
+
+better approximates A−1. In the present application to mantle convection
+problems, we had chosen T as a diagonal matrix by the use of the local
+time stepping approach. In addition, we had determined the values of nonzero
+elements of T from the assumption that both the rate of “diﬀusion” in velocity
+components and the rate of propagation of “pseudo-sound wave” were kept
+almost uniform in space. This choice of T corresponds to the preconditioning
+similar to the diagonal scaling of (4). However, apart from the local time
+stepping approach, we can use any arbitrary matrix T rather than a diagonal
+matrix. In other words, the convergence of (6) is accelerated if T preconditions
+(4) more properly than in the present paper. We can construct T , for example,
+by an incomplete factorization of A. Since the matrix T deﬁned thus is most
+likely to be a better approximation of A−1 than that employed here, the
+convergence of (6) is expected to be faster than in the present cases. On
+the other hand, constructing T by an incomplete factorization has several
+disadvantages because (i) more memory is required to store all of the nonzero
+elements of T and (ii) the operation of an incomplete factorization is diﬃcult to
+vectorize and parallelize. We should, therefore, take into account the speciﬁc
+computer architecture (such as scalar or vector processors) in choosing the
+most appropriate T in terms of preconditioning techniques.
+
+However, the most essential improvement possible for the present numerical
+method is the multigrid operation itself, rather than the smoothing calcula-
+tions during multigrid iteration. As has been suggested in Section 3.3, the
+reason why the multigrid iteration diverges for larger rη is that the coarse-
+grid correction becomes less eﬃcient as rη increases (see Figures 4 and 5).
+The ineﬃciency of coarse-grid correction may come from an inappropriate
+treatment of the inﬂuences of variable viscosity in the multigrid operation.
+In the present numerical method, as well as in most of earlier models based
+on ﬁnite-volume discretization [26,20,22], we followed a “standard” strategy of
+multigrid. Namely, a linear interpolation was used for transferring the residual
+and error between adjacent grid levels. In addition, the discretized equations
+on coarser grids were derived by directly discretizing the diﬀerential equations
+on the particular coarser grids. However, as has been already acknowledged in
+the literature of multigrid [12,13], the standard strategy does not eﬃciently
+work when the diﬀerential equations contain strongly varying coeﬃcients. One
+of the potential remedies is to develop the discretized equations based on
+Galerkin coarse-grid approximation [12,13], where the coeﬃcient matrix ¯A on
+a coarse grid is deﬁned from the matrix on a ﬁne grid A by,
+
+¯A = RAP ,
+
+(24)
+
+where R and P are the restriction and prolongation operators, respectively.
+The Galerkin coarse-grid approximation can automatically deﬁne the coeﬃ-
+cient matrix ¯A on the coarse grid, so as to suﬃciently approximate A deﬁned
+
+22
+
+on the ﬁne grid. But it is not straightforward to use this approach in ﬁnite-
+volume models, since it makes the coeﬃcient matrices on the coarse grids
+very complicated, with increased stencils, compared to those coming from the
+direct discretization. On the other hand, another potential remedy is to use
+the operator-dependent transfer operators [12,13]. These transfer operators
+utilize the structure of A with the variations in its coeﬃcients and, hence,
+improve the accuracy of the restriction and prolongation operations. Indeed,
+Yang and Baumgardner [41] incorporated these transfer operators together
+with the Galerkin coarse-grid operators into their ﬁnite-element models, and
+demonstrated signiﬁcant improvements in the robustness and eﬃciency of their
+multigrid procedures even for the cases with strongly viscosity variations. We
+expect that the robustness of our multigrid method presented in Section 3
+can be improved by incorporating the operator-dependent transfer operators
+into the present model, although their eﬃciency is left uncertain when used
+without the Galerkin approximation [22].
+
+It is also an important issue to improve the robustness of the multigrid itera-
+tions against a “sharp” or “discontinuous” variation in viscosity, in addition to
+a “smooth” variation considered here. One of the major unsolved problems in
+the numerical study of mantle dynamics is to reproduce the motion of surface
+plates in the framework of mantle convection. Earlier numerical studies [42,
+for a review] had demonstrated that the generation of localized zones of low
+viscosity around the plate boundaries plays an important role in reconciling
+the ﬂuid-like ﬂow of mantle with the discrete motion of surface plates. How-
+ever, it is very diﬃcult in essence for the multigrid method to deal with a local
+variation in viscosity as long as uniform mesh spacing is considered, since such
+local features are hardly “visible” on coarser grids. Recently, in several ﬁelds of
+geophysical ﬂuid dynamics, new numerical techniques, such as the local mesh
+reﬁnement [22], its combination with spectral-element method [43], and the
+wavelet-based method [44], are utilized. Since these methods allow taking the
+spatial resolution non-uniformly in space, a local variation of viscosity can be
+handled accurately by, for example, using ﬁner resolution around the regions
+of local variation. We thus speculate that the combination of these techniques
+together with the present method is one promising approach to reproduce the
+motion of surface plates in the numerical model of mantle convection.
+
+Acknowledgement
+
+We thank Tomoeki Nakakuki, David A. Yuen, Paul J. Tackley, and Masaki
+Ogawa for discussion and comments. We also thank two anonymous reviewers
+for valuable comments which greatly improved the manuscript. The calcula-
+tions presented in this paper were in part done by Earth Simulator at Japan
+Agency for Marine-Earth Science and Technology.
+
+23
+
+References
+
+[1] D. L. Turcotte and G. Schubert. Geodynamics: Applications of continuum
+
+physics to geological problems. John Wiley, New York, 1982. 450 pp.
+
+[2] F. D. Stacey. Physics of the Earth. Brookﬁeld Press, GPO Box 738, Kenmore,
+
+Brisbane, 4069, Australia, 3rd edition, 1992.
+
+[3] D. L. Turcotte and E. R. Oxburgh. Finite amplitude convection cells and
+
+continental drift. J. Fluid Mech., 28:29–42, 1967.
+
+[4] D. P. McKenzie, J. Roberts, and N. O. Weiss. Convection in the Earth’s mantle.
+
+Tectonophysics, 19:89–103, 1973.
+
+[5] G. Schubert, D. L. Turcotte, and P. Olson. Mantle convection in the Earth and
+
+planets. Cambridge University Press, 2001.
+
+[6] J. Weertman. The creep strength of the Earth’s mantle. Rev. Geophys., 8:145–
+
+168, 1970.
+
+260:771–778, 1993.
+
+[7] S.-I. Karato and P. Wu. Rheology of the upper mantle: A synthesis. Science,
+
+[8] B. Travis, P. Olson, and G. Schubert. The transition from two-dimensional to
+three-dimensional planforms in inﬁnite-Prandtl-number thermal convection. J.
+Fluid Mech., 216:71–91, 1990.
+
+[9] U. Christensen and H. Harder. 3-D convection with variable viscosity. Geophys.
+
+J. Int., 104:213–226, 1991.
+
+[10] A. Brandt. Multi-level adaptive solutions to boundary-value problems. Math.
+
+Computation, 31:333–390, 1977.
+
+[11] A. Brandt. Multilevel adaptive computations in ﬂuid dynamics. AIAA Journal,
+
+18:1165–1172, 1980.
+
+[12] P. Wesseling. An introduction to Multigrid methods. Wiley, New York, 1992.
+
+[13] U. Trottenberg, C. Oosterlee, and A. Sch¨uller. Multigrid. Academic Press, 2001.
+
+[14] E. M. Parmentier, C. Sotin, and B. J. Travis. Turbulent 3-D thermal convection
+in an inﬁnite Prandtl number, volumetrically heated ﬂuid: implications for
+mantle dynamics. Geophys. J. Inter., 116:241–251, 1994.
+
+[15] J. R. Baumgardner. Three-dimensional treatment of convective ﬂow in the
+
+Earth’s mantle. J. Stat. Phys., 39:501–511, 1985.
+
+[16] H.-P. Bunge, M. A. Richards, and J. R. Baumgardner. Eﬀect of depth-
+dependent viscosity on the planform of mantle convection. Nature, 379:436–438,
+1996.
+
+[17] H.-P. Bunge, M. A. Richards, C. Lithgow-Bertelloni, J. R. Baumgardner, S. P.
+Grand, and B. A. Romanowicz. Time scales and heterogeneous structure in
+geodynamic Earth models. Science, 280:91–95, 1998.
+
+24
+
+[18] L.-N. Moresi and V. Solomatov. Numerical investigation of 2D convection with
+
+extremely large viscosity variations. Phys. Fluids, 7:2154–2162, 1995.
+
+[19] L.-N. Moresi and M. Gurnis. Constraints on the lateral strength of slabs from
+three-dimensional dynamic ﬂow models. Earth Planet. Sci. Lett., 138:15–28,
+1996.
+
+[20] R. A. Trompert and U. Hansen. The application of a ﬁnite volume multigrid
+method to three-dimensional ﬂow problems in a highly viscous ﬂuid with a
+variable viscosity. Geophys. Astrophys. Fluid Dyn., 83:261–291, 1996.
+
+[21] R. Trompert and U. Hansen. On the Rayleigh number dependence of convection
+with a strongly temperature-dependent viscosity. Phys. Fluids, 10:351–364,
+1998.
+
+[22] M. Albers. A local mesh reﬁnement multigrid method for 3-D convection
+problems with strongly variable viscosity. J. Comp. Phys., 160:126–150, 2000.
+
+[23] S. V. Patankar. Numerical Heat Transfer and Fluid Flow. Hemisphere,
+
+Washington DC, 1980. 197 pp.
+
+[24] C. Auth and H. Harder. Multigrid solution of convection problems with strongly
+
+variable viscosity. Geophys. J. Inter., 137:793–804, 1999.
+
+[25] S. P. Vanka. Block implicit multigrid solution of Navier-Stokes equations in
+
+primitive variables. J. Comp. Phys., 65:138–158, 1986.
+
+[26] P. J. Tackley. Three-dimensional models of mantle convection: inﬂuence of
+phase transitions and temperature-dependent viscosity. PhD thesis, California
+Institute of Technology, 1994.
+
+[27] P. J. Tackley. Eﬀects of strongly variable viscosity on three-dimensional
+compressible convection in planetary mantles. J. Geophys. Res., 101:3311–3332,
+1996.
+
+[28] J. T. Ratcliﬀ, P. J. Tackley, G. Schubert, and A. Zebib. Transitions in thermal
+convection with strongly variable viscosity. Phys. Earth Planet. Inter., 102:201–
+212, 1997.
+
+[29] P. J. Tackley. Self-consistent generation of tectonic plates in three-dimensional
+
+mantle convection. Earth Planet. Sci. Lett., 157:9–22, 1998.
+
+[30] P. J. Tackley. Self-consistent generation of tectonic plates in time-dependent,
+three-dimensional mantle convection simulations 1. pseudoplastic yielding.
+Geochem. Geophys. Geosyst., 1:doi:10.1029/2000GC000036, 2000.
+
+[31] P. J. Tackley. Self-consistent generation of tectonic plates in time-dependent,
+three-dimensional mantle convection simulations 2. strain weakening and
+asthenosphere. Geochem. Geophys. Geosyst., 1:doi:10.1029/2000GC000043,
+2000.
+
+[32] A. J. Chorin. A numerical method for solving incompressible viscous ﬂow
+
+problems. J. Comp. Phys., 2:12–26, 1967.
+
+25
+
+[33] H. Schmeling and W. R. Jacoby. On modelling the lithosphere in mantle
+
+convection with nonlinear rheology. J. Geophys., 50:89–100, 1981.
+
+[34] M. Ogawa, G. Schubert, and A. Zebib. Numerical simulations of three-
+dimensional thermal convection in a ﬂuid with strongly temperature-dependent
+viscosity. J. Fluid Mech., 233:299–328, 1991.
+
+[35] F. Sotiropoulos and G. Constantinescu. Pressure-based residual smoothing
+operator for multistage pseudocompressibility algorithms. J. Comp. Phys.,
+133:129–145, 1997.
+
+[36] C.-H. Tai and Y. Zhao.
+
+computations using an unstructured multigrid method.
+192:277–311, 2003.
+
+Parallel unsteady incompressible viscous ﬂow
+J. Comp. Phys.,
+
+[37] S. E. Rogers, D. Kwak, and U. Kaul.
+
+the
+pseudocompressibility method in solving the incompressible Navier-Stokes
+equation. Appl. Math. Modelling, 11:35–44, February 1987.
+
+On the accuracy of
+
+[38] J. Shen. On a new pseudocompressibility method for the incompressible Navier-
+
+Stokes equations. Applied Numerical Mathematics, 21:71–90, 1996.
+
+[39] B. Blankenbach, F. Busse, U. Christensen, L. Cserepes, D. Gunkel, U. Hansen,
+G. Jarvis, M. Koch, G. Marquatt, D. Moore, P. Olson, H. Schmeling, and
+T. Schnaubelt. A benchmark comparison for mantle convection codes. Geophys.
+J. Int., 98:23–38, 1989.
+
+[40] F. H. Busse, U. Christensen, R. Clever, L. Cserepes, C. Gable, E. Giannandrea,
+L. Guillow, G. Houseman, H.-C. Nataf, M. Ogawa, M. Parmentier, C. Sotin,
+and B. Travis. 3D convection at inﬁnite Prandtl number in Cartesian geometry
+– a benchmark comparison. Geophys. Astrophys. Fluid Dyn., 75:39–59, 1993.
+
+[41] W.-S. Yang and J. R. Baumgardner. A matrix-dependent transfer multigrid
+method for strongly variable viscosity inﬁnite Prandtl number thermal
+convection. Geophys. Astrophys. Fluid Dyn., 92:151–195, 2000.
+
+[42] D. Bercovici. The generation of plate tectonics from mantle convection. Earth
+
+Planet. Sci. Lett., 205:107–121, 2003.
+
+[43] A. Fournier, M. A. Taylor, and J. J. Tribbia. The spectral element atmosphere
+model (SEAM): High-resolution parallel computation and localized resolution
+of regional dynamics. Monthly Weather Review, 132:726–748, 2004.
+
+[44] O. V. Vasilyev, D. A. Yuen, and Y. Y. Podladchikov. Applicability of wavelet
+algorithm for geophysical viscoelastic ﬂow. Geophys. Res. Lett., 24:3097–3100,
+1997.
+
+26
+
+Figure 1
+
+(a) Case 1a
+
+(b) Case 2
+
+27
+
+Figure 2
+
+(a) Case 1 (Rat = 105, rη = 1)
+
+(b) Case 4 (Rat = 103, rη = 102)
+
+(c) Case 16 (Rat = 103, rη = 3.2
+
+103)
+
+(d) Case 18 (Rat = 32, rη = 105)
+
+×
+
+28
+
+Figure 3
+
+(a) isotherms
+
+Temperature A (t = 5.4
+
+(b) Th(z) and
+10−4)
+
+|
+
+×
+
+0
+
+1
+
+grad(T )
+
+max(z)
+
+|
+
+|grad(T)|max
+
+50
+
+z
+
+z
+
+z
+
+0
+
+0
+
+0
+
+1
+
+0
+
+0
+
+0
+
+1
+
+0
+
+0
+
+Temperature B (t = 1.52
+
+Th
+
+10−2)
+
+×
+
+|grad(T)|max
+
+Temperature C (t = 3.6
+
+Th
+
+10−2)
+
+×
+
+|grad(T)|max
+
+1
+
+50
+
+1
+
+50
+
+Th
+
+1
+
+29
+
+(a) number of V-cycle NV
+
+(b) cost of smoothing procedures Ws
+
+Figure 4
+
+Temperature A
+
+104
+
+Ws
+
+Type 2
+
+Type 3
+
+1010
+
+102
+
+100
+
+Temperature B
+
+104
+
+Type 3
+
+Ws Type 0
+
+Type 1
+
+1010
+
+102
+
+100
+
+Temperature C
+
+104
+
+Type 3
+
+Type 2
+
+Type 0
+
+Type 1
+
+Temperature A
+
+rη
+
+1010
+
+Temperature B
+
+Type 3
+
+Type 2
+
+rη
+
+1010
+
+Temperature C
+
+Type 2
+
+Type 3
+
+Ws Type 0
+
+Type 1
+
+50
+
+NV
+
+50
+
+NV
+
+50
+
+NV
+
+Temperature A
+
+Type 0
+
+Type 1
+
+0
+
+100
+
+rη
+
+Temperature B
+
+Type 0
+
+Type 1
+
+0
+
+100
+
+Type 2
+
+rη
+
+Temperature C
+
+Type 0
+
+Type 2
+
+Type 1
+
+0
+
+100
+
+rη
+
+Type 3
+
+1010
+
+102
+
+100
+
+rη
+
+1010
+
+30
+
+(a) Type 1, Temperature A, rη = 104
+107
+
+Temperature A, rη=104
+Type 1
+
+(b) Type 0, Temperature A, rη = 104
+108
+l Temperature A, rη=104
+
+Type 0
+
+smoothing on finest grid
+coarse-grid correction
+
+smoothing on finest grid
+coarse-grid correction
+
+iteration on finest grid
+
+80
+
+iteration on finest grid
+
+80
+
+l
+
+i
+
+a
+u
+d
+s
+e
+r
+ 
+f
+o
+ 
+m
+r
+o
+n
+-
+
+2
+L
+
+102
+
+0
+
+Figure 5
+
+i
+
+a
+u
+d
+s
+e
+r
+ 
+f
+o
+ 
+m
+r
+o
+n
+-
+
+2
+L
+
+105
+
+0
+
+31
+
+

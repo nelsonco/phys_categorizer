@@ -1,0 +1,3591 @@
+2
+0
+0
+2
+ 
+p
+e
+S
+ 
+0
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+3
+4
+0
+9
+0
+2
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Equation-Free Multiscale Computation:
+enabling microscopic simulators to perform system-level
+tasks
+
+Ioannis G. Kevrekidis1,2, ∗
+C. William Gear1,3, James M. Hyman4, Panagiotis G. Kevrekidis5,
+Olof Runborg2, †and Constantinos Theodoropoulos6
+
+1Department of Chemical Engineering;
+2Program in Applied and Computational Mathematics
+Princeton University, Princeton, NJ 08544; 3NEC Research Institute;
+4CNLS and T-7, Los Alamos National Laboratory Los Alamos, NM 87545;
+5Department of Mathematics, University of Massachusetts, Amherst, MA
+6Department of Process Integration, UMIST, Manchester M60 1QD, UK.
+
+Abstract
+
+We present and discuss a framework for computer-aided multiscale analysis,
+which enables models at a “ﬁne” (microscopic/stochastic) level of description
+to perform modeling tasks at a “coarse” (macroscopic, systems) level. These
+macroscopic modeling tasks, yielding information over long time and large space
+scales, are accomplished through appropriately initialized calls to the microscopic
+simulator for only short times and small spatial domains. Traditional modeling
+approaches ﬁrst involve the derivation of macroscopic evolution equations (bal-
+ances closed through constitutive relations). An arsenal of analytical and numer-
+ical techniques for the eﬃcient solution of such evolution equations (usually Par-
+tial Diﬀerential Equations, PDEs) is then brought to bear on the problem. Our
+equation-free (EF) approach, introduced in [1], when successful, can bypass the
+derivation of the macroscopic evolution equations when these equations conceptu-
+ally exist but are not available in closed form. We discuss how the mathematics-
+assisted development of a computational superstructure may enable alternative
+descriptions of the problem physics (e.g. Lattice Boltzmann (LB), kinetic Monte
+Carlo (KMC) or Molecular Dynamics (MD) microscopic simulators, executed
+over relatively short time and space scales) to perform systems level tasks (inte-
+gration over relatively large time and space scales,“coarse” bifurcation analysis,
+optimization, and control) directly. In eﬀect, the procedure constitutes a sys-
+tems identiﬁcation based, “closure on demand” computational toolkit, bridging
+microscopic/stochastic simulation with traditional continuum scientiﬁc computa-
+tion and numerical analysis. We illustrate these “numerical enabling technology”
+
+∗to whom correspondence should be addressed, yannis@princeton.edu
+†Current address: Numerical Analysis and Computer Science, KTH, 100 44 Stockholm, Sweden.
+
+1
+
+ideas through examples from chemical kinetics (LB, KMC), rheology (Brownian
+Dynamics), homogenization and the computation of “coarsely self-similar” solu-
+tions, and discuss various features, limitations and potential extensions of the
+approach.
+
+2
+
+Contents
+
+1 INTRODUCTION
+
+2 THE COARSE TIME-STEPPER
+
+3 COARSE BIFURCATION ANALYSIS
+
+4 COARSE PROJECTIVE INTEGRATION
+
+5 A DISCUSSION OF THE INGREDIENTS
+
+5.1 System Identiﬁcation . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+5.2 The “Numerical Analysis of Legacy Codes” . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . .
+5.3 Separation of Scales
+. . . . . . . . . . . . . . . . . . . . .
+5.4 Some Additional Considerations
+
+6 THE GAP-TOOTH SCHEME
+
+7 PATCH DYNAMICS: A COMPOSITION
+
+8 ON PATCH BOUNDARY CONDITIONS
+
+9 SOME APPLICATIONS
+
+10 CONCLUSIONS, DISCUSSION, OUTLOOK
+
+4
+
+7
+
+9
+
+13
+
+17
+17
+18
+20
+23
+
+24
+
+33
+
+36
+
+39
+
+42
+
+3
+
+1
+
+INTRODUCTION
+
+The purpose of this work is to analyze a synergism that exists between “conventional”
+numerical methods/analysis and microscopic complex systems modeling, dynamics
+and control. Based on this synergism, it is possible (under conditions discussed be-
+low) to perform the computer-assisted analysis of an evolution equation for the coarse,
+macroscopic level, closed description of a physical/material phenomenon without hav-
+ing this closed description explicitly available. This is accomplished by extracting from
+a diﬀerent, ﬁne level, microscopic description (e.g. MD, KMC, kinetic theory based
+Lattice Gas (LG) or LB-BGK (Bhatnagar, Gross and Krook, [2] codes) the infor-
+mation that “traditional” numerical procedures would obtain through direct function
+evaluation from the macroscopic evolution equation, had this equation been available.
+This type of information includes, for example, numerical approximations of residuals,
+(actions of) Jacobians and Hessians, partial derivatives with respect to parameters
+etc. Circumventing the derivation of the macroscopic-level description lies at the
+heart of the approach. We collectively refer to this class of methods as “Equation
+Free (Multiscale)” Methods (EF or EFM Methods). The purpose of this “mathemat-
+ics assisted” computational technology is, therefore, to enable microscopic-level codes
+to perform system-level analysis directly, without the need to pass through an inter-
+mediate, macroscopic-level, explicit “conventional” evolution equation description of
+the dynamics.
+
+In general introductory terms, a persistent feature of complex systems is the emer-
+gence of macroscopic, coherent behavior from the interactions of microscopic “agents”
+-molecules, cells, individuals in a population- between themselves and with their envi-
+ronment. The implication is that macroscopic rules (description of behavior at a high
+level) can somehow be deduced from microscopic ones (description of behavior at a
+much ﬁner level). For some problems (like Newtonian ﬂuid mechanics) the success-
+ful macroscopic description (the Navier Stokes equations) predated its microscopic
+derivation from kinetic theory. In many important problems, ranging from ecology to
+materials science, and from chemistry to engineering, the physics are known at the mi-
+croscopic/individual level, and the closures required to translate them to a high-level
+macroscopic description are simply not available. Severe limitations arise in trying
+to either ﬁnd these closures, or to directly computationally bridge the enormous gap
+between the scale of the available description and the scale at which the questions
+of interest are asked and the answers are required. These computational limitations
+constitute a major stumbling block in current complex system modeling.
+
+In this work, using as a tool the “coarse time-stepper” [1] we discuss the formula-
+tion (and in some instances demonstrate the implementation) of a set of “mathemat-
+ics assisted” computational super-structures (libraries) that can be wrapped around
+whatever the best computer model a scientist would come up with for her/his system -
+be it a Monte Carlo description of a chemical reaction or a kinetic theory based model
+of multiphase ﬂow. The procedure is intended to be used when a macroscopic descrip-
+tion is conceptually possible yet unavailable in closed form. If accurate macroscopic
+models are available in closed form, one should probably work with them directly.
+It is interesting, however, even in this case, to explore the performance of the EF
+
+4
+
+methods we describe here.
+
+We discuss a systematic framework for extracting directly (and, we hope, as more
+work is performed, and experience gained, eﬃciently) from microscopic simulations
+the information one would obtain from macroscopic models, had these macroscopic
+models been available in closed form.
+It is the diﬃculty in obtaining such closed
+models that the proposed approach may circumvent. In a sense, the approach consists
+of “unavailable macroscopic model-motivated” processing of microscopic dynamical
+computations - it is a system identiﬁcation based procedure, processing the results of
+short bursts of (appropriately initialized) microscopic simulation, that enables us to
+create an “equation-free” computational framework.
+
+If what we did was to run a full (completely resolved in space and time) microscopic
+simulation, and merely extract the macroscopic behavior from it, the size of the
+resolved computation would obviously limit us to small systems over short times. A
+key feature of this work is that microscopic simulations are performed only in small
+“elements” in space-time: small space domains (“patches”) for short times. The
+solution is evolved in each patch, and then macroscopically interpolated across the
+patches (which can be thought of as nodes of a coarse mesh) to report the evolution of
+the macroscopic ﬁelds of interest; consecutive such reports can be used to estimate the
+time-derivative of the unavailable equation for the evolution of the coarse ﬁelds. These
+time derivative estimates can then be used as input to (a) a large time-step integrator –
+the projective integrator [3, 4]; (b) a zero-ﬁnder, to determine steady states, [1]; (c) an
+Arnoldi type eigensolver, to determine stability; and, more generally, to macroscopic
+task codes (controller design software, optimization software etc.). These points are
+brieﬂy summarized in Table 1, where “small space” and “short time” refer to the
+microscopic simulation, while “large space” and “long time” refer to the macroscopic
+tasks.
+
+The microscopic simulation should use the best current microscopic description of
+the physics (and the code implementing it) available; our procedure will be wrapped
+around this microscopic simulator calling it as a subroutine. As microscopic simulators
+improve, the overall results will also improve.
+If the simulator does not embody
+correct physics, the EFM “wrapper” will extract (hopefully quickly and eﬃciently)
+the macroscopic consequences of the incorrect physics; this can help in realizing what
+is missing and modifying the microscopic model or code.
+
+The macroscopic computations will take advantage of the arsenal of tools that
+have been developed for continuum evolutionary equation (usually Ordinary and Par-
+tial Diﬀerential Equation, ODE and PDE) descriptions of physical phenomena (e.g.
+[6, 7, 8, 9]). Standard such tools include discretization and integration techniques,
+numerical linear algebra -most importantly, iterative large scale linear algebra, matrix-
+free solvers and eigensolvers-, contraction mappings, continuation and numerical bi-
+furcation analysis, as well as optimization -local and possibly global-, and controller
+design computations (e.g. the solution of large scale Riccati equations and in general
+optimal control techniques)
+
+The paper is organized as follows. We start our presentation of EFM methods with
+a review of our recent work on the coarse timestepper, and its use in coarse integra-
+
+5
+
+Method
+Legacy timestepper + RPM
+Shroﬀ and Keller, 1993 [37]
+Coarse timestepper + RPM
+Theodoropoulos et al., 2000 [1]
+
+(coarse bifurcation)
+
+Coarse integration
+Gear and Kevrekidis, 2001, 2002[3, 4]
+Gaptooth scheme
+Kevrekidis, AIChE 2000 [5]
+gaptooth + coarse integration
+≡ patch dynamics
+gaptooth + RPM
+≡ patch bifurcations
+
+EFM Methods & Scope
+Actual
+repeated (ST)
+
+Enabled
+
+−→ ST∞
+
+repeated (Sτ )
+
+−→ ST∞
+
+Sτ τ τ . . .
+
+(ss. . .s)τ
+
+(ss. . .s)τ τ τ . . .
+
+−→
+
+−→
+
+−→
+
+ST
+
+Sτ
+
+ST
+
+repeated ((ss. . .s)τ τ τ . . .) −→ ST∞
+
+Table 1: EFMs can be catalogued by their spatial – s(S) small(large) – and their temporal
+– τ (T,T∞) short (intermediate,“inﬁnite”) computational scales. The method named on the
+left uses “actual” space-time computations to obtain “enabled” space-time results.
+
+tion and coarse bifurcation analysis of unavailable macroscopic evolution equations
+through microscopic simulators. We continue with a long conceptual discussion of
+the building blocks that make the EFM computational enabling technology possible:
+system identiﬁcation, the numerical analysis of legacy codes, and separation of scales.
+This section may be skipped at a ﬁrst reading of the paper, and the reader can proceed
+directly to the new material, returning to the conceptual discussion later. We then
+discuss the “gaptooth” scheme (ﬁrst presented in [5]) and subsequently show how to
+combine it with coarse integration (for patch dynamics) and coarse bifurcation meth-
+ods (for patch bifurcations). These steps enable the EF computation of macroscopic
+behavior over large spatial domains and long time intervals through post-processing
+(“patching together”) the results of appropriately initialized and executed bursts of
+microscopic simulation over small spatial domains and short time intervals. We will
+then present an anthology of results from ongoing investigations that illustrate the
+scope of the EFM methods to analyze various types of problems, both in terms of
+the type of inner (microscopic) simulator, but also in terms of alternative tasks, like
+control-related tasks, homogenization –more precisely “eﬀective” equation analysis–,
+and the computation of coarsely self-similar solutions. In conclusion we will discuss
+various features and limitations of the EFM framework, as well as areas in which we
+hope the methods may be fruitfully applied.
+
+Before we start, it is worth making certain disclaimers (and we will come back
+to this again in the conclusions and discussion sections). Many of the mathematical
+and computational tools combined here (for example, system identiﬁcation, or iner-
+
+6
+
+tial manifold theory) are well established; we only borrow them as necessary. We
+hope that the synthesis we propose here has new tools and insights to oﬀer. Its main
+point, the “on-line” bridging of scales through “on demand” closure is, of course, a
+mainstream avenue in current research, where innovative multiscale techniques (such
+as the quasi-continuum method of Philips and coworkers [10, 11], the kinetic-theory
+based solvers proposed by Xu and Prendergast [12, 13], the optimal prediction meth-
+ods of Chorin [15, 16] and the novel stochastic integration techniques of Shardlow and
+Stuart [14]) are constantly being proposed and explored.
+
+This work is written more in the style of a manifesto of principles; it contains
+suggestions and speculation, as well as results and research directions that we believe
+will be fruitful for further study.
+
+2 THE COARSE TIME-STEPPER
+
+The main tool that allows the performance of numerical tasks at the macroscopic level
+using microscopic/stochastic simulation codes is the so-called “coarse timestepper”
+discussed in [1] (see also [17, 18, 4]). By timestepper, or time-T map, we mean the
+solution operator of a diﬀerential equation for a ﬁxed time T . We denote it generically
+by T : a diﬀerential equation solution u(t, x) satisﬁes u(t + T, x) = T u(t, x). The
+coarse timestepper, denoted Tc, implements the time-T map for the –unavailable
+in closed form- equation that governs the macroscopic evolution for the problem of
+interest. For this task it only uses a ﬁne timestepper, Tf , of the detailed microscopic/
+stochastic evolution of the system. The coarse timestepper consists of the following
+basic elements (see Fig. 1.a):
+
+(a) Select the statistics of interest for describing the coarse behavior of the system
+and an appropriate representation for them. For example, in a gas simulation
+at the particle level, the statistics would probably be the pressure, density, and
+velocity. For our LB-BGK reaction-diﬀusion and our KMC lattice gas illustra-
+tive problems, the statistics of interest are the zeroth moments of the distri-
+bution (i.e. the concentrations). We will call this the macroscopic description,
+u. These choices determine a restriction operator, M, from the microscopic-
+level description U , to the macroscopic description: u = MU . The maximum
+likelihood inference based “ﬁeld estimator” of Li Ju et al.
+[19, 20, 21], and
+the cumulative probability distributions in [22], are instances of this restriction
+operator. This operator may involve averaging over microscopic space and/or
+microscopic time and/or number of realizations if an ensemble of simulations
+has been used.
+
+(b) Choose an appropriate lifting operator, µ, from the macroscopic description, u,
+to a consistent microscopic description, U . By consistent we mean that Mµ =
+I , i.e.
+lifting from the macroscopic to the microscopic and then restricting
+(projecting) down again should have no eﬀect. For many types of microscopic
+descriptions, the lifting operator constructs distributions conditioned on (one or
+more of their) lower moments. For example, in a gas simulation using pressure
+
+7
+
+etc. as the macroscopic-level variables, µ would probably be chosen to make
+random particle assignments consistent with the macroscopic statistics.
+
+(c) Prescribe a macroscopic initial condition (e.g. concentration proﬁle) u(t = 0);
+
+(d) Transform it through lifting to one (or more) ﬁne, consistent microscopic real-
+
+izations U (t = 0) = µu(t = 0);
+
+(e) Evolve these realizations using the microscopic simulator (the ﬁne timestep-
+per) for the desired short macroscopic time T , generating the value(s) U (T ) =
+Tf U (t = 0).
+
+(f) Obtain the restriction u(T ) = MU (T ) and deﬁne the coarse timestepper as
+
+u(T ) = Tcu(t = 0). In other words, Tc = MTf µ.
+
+Separation of scales arguments, similar to those used in deriving explicit closed
+macroscopic equations, can in principle be used to show that this coarse timestepper
+indeed approximates the timestepper of the macroscopic equation. The hope is that
+the coarse solution u(T ) (or, more generally, u(nT )) at these discrete points in time
+“come from” an evolution equation (a semigroup). In other words, we hope that a
+closed evolution equation –a formula for the time derivative– exists and closes for u,
+and that its solution (deﬁned for all t) agrees with our coarse-timestepper obtained
+u(T ) (or u(nT )). The coarse time-stepper procedure is a natural one, and it is easy
+to realize numerically. For problems in which several microscopic copies of the same
+coarse initial conditions must be evolved, it is also easy to parallelize: each “lifted”
+copy of the same coarse initial condition runs independently on a diﬀerent processor.
+(As we will see below, an additional level of parallelism enters when we decimate a
+large computational domain to “patches”, each of which can also be run on a diﬀer-
+ent processor.) Such procedures have been employed for the construction of averaged
+equations from coarse-graining the master equation (e.g. [23, 24, 25]) and, similarly,
+for the derivation of hydrodynamic descriptions of interacting particle systems (e.g.
+[26, 27, 28, 29, 30]).
+In this work we provide, through several illustrations, “com-
+putational collateral” for this idea, suggesting a program for the proof of existence
+of a semigroup for such a procedure (and for its “gaptooth” and “patch dynamics”
+extensions that will be presented in later Sections).
+
+If the the coarse time-stepper is accurate enough, it is immediately obvious (and
+we have demonstrated in the literature) [1, 4, 17, 18, 31, 32, 33] that a computa-
+tional superstructure like the Recursive Projection Method of Shroﬀ and Keller (see
+next section) can be “wrapped around” it and enable it to perform the time-stepper
+based bifurcation analysis of the (unavailable in closed form) coarse description of
+the problem. Through this “lift-run-restrict” procedure, we enable a code doing time
+evolution at a ﬁne level of description, to perform bifurcation analysis at a completely
+diﬀerent, coarse level of description.
+
+8
+
+3 COARSE BIFURCATION ANALYSIS
+
+We brieﬂy review here, for completeness, previous results so that they can be com-
+In our original
+pared later with results obtained through more recent approaches.
+papers we used, as the basic illustrative example, a simple, well known set of non-
+linear coupled partial diﬀerential equations (the FitzHugh-Nagumo, FHN) system in
+one spatial dimension [34, 35, 1].
+
+ut(x, t) = uxx(x, t) + u(x, t) − u3(x, t) − v(x, t)
+vt(x, t) = δvxx(x, t) + ǫ(u(x, t) − a1v(x, t) − a0)
+
+(1)
+
+(2)
+
+Here u(x, t) and v(x, t) are the local concentrations of the two participating re-
+actants (the “activator” and the “inhibitor”), δ is a diﬀusion coeﬃcient and the
+remaining constants pertain to the kinetic terms; we can clearly recognize the terms
+corresponding to diﬀusion and those corresponding to chemical kinetics. In all the
+simulations that will be presented in this paper, the diﬀusion coeﬃcient is set to
+δ = 4.0 and the values of the kinetic parameters are chosen to be a0 = −0.03 and
+a1 = 2.0. Finally, ǫ was varied as in some of our simulations it represented the contin-
+uation/bifurcation parameter. The use of such models for both analysis and design
+purposes then hinges on the exploitation of numerical discretization techniques to
+turn them into large sets of ordinary diﬀerential or diﬀerential-algebraic equations.
+
+One of the reasons for choosing this model in [1] was that it is possible to analyze
+it through both the closed form PDE, as well as through a kinetic theory motivated
+Lattice Boltzmann-BGK code [36]. The PDE, at the appropriate limit, is a closed
+equation for the zeroth moments of the discrete velocity distribution - so it can be
+considered as a “coarse” closed deterministic model; the LB-BGK model is the “ﬁne”
+model in this case. Another reason for choosing this example is that it exhibits a rich
+variety of nonlinear dynamic patterns, including multiplicity of spatially structured
+steady states (and we will work with sharp, front like ones, both stable and unstable)
+as well as spatiotemporal oscillations consisting of the palindromic movement of sharp
+concentration fronts (we will also work with these). The rich nonlinear dynamics and
+the spatial sharpness of the solutions make this simple but nontrivial one dimensional
+example a good testing ground for new tools.
+
+The behavior can be analyzed through direct simulation using a code that evolves
+an initial proﬁle in time (a time-stepper) [1]. Using the time-stepper in a “successive
+substitution” form, un+1 = T un with un ≡ u(nT ), corresponds to doing on the com-
+puter what one would observe in an experiment for the problem: setting parameter
+values, setting initial conditions and evolving forward in time. Doing on the computer
+what “nature does” in a laboratory makes sense, but may not be the best or fastest
+way of discovering features like steady states or bifurcation points for an evolution
+PDE
+
+ut(x, t) = P (∂x, x, u(x, t); λ))
+
+(3)
+
+where λ is the bifurcation parameter. Diﬀerent algorithms (contraction mappings,
+augmented systems for the detection of bifurcation points) are routinely now con-
+structed [7, 8] that use the same right hand side, (RHS) P (∂x, x, u; λ), but in diﬀerent
+
+9
+
+ways than direct integration. Indeed, techniques like Newton-Raphson, or multipa-
+rameter continuation codes inspired by numerical bifurcation theory, can be thought
+of as “alternative simulation ensembles”: they use the same system equations (the
+same RHS formula) but in diﬀerent ways, that do not correspond to evolution in
+physical time. The detailed dynamics of these algorithms (e.g. the dynamics of a
+Newton Raphson iteration) do not make sense as physical dynamics; yet the results
+(the ﬁxed points, the bifurcation points) are the same as the corresponding states of
+the original system - and they have been found “much easier” than an experimentalist,
+or a “direct simulator”, would ﬁnd them.
+
+The plan is, therefore, to construct such alternative computational ensembles that
+will discover the information we want to obtain from the code “faster and easier” than
+direct simulation. This is routinely done today, for example through numerical bi-
+furcation theory algorithms, or through optimization algorithms – using knowledge
+about the mathematical characteristics of the problem we want to solve (e.g. eigen-
+value conditions for a boundary of stability, Karush-Kuhn-Tucker conditions for opti-
+mality) we construct algorithms that wrap additional considerations around the same
+right-hand-side and search more eﬃciently than direct simulation could search. In
+general, such codes (optimization codes, bifurcation codes, controller design codes)
+have to be written from scratch, even if they do use some of the subroutines that the
+direct simulation code uses.
+
+The “numerical analysis of legacy codes” discussed later in Section V, and the
+associated “time-stepper based bifurcation analysis” from which our original inspi-
+ration comes [37, 38, 39, 40, 41] combine the two approaches: direct simulation and
+alternative algorithm (“ensemble”) construction in what we believe is an ingenuous
+“software engineering” way. One uses the direct simulator as a timestepper -a simple
+subroutine that integrates starting at an initial condition in time, and reports the
+result a little later. The point of algorithms like Shroﬀ and Keller’s Recursive Pro-
+jection Method (RPM) [37] is to extract from the time-stepper what a ﬁxed point
+Newton algorithm would need: residuals (that is easy) and the action of Jacobians
+(that is a little more intricate, and uses iterative linear algebra / matrix free ideas).
+Using the time-stepper as a tool that allows us to identify the quantities that we
+need in order to do numerical analysis of the “unavailable equation” lies, as we have
+already said, at the heart of the overall procedure.
+
+One might, at some level, consider that what we are doing is adaptive control
+on the time-stepper using it as an experiment. The diﬀerence though –and it is a
+crucial diﬀerence– is that the time-stepper can be initialized at will, while a physical
+experiment, even in closed loop, is not so easy to initialize, and evolves as the physical
+dynamics dictate in real time.
+
+In RPM the user repeatedly calls the timestepper routine for successive (relatively
+short) time steps as well as from nearby initial conditions. The main assumption is
+that the system has a clear separation of time scales: there exist a few eigenvalues
+in a narrow strip around the imaginary axis (possibly some unstable ones too); then
+comes a spectral gap, and the rest of the eigenvalues are “far to the left” in the complex
+plane. These eigenvalues arise, for example, in linearizing around a steady state of
+
+10
+
+the evolution equation Equ.(3) which is obviously also a ﬁxed point
+
+u∗(x) = T u∗(x)
+
+(4)
+
+of the timestepper, un+1 = T un, the result of integration of Equ.(3) above with
+initial conditions u(x, t) for time T . This translates to having a few eigenvalues in a
+strip around the unit circle, then a gap, and then many eigenvalues in a small disk
+around zero for the time-stepper. Eigenvalues at zero for the linearization around a
+steady state of Equ.(3) (at 1 for Equ.(4)) are special, and can be dealt with. While
+so much structure seems like a lot to expect a priori from a model (or from the
+physical process that the model springs from) the usually dissipative PDEs modeling
+reaction and transport (and including diﬀusion, viscous dissipation, heat conduction
+etc.) often do possess such a separation of time scales.
+
+Similar assumptions, for example, underpin the theory of Inertial Manifolds and
+Approximate Inertial Manifolds [42, 43, 44], and many singularly perturbed systems
+that arise in engineering modeling. In addition, as we will qualitatively discuss below,
+even if the problem itself does not have a separation of time scales, it is possible that
+the Fokker-Planck equation for the evolution of the statistics of the problem may have
+a separation of time scales. The EF approach will then be used on a timestepper for
+that level of (coarse, averaged) description of the statistics of the problem [45].
+
+Under the loose assumptions described above, the results of the repeated calls to
+the timestepper can be used to adaptively approximate a low-dimensional subspace
+P of the linearization of the system along which time evolution is slowest, possibly
+slightly unstable. One then performs a contraction mapping (e.g. a Newton iteration
+based on a small approximate Jacobian) in this subspace, aided by the integration
+itself (Picard iteration for the timestepper, Equ.(4)) in its orthogonal complement Q.
+This combination of (approximate) Newton iteration in the low-dimensional, slow sub-
+space, and Picard iteration (integration) to provide a contraction in its complement,
+justiﬁes the classiﬁcation of such iterative methods as “Newton-Picard” methods.
+Such procedures, and their extensions, are being successfully used to perform contin-
+uation, stability and bifurcation analysis of dissipative PDEs and low-index PDAEs
+close to low-codimension bifurcations [37, 46, 47, 48, 49, 50, 51, 52, 53].
+
+Substituting the “coarse time-stepper” (Fig. 1.a) for the “PDE time-stepper”
+(Fig. 1.b) is (almost) all it takes to turn RPM into a coarse bifurcation code. The
+main new component is lifting: one needs to construct microscopic initial states (e.g.
+distributions) conditioned on the coarse variables (typically, some of the lower mo-
+ments of said distributions). We have discussed the one-many nature of this procedure
+in much more detail in [18, 4, 33, 55]. In principle, if there is enough of a separation
+of time scales, it should not matter what we initialize the higher moments of the dis-
+tributions to; we expect that, if a coarse deterministic equation for the low moments
+exists and closes, the high moments will very quickly relax to functionals of the lower
+moments. We refer to this process as the “healing” of the higher moments, and it
+basically produces “mature” distributions (as opposed to “fresh” distributions that
+have the same low moments but “inaccurate” or “improbable” higher moments). This
+is, of course, a singularly perturbed problem (the high moments quickly evolve to an
+
+11
+
+attracting manifold parametrized by the low moments), and the problem of consistent
+initialization has been systematically studied in this context. Consistent initializa-
+tion of DAEs is, essentially, the same problem [54]; initializing on slow manifolds in
+meteorology (what we call “mature” initial conditions are referred to as “bred” initial
+conditions there, e.g. see [56, 57]) is also in essence the same problem, as is initial-
+izing as close to an inertial manifold as possible. Of course, after a short integration
+time the dynamics themselves will “bring us down” to the manifold; but the random
+initialization of the high moments, even though quickly healed, is a source of noise for
+the deterministic part of the computation, and reducing this noise is helpful in the
+“outer” computational tasks. The “strong” and “weak” cone conditions in the theory
+of inertial manifolds [43] provide a framework for the rate at which trajectories “oﬀ”
+the manifold approach it, and several playful analogies to airplanes and landing strips
+can be made. This issue has important practical implications for the eﬀectiveness of
+the computations, and it has been studied in the statistical mechanical literature for
+a long time [58] (see also [59]).
+
+Averaging over an ensemble of consistent (i.e. similarly conditioned) initial dis-
+tributions is, of course, also a means to variance reduction.
+In the systems and
+control area a vast literature exists on optimal estimation and model identiﬁcation
+(e.g.
+[60, 61, 62]), and good ﬁltering is vital when one tries to estimate the numer-
+ical derivatives (or the approximations to the matrix-vector products) necessary to
+enable Newton-Picard type, subspace iteration based computations. Our standard
+illustrative problem (the LB-FHN model) is extremely forgiving in terms of variance
+reduction and consistent initialization; this is illustrated in Fig.2. A single simulation
+copy (a single realization) conditioned on the zeroth moments, at various levels of
+coarseness, initialized at local equilibrium or away from local equilibrium for the high
+moments, does “the same thing” as far as the RPM code is concerned at the level of
+accuracy in our computations.
+
+Other problems (like the nematic liquid crystal closure [55] as well as the surface
+kinetic Monte Carlo examples [18, 33] we brieﬂy discuss below) are much more sen-
+sitive to “mature” initial conditions. Indeed, care has to be taken (i.e. a separate
+Metropolis Monte Carlo code written) to “equilibrate” the consistent initialization
+[33]; as we discuss in [18] and demonstrate in [55], it may become necessary to in-
+clude additional moments (which now have gradually become “slow”) as independent
+coarse variables. For surface lattice gases, for example, we may lift with densities
+and pair probabilities as independent variables, and include a separate short MC step
+that imposes desired pair probabilities for every initialization (“lifting”).
+
+Newton-based and RPM-based bifurcation analysis results (stable and unstable
+steady states, limit cycles, computation and continuation of codimension one “coarse
+bifurcation” points) for our FHN test problem, as well as other problems, have ap-
+peared in the past [1, 4]. A summary of these results (to be compared to additional,
+“small space” gaptooth results later) is included in Fig.3 (bifurcation diagram of the
+FHN with respect to the bifurcation parameter ǫ, showing a Hopf bifurcation), Fig.4
+(showing representative u and v spatially varying steady states for a value of the
+parameter), Fig.5 (showing the leading eigenspectrum just before and just after the
+
+12
+
+Hopf bifurcation) and Fig.6 (showing the corresponding critical eigenvectors (both
+the “PDE-based” and the “LB-RPM small Jacobian” identiﬁed ones).
+
+Let us stress once more the two-tier structure of the EFM numerics: an inner
+numerical algorithm (the LB-BGK time integrator) is called repeatedly, and its results
+processed by an outer numerical algorithm (the Newton-Picard-type RPM code). It is
+interesting that one can study the numerical analysis (stability, convergence) aspects
+of the method without having to worry about the exact nature of the “inner” code.
+The only element required to parametrize this inner code from the point of view of
+the outer one is the “coarse linearization” spectrum of the inner code; this can be
+obtained oﬀ-line, and using the inner code only [3, 63]. As we will discuss below,
+this two-tier “inner-outer” structure makes also sense in the case of “legacy code”
+numerical analysis, when the “inner” timestepper is not a microscopic/stochastic
+code, but rather, a continuum model solver.
+
+4 COARSE PROJECTIVE INTEGRATION
+
+We ﬁrst present the coarse projective integration (CPI) approach (whose analysis
+can be found in [3, 22], and which has been extensively used in [4]) in the context
+of accelerating a “legacy simulator” using system identiﬁcation to estimate time-
+derivatives. Consider a problem for which a powerful integrator code (a time-stepper)
+has been written with, for example, a hardwired time step of 10−6 (appropriate for
+the stiﬀness of the problem). Suppose the solution displays smoothness in time,
+suggesting that a much larger time step, say 0.1, could be used. For a variety of
+reasons, it may not be feasible to change the time step. The user may not have access
+to the source code; in an implicit integrator the Newton iteration may fail to converge
+for larger time steps; or (for some unknown reason) the code becomes unstable (e.g.
+unacceptable splitting errors arise in a split step based code). The only tool then
+availabe is the executable with the very small step that we cannot change. And now,
+to complete the story, we need to integrate over long time horizons.
+
+One can, of course, concatenate many calls to the 10−6 step subroutine we have
+available in the traditional successive substitution use of the timestepper. Clearly,
+if the (“lost”) right-hand-side was available, one could take large time steps. The
+compromise is, of course, to use a few evaluations of the 10−6 black-box timestepper
+to estimate the right-hand-side of the unavailable (lost) equation on the slow/inertial
+manifold –a system identiﬁcation task–, and then perform a time step (e.g. an Euler
+step). The time-stepper is the “inner” integrator; it is repeatedly called, and its
+results processed, by an “outer” integrator - the ubiquitous two-tier structure of the
+algorithms we propose.
+
+The simplest projective integration method, the Projective Forward Euler (PFE)
+method (see [3]) integrates over k + 1 + M time steps of size h from tn to tn+k+1+M
+in the following manner:
+
+1. Use a suitable inner integrator to integrate for k time steps from tn to tn+k. It
+does not matter in our discussion what method is used for this inner integrator
+except that it is stable and of at least ﬁrst order.
+
+13
+
+2. Perform one more inner integration to compute yn+k+1 from yn+k.
+
+3. Finally, perform an extrapolation over M steps using yn+k+1 and yn+k to com-
+
+pute yn+k+1+M as
+
+yn+k+1+M = (M + 1)yn+k+1 − M yn+k
+
+This outer procedure is called a “Forward Euler” method because it can also be
+written as
+
+where the derivative approximation is given by
+
+yn+k+1+M = yn+k+1 + (M h)y′
+
+n+k+1
+
+y′
+n+k+1 = (yn+k+1 − yn+k)/h
+
+The k steps of the inner integrator are taken so that the fast components of
+the solution are suﬃciently damped, and their growth at the extrapolation step is
+neutralized. In fact, each application of the inner integrator multiplicatively reduces
+the fast components, so the error reduction scales with a power of k whereas the
+growth in the extrapolation is linear in M .
+
+A detailed study of this type of algorithms can be found in [3, 63]; while implicit
+versions of these algorithms are possible, and are partially discussed there, the heart
+of the process is an explicit outer integrator built around calls to an “inner” inte-
+grator. As such, the algorithms bear many resemblances to explicit codes for stiﬀ
+systems [64, 65, 66]; yet ours have been devised with multiscale problems in mind,
+and a microscopic/stochastic inner integrator. The main enabling step is again the
+coarse time-stepper through the “lift-run-restrict” evaluation sequence. There are
+some signiﬁcant diﬀerences from explicit RK codes, inlcuding the applicability in the
+“legacy code” or noisy inner integrator cases, and ease in dynamically selecting step
+sizes (see [63] for details).
+It would also be interesting to compare our projective
+integrators with Krylov/exponential integrators for large systems with separations of
+time scales [67, 68, 69, 70].
+
+Using the coarse timestepper as the “inner” integrator, Coarse Projective Integra-
+tion (CPI) can be performed. The procedure is illustrated in Fig.7: an initial condition
+is taken in “coarse space” (e.g. a density ﬁeld) and lifted to a consistent distribution
+in microscopic space (e.g. cells for a chemotaxis problem). The microscopic code is
+used to evolve the distribution long enough for the higher moments, that have been
+“incorrectly” initialized, to heal. A few more evolution steps are then taken, and the
+solutions restricted to coarse space (densities). Successive density proﬁles are used to
+estimate the time derivatives of the (unavailable) density equation (again, an iden-
+tiﬁcation step). The proﬁle of the (coarse) density function can be represented by
+the basis functions used in any of the traditional numerical discretization techniques,
+including ﬁnite diﬀerences, ﬁnite volumes, ﬁnite elements and spectral methods. The
+time-derivatives for the coeﬃcients of the basis function will be estimated, and used
+in the projective integration step; ﬁnite diﬀerence (nodal), ﬁnite element as well as
+empirical basis function representations have been illustrated in [4].
+
+14
+
+The smooth macroscopic ﬁelds can be estimated by low-dimensional projections of
+Cumulative Distribution Functions (CDFs) on appropriate basis functions [22]; alter-
+native maximum-likelihood based methods for estimating smooth macroscopic ﬁelds
+from distributions include the “thermodynamic ﬁeld estimator” [20]. This estimated
+time derivative is then used by the outer integrator to perform a projection step in
+density space - a step much longer than the time-step in the molecular code. What
+carries the day is the separation of time scales in the space of moments of the distri-
+bution (in that, for example, higher moments get very quickly slaved to density, the
+zeroth moment, here). Of course, even within the space of the evolution for the zeroth
+moment (density proﬁles) slaving and smoothness is important, and another level of
+separation of time scales ensues (center manifolds and possibly inertial manifolds for
+the density PDE). But the important thing [3, 4, 63] is that the detailed, microscopic
+dynamics themselves “kill” (damp) the coarse strong stable modes enough during the
+initial, maturing stages of the integration. Eventually, for coarse problems with gaps
+in their spectrum, the only eﬀective limitation is the time scales of the coarse slow
+modes, and the “outer” integration steps can be taken (with care) commensurate to
+these.
+
+The projective step can be run forwards or (interestingly) backwards in time. A
+reason for running it backwards would be to obtain an estimate of an earlier point on
+the “slow” or inertial manifold –when the integration was started oﬀ that manifold.
+If, for example, we used k steps, each of length h, of an inner integrator, –where
+k was large enough for the fast components to signiﬁcantly damp and approach the
+manifold–, took one more step, and then took a projective step of length kh backwards
+in time using the chord from the last two integration steps, we would have an estimate
+of the initial values on the inertial manifold. Simple analysis (at least, in the linear
+case) shows that if the inner integrator is approximately correct for the fast component
+– i.e., it approximates exp(hλ) – then the initial deviations from the inertial manifold
+are damped by a factor proportional to khλ exp(khλ). For negative λ this factor can
+be made arbitrarily small by increasing k.
+
+This “backwards estimate” can also be used to estimate the time derivatives on
+the manifold at the “start”. In this case, we must do at least 2 additional inner steps,
+and then interpolate a quadratic or higher polynomial through the last 3 (or more)
+points. Estimating the time derivative at the “start” by computing the derivative
+of this polynomial can be similarly shown to reduce the impact of any oﬀ-manifold
+discrepancies in the initial conditions by a comparable factor. An additional beneﬁt
+of this “backwards estimate” is that one can now construct a subroutine which, given
+a coarse initial condition, returns an estimate of the coarse time-derivative at this
+condition. This would allow for the easier incorporation of the equation-free approach,
+based on the coarse time-stepper, into existing large-scale, equation based, scientiﬁc
+computing integration packages.
+
+Note that the coarse projective integration procedure can be “telescoped” recur-
+sively over several tiers of description: not just densities to molecules, but (not too
+seriously) densities to molecules to wavefunctions, with the microscopic integration
+always performed at the inner level. One then has an hierarchical structure, where the
+
+15
+
+inner timestepper does the real work, the “ﬁrst outer” time-stepper “projects” inner
+time-stepper results, a “second-outer” timestepper projects “ﬁrst outer” timestepper
+results and so forth. The key is to do enough inner integration (that is where the
+damping takes place) so that the iterative outer projections remain stable and accu-
+rate; we have some preliminary experience with these telescoping projective integra-
+tors, and we are currently studying them further [63]. It may be interesting (although
+not immediately useful) to remark that the stability regions of these telescoping in-
+tegrators have asymptotically (at the inﬁnite iteration limit) fractal boundaries.
+
+In summary, and in terms of the description of the coarse time-stepper above, it
+
+is possible (see Fig.7), through
+
+1. repeating steps (c) through (f) above over several time steps and several suc-
+
+cessive U (ti) as well as their restrictions u(Ti) = MU (Ti)
+
+2. using the chord connecting these successive time-stepper output points to esti-
+
+mate the right-hand-side of the equations we do not have, we can then
+
+3. use this derivative in another “outer” integrator scheme.
+
+to estimate the coarse solution “farther” into the future. More generally, one can [4]
+
+1. From an initial value at the microscopic level, U (t = 0), run the microscopic
+simulator (the ﬁne timestepper) for a number of simulated time steps, generating
+the values U (ti) for i = 1, 2, · · · , n.
+
+2. Obtain the restrictions u(tk) = MU (tk), for k = n, n − s, n − 2s, · · · , n − qs for
+
+some integers s and q.
+
+3. Let u(t) be the q-th order polynomial in time, t, through u(tk).
+
+4. Evaluate u(T ), where T = tn + H and H is a large time step, appropriate for
+
+the macroscopic-level description.
+
+5. Lift u(T ) to get a new consistent microscopic U = µu(T ) and use it as a new
+
+starting value for repeating steps 3 to 6.
+
+Steps 1 and 5, in the spirit of the discussion above, may be performed for an
+appropriately chosen ensemble of microscopic initial conditions Ui, all consistent with
+the same macroscopic condition u : (MUj = u, ∀j). The projective step is performed
+on the macroscopic description, and is followed by a new lifting step.
+
+Notice that when a microscopic inner integration is continued beyond the ﬁrst
+restriction (“coarse reporting horizon”), we can skip the lifting step, since the evolving
+distribution is already mature, and simply continue evolving for some additional time
+before restricting again. The schematic does not contain such “intermediate” liftings;
+the reporting horizons for the subsequent restriction results can therefore, in principle,
+be signiﬁcantly shorter. As an aside, we note that there exist cases where intermediate
+liftings may be necessary (see the discussion in [18] about the “density of collapses”,
+
+16
+
+and also the later discussion about the eﬀect of boundary conditions in the gaptooth
+and patch dynamics calculations).
+
+We have analyzed and used such two-tier (and multi-tier) EFM projective in-
+tegrators for what we term “coarse integration” of the –unavailable in closed form
+macroscopic equations– using microscopic as well as stochastic inner time-steppers.
+Figure 8, taken from [4] shows time-series as well as long-term attractors of such an
+“inner LB, outer FEM” one stage projective forward Euler integrator; because of the
+nature of the outer description, we call these two-tier codes “micro-Galerkin meth-
+ods”. Using diﬀerent sets of basis functions for the outer integrator is discussed in [4].
+In particular, we have used empirical basis functions (EOFs) for the representation of
+the macroscopic ﬁeld. These are also known as KL modes (from the Karhunen-Loeve
+expansion), POD modes (from the Proper Orthogonal Decomposition) or simply PCs
+(from Principal Component Analysis) see [71, 72]. Such basis functions (modes) are
+useful for the parsimonious representation of macroscopic ﬁelds in complicated ge-
+ometries, and are extensively used in nonlinear identiﬁcation and model reduction
+(for data compression, identiﬁcation, bifurcation, control and optimization tasks),
+e.g. [73, 74, 75, 76, 77].
+
+5 A DISCUSSION OF THE INGREDIENTS
+
+In this section we discuss several elements (all of them more or less well established)
+that underpin the “computational bridge” we want to construct between microscopic
+simulation and traditional, macroscopic scientiﬁc computing / numerical analysis.
+This discussion can be skipped at a ﬁrst reading of the paper, and studied after a
+ﬁrst pass of the new algorithms and results sections.
+
+5.1 System Identiﬁcation
+
+The most important element comes from systems theory: system identiﬁcation lies at
+the heart of what we propose. The point is to consider the microscopic simulator as an
+experiment, from which measurements are made. It is crucial that this computational
+experiment can be repeatedly initialized almost at will; this is to be contrasted to a
+physical experiment, which cannot practically be initialized at will. Using information
+obtained from several short dynamic runs of the microscopic code, runs that have
+been initialized “intelligently”, possibly by post-processing results of previous runs,
+one can essentially identify (estimate) useful elements of the unavailable continuum
+model. This procedure has components of what are called “just in time” or “model
+on demand” approaches in learning theory [78, 79]. Whether because of the lifting
+procedure, because of the noise inherent in stochastic “inner” timesteppers, or even
+from the choice of the restriction operator, it is clear that accurate estimation of
+various coarse quantities and derivatives is crucial for the successful performance of
+the “outer” algorithm. We rely on theory developed in the systems area [60, 61,
+62] for the best unbiased estimates of these quantities (see also the review [80]).
+Since we can initialize the simulation at will, however, we also have the option of
+
+17
+
+selecting appropriate ensembles, so that we can improve variance reduction for a
+given computational eﬀort; variance reduction plays a crucial role in the accurate
+estimation of coarse values and coarse derivatives.
+
+Because in our case the missing element is the closure of the macroscopic equations
+-and that is what, in eﬀect, is accomplished through the identiﬁcation procedure-, we
+believe that “closure on demand” is an appropriate description for our computational
+framework. One then “passes” the on-demand identiﬁed coarse model quantities to
+the standard continuum scientiﬁc computing subroutines. These proceed to perform
+the computer assisted analysis “without realizing” that the numbers they crunch
+do not come from a subroutine evaluating an explicit coarse description, but rather
+from a subroutine that identiﬁes these quantities “on demand” through short com-
+putational bursts of the microscopic description. Part of the macroscopic operations
+performed includes the post-processing of simulation results to construct new, useful
+initial conditions for the microscopic timestepper: for example, a new initial guess for
+an outer Newton iteration, an outer optimization algorithm, or for an outer Arnoldi
+eigensolver.
+
+5.2 The “Numerical Analysis of Legacy Codes”
+
+The next important element is what, for lack of a better expression, could be called
+“the numerical analysis of legacy codes”; this is the context in which we ﬁrst encoun-
+tered such ideas. It is a context of great practical importance in itself, but at the
+same time it is truly valuable since it provides a natural framework for the numerical
+analysis of what we propose. The Recursive Projection Method (Shroﬀ and Keller,
+1993 [37], see also [39]) is representative of this context (and of what has come to be
+called “time-stepper-based” numerical bifurcation theory [41]). Consider that a com-
+pany or National Laboratory (which, as we understand, was the case for the inception
+of RPM) has a large scale dynamic simulator of a physical process (what we will call
+“the legacy code”). This dynamic simulator requires often tens of man-years of de-
+velopment and validation, and it embodies the best physics description of the process
+available. As an illustration, consider that this code is used, say, to detect a steady
+state by transient integration; it is then conceivable that the acquisition of the de-
+sired result (the steady state) may be signiﬁcantly accelerated by a Newton-Raphson
+procedure. However, rewriting the code as a Newton-Raphson iteration may be prac-
+tically impossible - the original programmers may have left or retired, and rewriting
+the code from scratch might be an immense undertaking. Alternatively, the evolution
+code may not involve simple right-hand-side evaluations, but, for example, split-step
+iterations, and a steady solver will be far from a small modiﬁcation. The alternative
+is to write a software wrapper “around” this code, calling it as a subroutine. The
+“wrapper” will identify, using “intelligent” calls to the code, what a Newton iteration
+would require; and thus exploit the simulator (the “time-stepper”) making it the core
+of a continuation - stability - bifurcation code.
+
+This combination of system identiﬁcation with numerical analysis is motivated by
+the structure of large scale numerical linear algebra techniques, based on matrix vector
+product computation. These matrix-vector products can be approximated through
+
+18
+
+timestepper calls in a “matrix free” environment. This was demonstrated in the
+work of Shroﬀ and Keller where, exploiting separation of time scales for the original
+problem, it was proved that the overall procedure converges. The main element in
+the procedure is its two-tier structure: one has an “inner” simulator (the legacy code)
+and an “outer” processor (identiﬁcation plus whatever we do with the identiﬁcation
+results, here a contraction mapping). It is this two-tier structure that is important for
+numerical analysis purposes. There is an extensive and growing literature on the use of
+techniques like RPM in the inner “legacy timestepper” context (e.g. [46, 52, 51, 53]),
+not only for steady states but also for periodic solutions, whether autonomous [47, 48]
+or periodically forced [81].
+
+In our research so far we have substituted the “inner simulator” with the (appro-
+priately initialized) microscopic system model. However, one can perform the analysis
+of the two-tier process assuming a “general” inner simulator: for example, a “perfect”
+inner simulator as will be shown for the “gaptooth scheme” below, or a “typical” inner
+integrator as can be found in our work on Projective Integrators [3, 63]. One can then
+proceed to analyze the stability and convergence of the procedure based on nominal
+representative properties of the inner scheme (like the ampliﬁcation factor for an inte-
+grator, as in [3]) without worrying at this level about what the detailed inner scheme
+will eventually actually be. The results of the overall process for a particular inner
+scheme may then be found through the properties (e.g. the integration ampliﬁcation
+factor) of that scheme itself.
+
+As we discussed above, RPM is a computational superstructure that enables a
+“short time” legacy code to perform “inﬁnite time” calculations (ﬁnd elements of
+the ω-limit set of the problem). What we call “projective integration” is similarly a
+computational framework that enables a “short time” legacy code to perform “longer
+time” calculations. Along the same lines, the so-called “gaptooth” scheme is a com-
+putational framework that enables a “small space, short time” legacy code to perform
+“large space, short time” calculations. The gaptooth-projective integration combina-
+tion (that we call “patch dynamics”) allows then the “small space, short time” legacy
+codes to perform “large space, long time” calculations, while the gaptooth-RPM com-
+bination allows them to perform “large space, inﬁnite time” calculations. The scope
+of these schemes is summarized in Table 1. It is not clear which of these names will
+withstand the test of time, but for the moment we will keep using them for brevity.
+Over the last few years we have demonstrated that this “enabling legacy codes”
+approach can be used by substituting at the inner level an appropriately initialized
+microscopic code at the place of the legacy simulator. The “coarse timestepper” in
+eﬀect, evolves distributions -and thus moments of distributions- conditioned on (ini-
+tialized consistently with) initial values of typically a few of these moments; thus
+the microscopic code becomes our main tool for conditional probability estimation
+[15, 16]. Some of the combinations we consider (timestepper and RPM, projective
+integration) may make perfect sense for legacy codes; the rationale of other combina-
+tions (the “gaptooth scheme”) might appear a little warped in the context of legacy
+codes, but much more natural, as we shall see, and even quite powerful, in the con-
+text of microscopic inner simulators. Shroﬀ and Keller’s RPM, the Newton-Picard
+
+19
+
+methods of Lust et al., our own Projective Integrator analysis [3, 4, 63] as well as the
+glimpses of gaptooth numerical analysis presented below make, we hope, the point.
+
+5.3 Separation of Scales
+
+After system identiﬁcation, the matrix-free computations that arise in the numerical
+analysis of legacy codes bring up the next important element in the overall procedure:
+separation of time scales (and the concomitant separation of space scales and the
+smoothness it induces on the expected behavior). As one sees in the numerical analysis
+of RPM, a gap in the eigenvalue spectrum of the linearization of the problem one
+studies is useful for the fast convergence of the method. The same appears in the
+study of projective integrators - and is also very important in the identiﬁcation of the
+slow subspace of the evolution of the “unavailable coarse equation”.
+
+Separation of time (and sometimes concomitant space) scales arises in several im-
+portant ways. Possibly the most important is in the way it appears in the RPM itself:
+as a spectral gap within the dynamics of the legacy code (or the “unavailable PDE”).
+This is typical of dissipative evolution equations (equations characterized by diﬀusion
+-molecular or turbulent-, viscosity, heat conduction...) where the spatial operators
+have dispersion relations that give rise to large, increasingly negative eigenvalues. If
+only a few modes, with eigenvalues close to the imaginary axis (possibly unstable)
+are “slow”, then a spectral gap exists; to the left of it follow the (inﬁnitely many)
+fast, strongly stable modes, and RPM is shown to converge “fast”. This dissipative
+PDE/separation of time scale context is also the realm of Inertial Manifolds/Forms
+and Approximate Inertial Manifolds/Forms (IMs, AIMs, IFs and AIFs respectively,
+[43, 42]). It is also the context in which the singularly perturbed control methodolo-
+gies by Kokotovic and coworkers [82] have been developed over the years; these will
+become important in several ways below.
+
+Time scale separation also arises through irreversibility and averaging, as one takes
+hydrodynamic limits of microscopically reversible processes (e.g. [26, 30]). In essen-
+tially all current microscopic/multiscale models we evolve distributions (of atoms,
+particles, cells, individuals) and try to analyze (simulate, design, optimize and con-
+trol) closed deterministic equations for a few order parameters, usually the ﬁrst few
+moments of these distributions (alternatively, well-chosen phase ﬁeld variables). A
+typical example would be the distribution of molecules (“kinetic entities” for a kinetic
+theory) over physical space, time and velocity space. It is convenient to consider the
+Navier-Stokes as an example of explicitly closed macroscopic “coarse” equations for
+ﬁelds of the ﬁrst two moments (density and momentum) of this distribution over ve-
+locity space - (a kind of Approximate Inertial Form closure of the moments hierarchy
+of the Boltzmann equation). We will discuss below the issue of choosing possibly
+“better” coarse variables than these ﬁrst few moments; let us temporarily think in
+terms of writing an (inﬁnite) hierarchy of (coupled) equations for the evolution of
+moments of the distribution.
+
+If coarse, deterministic, macroscopic behavior exists (we fully realize this is a
+colloquial, and not a mathematical statement), the implication is that –for the Boltz-
+mann/NSE example– one can indeed predict, over coarse space and time scales, the
+
+20
+
+behavior of the ﬁrst two moments of the distribution (density and momentum) based
+only on these two moments. It is the closure of the inﬁnite moment hierarchy that
+allows us to write the Navier-Stokes: they contain a model of the eﬀect of all the
+higher moments on the ﬁrst two (Newton’s law of viscosity). The fact that a useful
+deterministic equation exists and closes in terms of only the ﬁrst two moments does
+not imply that the higher moments are negligible - far from that. It implies that the
+higher moments of the distribution get very quickly (compared to the time scale over
+which coarse deterministic predictions are made) slaved to (become functionals of)
+the lower moments - density and momentum.
+
+The theory of inertial manifolds provides good “thought analogies” and nomencla-
+ture for such a situation. In the same way that one writes an (approximate) inertial
+form in terms of the ﬁrst few eigenmodes of the linear part of the problem, one here
+writes the Navier-Stokes in terms of the ﬁrst few moments of the evolving distribu-
+tion. By analogy to “determining modes”, we can call these ﬁrst few moments the
+“determining moments” for the coarse evolution of the distribution.
+
+By analogy to the parametrization of the (approximate) inertial manifold as a
+function over the determining modes, we can think of the existence of an “almost
+always” forward attracting, smooth, invariant manifold in moments space (in the case
+of IMs, the manifold is Lipschitz and exponentially attracting [43, 42]). When the
+distribution is initialized “far away” from it, the higher moments get quickly attracted
+to this manifold, and thus become functionals of the lower (governing) moments. In
+that sense, we can think of the Navier-Stokes as some kind of “approximate inertial
+form” of the (non-closed) hierarchy of equations for the evolution of the moments of
+the distribution. Alternatively, this “slow moment manifold” can be thought of as
+embodying a closure in the mode hierarchy in the appropriate space (see [83] for a
+recent corresponding study for diﬀusion).
+
+It stands to reason that such a slaving is at play when coarse macroscopic deter-
+ministic behavior is observed: if the higher moments were truly individually important
+then knowing only the ﬁrst few (in eﬀect, conditioning the distribution on the ﬁrst
+few) would not be enough to have deterministic predictions later on in time. It is
+conceivable that one can come up with examples in statistical mechanics where closed
+equations can be obtained for some moments even without slaving; in most of the prac-
+tical physical problems that we want to model, however, quick dynamic slaving of the
+high moments of the distributions, eﬀected by the inner, microscopic timestepper, lies
+at the heart of macroscopic coarse determinism.
+
+Perhaps the most typical example of this “irreversibility induced” separation of
+time scales is the derivation of the diﬀusion equation from molecular dynamics; under
+appropriate conditions, and after an initial few molecular collisions, the density ﬁeld
+eﬀectively satisﬁes the diﬀusion equation; all higher moments of the distribution have
+been slaved to the zeroth moment (density) ﬁeld. Similarly, microscopic (MD,DSMC)
+simulators eﬀectively “see” the Navier Stokes equations after a brief initial startup
+period [30, 84]. This is probably best illustrated by thinking of a (laminar, isothermal)
+ﬂuid mechanical experiment as compared to a solution of the Navier-Stokes equations.
+We know that measuring the density and momentum with some resolution allows us to
+
+21
+
+predict what they will become later in time: we interpolate (smoothness is important)
+the measurements, give them as initial conditions to the Navier Stokes, evolve the
+Navier-Stokes and obtain deterministic predictions for the same ﬁelds after some
+time. Clearly, the NS are “successful” closed equations for the expected values of two
+moments of the distribution; the actual positions and momenta of each molecule at
+the initial time are not necessary to make coarse deterministic predictions. It is worth
+reiterating that the microscopic (Newtonian collision) dynamics are fully reversible,
+yet the macroscopic coarse dynamics are dissipative.
+
+There is a third way by which separation of time scales enters the problem, and
+this is the one that we have the most diﬃculty articulating; the discussion is still, we
+hope, informative. There exist physical contexts in which it does not make sense to
+attempt the derivation of an equation for the (expected value of a) single experiment;
+the system is “too noisy”. While it is not possible to have deterministic predictions
+of the coarse state of a single experiment, we can still obtain good deterministic pre-
+dictions for the probability distribution of coarse states of many experiments over said
+coarse state values (e.g. through Fokker-Planck equations). One evolves simultane-
+ously several realizations of the problem with the same coarse initial conditions, and
+observes the evolution of the ensemble; noise comes from the ﬁne initial conditions
+and/or the ﬁne simulator.
+It is now the dynamics for the probability distributions
+of the coarse results that may acquire time-scale separation: higher order moments
+again quickly become functionals of lower order moments. In this case, however, these
+are moments of the evolving probability distributions of the coarse variables (alterna-
+tively, of the solution of the Fokker-Planck for the evolving probability distribution
+of the coarse variables).
+
+A nice example arises in the rigid rod model of nematic liquid crystal rheology,
+[85, 86, 87], see [88, 55]. One cannot write a deterministic equation for the molecular
+orientation - but can write a good deterministic equation at the level of the single
+rod orientation distribution. This equation certainly has exponential attractors, and
+probably even has an inertial manifold. Macroscopic closures for the problem (that
+is, approximate inertial forms in terms of order parameters - which can be identiﬁed
+with low moments of the distribution) are well known and quite accurate in certain
+parameter regimes. So, inertial manifold “technology” may be invoked to explore
+whether indeed high moments of evolving probability density distributions get slaved
+to low moments of these distributions. In this case, it is the averaging over many real-
+izations that “is responsible for” the time scale separation, the spectral gaps and the
+slaving; and it is the running and averaging of many similar experiments that allows
+us to make deterministic predictions for the statistics of the expected coarse state,
+rather than for the coarse state itself. One has to work at a diﬀerent level of coarse
+description (statistics of evolving ensembles) in order to restore coarse determinism.
+Since the single realization is not “ergodic enough” any more, the modeler changes
+the problem by following many (similarly coarsely initialized) realizations.
+
+What we do is to use the microscopic timesteppers to identify, on the ﬂy, what
+amounts to the time-T map (the timestepper) and slow evolution subspace of the
+unavailable equation, be it an equation for the expected state of an experiment (like
+
+22
+
+the velocity ﬁeld in the Navier-Stokes) or the expected statistics of an experiment
+(like, possibly, the “energy versus wavenumber” spectrum in a turbulence calculation,
+as we will discuss below). We then use scientiﬁc computation to analyze/compute
+this equation as if we had it. Statistical mechanics and probability theory must
+therefore play a vital role in establishing or contesting the validity of the attempt to
+extend the“numerical analysis of legacy codes” into the “coarse numerical analysis of
+microscopic timesteppers”.
+
+5.4 Some Additional Considerations
+
+It is interesting to consider that, in addition to direct simulation, most of the compu-
+tational technology we use to enhance the exploration of our computational models is
+based on smoothness and the evaluation of derivatives. The Newton-Raphson is such
+a case, as are other steady solvers [89], continuation algorithms, parametric sensitiv-
+ity, the integration of variational and Riccati equations, or optimization algorithms.
+Within these algorithms we need to evaluets Jacobians, Hessians, derivatives with
+respect to parameters etc. If the equations are not available, these derivatives have
+to be identiﬁed from calls to the “inner” legacy code, and so numerical derivative
+estimation becomes important. In the context of microscopic/stochastic codes, we
+need to obtain accurate coarse derivative information directly from the timestepper:
+variance reduction is absolutely crucial for the practical usefulness of the ideas we
+in addition to
+discuss. There are several ways to accomplish variance reduction:
+large samples (something we want to avoid if possible for computational reasons) one
+could try “intelligent” (i.e. slightly biased) microscopic simulations, such as Brownian
+Conﬁguration Fields [90, 91], see alse [92]. Systems theory comes once more to the
+aid of such computations; indeed, the ﬁltering and estimation techniques that have
+been developed for noisy data processing and identiﬁcation (from the famous Kalman
+ﬁltering to the recent interest in synchronization and nonlinear observers [93]) can be
+brought to bear on the variance reduction problem.
+
+One of the important issues in the “coarse observation” of microscopic simula-
+tions is the extraction of smooth, coarse, macroscopic ﬁelds (output) from, say, the
+detailed locations, velocities, and possibly recent histories of molecules in an MD sim-
+ulation (the “microscopic state”). Such problems, using systems theory methods, are
+currently being tackled in materials science computations (see for example the “ﬁeld
+estimator” [20] or the use of the Cumulative Distribution Function and ﬁltering in
+[22]).
+
+As we will see, additional elements of systems theory (in particular, controllers)
+will be combined with elements of continuum numerical analysis (the “gaptooth” and
+“patch dynamics” schemes) and with new ensembles from microscopic simulation (in
+the spirit of the Dual Volume Grand Canonical MC or MD simulations [94, 95, 96, 97]).
+The crucial element here is the eﬀective imposition of coarse boundary conditions on
+microscopic simulators; and the use of control-motivated methodologies to come up
+with the corresponding microscopic ensembles.
+
+23
+
+6 THE GAP-TOOTH SCHEME
+
+The discussion up to this point involved results that have either been published, are
+in press or under review; we will now proceed to discuss new results. We started with
+the discussion of previous work because we wanted to show the framework in which
+what follows was developed as an integral step of a general program. Table 1 starts
+with what we have discussed so far: we have enabled “large space, short time” coarse
+timesteppers (through the “lift-run-restrict” approach, identiﬁcation, and connection
+with traditional scientiﬁc computation) to perform “large space, inﬁnite time” tasks
+(ﬁnd steady states and bifurcations) as well as “large space, long time” tasks (coarse
+integration). We will now discuss a diﬀerent “enabling technology”: enabling a “small
+space, short time” timestepper to perform “large space, short time” tasks - what for
+short we will refer to as “the gaptooth scheme” [5].
+
+The main idea is related to the above discussion for enabling a wonderful (but
+with hardwired 10−6 step) black-box legacy timestepper to perform much longer steps
+when the solution is smooth enough. We now do something similar for enabling a
+wonderful (but with hardwired domain size 10−6) black-box PDE solver to solve in
+much larger domains again when the solution is smooth enough. While extrapolation
+of temporally smooth solutions was the main element in coarse projective integration,
+it is the interpolation of spatially smooth solutions that will be the main element in
+the gaptooth scheme and later in patch dynamics.
+
+We will motivate the work in this section by presenting what will appear as a
+“pretty dumb” scheme for the numerical solution of the diﬀusion equation in one
+spatial dimension. We will then discuss how this “gap-tooth” scheme, can lead to
+hybrid, two-tier (e.g. ﬁnite diﬀerence - molecular dynamics or ﬁnite diﬀerence -
+Monte Carlo) timesteppers. These hybrid timesteppers will be useful for problems
+for which microscopic evolution laws (MC, MD, LB) exist and are implemented in
+scientiﬁc codes; but mean ﬁeld type evolution equations for “coarse” quantities, (such
+as concentrations or moments of the particle distribution functions) even though they
+conceptually exist, they are not explicitly available in closed form. Our purpose is to
+construct accurate timesteppers for the evolution equations of such coarse quantities
+without explicitly deriving these equations through analytical mean-ﬁeld or averaging
+procedures. We use instead the microscopic rules themselves, but in smaller parts
+of the domain and use computational averaging within the subdomains, followed by
+interpolation to evaluate (estimate, identify) these coarse ﬁelds, their timesteppers,
+and the time derivative ﬁelds over the entire domain.
+
+We start with a one-dimensional case where “coarse equations” (like the diﬀusion
+equation for a concentration, the zeroth moment of the single particle distribution
+function) exist and we know them in closed form. We denote the exact solution
+(of the coarse equation) by uc(x, t). Consider a ﬁnite diﬀerence (FD) discretization
+of the diﬀusion equation on the full, one-dimensional domain, on a computational
+grid with spatial stepsize H, which is capable of accurately approximating the (time-
+dependent as well as stationary) true solution of the diﬀusion equation. (If we are
+lucky, we may know this solution analytically). This is our “Coarse Mesh”; note that
+it is ﬁne enough for the numerical approximation to the solution to be accurate for
+
+24
+
+i
+
+macroscopic purposes. We let uF D(n)
+coarse solution on this mesh, uF D(n)
+
+be the grid function approximation of the exact
+≈ uc(iH, nT ).
+Now, centered around each discretization point of the coarse mesh, consider a
+small computational domain (a “patch”) of size (here, in 1-D,of length) h ≪ H.
+These small boxes are the “teeth” of the scheme, and are separated by the “gaps”,
+each of size H − h.
+
+i
+
+In an explicit ﬁnite diﬀerence scheme, what happens during a single time step T in
+a “big box” (represented by the concentration values at the coarse nodal positions) is
+computed (approximated) using ﬂuxes, proportional to derivatives evaluated through
+ﬁnite diﬀerences. For reaction-diﬀusion problems, we also need reaction source-sink
+terms evaluated at the nodal point(s)).
+
+We want to represent what happens (during a time step of the explicit ﬁnite diﬀer-
+ence scheme, which is assumed small enough for the coarse ﬁnite diﬀerence scheme to
+be stable, i.e. one satisfying the CFL condition) in the “big box” (of size H) through
+what happens in the small box (of size h) appropriately weighting the various terms
+by box size. This is another way of approximating the exact coarse solution uc(x, t),
+and we denote the corresponding grid function with uc(n)
+i ≈ uc(iH, nT ).
+The small box in this approximation plays the role of the nodal point of the coarse
+ﬁnite diﬀerence scheme.
+
+, so that uc(n)
+
+i
+
+In each such small box we solve the same transient governing balance equations as
+those for the whole domain, up to the reporting time, T (the time step of the coarse FD
+scheme). Let ui(y, t) denote the solution in the small box i with appropriate boundary
+and initial conditions; the spatial coordinate y is local to each box 0 ≤ y ≤ h). Hence,
+given a small box size h, for each box i,
+
+• Construct boundary conditions and initial data for the small box from the coarse
+
+grid function uc(n)
+
+.
+
+i
+
+• Compute ui(y, t) by solving the governing balance equation exactly for time
+t ∈ [0, T ] in each small box y ∈ [0, h] ≡ [xi − h/2, xi + h/2] with these boundary
+conditions and initial data.
+
+• Deﬁne the discrete approximation at the next time level by the small box average
+
+of ui at the next time level t = T ,
+
+uc(n+1)
+i
+
+= ¯ui(T ) ≡
+
+ui(y, T )dy.
+
+h
+
+1
+h
+
+0
+
+Z
+
+Note that this should correspond to the explicit FD solution uc(n+1)
+
+≈ uF D(n+1)
+
+.
+
+i
+
+i
+
+For a balance equation (diﬀusion, reaction diﬀusion) the local boundary conditions
+should be the “correct” slopes (determining the ﬂuxes) in and out of each small
+2 (xi + xi+1) between two adjacent
+box. The derivative si+ 1
+“coarse” nodes xi and xi+1 can be approximated by the corresponding centered ﬁnite
+diﬀerences
+
+at the midpoint xi+ 1
+
+= 1
+
+2
+
+2
+
+25
+
+(5)
+
+(6)
+
+(7)
+
+si+ 1
+
+2
+
+= (uc
+
+i+1 − uc
+
+i )/H.
+
+Let the left and the right slope boundary conditions for each small box be s−
+They can then be computed by linear interpolation between si− 1
+of Fig.9). Therefore
+
+and si+ 1
+
+2
+
+2
+
+i and s+
+i .
+(see inset
+
+s−
+i =
+
+s+
+i =
+
+(H + h)si− 1
+
+(H − h)si− 1
+
+2
+
+2
+
+2
+
++ (H − h)si+ 1
+2H
++ (H + h)si+ 1
+2H
+
+2
+
+.
+
+i
+
+We have not yet discussed what to use as an initial condition for the simulation
+in the small box with these boundary conditions. It is reasonable to expect that the
+average (over the small box) of the quantity we are studying will be initially equal
+to the “nodal value” uc(n)
+. Any initial condition with the correct average ought to
+do a good job in the scheme we envision (as we discuss below, it is possible that we
+may have to run an ensemble of such “macroscopically consistent” initial conditions
+and average over their results).
+If the initial condition does not satisfy the BC at
+t = 0 there will be sharp startup transients close to the boundary, but in principle
+the time-reporting horizon for the simulation in the small box (corresponding to one
+time step of the FD scheme for the “big” box) should be enough for these transients
+to smoothen out. We will return extensively to the discussion of the time-reporting
+horizon of the simulation in each small “tooth”. This is also an important point for
+when we get to microscopic simulations: how quickly do “random” initial conditions
+consistent with (conditioned upon) some moment ﬁelds, heal - that is, how quickly do
+their higher moment ﬁelds become functionals of (get slaved to) the lower, governing
+moments ﬁelds ?).
+
+Let us study the gap-tooth scheme for the linear problem
+
+ut = uxx.
+
+(8)
+
+Since the boundary conditions for the small boxes are slopes, the average is given,
+and the proﬁle is assumed to be smooth, it is reasonable (from all possible initial
+conditions with the same mean) to choose the simplest polynomial that satisﬁes the
+B.C: a quadratic function of space within the small box:
+
+u(y) = Ay2 + By + C,
+
+y ∈ [0, h] ≡
+
+xi −
+
+, xi +
+
+h
+2
+
+h
+2
+
+.
+
+(cid:21)
+
+The explicit (coarse) FD solution we assume is given by the forward Euler method,
+
+uF D(n+1)
+i
+
+= uF D(n)
+i
+
++ T
+
+i+1 − 2uF D(n)
+uF D(n)
+
++ uF D(n)
+i−1
+
+.
+
+(9)
+
+The “gap-tooth” scheme starts with the coarse uc(n)
+each box i,
+
+i
+
+from the previous time step. For
+
+(cid:20)
+
+i
+H 2
+
+26
+
+• Use uc(n)
+
+i
+
+to compute the boundary conditions s−
+
+i at the beginning and
+end of each small box respectively, based on the linear interpolation formula
+(equ.(6) and (7)) with si− 1
+
+calculated from equation (5),
+
+i and s+
+
+and si+ 1
+
+2
+
+2
+
+∂yui(0, t) = s−
+i ,
+
+∂yui(h, t) = s+
+i ,
+
+t > 0.
+
+• Use uc(n)
+
+i
+
+to ﬁnd the initial condition through the quadratic expression
+
+ui(y, 0) = Ay2 + By + C,
+
+with the coeﬃcients A, B and C computed so that the proﬁle matches the BC
+and the (mean) IC. The slope at every y is given by 2Ay +B and, from matching
+the BC’s, the correct A and B can be calculated as
+
+(10)
+
+(11)
+
+(12)
+
+(13)
+
+B = s−
+i ,
+i − s−
+A = (s+
+
+i )/2h.
+
+Moreover, for consistent lifting,
+
+1
+h
+
+¯ui(0) ≡
+
+ui(y, 0)dy =
+
+(Ay2 + By + C)dy = uc(n)
+
+.
+
+i
+
+(14)
+
+0
+Z
+
+0
+Z
+The average value of ui(y, t) in the box is identiﬁed with the uc(x, t) value at
+the corresponding “coarse” node uc(n)
+(which is also supposed to correspond to
+the coarse FD value uF D(n)
+
+). We can compute C from Eq. (14) as
+
+i
+
+h
+
+1
+h
+
+h
+
+i
+
+C = uc(n)
+
+i −
+
+(Ay2 + By)dx.
+
+(15)
+
+Note that A, B and C are linear in uc(n)
+
+by equations (12), (13) and (15).
+
+• Integrate the equation in the small box for time T , corresponding to the time
+step of the coarse FD scheme. During this time the boundary conditions remain
+constant and equal with their values at the beginning of the step. Hence, solve
+
+∂tui = ∂yyui,
+
+y ∈ (0, h),
+
+t ∈ (0, T ],
+
+with initial data (11) subject to boundary conditions (10). While in general
+the solution would need to be approximated numerically (e.g. through a ﬁne
+FD scheme, within each box, and with well-chosen ﬁne time-step, or — for the
+diﬀusion equation — through a reasonable truncation of the solution obtained
+through separation of variables) here we are lucky: for the diﬀusion equation, the
+particular initial condition we chose for each box (a parabolic proﬁle satisfying
+the mean and the BC) has an explicit solution:
+
+ui(y, t) = Ay2 + By + C + 2At,
+
+.
+
+1
+h
+
+h
+
+0
+Z
+
+i
+
+27
+
+• Compute the discrete approximation at time T by averaging in space over the
+
+small box solution ui(y, t) at the ﬁnal time T . We obtain
+
+uc(n+1)
+i
+
+= ¯ui(T ) =
+
+(Ay2 + By + C + 2AT )dy.
+
+(16)
+
+h
+
+1
+h
+
+0
+Z
+
+By using (13), (6) and (7) we thus have
+
+uc(n+1)
+i
+
+= uc(n)
+
+i + T
+
+i − s−
+s+
+i
+h
+
+= uc(n)
+
+i + T
+
+si+ 1
+
+2
+
+− si− 1
+H
+
+2
+
+.
+
+Finally, from (5) we obtain the new coarse mesh quantities:
+
+uc(n+1)
+i
+
+= uc(n)
+
+i + T
+
+uc(n)
+i+1 − 2uc(n)
+i + uc(n)
+H 2
+
+i−1
+
+.
+
+(17)
+
+(18)
+
+The procedure then repeats itself: we interpolate to obtain a new coarse ﬁeld, i.e.
+use the uc(n+1)
+i and so on. The right-hand side of
+the above equation is exactly the same as the right-hand side of equation (9); therefore,
+this hybrid scheme reduces exactly to the corresponding coarse FD discretization.
+
+to compute the new slopes s+
+
+i and s−
+
+i
+
+In this example we used a nodal representation of the macroscopic ﬁeld as well
+as linear interpolation of coarse slopes to determine the patch boundary conditions.
+These features are shared by the FD scheme that was used to motivate the approach.
+We refer to this as the “nodal–Exact” gap-tooth scheme. The ﬁrst component of the
+name (nodal) refers to our chosen representation of the macroscopic ﬁeld which guides
+the number and location of coarse nodes as well as the patch boundary condition
+procedure. The second component (here “exact”) is the way by which we solve the
+equation in each small box.
+
+In the simple diﬀusion example, the truncation error for “nodal–Exact” is O(H 2 +
+T ), independent of h. To analyze the accurcay of the scheme, consider ﬁrst the limiting
+case when h = H i.e., when there are no gaps between the teeth. The scheme will
+then have truncation error is O(H p0 + T p1). The values of p0 and p1 depend on the
+order with which the boundary conditions are interpolated in space and extrapolated
+in time from the data uc(n)
+. Furthermore, an asymptotic analysis reveals that the
+diﬀerence between “nodal–Exact” with h < H and with h = H in one timestep
+is O(T (H q − hq)), for some q (for h, H ≪ 1). Thus the total truncation error for
+“nodal–Exact” is bounded by
+
+i
+
+O (H p0 + T p1 + |H q − hq|) .
+
+(19)
+
+When the “nodal–Exact” scheme described above is applied to a reaction-diﬀusion
+equation, ut = uxx + f (u), we will have p0 = q = 2 and p1 = 1. Since p0 ≤ q, we note
+that in this case the order of accuracy is still asymptotically independent of h.
+
+If we solve problems where the solution within each small box is not explicitly
+available, we also need to compute it numerically using, for example, a ﬁnite diﬀerence
+scheme on ﬁne mesh, with Nf (f for ﬁne) nodes within each small box and time step
+
+28
+
+In this case, the truncation error of
+Tf . This would be the “nodal–FD” scheme.
+the FD scheme will be O((h/Nf )r0 + T r1
+f ), with r0 and r1 depending on the scheme.
+Assuming stability, this is also the error for one coarse time step T “within” each
+small box. The total truncation error for “nodal–FD” is then
+
+O
+
+H p0 +
+
+ 
+
+r0
+
+h
+Nf !
+
+ 
+
++ T p1 + T r1
+
+f + |H q − hq|
+!
+
+.
+
+(20)
+
+In addition to the consistency of the schemes as expressed by (19) and (20), we
+also need to consider their stability at both the coarse level and at the ﬁne level
+independently. Stability conditions will typically restrict the possible sizes of T , H
+and Tf , Nf . Optimal h/H as well as Tf and Nf will appropriately balance errors and
+computational cost under these constraints.
+
+This example was chosen to illustrate an EFM approach in situations where the
+macroscopic balance equations are not explicitly available. This “two-tier”, inner-
+outer structure of the solver is a persistent feature in EFM computations. In general,
+the “inner” solver will not come from a ﬁner description of the same representation
+of the physics (i.e. the diﬀusion equation) but from a diﬀerent level representation of
+the physics, i.e. random walkers or molecular dynamics.
+
+In these situations the above procedure is modiﬁed so that
+
+• The initial condition in each small box is somehow “lifted” to a microscopic
+initial condition consistent with the coarse proﬁle (or an appropriate ensemble
+of such consistent, microscopic initial conditions –distributions conditioned on
+a few low moments–); boundary conditions for each small box are computed
+from the coarse ﬁeld.
+
+• Microscopic versions of the BC are applied to the small box problems. (New
+ensembles for doing, say, MC under various boundary conditions will need to
+be invented, see for example the work of Heﬀelﬁnger et al. on Dual-Volume
+Grand Canonical Molecular Dynamics or -Monte Carlo as an example of such
+ensembles, [94, 95, 96, 97]).
+
+• The small box problems are propagated in time using microscopic evolution
+rules (MD, MC, LB) with, in principle, constant boundary conditions over the
+reporting horizon (corresponding to one coarse time step).
+
+• The results at the end of the “coarse” time interval are averaged within each
+small box, subsequently interpolated in space between these averaged values.
+This gives the coarse ﬁeld timestepper evolution for one step. The restriction
+operator maps the ﬁne to the coarse description levels.
+
+The procedure is then repeated.
+
+It is conceivable that we may have to average over several realizations -possibly
+over several initial conditions- of the simulations in each small box to get good variance
+reduction (i.e., “good” ﬁnal expected values for the coarse quantity of interest in this
+“tooth”; good enough for the interpolation in coarse space that follows).
+
+29
+
+It is important, as was discussed above, that the time-reporting horizon for the
+microscopic simulation is long enough for the higher order moments (incorrectly, “oﬀ
+manifold” initialized when microscopically lifting) to have time to “heal”, i.e.
+to
+become functionals of the governing moments, the ones for which we believe that an
+evolution equation exists and closes. A comparable “healing” process should occur
+in terms of the spatial interpolation- the time integration should be long enough for
+interpolation errors in the higher spatial frequency components of the coarse ﬁeld to
+get slaved to lower spatial frequency components. Similar thoughts (through a “center
+manifold” argument) for dissipative PDEs, at a single level of physics description, have
+been discussed by Roberts [98].
+
+While this scheme seems computationally intensive (solving in each small box, av-
+eraging and interpolating is more expensive than the corresponding “straight” coarse
+FD solution), it is aimed towards the simulation of microscopic systems on large com-
+putational domains. An extra advantage is that the small box computations for the
+reporting time can be performed in parallel (a separate processor for each “box” or
+patch) signiﬁcantly reducing the total computational time. What was described here
+was templated on an explicit outer solver; in the spirit of implicit projective integra-
+tors, we expect that implicit (predictor-corrector) versions of this procedure can also
+be constructed.
+
+Clearly, the “gaptooth” scheme can also be combined with what are traditionally
+called “hybrid codes” [11, 106, 99, 104]: codes that combine a continuum with a
+microscopic description at diﬀerent parts of the domain, matching them at “compu-
+tational interfaces”. If in parts of the domain an available coarse description is valid,
+we evolve the mesh quantities there with the coarse equation “outer” scheme directly.
+In the regions were the explicit macroscopic description fails, we use “teeth” (boxes,
+patches in higher dimensions) and the “lift-run-restrict” approach. It appears as if
+the entire domain has been evolved with the “outer scheme”. But the numbers that
+this outer scheme crunches come in part from simple function evaluations (in parts
+of the domain where the coarse equation is valid) and in part from the appropriately
+initialized and evolved microscopic timestepper (in the regions of the domain where
+the coarse description is inaccurate and we need to revert to the microscopic physics).
+Many current hybrid applications have only one “tooth”: the entire portion of the
+domain where the macroscopic equation fails is evolved microscopically, and matched
+to the continuum. If this portion of the domain is large, however, the gaptooth ap-
+proach may reduce the extent of physical space over which microscopic simulations
+must be evolved.
+
+One can also envision (although the details need to be worked out) that multi-
+tiered outer solvers (e.g. multigrid solvers), can be combined with the inner micro-
+scopic small-box timestepper. As a matter of fact, in the spirit of telescopic projective
+integrators, diﬀerent levels of physics descriptions can be used at diﬀerent levels of
+In established multigrid approaches one works with
+a composite, multitier solver.
+diﬀerent coarseness levels of the same description; here one would work with diﬀerent
+levels of description; the inner, “ultimate microscopic” solver provides the basic de-
+tailed physics; and it is “coaxed” through the computational superstructure to also
+
+30
+
+provide the relaxation of the basic detailed physics to the “coarse slow” system-level
+dynamics we want to study. That such a “coarse slow” description exists, and the
+level at which it exists, is a basic premise of the entire numerical skeleton we build
+around the microscopic timestepper. This basic premise requires validation during
+any computation.
+
+There are several levels at which the procedure can fail; some of them are tradi-
+tional numerical failures (inadequate coarse discrete approximations in space and/or
+time) and the ways to deal with them on-line during a computation through reﬁne-
+ment or adaptive meshing are parts of traditional scientiﬁc computation. The more
+interesting and new feature, that has to be combined with these more traditional
+numerical aspects, is the “closure failure”, i.e. the possibility that equations do not
+close any more (as conditions change) at the level of coarse description we have been
+using up to now. A typical example would be that we need to write equations, in
+chemical kinetics, not just in terms of densities, but of densities and pair probabilities.
+Alternatively, in ﬂuid mechanics, that we would need to write equations for stresses as
+independent variables as the Deborah number grows, and not just have them slaved
+to momentum gradients. These considerations have been discussed to some extent in
+[18]; we believe that testing such “constitutive failures” can be reasonably done “on
+line”, and we discuss how to do it in [33, 55]. We believe that the ability to detect,
+test for, and possibly remedy such “constitutive failures” is one of the strong points
+of the computational framework we discuss. We only mention here that ways to test
+for “constitutive failures” have to be integrated in the framework, along with tests
+for more traditional discretization-based “numerical failure”.
+
+To validate EF computations for any given problem we always start in a parameter
+regime where we know a valid macroscopic description explicitly, and we reproduce
+its results. We then perform homotopy/continuation towards the regime of interest
+in parameters/operating conditions, constantly “numerically” as well as “constitu-
+tively” validating the procedure. As we gain more experience from applications, our
+knowledge of levels of closure appropriate at diﬀerent parameter regimes will give
+enough conﬁdence to avoid the overhead of constant validation.
+
+Figure 9 shows our ﬁrst schematic of the gaptooth scheme from the original pre-
+sentation [5]; the notation is slightly diﬀerent than what we have currently “converged
+on” above, but the main ideas are clear.
+
+Figure 10 shows, from the same presentation, our ﬁrst gaptooth integration results
+for the FHN equation (this computation did not involve projective integration). In
+those simulations the domain length was L = 20.0 and the parameter, ǫ was set
+to ǫ = 0.5. At this parameter value a steady front is produced. The domain was
+discretized in 30 nodes, therefore 30 boxes were used, each of them having length,
+h equal to 1/4 of the internode distance, H (i.e. h = 0.1724). For each overall
+step, starting from values of the density (zeroth moment for the LB-BGK code) on
+a coarse grid we computed a coarse density proﬁle through interpolation (taking
+advantage of smoothness); we also used this coarse proﬁle to compute temporary
+(slope) boundary conditions for the little boxes. We lifted the density proﬁle to a
+consistent LB proﬁle in each box, and then evolved the problem through LB-BGK
+
+31
+
+for one reporting horizon in each box, keeping the temporary boundary conditions
+constant; the “outer” scheme here is an explicit ﬁnite diﬀerence scheme.
+Implicit
+(iterated to self-consistency) versions of this evolution may also be possible [3, 4].
+After the problem has evolved for one time horizon in each box using the “inner”
+solver, we restrict the solution, computing the averages of the densities in each box.
+We have thus created an “inner solver-assisted” map from coarse grid to coarse grid.
+The procedure was then repeated.
+
+We veriﬁed the eﬀectiveness of this approach in a nodal-FD mode (inner code:
+FD in (ﬁne) space, trapezoidal in (ﬁne) time; nodal macroscopic ﬁeld representation)
+as a sanity check. We then performed the computations in a nodal-LB code (we will
+call this an LB-BOX code): inner LB in ﬁne space and ﬁne time, with lifting and with
+slope boundary conditions; and outer nodal representation of the coarse ﬁelds. Some
+of the results presented in [5] are shown in Fig.10 both for “inner FD” and “inner
+LB” evolvers for comparison purposes.
+
+In the simulations for the gaptooth procedure shown in the following Figures,
+101 boxes were used with h/H = 0.1, i.e. the box length was h = 0.02. Figure 11
+shows comparisons of full LB and LB-BOX proﬁles of the variable u at various times
+in the oscillatory regime of the FHN (ǫ = 0.01). The solution is a spatiotemporal
+limit cycle, and the ﬁgure shows a portion of it, involving the palindromic movement
+of a sharp reaction front. Figure 12 shows a projection of this spatiotemporal long-
+term periodic attractor computed through full LB and through the gaptooth LB-BOX
+approach. The eﬀect of the coarse time reporting horizon, Tc = 7.5 × 10−4, can be
+seen comparing with Fig. 13 where the long-term attractor of the same scheme but
+with a larger coarse time horizon (Tc = 2.5 × 10−3) is shown. In the latter case the
+communication between the boxes, by constructing the new coarse proﬁle and the
+“new” box boundary conditions for the next microscopic sumulation “era”, occurs
+a factor of three less frequently. It is important in comparing these two ﬁgures to
+remember that what is shown are long term attractors. The short term itegration with
+the two diﬀerent reporting horizons will, for quite some macroscopic time, appear
+visually practically the same at the resolution of these plots.
+
+Comparable results have been obtained for the diﬀusion equation and also for the
+
+Allen-Cahn equation [100] of the form
+
+ut = uxx + 2(u − u3),
+
+(21)
+
+where the relaxation of the macroscale proﬁle to the exact steady state of the form
+u = tanh(x − x0) was observed. The simulation used an “inner FD” scheme in each
+patch (with diﬀerent numbers of nodes in the short space of the patch and appropriate
+time steps between each “outer” reporting horizon).
+
+There is one more issue that is important to discuss: the repeatedly imposed,
+“macroscopically motivated” boundary conditions for the patches, and the appropri-
+ate microscopic ensembles for imposing them. This discussion will follow the next
+section on “Patch Dynamics”, since patch boundary conditions are also important in
+that context.
+
+32
+
+7 PATCH DYNAMICS: A COMPOSITION
+
+In Section III we were able to use “large space, short time” computations, embodied
+in calls to the microscopic “large space” timestepper, in order to perform coarse
+stability and bifurcation calculations (see Table 1). Since the results of this procedure
+are invariant objects (including elements of the ω-limit set of the unavailable coarse
+equation) we can consider that the coarse bifurcation results are “large space, inﬁnite
+time”. Correspondingly, projective integration as presented above allows the use of
+“large space, short time” computations (again embodied in calls to the microscopic
+“large space” time stepper), in order to perform numerical integration over larger
+macro-time steps. We could therefore summarize this as “large space, short time”
+to “large space, long time” computations (“long time” here is to be contrasted with
+“inﬁnite”, i.e. with bifurcation-level computations.
+
+The “gaptooth” time-stepper discussed in the previous section is a “short space,
+short time” to “large space, short time” computational framework. One could, in
+principle, use the gaptooth timestepper repeatedly, tiling longer and longer intervals
+in time “completely”.
+In the spirit, however, of our coarse projective integration
+discussion, it is preferable that the gaptooth timestepper can be combined with pro-
+jective integrator templates to provide an EF framework bridging “short space, short
+time” simulations and “large space, long time” evolution. The gaptooth timestepper
+can also be combined with coarse bifurcation calculations to provide a “short space,
+short time” simulation “large space, inﬁnite time” computational framework.
+
+A schematic summary of the space-time features of the algorithms can be seen
+in Fig. 14. In the middle (a) we see that, in order to evolve the problem with the
+“detailed microscopic” physics description, we must tile the space-time area with
+extremely ﬁne grids in both directions. This would be practically computationally
+intractable. The basic building block of our EF “computational enabling technology”
+is the same detailed description, but in a “little box” in space for a short time (a small
+space-time region). What enables the simulation to be done faster, if at all, is the
+basic premise that coarse behavior exists – that “emergent” (for lack of a better word),
+smooth in space and time at much larger scales, behavior exists for the moments of our
+microscopically evolving distributions. Projective integration is shown in caricature
+in (b), where we evolve in large space but for short times, and then we project, and
+start again (the lifting part has been suppressed). The gaptooth scheme is shown in
+caricature in (c), where we evolve in small boxes for a short time horizon, and then
+we stop, estimate coarse ﬁelds, interpolate to compute new box boundary conditions
+(let the boxes talk to each other) and start again. Putting the two together is shown
+in (d) and -really- in (e): exploiting smoothness in time we need only to integrate
+small times, and exploting smoothness in space we need only to integrate in patches
+– as a result small space-time regions emerge from the overlap of the temporal and
+the spatial “strips”.
+
+It is only within these “space-time elements” (small space, short time) that the
+actual microscopic evolution takes place – the results from this are “intelligently
+postprocessed” by the identiﬁcation part of the software, and “passed on” to the
+traditional, continuum numerical routines for number-crunching. Since this way the
+
+33
+
+closures for the unavailable macroscopic equations have been computed in real time
+(“on demand”), the macro-solvers (the “outer” computational codes) do not realize
+that the information they process does not come from a closed formula.
+
+What is “space” in this caricature is not necessarily physical space – it is what-
+ever our evolving distribution is distributed over, in addition to physical space. For
+population dynamics an additional coarse dimension may be the cell size;
+in the
+coarse integration of turbulence spectra, additional coarse dimensions would involve
+wavenumber space. The higher the dimensions of the problem we are evolving, the
+higher the potential savings compared to “full space” microscopic simulations. Con-
+sider for example, agent based models arising in ecology or epidemiology, where the
+required solution moments are distributed not only over space and time, but also over
+several features of the populations in question (e.g. cell size, age, or income); if we
+only solve in a fraction h/H of each coarse dimension, the savings grow as powers of
+this fraction. It will be extremely interesting to explore and devise “patch boundary
+conditions” for such alternative descriptions of distributed systems.
+
+Fig. 15 contains a schematic summary of the patch dynamics procedure which we
+
+now repeat in words:
+
+(a) Coarse variable selection (as in Section 2, but now the variable u(x) depends
+on “coarse space” x). We have chosen for simplicity to consider only one space
+dimension. This deﬁnes the restriction operator M.
+
+(b) Choice of lifting operator µ (as in Section 2, but now we lift entire proﬁles of
+u(x) to proﬁles of U (y), where y is microscopic space corresponding to the
+macroscopic space x). This lifting involves therefore not only the variables, but
+the space descriptions too. The basic idea is that a coarse point in x corresponds
+to an interval (a “box” or “patch” in y).
+
+(c) Prescribe a macroscopic initial proﬁle u(x, t = 0) - the “coarse ﬁeld”. In par-
+ticular, consider the values ui(t = 0) at a number of macro-mesh points (or, for
+that matter, ﬁnite element coeﬃcients, or spectral coﬃcients); the macroscopic
+proﬁle comes then from appropriate interpolation of these values of the coarse
+ﬁeld. Compute boundary conditions for the “patches” from the coarse ﬁeld.
+
+(d) Lift the “mesh points” xi and the values ui(t = 0) to proﬁles Ui(yi) in mi-
+croscopic domains (“patches”) yi corresponding to the coarse mesh points xi.
+These proﬁles should be conditioned on the values ui, and it is a good idea
+that they are also conditioned on certain boundary conditions motivated by
+the coarse ﬁeld (e.g. be consistent with coarse slopes at the boundaries of the
+microdomain that come from the coarse ﬁeld, see the discussion below).
+
+(e) Evolve each of these “micro-patches” for a short time based on the microscopic
+description, and through ensembles that enforce the “macroscopically inspired”
+boundary conditions - and thus generate Ui(yi, T ).
+
+(f) Obtain the restriction from each patch to coarse variables ui(T ) = MUi(yi, T ).
+
+34
+
+(g) Interpolate between these to obtain the new coarse-ﬁeld u(x, T ) and, from it,
+
+new boundary conditions for each patch.
+
+The steps above deﬁne the “gaptooth scheme”, that is, a scheme that computes in
+small domains (the “teeth”) which periodically communicate over the gaps between
+them through “coarse ﬁeld inspired” boundary conditions. This provides us with the
+“small space, short time” to “large space, short time” enabling technology. We now
+proceed by combining the gaptooth scheme with the Projective Integrator ideas to
+
+(h) Repeat the process (compute patch boundary conditions, lift to patches, evolve
+
+microscopically for a few steps) and then
+
+(i) Advance coarse ﬁelds “long” into the future through projective integration. This
+
+ﬁrst involves estimation of the time-derivatives for the coarse ﬁeld variables, us-
+ing successively reported coarse ﬁelds. A projective step then follows, advancing
+the coarse ﬁeld into the future.
+
+(j) Repeat the entire procedure starting with the lifting (d) above.
+
+Microscopic simulations in each patch yield averaged quantities on a macroscopic
+“sampling mesh.” These quantities are then interpolated to deﬁne the macroscopic
+ﬁelds. The macroscopic time derivatives can be estimated at the nodes directly from
+the detailed computational data in the patches. Alternatively, they can be estimated
+from a time sequence of the basis functional representation of the macroscopic ﬁelds.
+Results of “patch dynamics” and “patch bifurcation” computations for our FHN
+equation based LB-example are now presented and discussed. We already showed in
+Fig.3 the coarse bifurcation diagram of the FHN obtained through a “large space”
+LB coarse timestepper; the ﬁgure also shows, for comparison, the same bifurcation
+diagram obtained with a “small space” LB coarse timestepper (a two-tier nodal-
+LB scheme that we call LB-BOX). Here, 101 lattice points were used for the LB
+timestepper and correspondingly 101 boxes with h/H = 0.1 (so the “inner” solver
+operates on only one tenth of the full spatial domain). It is important to notice that,
+beyond the main features of the diagram, the actual shapes of the computed spatially
+varying steady states, both stable and unstable, are well captured. Furthermore, their
+stability (embodied in the coarse linearization) is also well captured. This can be seen
+both for the LB and for the LB-BOX scheme. The LB-BOX scheme clearly captures
+quantitatively the linearized stability of the detailed problem at low wavenumbers (at
+the coarse level) as well as the “large space” coarse LB scheme does. The combination
+of the gaptooth scheme with techniques like RPM allows us, therefore, to perform
+coarse bifurcation computations using “boxes” or “patches” in space- it provides a
+“small space, short time to long space, inﬁnite time” framework.
+
+Figure 16 compares full LB with patch dynamics (gaptooth combined with pro-
+jective integration) results; the algorithm now has several tiers. There are two tiers
+in time: the inner integrator is a “gaptooth” LB, and the outer integrator is forward
+Euler on the coarse proﬁle (to be exact, on the macroscopic mesh density values).
+There are, however, tiers also in space: the “coarse density proﬁle” interpolated from
+
+35
+
+the density values at the coarse mesh points; the (auxiliary) coarse proﬁle in each box;
+and the Lattice-Boltzmann proﬁle in each box, the one that we lift to, and which we
+evolve using “microscopic evolution physics”. In particular we call this a 100-100 “in-
+ner” 200 “outer” integrator, since the forward Euler “jump” is equivalent to 200 time
+steps of the inner integrator (see also [4]). Fig.17 shows the corresponding short-term
+integration results, and Fig.18 shows the long-term periodic attractor, successfully
+captured by the LB-BOX-Projective scheme. These are, of course, preliminary re-
+sults in a regime where the “coarse PDE” is known, where a lot of variance reduction
+is not really necessary, and where therefore we ﬁnd a context for troubleshooting
+the computational procedure and exploring the numerical analysis of the multi-tiered
+schemes.
+
+This completes the “simulation” part of EFM toolkit. We now have, through the
+combination of the gaptooth scheme with projective integrators and RPM what we
+call “patch dynamics” and “patch bifurcations” respectively: a “small space, short
+time” to “large space, long/inﬁnite time” enabling methodology. The accuracy and
+stability analysis of patch dynamics algorithms obviously will rely on the correspond-
+ing analyses of the “gaptooth” scheme and the projective integrator schemes, and
+is the subject of current research. This “coarse simulation” technology can also be
+coupled with both controller design and optimization algorithms.
+
+8 ON PATCH BOUNDARY CONDITIONS
+
+In the description, above, of the “nodal-Exact” gaptooth scheme, we directly intro-
+duced slope boundary conditions for the microscopic computational domains (“teeth”,
+“boxes”). We will now brieﬂy discuss how one would repeatedly impose such boundary
+conditions in the case of microscopic simulators, and then what boundary conditions
+can be used for the little boxes. The nomenclature is quickly summarized by the
+one-dimensional sketch in Fig.19. The boundary conditions for the microscopic dy-
+namics will be imposed using buﬀer regions surrounding the patches; converting the
+macroscale interpolant into a microscale boundary condition is clearly a key algo-
+rithm in this framework. The appropriate boundary conditions for the patches will,
+of course, be problem speciﬁc.
+
+The macroscale average quantities are interpolated (e.g. through piecewise linear
+or cubic Hermite interpolation) across the spatial gaps to give macroscopic ﬁelds.
+The approach is straightforward in higher-dimensional problems, when the patches
+are centered at the gridpoints of a rectangular or cuboid grid. The coarse, macroscale
+variables will be deﬁned at the grid points and interpolated through, for example,
+tensor product piecewise Hermite polynomials. These interpolations are fast and
+eﬃcient on regular grids for high dimensions (e.g. [101]).
+
+If the “inner solver” for the patches is based on a known partial diﬀerential equa-
+tion, then this equation acts as a guide in deﬁning appropriate boundary conditions
+for the patches. However, even for known PDEs, in many cases it is not clear how
+to best choose the boundary conditions to “tie” the inner solution to the macro so-
+lution. If the macroscale ﬁeld is suﬃciently accurate, using it to overpose the BCs
+
+36
+
+for a microscale patch may yield acceptable results if the frequent communication
+between the scales regularizes the solution. That is, if the errors resulting from the
+temporarily frozen BC grow slowly, so that they remain small and conﬁned to the
+buﬀer regions, their eﬀect will be minimized at the next reporting horizon. Such a
+self-regularizing eﬀect is reminiscent of AMR simulations [102], where the coarse grid
+solution is interpolated in time and used to overpose the boundary conditions for the
+ﬁne scale imbedded solution.
+
+Figure 20, borrowed from [20] shows an example of current practice in imposing
+arbitrary ﬁeld “macroscopically inspired” boundary conditions to microscopic simu-
+lations. Such methodologies have resulted from extensive research in the coupling
+of continuum with microscopic simulations, leading to current hybrid simulations
+practice [103, 104, 20, 105, 106, 107]. The so-called “extended boundary conditions”
+(EBS) are applied in buﬀer regions, which are not real, physical domains, and which
+surround the actual computational “patch”. It is the “core region” over which we will
+eventually restrict in order to obtain coarse ﬁeld information. By acting away from
+the region of interest, across a buﬀer zone where the microscopic dynamics are al-
+lowed to relax, these conditions attempt to minimize disturbances to the microscopic
+dynamics in the core region. Knowing that the microscopic distribution functions will
+relax within a few “collision lengths” dictates the size of the buﬀer regions. Various
+methods have been proposed to impose the actual boundary conditions in the buﬀer
+regions. These approaches include using distribution functions [105, 106] when these
+are known, constrained dynamics [103], and feedback control (the Optimal Particle
+Controller of [20]). Imposing a known distribution will, of course, be accurate; we
+hope that the theoretical underpinnings of other approaches will gradually become
+more ﬁrm. The “dual volume grand canonical” ensembles also use buﬀer zones to
+impose “chemical potential Dirichlet” boundary conditions.
+
+The ingredients of the EBS implementation for continuum/MD ﬂuid simulations
+involve (a) A ﬁeld estimator, based on maximum likelihood inference; this corresponds
+to our restriction operator, obtaining moment ﬁelds from particle realizations. For
+Monte Carlo simulations we have also been using the cumulative probability density
+function, projected on the ﬁrst few of a hierarchy of appropriate basis functions as the
+ﬁeld estimator. (b) Three distinct regions only the ﬁrst of which is physical: (the core
+region of interest, the action region of the OPC, and a buﬀer zone between the two);
+a particular illustration is also shown in the Figure); and (c) A method for enforcing
+the macroscopic BC in the action region.
+
+There is an overhead involved with imposing “nontrivial” (e.g. slope) boundary
+conditions to microscopic simulations, certainly in the MD case. The conceptual steps
+will be the same for any microscopic simulator; the implementation may be easier or
+more diﬃcult depending on the nature of the simulator and on the problem under
+study. It might make sense to trade “worse” boundary conditions for larger buﬀer
+zones. In the case, for example, of the diﬀusion problem, instead of lifting to particles
+over a small box, and imposing slope boundary conditions, we may lift consistently
+with the coarse proﬁle over a much larger box, but make no eﬀort to impose particular
+boundary conditions at the outer boundary of the buﬀer region (i.e. let the particles
+
+37
+
+“spill out”). The inaccurate boundary conditions will slowly degrade the accuracy
+of the quantities of interest in the patch; the reporting horizon is chosen so that
+the computation in the core region remains accurate. Imposing “better” boundary
+conditions will permit smaller buﬀer region and/or longer reporting horizons.
+
+The eﬀect of the boundary conditions on the quality of the computation also de-
+pends on how often they are updated (compare, for example, the long term attractors
+in Fig.12 and Fig.13. This can be analyzed in the ideal case where an exact inner
+continuum solver is available (for example, the “inner exact” diﬀusion problem men-
+tioned earlier). Keeping the slope boundary conditions ﬁxed for the exact solver, will
+eventually result in an inﬁnite (or zero) average in the box; it is vital that the “exact”
+simulation in each box is stopped periodically, a restriction followed by interpolation
+to a new coarse ﬁeld made, and a new round of “inner” simulations started. The length
+of time over which the slope boundary conditions can be used in each box without
+reinterpolation (without letting the boxes “talk” to each other) is clearly bounded by
+the accuracy and stability of the “outer scheme”; for this problem gaptooth reduces
+to the FD Equ.(9) with well known stability and accuracy criteria. For this example,
+there exists a direct connection between updating the BC in the gaptooth scheme and
+the stability of an associated “standard” ﬁnite diﬀerence scheme.
+
+When microscopic ensembles imposing macroscopically-motivated boundary con-
+ditions are used, the quality of the computation will be aﬀected by the same factors
+as for an “inner continuum” gaptooth scheme, and, in addition, by how the particular
+macroscopic BC are imposed on the microscale (the particular EBS “ensemble”).
+
+In summary the quality of the overall patch dynamics scheme depends on the
+interplay of these factors: (a) the choice of macroscopic boundary conditions; (b)
+the size of the buﬀer region at the outer boundary of which they will be imposed;
+(c) how often the BC are updated from the macroscale (how patches “talk to” each
+other) and (d) the details of how they are imposed on the microscale. The ﬁrst three
+factors would also arise in analyzing the gaptooth scheme for a continuum problem.
+It is conceptually possible (by analogy to implicit projective integrators) that implicit
+“patch schemes” can also be constructed; the interplay between “overall patch size”
+and “time reporting horizon” will be diﬀerent for these.
+
+For the diﬀusion equation, the slope boundary conditions are natural (they gov-
+ern the ﬂux of physical material in and out of the patch). In general, however, we
+can only guess at the number and type of boundary conditions we should use, since
+we do not know what the coarse equations actually are. What we do know (or, at
+least, postulate) is what the coarse variables are (at what level of coarse description
+a deterministic equation exists and closes). New challenges therefore arise for identi-
+ﬁcation: from just the nature of the coarse variables and the microscopic simulator,
+we must extract enough information about the unavailable equation to determine the
+appropriate boundary conditions. This is an ongoing research subject, which also has
+a counterpart in the “legacy code” context: if we are given a “black box” PDE solver,
+which we can initialize at will, how can we use the solver to ﬁnd out how many, and
+what, boundary conditions to impose in a “patch dynamics” context ?
+
+A ﬁrst step towards answering this question is made by observing that appropriate
+
+38
+
+BC for macroscopic evolution problems are often closely related to the highest spatial
+derivative in the model equations. To estimate the highest order spatial derivative
+in the right hand side P (∂x, x, u) for evolution PDEs of the form ut = P (∂x, x, u) we
+developed the “baby-bathwater” algorithm (BBA) [108]. In the BBA we evolve en-
+sembles of initial conditions in a periodic domain using a “black box” simulation code
+(this can be the micrscopic solver, or even a “legacy timestepper” for an unknown
+PDE). We construct ensembles of (spatially periodic) initial conditions which at some
+point in space x0, share the same value; or share the same value and the same ﬁrst
+spatial derivative value; the same value and the same ﬁrst and second spatial deriva-
+i (0, x)}n
+tive values; and so on. Let {uM
+i=1 denote an ensemble of n initial conditions
+such that ∂m
+x uM
+j (0, x0) for i, j = 1, . . . , n and m = 0, . . . , M . We
+note that if P (∂x, x, u) only depends on derivatives of order equal to or less than M ,
+then so does ∂tuM
+j (0, x0) for i, j = 1, . . . , n. Therefore, tracking the
+results of a short time simulation at the point x0, i.e. studying {uM
+i=1 with
+t ≪ 1, shows at what level we have thrown the “baby” (the highest signiﬁcant spatial
+derivative) along with the “bathwater” (the higher order, non-signiﬁcant ones). We
+have already tested this algorithm both at the “legacy PDE” level and at the level of
+“coarse” studies of microscopic simulators [108].
+
+i (0, x0) = ∂tuM
+
+i (0, x0) = ∂m
+
+i (t, x0)}n
+
+x uM
+
+If the microscale model is in divergence form, then the natural boundary condi-
+tions would be in terms of ﬂuxes. For example, the boundary conditions for the heat
+equation (ut = (Kux)x) would involve prescribing the ﬂux (Kux) at the boundary.
+Similarly, for the KdV equation (ut = (u2 + uxx)x) boundary conditions for the ﬂux
+(u2+uxx) result in a well posed problem. Another consideration for these conservation
+laws is to retain global conservation of the relevant quantities, including the material
+not being simulated between the patches. Not keeping track of this material between
+the patches will result in only approximately conservative algorithms. For the full cal-
+culation to preserve global conservation, the material in the gaps between the patches
+must be accounted for. This can easily be done in one dimension by calculating aux-
+iliary conserved variables in the gaps between the patches; these conserved variables
+in each gap are updated on every macroscopic timestep by continuously accounting
+for the ﬂuxes in and out of its neighboring patches. These auxiliary variables play
+a key role in constructing the macroscale interpolant deﬁning the patch boundary
+conditions. A conservative interpolant is constructed to agree with the average values
+of the material in each patch and the integral of the interpolant in the gaps between
+the patches. Conservative patch dynamics algorithms still need to be developed in
+higher dimensions. A formulation for conservation problems based on the estimation
+of ﬂuxes, leading to a generalized Godunov scheme, is proposed in [109].
+
+9 SOME APPLICATIONS
+
+To demonstrate the scope of the techniques we have discussed, we present here a
+brief anthology of results that we have obtained doing “coarse” numerics on problems
+with various “inner timesteppers”. This collage, and references to the corresponding
+publications, were selected to emphasize the broad scope of the problems that can be
+
+39
+
+solved through the EFM computational approach.
+
+Figure 21 arises in the modeling of multiphase ﬂows through LB-BGK simulations.
+It is a study of the dynamics and instabilities of a two-dimensional periodic array of gas
+bubbles rising, under the action of gravity, in a liquid. Time-dependent simulations
+both before and after this “coarse Hopf” instability, leading to macroscopic bubble
+shape oscillations, are shown, and the coarse bifurcation diagram shows both stable
+and unstable coarse steady bubble shapes. This is collaborative research with Dr.
+Sankaranarayanan and Prof. Sundaresan at Princeton [31, 32, 110, 111]
+
+Fig.22 shows bifurcation diagrams for lattice gas models of surface catalytic reac-
+tions (a caricature of CO oxidation) in the presence of adsorbate interactions. Here
+the “inner integrator” is a kinetic Monte Carlo code. One deals with average surface
+concentrations (that is, coarse ODEs for expected coverages, as opposed to coarse
+PDEs in the examples above).
+It is interesting to compare the coarse bifurcation
+analysis obtained through our scheme with the results of “traditional” explicit clo-
+sures included in the graph (mean ﬁeld as well as quasi-chemical approximations)
+and with true KMC simulations (also included). Clearly, at these strong value of
+adsorbate interactions, microsctructure has started to develop on the surface; yet it
+is still possible (for a long enough reporting horizon) to analyze unavailable closed
+equations in terms of only the zeroth moments of the distribution (two coverages).
+This work is in collaboration with Dr. A. Makeev of Moscow State University, and
+Profs. D. Maroudas at UCSB and A. Panagiotopoulos at Princeton.
+
+Figure 23 shows the bifurcation diagram for an order parameter arising in the
+dynamics of nematic liquid crystals (more exactly, the Doi theory for rigid rods in
+shear). Here the inner time-stepper is Brownian Dynamics, the initial conditions
+are rod orientation distributions (over the unit sphere) evolved through a stochastic
+integrator, and the bifurcation parameter corresponds to the density of the rods. The
+Smoluchowski/Fokker-Planck equation for the evolution of the distribution has been
+analyzed through both spherical harmonic and wavelet methods ([88, 86]). This coarse
+bifurcation diagram (and the coarse eigenvalues computed in the process) conﬁrms
+what is known from the numerically integrated Fokker-Planck itself. We have used
+this example to study the eﬀect of closure conditioning on several moments, and have
+conﬁrmed that the “next fastest” governing moment is approximately 500 times faster
+than the order parameter S [55]. This justiﬁes one-mode closures in the literature,
+which can be rationalized as a one-dimensional approximate inertial manifold for
+the Smoluchowski equation. This work is in collaboration with Dr. C. Siettos and
+Prof. M. D. Graham at Wisconsin (and aspect of it are also studied with Prof. R.
+Armstrong and Dr. A. Gopinath at MIT).
+
+Figure 24 shows a “diﬀerent” (non-microscopic) application of the EF methodol-
+ogy: a computation of “eﬀective medium” behavior using coarse timesteppers. The
+example is taken from our recent paper [17]; it is a study of the dynamics of pulses
+in a reaction-diﬀusion problem, traveling in a one-dimensional periodic medium (con-
+sisting of alternating “stripes” of diﬀerent reactivity). Assuming that an eﬀective
+equation for a complicated medium exists, but is not available in closed form, we
+can construct an approximate timestepper for it by giving a coarse initial condition
+
+40
+
+to an ensemble of realizations of the detailed medium, solving (for short times) the
+detailed equations, and averaging the result. In general, for a random medium, one
+would have to construct the ensemble of medium realizations through Monte-Carlo
+sampling; but in this example the medium is periodic, and so the diﬀerent realizations
+simply correspond to shifts of the initial condition over the unit cell. The “eﬀective
+equation” version of the coarse time-stepper is shown above in caricature, and the
+“eﬀective” bifurcation diagram, showing a “coarse Hopf” bifurcation of a “coarsely
+traveling” wave to a “modulated coarsely traveling” wave is shown below. We believe
+that, at the appropriate limit, the time-stepper constructed through this procedure
+will approach the time-stepper arising from the discretization of the corresponding
+homogenized equations.
+
+Figure 25 is a sample of an “alternative” computational task - neither integration
+nor steady/bifurcation computation. It shows the coarse control of the expected value
+of a kinetic Monte Carlo simulation for a caricature of a catalytic surface reaction
+[18, 112]. Here the unstable coarse (expected) steady states, their linearization and
+bifurcations have been computed oﬀ-line using the coarse time-stepper. The identiﬁed
+linearization and coarse derivatives with respect to control parameters around an
+unstable steady state were used to design both an observer (a Kalman ﬁlter) and a
+(pole placement) controller for the system. The bifurcation parameter (corresponding
+to the gas phase pressure of a reactant) is used as the actuator in a regime where
+the coarse dynamics are oscillatory. The “coarse linear controller” is clearly capable
+of stabilizing the (unstable) coarse expected stationary state of the KMC simulation.
+This work is in collaboration with Dr. C. Siettos, A. Armaou and Prof. A. Makeev;
+work on the coarse control of distributed microscopic systems is also underway.
+
+We are currently exploring, through collaborations, several problems involving
+several types of “inner timesteppers”: with Prof. Katsoulakis we study coarse opti-
+mization and the computation of “coarse rare” events using timesteppers. With Prof.
+Bourlioux we explore turbulent combustion using coarse front evolution timesteppers.
+With Prof. Tannenbaum we study “coarse” computationns of microscopic edge de-
+tection algorithms; With Prof. Hadjiconstantinou and Drs. Alexander and Garcia we
+study coarse DSMC ﬂuid simulation. Finite temperature MD stress induced crystal
+transformations is studied with Profs. Maroudas and Li Ju, and pattern formation
+in granular ﬂows is studied with Professors Swinney and Swift.
+
+The last application we include is very simple, but has, we believe, important
+implications. Fig.26 shows the computation of a coarse self similar solution – the de-
+caying self-similar solution of the diﬀusion equation–, computed through a microscopic
+timestepper (a Monte Carlo random walk simulator). We have recently proposed the
+use of a template based dynamic renormalization approach to compute self-similar
+solutions for evolutionary PDEs [113, 114]. This template-based approach was moti-
+vated by the work of Rowley and Marsden for problems with translational invariance
+and traveling solutions [115]. The solution is rescaled either continuously, or discretely
+(after some time) based on minimizing its distance from a (more or less aritrary) tem-
+plate function (see also [116]). Here we combine this idea with the “lift-run-restrict”
+approach as follows: we start with a random walker density proﬁle (a coarse initial
+
+41
+
+condition); for convenience, the coarse variable will be the cumulative distribution
+function (percent total walkers to the left of a given location in space). We then “lift”
+it to random walker location, and let the random walkers evolve for some time. We
+interpolate to cumulative distribution function (using appropriate orthogonal poly-
+nomials) and rescale the solution based on template minimization. The procedure
+is then repeated giving a discrete-time renormalization evolution, which converges
+quickly (the solution is stable). Successive coarse portraits are used to extract the
+relevant self-similarity exponents. Finally, we ﬁnd the same solution not through
+successsive coarse timestepping, but through a contraction mapping: a secant-based
+quasi-Newton method, for the proﬁle that is invariant under ﬁnite time evolution and
+template-based rescaling - see the bottom panel in the Figure. This work [117] is in
+collaboration with Prof. Aronson and Dr. Betelu at Minnesota, and we hope that it
+will allow the “coarse” study of many phenomena that involve self-similarity (“from
+cells to stars”, [118]) when microscopic physics descriptions exist but the macroscopic
+It is conceivable that even asymptotically self-similar
+equations are not available.
+solutions might be treatable in some cases. We have recently located an interesting
+bifurcation (the onset of dynamic self-similarity from steady state solutions) in the
+context of the focusing Nonlinear Schroedinger (NLS) equation [119]. It is conceivable
+that similar bifurcations, involving the onset of dynamic coarse self-similarity from
+coarse steady states (e.g. in molecular dynamics equilibrium simulations) might share
+some features with this instability and oﬀer a useful computational perspective of the
+transitions involved.
+
+10 CONCLUSIONS, DISCUSSION, OUTLOOK
+
+We have described an equation-free framework for the computer-aided analysis of mul-
+tiscale problems, in which the physics are known at a microscopic level, but where
+the questions asked about the expected behavior are at a much higher, macroscopic,
+coarse level. This is a “closure on demand”, system identiﬁcation based framework,
+which provides a bridge between microscopic/stochastic simulators and macroscopic
+scientiﬁc computation and numerical analysis. The basic idea is to use short, intelli-
+gent “bursts” of appropriately initialized microscopic simulations (the “inner” code),
+and process their results through system identiﬁcation techniques to estimate quanti-
+ties (residuals, time derivatives, right-hand-sides, matrix-vector products, actions of
+coarse slow Jacobians and Hessians) that, if a macroscopic model was available, would
+simply be evaluated from closed formulas. The quantities thus estimated are “passed”
+to an “outer level” code, usually a traditional macroscopic computational code that
+performs integration, controller design, steady state calculation or optimization tasks.
+This outer code proceeds to perform its task “without realizing” that the model it
+is studying is not available in closed form at the macroscopic level. We showed also
+that these short bursts of microscopic simulation may, under some cicrumstances,
+be performed for small “patches” of computational space; these patches repeatedly
+communicate with each other, as the computation evolves, through macroscopically
+inspired boundary conditions (“patch dynamics”).
+
+42
+
+In our discussion, the main tool was the “coarse timestepper”, that evolves ﬁelds
+of the macroscopic variables through microscopic simulation. If the timesteppers are
+“legacy simulators” (one of the original motivations of time-stepper based enabling
+algorithms, like the adaptive condensation of Jarausch and Mackens, the RPM of
+Shroﬀ and Keller, but also the Arnoldi based stability computations of Christodoulou
+and Scriven [120]) we are in the realm of “numerical analysis of legacy codes”. EF-
+type algorithms can signiﬁcantly accelerate the convergence of large scale industrial
+simulators to ﬁxed points (e.g. periodic steady states for pressure swing adsorption
+or reverse ﬂow reactor simulations) as well the stability analysis of these ﬁxed points
+(e.g. [81]).
+
+This paper is focused on situations where the macroscopic model is not available
+in closed form, and one needs to use microscopic simulation over the entire spatial
+domain, or over “patches” distributed across the domain. As we brieﬂy discussed,
+however, it is also conceptually straightforward to construct coarse timesteppers us-
+ing existing hybrid simulation frameworks. The map from current to future coarse
+ﬁelds is obtained through the combination of the lift-evolve-restrict approach in the
+“molecular regions” and continuum solvers in the continuum regions. If the “molecu-
+lar regions” are large, and the macroscopic expected solution is smooth enough across
+these regions, one can conceivably evolve the microscopic simulation only in a grid
+of patches along this region; one then has a hybrid continuum-“patch” overall coarse
+timestepper.
+
+On a diﬀerent note, a connection between coarse timesteppers and what is termed
+“gray-box identiﬁcation” is best discussed considering an “unavailable macroscopic
+equation” of the form of Equ.(3). The coarse timestepper estimates the result of
+integrating the entire right-hand-side of the equation for time T . Frequently, we may
+know (e.g. from irreversible thermodynamics, or from experimental experience) a lot
+about the form of several terms in the RHS; and only miss a particular phenomeno-
+logical term, such as an eﬀective viscosity, to have a useful closure. In such cases,
+microscopic simulations are typically done to extract a “law” for this phenomeno-
+logical coeﬃcient. For engineering purposes, discrete-time data obtained through
+the coarse timestepper can be “fed to” discrete time gray-box identiﬁcation schemes,
+with built-in partial knowledge of the RHS of the macroscopic equation; only the
+unknown parts of the postulated equation will then be identiﬁed (ﬁtted). A particu-
+lar framework for doing this, based on recurrent artiﬁcial neural networks templated
+on numerical integration schemes can be found in [121, 122]. We are exploring the
+ability of this framework to practically close microsopic rheological simulations in
+collaboration with Prof. Oettinger.
+
+While we discussed mostly parabolic problems in presenting coarse integration
+results, clearly coarse bifurcation algorithms like RPM provide the solutions to elliptic
+problems, and -as we brieﬂy discussed in the section above- hyperbolic problems also
+ﬁt naturally within this framework.
+
+Most of the “mathematics assisted” enhancement we expect from these algorithms
+comes from the estimation of coarse derivatives (in time, in space, with respect to
+parameters or with respect to the coarse variables themselves) through calls to the
+
+43
+
+microscopic timestepper. Variance reduction through sheer number of copies, but also
+through “the best” estimation we can have, is thus vital in establishing computational
+savings [123]; its importance cannot be overestimated.
+
+In most of our exposition we assumed that the coarse variables of choice would be
+low order moments of the distributions evolved through the microscopic timesteppers.
+There will, however, exist problems where “intelligently chosen” phase ﬁeld variables
+will provide a much “leaner” set of equations than moments (in the same sense that
+good basis functions can provide a much more parsimonious description of a PDE
+discretization). We believe that the discovery (through statistical algorithms that
+search for nonlinear correlations across data ﬁelds) of “good coarse variables” from
+which to lift is one of the requests this technology will have from modern computer
+science. The fact that we need not come up with explicit formulas for the time
+derivatives in terms of the variables generates a lot of freedom in allowing the study of
+systems currently intractable (because good closures could not be explicitly computed,
+and “full” microscopic simulations were too expensive to perform over relevant space-
+time scales).
+
+A simple case in point is the attempt to create timesteppers for expected energy
+spectra of DNS or LES simulations of the Navier Stokes equations by (a) conditioning
+NS initial condition ensembles on a given spectrum; (b) evolving the ensemble through
+DNS or LES for some time and (c) restricting back down to spectra. Aspects of this
+problem are being explored in collaboration with Profs. Martin, Yakhot, Jolly and
+Foias. The list of problems that can be attempted through this methodology (with no
+guarantee of solution, of course; the premise of “coarse behavior” has to be satisﬁed,
+and it cannot be a priori established) is vast. In the previous section we provided an
+anthology of systems we are working on currently; we have promising initial results
+on Monte Carlo models of bacterial chemotaxis (with Dr. Sima Setayeshgar and Prof.
+Hans Othmer) and in the derivation of translationally invariant eﬀective equations
+for discrete systems (e.g.
+lattices of coupled neurons) in which we study the eﬀect
+of front pinning and an analogy to the Portevin-le Chatelier eﬀect (with K. Lust, J.
+Moeller and D. Srolovitz). Agent based models in ecology, epidemiology and evolu-
+tionary biology (the timesteppers do not have to be in physical time, they can involve
+mutations in a population) are also a possibility, which we are exploring with Prof.
+Levin; another possibility might be the coarse integration of unavailable equations
+for the expected backbone shapes of oligopeptides. While most of the problems we
+have suggested so far come from nonequilibrium statistical mechanics, equation-free
+dynamic approaches may play a role in studying equilibrium phenomena throgh dy-
+namics (see recent work in [124, 125, 126, 127] as well as in [128]). It is also conceivable
+that appropriate limits of quantum problems, such as the weak coupling limit of the
+N -particle Schroedinger, which in the semi-classical limit yields the 1-body Vlasov
+equation [129], can be studied through “coarse timesteppers”.
+In fact the Vlasov
+equation (as well as the Fokker-Planck-Vlasov) has analytically known equilibrium
+states; one could try to retrieve them using time-steppers and compare to the explicit
+analytic results. Another possibility is the semiclassical limit of a single Schroedinger
+equation, which, using the Wigner transform, gives rise to a Vlasov equation Further
+
+44
+
+ad-hoc closures yield a system of conservation laws with a dispersive correction [130];
+coarse timesteppers could sidestep (and/or validate) the derivation of such closures.
+The availability of continuum equations underlies many of the methods devel-
+oped and the results obtained in the modeling of physical systems. These continuum
+equations are, in many cases, only caricatures (sometimes excellent caricatures) of
+“better but dirtier” descriptions of the physics, such as those provided by micro-
+scopic/stochastic models. Equation-Free approaches hold the promise of applying
+our best computational/ mathematical tools (whose development was targeted at
+continuum evolution equations) to the “dirty” description directly, circumventing the
+necessity of passing through a caricature. The transition between analytical “paper
+and pencil” solution methods (based on perturbation theory and special functions) to
+computer-aided analysis (based on large scale linear algebra and PDE discretization
+techniques) discussed in [131, 132] serves, in some sense, as a prototype for a new
+transition: from equation-based computer-aided analysis to equation-free computer
+aided analysis. In the ﬁrst transition, quantities that would be computed by paper
+and pencil if the solution was explicitly available (e.g. eigenvalues of a lineariza-
+tion) were computed numerically. In the second transition, quantities that would be
+computed numerically if the equation was explicitly available (e.g., again, eigenval-
+ues of a coarse linearization) are estimated numerically through appropriate calls to
+microscopic/stochastic simulators.
+
+Beyond the type of systems that one can attempt to approach through this com-
+putational enabling technology, the type of tasks that are aﬀected go beyond coarse
+simulation, steady state calculation and bifurcation analysis. We illustrated “coarse
+control” in the previous section, and timesteppers also naturally ﬁt in a “coarse op-
+timization” framework, where optimal control problems (such as those arising in rare
+events) can be solved without ever having to derive explicit models in terms of “coarse
+coordinates” that parametrize the transitions in question. Just guessing what a set
+of suﬃcient such coordinates might be, would be enough. The ability to ﬁnd coarse
+self-similar solutions by combining coarse timesteppers with renormalization ﬂow ap-
+proaches for PDEs opens up the playing ﬁeld even more. It would be interesting to
+see, as experience is gathered and developments are made, how much of the conceptual
+promise of these techniques becomes reality.
+
+Acknowledgements. The work reported in this paper spans several years and in-
+volves interactions with several people, whom we would like to acknowledge. Original
+discussions with Herb Keller about RPM (at the IMA in Minneapolis) and with Jim
+Evans at Iowa State about his hybrid MC simulators of surface reactions played an im-
+portant role. Discussions over the years with Profs. J. Keller, K. Lust, D. Maroudas,
+D. McLaughlin, A. Majda, L. Ju, S. Yip, R. Armstrong, A. Panagiotopoulos, M.
+Graham, R. Kapral, H.-C. Oettinger, V. Yakhot, C. Foias, E. Titi, P. Constantin,
+M. Aizenman, J. Burns, F. Alexander, N. Hadjiconstantinou, A. Makeev, C. Siettos,
+C. Pantelides, C. Jacobsen, and A. Armaou have aﬀected this work. In the course
+of the last two years we have discussed this research direction with our colleagues,
+Professors Engquist and E at PACM in Princeton. In the companion paper [109] they
+present an alternative formulation which, in the time-dependent case, corresponds to
+
+45
+
+a generalized Godunov scheme. The role of AFOSR (Dynamics and Control, Drs. Ja-
+cobs and King), to whom this work was proposed in 1999, and which they supported
+through the years, has been crucial. Partial support by NSF through a KDI and an
+ITR grant, by DARPA, by a Humboldt Forschungspreis to I.G.K, and Los Alamos
+National Lab (through LDRD-DR-2001501) are also gratefully acknowledged.
+
+References
+
+Sci. 34, 9840-9843.
+
+[1] C. Theodoropoulos, Y.H. Qian and I.G. Kevrekidis (2000). Proc. Nat. Acad.
+
+[2] P.L. Bhatnagar, E.P. Gross and M. Krook (1954) Phys. Rev. 94 pp. 511-525.
+
+[3] C. W. Gear and I.G. Kevrekidis (2001) SIAM J. Sci. Comp. in press; also NEC
+
+Research Report NECI-TR 2001-029.
+
+[4] C. W. Gear, I. G. Kevrekidis and C. Theodoropoulos (2002) Comp. Chem. Eng.
+
+26(7-8) 941-963.
+
+[5] I. G. Kevrekidis, (2000) Plenary Lecture, CAST Division of the AIChE, 2000
+
+AIChE annual meeting, Los Angeles; also www.princeton.edu
+
+[6] Matlab, the Language of Technical Computing, the Math Works Inc. Natick,
+
+MA (2000).
+
+[7] Doedel, E.J. (1981) Cong. Num 30 265-284; Doedel, E.J., H. B. Keller and J.P.
+
+Kernevez (1991) Int. J. Bif. Chaos 1 493-520.
+
+[8] A.G. Salinger, N.M. Bou-Rabee, E.A. Burroughs, R.B. Lehoucq, R.P.
+Pawlowski, L.A. Romero, and E.D. Wilkes (2001), Sandia National Labs Tech-
+nical Report; also R.B. Lehoucq and A.G. Salinger (2001) Int. J Numer. Meth.
+Fluids 36, 309-327.
+
+[9] C. C. Pantelides, (1996) Proceedings of CHEMPUTERS EUROPE III, Frank-
+
+furt.
+
+sity Press.
+
+[10] R. Phillips (2001) “Crystals, Defects and Microstructures” Cambridge Univer-
+
+[11] V. B. Shenoy, R. Miller, E. B. Tadmor, D. Rodney, R. Phillips and M. Ortiz
+
+(1999) J.Mechanics and Phys. Solids, 47.
+
+[12] K. Xu and K. Prendergast (1994) J. Comp. Phys. 114 9-17.
+
+[13] K. Xu (2001) J. Comp. Phys. 171 289-335.
+
+[14] T. Shardlow and A. M. Stuart (2000) SIAM J. Num. Anal. 37 1120-1137.
+
+[15] A. Chorin, A. Kast and R. Kupferman (1998) Proc. Natl. Acad. Sci. USA 95
+
+4094-4098
+
+46
+
+S36-S48.
+
+Wiley, NY.
+
+versity Press, NY.
+
+2968-2973
+
+491-511.
+
+10083-10091.
+
+[16] A. Chorin, O. Hald and R. Kupferman (2000) Proc. Natl. Acad. Sci. USA 97
+
+[17] O. Runborg, C. Theodoropoulos and I. G. Kevrekidis (2002) Nonlinearity 15
+
+[18] A. G. Makeev, D. Maroudas and I. G. Kevrekidis (2002) J. Chem. Phys. 116(23)
+
+[19] J. Li, D. Liao and S. Yip (1998) Phys. Rev. E 57 7259-7267
+
+[20] J. Li, D. Liao and S. Yip (1998) Mat. Res. Soc. Symp. Proc. 538 473.
+
+[21] J. Li, D. Liao and S. Yip (1999) J. Comp.-Aided Mat. Des. 6 95-102
+
+[22] C. W. Gear (2001) NEC Technical Report NEC-TR 2001-130
+
+[23] I. Prigogine, R. Balescu, F. Henin and P. Resibois (1960) Physica 26 (suppl.)
+
+[24] R. Balescu (1975) Equilibrium and nonequilibrium statistical mechanics John
+
+[25] P. Gaspard, (1998) Chaos, Scattering and Statistical Mechanics Cambridge Uni-
+
+[26] J. L. Lebowitz, E. Presutti and H. Spohn (1988) J. Stat. Phys. 51 841-862.
+
+[27] J. L. Lebowitz (1993) Physica A 194 1-27.
+
+[28] S. Chapman and T. G. Cowling (1964) The Mathematical Theory of Nonuniform
+
+Gases Cambridge U. Press.
+
+namics, John Wiley, NY.
+
+[29] W. G. Vincenti and C. H. Kruger Jr. (1965) Introduction to Physical Gas Dy-
+
+[30] J. P. Boon and S. Yip (1980) Molecular Hydrodynamics McGraw-Hill, NY.
+
+[31] C. Theodoropoulos, S. Sankaranarayanan, S. Sundaresan and I.G. Kevrekidis
+(2001) Proc. of the 3rd Pan-Hellenic Conference in Chemical Engineering pp.
+221-224.
+
+[32] C. Theodoropoulos, S. Sankaranarayanan, S. Sundaresan and I.G. Kevrekidis
+
+(2002) Phys. Rev. Lett. submitted.
+
+[33] A. G. Makeev, D. Maroudas, A. Z. Panagiotopoulos and I. G. Kevrekidis (2002)
+
+J. Chem. Phys. in press.
+
+[34] FitzHugh, R.(1961) Biophys. J. 1 445-466.
+
+[35] Nagumo, J.S., Arimoto, S. and Yoshizawa, S. (1962) Proc. IREE 50 2061-2070.
+
+47
+
+[36] Y. H. Qian and S. A. Orszag (1995) J. Stat. Phys. 81, 237-253.
+
+[37] G. M. Shroﬀ and H. B. Keller (1993) SIAM J. Numer. Anal. 30, 1099-1120.
+
+[38] H. B. Keller, (1997) Lecture presented at the IMA (Dynamical Systems Pro-
+
+gram), Minneapolis; also, personal communication (IGK).
+
+[39] H. Jarausch and W. Mackens (1987) Numer. Math 50 pp. 633-653.
+
+[40] H. Jarausch and W. Mackens (1987) in Large Scale Scientiﬁc Computing, P.
+Deuﬂhard, B. Engquist, Progress in Scientiﬁc computing, 7 Birkh¨auser Verlag.
+
+[41] L.S. Tuckerman and D. Barkley (1999) in IMA Volumes in Mathematics and
+
+its Applications 119 453-466.
+
+Physics Springer Verlag, NY.
+
+[42] R. Temam (1988) Inﬁnite Dimensional Dynamical Systems in Mechanics and
+
+[43] P. Constantin, C. Foias, B. Nicolaenko and R. Temam (1988) Integral Manifolds
+and Inertial Manifolds for Dissipative Partial Diﬀerential Equations, Springer
+Verlag, NY.
+
+[44] M. S. Jolly, I. G. Kevrekidis and E. S. Titi (1991) Physica D 44 36.
+
+[45] P. Constantin, I. G. Kevrekidis and E. S. Titi in preparation.
+
+[46] H. von Sosen (1994) The Recursive Projection Method applied to Diﬀerential
+Algebraic Equations and Incompressible Fluid Mechanics Ph.D. Thesis, Part II,
+Caltech, Pasadena.
+
+[47] K. Lust, D. Roose, A. Spence and A.R. Champneys (1997) SIAM J. Sci. Com-
+
+put. 19, 1188-1209.
+
+[48] K. Lust (1997) Numerical Bifurcation Analysis of Periodic Solutions of Partial
+
+Diﬀerential Equations, Ph.D. Thesis, Leuven.
+
+[49] K. Burrage, J. Erhel, B. Pohl and A. Williams (1998) SIAM J. Sci. Comput.
+
+19 pp. 1245-1260.
+
+[50] J. Erhel, K. Burrage and B. Pohl (1996) J. Comp. Appl. Math. 69 303.
+
+[51] B. D. Davidson (1997) SIAM J. Num. Anal. 34 2008-2027.
+
+[52] P. Love (1999) Bifurcations in Kolmogorov and Taylor Vortex Flows, Ph.D.
+
+Thesis, Caltech, Pasadena.
+
+[53] E. D. Koronaki, A. G. Boudouvis and I. G. Kevrekidis (2002) Comp. Chem.
+
+[54] L. R. Petzold (1983) in Scientiﬁc Computing, eds. R.S. Stepleman et al., North-
+
+Eng. submitted.
+
+Holland, 65-68.
+
+48
+
+Rev. Lett.
+
+5878-5881.
+
+203-219.
+
+95-107
+
+NY.
+
+Hall, NY.
+
+[55] C. Siettos, M. D. Graham and I. G. Kevrekidis (2002) in preparation for Phys.
+
+[56] Z. Toth and E. Kalnay (1993) Bull. Am. Meteorol. Soc. 72 2317
+
+[57] J. Patil, B. R. Hunt, E. Kalnay, J. A. Yorke and E. Ott Phys. Rev. Lett. 86(26)
+
+[58] R. M. Lewis (1967) J. Math. Phys. 8 1448-1459.
+
+[59] A. N. Gorban, I. V. Karlin, P. Ilg and H. C. Oettinger (2001) JNNFM 96
+
+[60] R. E. Kalman and R. S. Bucy (1961) Trans. ASME Ser. D, J. Basic Eng. 83
+
+[61] K. J. Astrom (1970) Introduction to Stochastic Control Theory Academic Press,
+
+[62] L. Ljung (1999) System identiﬁcation: theory for the user, 2nd ed., Prentice
+
+[63] C. W. Gear and I. G. Kevrekidis (2001) NECI Research Report NEC-TR 2001-
+
+122, October 2001; also submitted to J. Comp. Phys.
+
+[64] V. I. Lebedev (1997) in Numerical Analysis and its Applications, Proc. WNAA
+
+96, Bulgaria, Vulkov et al. eds., Springer, Berlin, 274-283.
+
+[65] A. L. Medovikov (1998) BIT 38(2) 372-390
+
+[66] J. G. Verwer (1996) Appl. Num. Math. 22 359-379.
+
+[67] M. Hochbruck, C. Lubich and H. Selhofer (1998) SIAM J. Sci. Comp. 19 1552-
+
+1574.
+
+Comp. Phys. 110 82-102.
+
+[68] W. S. Edwards, L. S. Tuckerman, R. A. Friesner and D. C. Sorensen (1994) J.
+
+[69] E. Gallopoulos and Y. Saad (1992) SIAM J. Sci. Comp. 13, pp. 1236-1264.
+
+[70] S. H. Lam and D. A. Goussis (1994) Int. J. Chem. Kinetics 26 461-486.
+
+[71] P.J. Holmes, J.L. Lumley and G. Berkooz (1996) Turbulence, Coherent Struc-
+
+tures, Dynamical Systems and Symmetry. Cambridge University Press.
+
+[72] L. Sirovich and J. D. Rodriguez (1989) Phys. Lett. A 120 211
+
+[73] A.E. Deane, I. G. Kevrekidis, G. M. Karniadakis and S. Orszag (1991) Phys.
+
+[74] N. Aubry, P.J. Holmes, J.L. Lumley and E. Stone (1988) J. Fluid Mech. 192
+
+Fluids 3 2337.
+
+115.
+
+49
+
+[75] S. Shvartsman and I. G. Kevrekidis (1998) AIChE J. 44 1579-1595.
+
+[76] S. Y. Shvartsman, C. Theodoropoulos, I.G. Kevrekidis, R. Rico-Mart´ınez, E. S.
+
+Titi and T. J. Mountziaris (2000) J. Proc. Control 10 177-184.
+
+[77] S. Yesilyurt and A. T. Patera (1995) CMAME 121 231-257.
+
+[78] G. Cybenko (1996) in Identiﬁcation, Adaptation and Learning: the Science of
+
+Learning Models from Data, NATO ASI Ser. F153 Springer, Berlin, 423-434.
+
+[79] M. W. Braun, D. E. Rivera and A. Stenman (2001) Int. J. Control 74 1708-1717.
+
+[80] N. K. Sinha (2000) Sadhana 25 75-83
+
+[81] C. I. Siettos, C. C. Pantelides and I. G. Kevrekidis (2001) presented at the
+
+AIChE annual meeting, Reno, also Ind. Eng. Chem. in preparation.
+
+[82] P. V. Kokotovic, H. K. Khalil and J. O’Reilly (1986) Singular Perturbation
+
+Methods in Control: Analysis and Design Academic Press, NY.
+
+[83] A. M. Berezhkovskii and G. Sutmann (2002) Phys. Rev. E 65(6) 060201.
+
+[84] N. G. Hadjiconstantinou (2000) Phys. Fluids 12 2634-2638.
+
+[85] R. G. Larson (1999) The structure and rheology of complex ﬂuids Oxford U.
+
+[86] J.K.C. Suen, Y.L. Joo, and R.C. Armstrong (2002) Annu. Rev. Fluid Mech. 34.
+
+[87] H. C. Oettinger (1996) Stochastic Processes in Polymeric Fluids, Springer,
+
+[88] M. Grosso, L. Russo, P. L. Maﬀetone and S. Crescitelli (2000) in Proc. of COC
+
+2000, St. Petersburg, IEEE Publications, 561-564.
+
+[89] C. T. Kelley (1995) Iterative Methods for Linear and Nonlinear Equations SIAM
+
+Publications, Philadelphia.
+
+[90] H. C. Oettinger, B.H.A.A. van den Brule and M. A. Hulsen (1997) JNNFM 70
+
+[91] M. A. Hulsen, A.P.G. van Heel and B.H.A.A. van den Brule (1997) JNNFM 70
+
+[92] R. M. Jendrejack, J. J. de Pablo and M. D. Graham (2002) JNNFM in press
+
+[93] M.P. Kennedy and M. J. Ogorzalek, guest eds. (1997) IEEE Trans. Circ. Syst.
+
+[94] G. S. Heﬀelﬁnger and F. van Swol (1994) J. Chem. Phys. 100(10) 7548-7552.
+
+[95] G. S. Heﬀelﬁnger and D. M. Ford (1998) Molecular Physics 94(4) 659-671.
+
+Press.
+
+Berlin.
+
+255-261.
+
+79.
+
+44(10).
+
+50
+
+[96] G. S. Heﬀelﬁnger and D. M. Ford (1998) Molecular Physics 94(4) 673-683.
+
+[97] A. P. Thompson, D. M. Ford and G. S. Heﬀelﬁnger (1998), J. Chem. Phys.
+
+109(15) 6406-6414.
+
+[98] A. J. Roberts (2001) Appl. Numer. Math. 37 371-396.
+
+[99] F. F. Abraham, J. Q. Broughton, N. Bernstein and E. Kaxiras (1998) Computers
+
+in Physics, 12, 538.
+
+[100] S.M. Allen and J.W. Cahn, (1979) Acta Metallurgica 27, 1085.
+
+[101] C. de Boor (2001) A Practical Guide to Splines, revised ed., Springer, NY.
+
+[102] M. Berger and J. Oliger (1984) J. Comp. Phys. 53 484.
+
+[103] S. T. O’Connell and P. A. Thompson (1995) Phys. Rev. E 52(6) R5792-95.
+
+[104] N. G. Hadjiconstantinou and A. T. Patera (1997) Int. J. Mod. Phys. C 8(4)
+
+967-976
+
+[105] N. G. Hadjiconstantinou (1999) J. Comp. Phys. 154 245-265.
+
+[106] A. L. Garcia, J. B. Bell, W. Y. Crutchﬁeld and B. J. Alder (1999) J. Comp.
+
+Phys. 154 p.134-155
+
+[107] W. E and Z. Huang (2001) Phys. Rev. Lett. 87 135501.
+
+[108] Li Ju and I. G. Kevrekidis (2002) manuscript in preparation,
+
+see also
+
+http://long-march.mit.edu/Stuﬀ/LANL.ppt
+
+[109] W. E and B. Engquist (2002) submitted.
+
+[110] K. Sankaranarayanan, X. Shan, I. G. Kevrekidis and S. Sundaresan (2002) J.
+
+Fluid Mech. 452 61-96.
+
+[111] K. Sankaranarayanan, I. G. Kevrekidis, S. Sundaresan, J. Lu and G. Tryggvason
+
+(2002) Int. J. Multiphase Flow, accepted for publication.
+
+[112] C. I. Siettos, A. Armaou, A. G. Makeev and I. G. Kevrekidis (2002) AIChE J.
+
+submitted; also manuscript nlin.CG/0207017 (arXiv.org).
+
+[113] D. G. Aronson, S. Betelu and I. G. Kevrekidis (2001) PNAS submitted; also
+
+manuscript nlin.AO/0111055 at arXiv.org.
+
+[114] C. W. Rowley, I. G. Kevrekidis, J. E. Marsden and K. Lust (2002) Nonlinearity
+
+submitted.
+
+[115] C. W. Rowley and J. E. Marsden (2000) Physica D 142 1-19.
+
+[116] L.-Y. Chen and N. Goldenfeld (1995) Phys. Rev. E 51(6) 5577-5581.
+
+51
+
+[117] C. W. Gear, S. Betelu, D. G. Aronson and I. G. Kevrekidis (2002) manuscript
+
+in preparation.
+
+[118] M. P. Brenner, P. Constantin, L. P. Kadanoﬀ, A. Schenkel and S. Venkataramani
+
+(1999) Nonlinearity 12(4) 1071-1098.
+
+[119] C. I. Siettos, I. G. Kevrekidis and P. G. Kevrekidis (2001) Nonlinearity submit-
+
+ted; also manuscript nlin.PS/0204030 at arXiv.org
+
+[120] K. N. Christodoulou and L. E. Scriven (1998) Quart. Appl. Math. 9 17.
+
+[121] R. Rico-Martinez, I. G. Kevrekidis and K. Krischer (1995) in Neural Networks
+
+in Chemical Engineering, A. B. Bulsari ed. Elsevier, 409-442.
+
+[122] R. Rico-Martinez, J. S. Anderson and I. G. Kevrekidis (1994) in Proc. IEEE
+Workshop, Neural Networks for Signal Processing IEEE Publ. vol.III, 596-605.
+
+[123] J. C. Spall (1998) in Johns Hopkins APL Technical Digest 19; also (2000) IEEE
+
+Trans. Aut. Control. 45 1839-1853.
+
+[124] F. A. Escobedo (1999) J. Chem. Phys. 110 11999.
+
+[125] D. A. Kofke (1993) Molec. Phys. 78(6) 1331-1336
+
+[126] L. I. Kioupis and E. J. Maginn (2002) Fluid Phase Equilibria in press.
+
+[127] L. I. Kioupis, G. Arya and E. J. Maginn (2002) Fluid Phase Equilibria in press.
+
+[128] C. Jarzynski (1997) Phys. Rev. Lett. 78(14) 2690-2693.
+
+[129] C. Bardos, F. Golse and N. J. Mauser (2000) Methods Appl. Anal. 7 275-293.
+
+[130] S. Jin and X. Li (2002) Preprint.
+
+[131] R. A. Brown, L. E. Scriven and W. J. Silliman (1980) in New Approaches to
+Nonlinear Problems in Dynamics, P. J. Holmes ed., SIAM, Philadelphia.
+
+[132] L. E. Scriven (1986) J. W. Gibbs Lecture presented to the AMS, New Orleans
+
+Meeting.
+
+52
+
+Figure 1: Schematic description of time-stepper based bifurcation analysis, ﬁne and
+coarse. Notice the lifting of a macroscopic initial condition to an ensemble of consis-
+tent microscopic ones, as well as the restriction of the microscopic integration results
+back to the macroscopic (usually moments-based) description.
+
+53
+
+Figure 2: Decay (“healing”) of the lifting error: comparison between the evolving re-
+strictions of a “mature” LB-BGK trajectory, and two distinct liftings of its restriction:
+(a) a local equilibrium ﬁne lifting and (b) a more “coarse” random lifting. Healing
+has visibly taken place at times much shorter than the timestepper reporting horizon
+(here 0.5).
+
+FD−SS stable
+FD−SS unstable
+LB−RPM stable
+LB−RPM unstable
+LB−BOX−RPM stable
+LB−BOX−RPM unstable
+
+>
+u
+<
+
+−0.02
+
+−0.04
+
+−0.06
+
+−0.08
+
+−0.1
+
+−0.12
+
+0
+
+0.01
+
+0.02
+
+0.04
+
+0.05
+
+0.06
+
+0.03
+ε
+
+Figure 3: FHN bifurcation diagram near a Hopf bifurcation point computed with a
+steady Finite Diﬀerence (FD-SS) code (blue line), our LB-RPM code (black line) and
+our LB-BOX gaptooth scheme combined with RPM, called LB-BOX-RPM (red line).
+Stable (unstable) steady states: solid (broken) lines.
+
+54
+
+0.5
+
+1
+
+0
+
+−0.5
+
+(a)
+
+LB
+LB−RPM
+LB−BOXES−RPM
+
+LB
+LB−RPM
+LB−BOX−RPM
+
+0.15
+
+0
+
+−0.15
+
+(b)
+
+5
+
+−1
+
+0
+
+5
+
+15
+
+20
+
+−0.3
+
+0
+
+10
+x
+
+10
+x
+
+15
+
+20
+
+Figure 4: Comparison of the coarse steady state spatial proﬁles of (a) u and (b) v
+at ǫ = 0.05 (a stable steady state) computed with direct LB simulations (black solid
+lines, LB combined with RPM (LB-RPM) simulations (red broken lines) and our
+LB-BOX gaptooth scheme combined with RPM (LB-BOX-RPM -blue broken lines).
+
+LB−RPM
+LB−BOX−RPM
+S.S
+
+    ε=0.02
+
+LB−RPM
+LB−BOX−RPM
+S.S.
+
+ε=0.01
+
+Figure 5: Leading coarse eigenvalues before (ǫ = 0.02) and after (ǫ = 0.01) the Hopf
+point, obtained upon convergence of LB-RPM (ﬁlled black circles) and LB-BOX-
+RPM (open red circles). The exponentials of the eigenvalues (for the same reporting
+horizon) of a steady FD code (based on the PDE) are also depicted for comparison
+(green diamonds, SS).
+
+55
+
+(a)
+
+LB−RPM,ev1
+LBBOX−RPM,ev1
+LB−RPM,ev2
+LBBOX−RPM,ev2
+
+(b)
+
+LB−RPM,ev1
+LBBOX−RPM,ev1
+LB−RPM,ev2
+LBBOX−RPM,ev2
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0
+
+−0.1
+
+−0.2
+
+0
+
+5
+
+10
+x
+
+15
+
+0.04
+
+0
+
+20
+
+5
+
+10
+x
+
+15
+
+20
+
+Figure 6: Comparison of (a) u and (b) v components of the critical coarse eigenvectors
+(ev1 and ev2) at ǫ = 0.01 obtained upon convergence of the LB-RPM and LB-BOX-
+RPM computations.
+
+Figure 7: Schematic representation of an explicit projective integrator. Notice the
+lifting, the evolution with successive restrictions, the estimation of the “coarse time
+derivative”, the projection step, followed be a new lifting.
+
+0.16
+
+0.14
+
+0.12
+
+0.1
+
+0.08
+
+0.06
+
+56
+
+Figure 8: A comparison of FHN dynamics computed through (1) an LB-BGK code
+and (2) a 100-50-350 inner-LB - outer FEM (explicit Euler) projective integrator (from
+[4]). The comparisons are performed by projection on subspaces spanned by a few
+empirical orthogonal eigenfunctions (EOFs or PODs, see text). Top two panels: time
+series for (1, black) and (2, red) starting from the same initial conditions. Bottom
+four panels: various phase space projections (in POD-mode space) of the attractors
+of the LB-BGK (1, black) and the 100-50-350 LB-FEM projective scheme (2,red).
+
+57
+
+Figure 9: An original schematic description of the gaptooth scheme (from the 2000
+AIChE Area 10 plenary lecture, [5]); the notation is slightly diﬀerent from the one
+in the paper. Notice the macro-mesh and the smoothly interpolated macro solution,
+the “teeth” surrounding the macro mesh, and the interpolated boundary conditions
+at the outer edges of the “teeth” or “patches”. For this continuum description the
+buﬀer zones are not depicted.
+
+58
+
+Figure 10: “Inner LB” gaptooth integration results for the FHN equation (symbols)
+compared to full LB simulations (curves) for various initial conditions. The last
+ﬁgure shows a phase portrait for this simulation for two diﬀerent gaptooth schemes:
+an “inner LB” (FD-LB) and an “inner FD” (FD-FD) continuum scheme.
+
+59
+
+IC
+LB,t=5
+LB,t=10
+LB,t=15
+LB−BOX,t=5
+LB−BOX,t=10
+LB−BOX,t=15
+
+1
+
+0.5
+
+u
+
+0
+
+−0.5
+
+−1
+
+0
+
+5
+
+10
+x
+
+15
+
+20
+
+Figure 11: Comparisons of LB and LB-BOX spatial proﬁles of u at various times in
+the unstable (oscillatory) FHN region (ǫ = 0.01) showing a palindromic movement of
+the reaction front.
+
+60
+
+Figure 12: Comparison of phase space projections of the LB (black) and LB-BOX
+(red) long-term attractors. Reporting horizon for communication between boxes Tc =
+7.5 × 10−4.
+
+Figure 13: Comparison of phase space projections of the LB (black) and LB-BOX
+(red) long-term attractors. Reporting horizon for communication between boxes Tc =
+2.5 × 10−3.
+
+61
+
+Figure 14: Schematics of coarse integration and patch dynamics techniques. Full mi-
+croscopic simulation (a) requires impractically ﬁne discretizations. Coarse integration
+(b) simulates in large space for short times, and then projects to longer times. The
+gaptooth scheme (c) simulates in short spacial domains and periodically reinterpolates
+between the domains. Combining the gaptooth scheme with coarse integration (d) is
+better seen in (e): microscopic simulations are performed over short space domains
+(patches) and for relatively short times (sparse space time “elements”). Interpolation
+in coarse space and projection in coarse time is used to advance the macroscopic
+quantities.
+
+62
+
+Figure 15: A schematic of the full patch dynamics simulation cycle, including lifting
+in patches, computation and imposition of patch BC, microscopic evolution, repeated
+restrictions and BC recomputations as necessary, and (after suﬃcient time has elapse
+so that the coarse time-derivatives can be estimated, a coarse projective step, followed
+by a new lifting.
+
+63
+
+Figure 16: Computed time-series comparison of the oscillatory FHN dynamics (ǫ =
+0.01) computed by a full LB code (solid black line) and by a 100-100-200 LB-BOX
+projective scheme (broken red line).
+
+1
+
+0.5
+
+u
+
+0
+
+−0.5
+
+IC
+LB,t=4.8
+LB,t=9.6
+LB,t=14.4
+LB−BOX−PROJ,t=4.8
+LB−BOX−PROJ,t=9.6
+LB−BOX−PROJ,t=14.4
+
+64
+
+−1
+
+0
+
+5
+
+10
+x
+
+15
+
+20
+
+Figure 17: Comparison of spatial proﬁles of u at various times in the unstable (os-
+cillatory) FHN region (ǫ = 0.01) computed by a full LB code (solid lines) and by
+a 100-100-200 LB-BOX projective code (broken lines). The boxes cover 10% of the
+macroscopic computational domain.
+
+Figure 18: Comparison of phase space projections of the long term attractors of a
+full LB (black line) and the 100-100-200 LB-BOX projective (red line) attractors.
+Reporting time for communication between boxes Tc = 7.5 × 10−4.
+
+65
+
+Figure 19: A schematic summary of the gaptooth/patch dynamics nomenclature in
+1D.
+
+66
+
+Figure 20: A schematic of the “extended boundary conditions” from [20] and a ﬂuid
+ﬂow application.
+
+67
+
+Figure 21: Coarse bifurcation diagram of a rising bubble ﬂow instability (bottom)
+obtained with an inner LB-BGK simulator. The top panels show simulations of a
+steadily rising and an oscillating bubble before and after the bifurcation (from [32]).
+Solid(resp. broken): coarse stable(resp. unstable) steady rising bubbles. m is the
+dimension of the slow coarse subspace adaptively identiﬁed by RPM).
+
+68
+
+Figure 22: Coarse bifurcation diagram of a Kinetic Monte Carlo simulation of a model
+surface reaction (CO oxidation with repulsive adsorbate interactions). The diagram
+compares the bifurcation diagram obtained trough the coarse KMC timestepper with
+the mean ﬁeld and the quasichemical bifurcation diagrams; the triangles are long-term
+KMC simulations (from [33]).
+
+69
+
+Figure 23: Coarse bifurcation diagram of a Brownian Dynamics simulation arising
+in the rigid rod model of nematic liquid crystals. Orientation distributions of rigid
+rods conditioned on one or two of their moments are used to construct the coarse
+timestepper with an inner stochastic Euler integrator. Stable and unstable branches
+of the order parameter S as a function of the rod density U are marked by color, and
+the corresponding coarse eigenvalues are also indicated (from [55]).
+
+70
+
+Coarse Initial Condition
+
+Integrate Several Shifted Copies of IC
+
+t=0
+
+Align
+
+t=T
+
+Average
+
+0.49
+
+〉
+ 
+u
+ 
+〈
+
+0.48
+
+0.52
+
+0.51
+
+0.5
+
+0.47
+
+0.46
+
+0.45
+
+0.93
+
+0.94
+
+0.95
+
+0.96
+
+0.97
+
+0.98
+
+0.99
+
+1
+
+1.01
+
+1.02
+
+λ
+
+Figure 24: Schematic of the coarse time-stepper in a homogenization/eﬀective equa-
+tion analysis framework from [17]. The “eﬀective bifurcation diagram” for a traveling
+reaction pulse through a periodic medium as a function of the medium periodicity
+is shown at the bottom, indicating a coarse instability and the birth of a modulated
+coarse traveling pulse.
+
+71
+
+Figure 25: Coarse control of a KMC simulation of a surface reaction model [112]; the
+(coarse) unstable steady state to be stabilized was located, the estimator (a Kalman
+ﬁlter) and the controller (pole placement) constructed based on Newton-Raphson
+results obtained exploiting the coarse timestepper. The open loop behavior is a noisy
+oscillation (light blue), while the closed loop (using the bifurcation parameter as the
+actuator) clearly shows stabilization of the coarse steady state.
+
+72
+
+Figure 26: Coarse renormalization ﬂow and coarse self-similar solution calculations
+based on KMC random walk simulations. The top panel shows the results of coarse
+renormalization ﬂow projective integration for the one-dimensional diﬀusion equation,
+while the bottom panel shows iterations of a ﬁxed point algorithm converging on the
+same coarse self-similar solution. The evolution of the rescaled cumulative probability
+density is plotted at various times above, and at various iterations of the ﬁxed point
+scheme below. The restriction operator was the cumulative distribution function.
+
+73
+
+

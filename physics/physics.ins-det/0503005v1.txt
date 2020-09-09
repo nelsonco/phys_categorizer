@@ -1,0 +1,795 @@
+5
+0
+0
+2
+ 
+r
+a
+
+M
+ 
+1
+ 
+ 
+]
+t
+e
+d
+-
+s
+n
+i
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+5
+0
+0
+3
+0
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Automated operation of a home made torque magnetometer using LabVIEW
+
+Stefan Kohout,∗ Joseph Roos, and Hugo Keller
+Physik-Institut, Universit¨at Z¨urich, Winterthurerstrasse 190, 8057 Z¨urich, Switzerland
+(Dated: February 2, 2008)
+
+In order to simplify and optimize the operation of our home made torque magnetometer we created
+a new software system. The architecture is based on parallel, independently running instrument
+handlers communicating with a main control program. All programs are designed as command
+driven state machines which greatly simpliﬁes their maintenance and expansion. Moreover, as the
+main program may receive commands not only from the user interface, but also from other parallel
+running programs, an easy way of automation is achieved. A program working through a text ﬁle
+containing a sequence of commands and sending them to the main program suﬃces to automatically
+have the system conduct a complex set of measurements. In this paper we describe the system’s
+architecture and its implementation in LabVIEW.
+
+I.
+
+INTRODUCTION
+
+In modern condensed matter research most interesting
+subjects are only subtle eﬀects which can be investigated
+only by thorough and systematic studies of large num-
+bers of samples. Even though ﬁrst investigations have
+to be done by hand, a lot of time can be saved with au-
+tomated measurement setups. Such automated systems
+are already widely used in large scale experiments, but
+most small laboratory experiments, even though com-
+puter controlled, do not allow for automated measure-
+ments. Automation is present, to some extent, in order to
+facilitate measurements in that there frequently are pos-
+sibilities to have the system execute a certain measure-
+ment automatically, but covering easily large parameter
+spaces is often not possible. Commercially available com-
+plete measurement systems, on the other hand, seldom
+come with sophisticated control software without pos-
+sibilities for programming long measurement sequences.
+Of course such software systems are the result of expen-
+sive software development which is beyond the possibil-
+ities of an ordinary research laboratory. Even though
+there are commercial programs available for some of the
+instruments that constitute an experimental setup, the
+important part is the interplay between them. Conse-
+quently most control software is written by the scientists
+themselves, who face the lack of time, money and man-
+power to develop extensive automation software.
+
+In this paper we present an easy way of creating control
+software which oﬀers possibilities of programming com-
+plex sequences and automatically executes them1. This
+is shown to be achieved with moderate development ef-
+fort using a common laboratory programming language.
+We will ﬁrst present the diﬀerent architecture approach
+needed to achieve this goal, after which the addition of
+automation is a small step.
+
+II. SOFTWARE FOR LABORATORY
+EQUIPMENT
+
+Programs created for control of experiments need to
+perform several tasks. Firstly, they have to be able
+
+to send control commands to the instruments and re-
+ceive the measured data. Secondly, these data are to
+be processed and displayed and eventually user input
+needs to be translated to control commands. Various
+development platforms oﬀer vast libraries of procedures
+to interface instruments, create user interfaces and per-
+form complicated data processing. These help to re-
+duce the workload associated with creating such soft-
+ware. LabVIEWTM2, a development environment from
+National InstrumentsTM for creating programs (called
+virtual instruments or shortly VIs) in its own graphi-
+cal programming language “G”, is probably best known
+and most widely used for such applications. “G” of-
+fers all the ﬂow control structures like loops and con-
+ditional branches found in any other programming lan-
+guage. Moreover, any VI can easily be used in any other
+VI as a subVI. LabVIEW VIs consist of a user inter-
+face (UI) and a block diagram (BD) containing the ac-
+tual code. Programming is done by modelling data ﬂow,
+where graphical representations of functions and proce-
+dures are interconnected by lines, usually called wires.
+The designation VI stems from the similarity of such a
+program to an actual instrument, the UI obviously cor-
+responding to the instrument’s front panel and the BD
+to its internal wiring.
+
+A usual way of creating LabVIEW software for mea-
+surement control is by writing a main VI containing the
+UI and the logic for acting appropriately on the user in-
+put as well as processing, displaying and saving the data.
+Communication with the instruments is performed by
+driver subVIs which are regularly executed by the main
+VI. When such a driver VI is called to perform a query
+on an instrument it sends the necessary command to the
+instrument, waits some time for the instrument to pre-
+pare the answer and ﬁnally reads this response from the
+instrument. Usually this process takes tens to hundreds
+of milliseconds. Assuming the whole measurement setup
+consists of several instruments, the main VI may be or-
+ganised in two diﬀerent ways. Either all driver VIs are
+called sequentially, causing the time needed to collect all
+data to grow with the number of instruments. Another
+apprach would be to call the driver VIs in parallel, which
+is possible thanks to the inherently multithreading archi-
+
+tecture of LabVIEW. In this case, however, all drivers
+would attempt to access the instruments at the same
+time. This would result in a “traﬃc jam” in case the in-
+struments are connected to a single interface bus. Some
+drivers would be forced to wait until the others have ﬁn-
+ished their writing to the bus. Moreover, as some instru-
+ments take measurements less often than others, many
+operations on the bus would be unnecessary because no
+new data would be obtained.
+
+In this paper we present the use of independent driver
+VIs, which we call handlers, running in parallel and com-
+municating with a main VI by means oﬀered by Lab-
+VIEW. This allows for a more eﬃcient use of the inter-
+face bus employed to connect the instruments and results
+in a higher data acquisition rate. Moreover, by employ-
+ing a “state machine” (SM) architecture such programs
+become easier to extend in functionality, to maintain and
+most importantly allow for the control by a separate pro-
+gram and consequently automation.
+
+III. EXPERIMENTAL SETUP
+
+The programs presented here were developed to con-
+trol and automatise a torque magnetometry apparatus
+which was built in our group3,4. Such a device is used to
+measure a sample’s magnetic moment m by the torque
+
+τ = µ0m × H
+
+(1)
+
+it experiences due to a magnetic ﬁeld H.
+It is well
+suited for investigation of anisotropic magnetic phenom-
+ena as found in most high temperature superconductors.
+Torque magnetometry is complementary to most other
+magnetometry techniques in that it is only sensitive to
+the part m⊥ of m perpendicular to the applied ﬁeld. A
+torque measurement is fast — one measurement taking
+a fraction of a second only — and due to the propor-
+tionality τ ∝ H reaches high sensitivities for m⊥ in high
+ﬁelds. Our home made torque magnetometer system,
+shown schematically in Fig. 1, consists of a ﬂow cryostat
+between the poles of an iron yoke magnet which is sitting
+on a rotatable support. The torque sensor with a sample
+mounted on it is inserted into the cryostat and connected
+to a Lock-In Ampliﬁer (LIA) for read out. Details of the
+measurement principle are beyond the scope of this ar-
+ticle and are described elsewhere3,4. All devices needed
+to control and measure the system’s state are connected
+to a Windows PC via an IEEE-488 General Purpose In-
+terface Bus (GPIB), RS-232 serial connections and indi-
+rectly via additional analog and digital input and output
+ports present in the LIA instrument. The main parts
+are the EG&G Model 7265 LIA, a Lakeshore DRC 93A
+temperature controller, and the Bruker BH-15 magnetic
+ﬁeld controller. Additional devices such as a pressure
+transducer with read out electronics for monitoring the
+exchange gas pressure in the cryostat or current sources
+and volt meters for specialized applications may also be
+connected via the GPIB. The GPIB is an interface bus
+
+2
+
+flow
+controller
+
+pump
+
+AC
+power
+supply
+
+DC
+magnet
+power
+supply
+
+cryostat
+
+iron
+magnet
+
+torque
+sensor
+
+He
+dewar
+
+s
+n
+o
+i
+t
+c
+e
+n
+n
+o
+c
+ 
+l
+
+a
+c
+i
+r
+t
+c
+e
+e
+
+l
+
+small
+motor
+
+large motor
+
+angle readout
+
+Temperature Controller
+
+Magnet Controller
+
+Pressure Meter
+
+Lock-In Amplifier
+
+Motor Driver
+
+additional devices
+
+s
+n
+o
+
+i
+t
+c
+e
+n
+n
+o
+c
+ 
+B
+P
+G
+
+I
+
+PC
+running
+LabView
+
+FIG. 1: Torque measurement setup overview, which was au-
+tomated using the presented software. A cryostat is placed
+between the poles of an iron yoke magnet, which is freely ro-
+tatable. The torque sensor is inserted into the cryostat and
+connected to readout electronics. All instruments needed to
+control the experiment’s state are connected to a personal
+computer.
+
+which is widely used in scientiﬁc instruments. It features
+8-bit parallel data transfer, handshaking and real-time
+response capabilities.
+
+IV. SOFTWARE SYSTEM ARCHITECTURE
+
+The architecture of the newly developed control soft-
+ware is shown in Fig. 2. Each instrument connected to
+the system is represented by a VI counterpart called han-
+dler.vi. All handlers are managed by the dataserver.vi
+VI which communicates with the torque.vi VI, which is
+the main application. All these VIs run independently
+in parallel. This way each handler.vi can be optimised
+to take best advantage of the instrument it is built for.
+This includes the waiting times needed for communica-
+tion, an optimized data rate based on varying needs as
+well as the use of each instruments ability to signal spe-
+cial events via the GPIB. Since all handler.vis run in
+parallel, their individual write–wait–read cycles needed
+to talk to the instruments are interlaced, thus reducing
+
+3
+
+FIG. 2: Architecture of the torque control software system.
+All VIs (torque.vi, dataserver.vi and the handler*.vis) execute
+in parallel. Commands are sent along the solid right point-
+ing arrows and data propagates back along the dashed left
+pointing arrows.
+
+the bus’ idle time. Moreover each instrument is talked
+to only when necessary thus reducing the bus occupa-
+tion while retaining data quality. This can be optimised
+particularly well by exploiting the service request (SRQ)
+functionality of the GPIB. Each instrument can signal
+a number of events to the GPIB controller by asserting
+the special SRQ line. Such events might be error con-
+ditions but can also be indicators of data availability.
+As an example the Lakeshore temperature controller is
+programmed to assert the SRQ line whenever a new tem-
+perature reading is ready. As this occurs only every two
+seconds, the instrument is read only when really neces-
+sary instead of reading the same data several times per
+second. Even instruments not oﬀering such functionality
+can be optimised by reducing the rate at which the han-
+dler.vi is instructed to read the instrument. This enables
+the more crucial measurements to be read more often re-
+sulting in data taken at a higher rate and resulting in
+better quality.
+
+Because the handler.vis are not called as subVIs by
+the main VI a special means of communication needs to
+be established. Here we present the use of queues for
+sending commands to the handler.vis and DataSockets
+for receiving the measured data. A queue is a ﬁrst–in–
+ﬁrst–out style memory construct which is oﬀered by Lab-
+VIEW. It may contain a ﬁxed or unlimited number of
+string entries, in our case commands. By use of special
+subVIs any VI can append commands to a queue’s end
+or retrieve the oldest commands. Any read entry is au-
+tomatically removed. Queues are identiﬁed by a name,
+making access to them fairly easy. In most applications
+a given queue is read by only one VI whereas several VIs
+may write to it. DataSockets are memory constructs as
+well, identiﬁed by a unique name, but only contain the
+most recent datum. Their data type can be freely cho-
+sen among the data types in LabVIEW. The DataSock-
+ets used in our case are arrays of ﬂoating point numbers
+containing a handler.vi’s main data. The dataserver.vi
+mentioned above serves as an intermediate VI which col-
+
+FIG. 3: Schematic illustration of the VI’s basic structure. An
+all enclosing main loop executes inﬁnitely. The logic inside
+consists of a command stack whose ﬁrst element is divided
+into instruction and argument. The instruction is used as the
+selector value into a case structure containing the code for the
+individual instructions. This results in the command parsing
+functionality needed for the operation. Internal data needed
+for the VI’s execution is passed through each iteration and
+can be read and modiﬁed by each command case.
+
+lects all the handler.vi’s data and puts all together in a
+separate DataSocket which is then read by the torque.vi
+main VI. Thus the main VI needs no knowledge about
+which data to obtain from which instrument.
+
+In order for the VIs to be able to act accordingly on the
+possible commands they must be given some command
+parsing functionality. In fact such a command parser is
+every VI’s core part: Even the regular operations per-
+formed by the VIs are put into commands which are ex-
+ecuted repeatedly. Essentially, all VIs are designed as
+command driven state machines (SM). The use of the
+SM paradigm in LabVIEW programs was already pro-
+posed at several occasions and given LabVIEW’s capa-
+bilities this is not surprising. Nevertheless, to our knowl-
+edge only few applications make use of this architecture.
+The basic idea is that by being executed, a program goes
+through various named states. The order in which these
+states are visited may be ﬁxed and deﬁned in advance
+or the state to follow might be determined based on the
+current state’s result. The implementation in LabVIEW
+is fairly simple and schematically shown in Fig. 3. An in-
+ﬁnitely running loop contains a case structure consisting
+of all the states. These states are identiﬁed by charac-
+ter strings and are therefore easily human readable. In
+contrast to other methods, where the identiﬁcation is by
+numbers or special enumeration data types, this makes
+the structure easy to extend and maintain. Additionally
+to these structures the VIs contain a command stack and
+some internal data needed for execution. Upon startup,
+when the command stack is empty, a default case (state)
+is executed. Usually this is the “GetCommands” case.
+This case contains the code needed to empty this VI’s
+queue and a set of default commands which are put onto
+the command stack. When the main loop is iterated for
+the second time, the oldest command is removed from the
+
+stack, split into an instruction and optional arguments,
+whereupon this instruction is fed into the case structure
+selector, deﬁning the case to be executed. This case may
+add more commands to the stack or simply perform a
+speciﬁc task. When the case is ﬁnished, the main loop
+iterates again, the next command is removed from the
+stack and so on. Whenever the stack becomes empty,
+the default case “GetCommands” is executed again and
+reﬁlls it.
+
+Because the handler.vis are independent programs not
+having to rely on being called regularly by a master VI
+they can be used to carry out more complex tasks than
+just talking to the instruments. As an example handler-
+Lakeshore.vi, the handler.vi for the Lakeshore tempera-
+ture controller contains logic to control the temperature
+by software through control of the coolant ﬂow in the
+cryostat. The ﬂow controller is connected to a separate
+digital–to–analog converter (DAC), thus enabling the
+handlerLakeshore.vi to control it by sending commands
+to the DAC’s handler.vi (handlerDAC.vi). Keeping track
+of the last few seconds of measured data, calculating their
+time trends and publishing it to the DataSocket is coded
+into a command and performed by the handler.vis as
+well.
+
+V. AUTOMATION
+
+As mentioned earlier, all VIs are organized as state ma-
+chines, even the main VI torque.vi. As shown in Fig. 4
+every user action (button press, value change) on its
+user interface (UI) is transformed into a command by
+the UI-handler which is then sent to and processed in
+the SM. The SM then sends appropriate commands to
+the dataserver.vi and the handler.vis (wide arrow (1) in
+Fig. 4). These two parts (UI-handler and SM) are in-
+dependently running components of torque.vi. The com-
+munication between them is again ensured via queues.
+This enables other VIs, such as the sequencer.vi shown
+in Fig. 4 to be used to control the SM in torque.vi pro-
+grammatically by sending these commands directly to
+the SM (wide arrow (2) in Fig. 4).
+
+When automatic measurements are required, a se-
+quence text ﬁle is written containing the commands
+needed to accomplish these measurements which is then
+read by the sequencer.vi. Additionally to the commands
+of torque.vi’s SM the sequencer.vi understands a set of
+ﬂow control instructions such as “if”, “while” and “for”
+which are useful for creating short sequences for repeti-
+tive tasks, as well as the use of variables and their arith-
+metic manipulation and comparison.
+
+The sequencer.vi parses through the sequence ﬁle by
+looking for known keywords – the commands. Any
+strings which are not recognized as a keyword are treated
+as arguments to the preceding keyword. The string
+settemp 20 waittemp present in a sequence ﬁle would
+instruct the torque software to change the temperature to
+20 K and wait for the cryostat to stabilize at this temper-
+
+4
+
+FIG. 4: All VIs consist of a User interface (UI) and a block
+diagram (BD). In contrast to all other VIs the torque.vi’s BD
+consists of the UI-handler part and the state machine (SM)
+itself, both running in parallel.
+In normal, interactive op-
+eration of the torque system, user actions on the torque.vi’s
+UI are translated by the UI-handler into commands which
+are sent to the SM via a queue and then propagate on to
+the dataserver and handler VIs (wide arrow (1)). If an au-
+tomated measurement is run, the sequencer.vi’s SM retrieves
+commands from the text sequence on its UI, sends them via
+a queue to the torque.vi’s SM from where they propagate on
+to the dataserver and handler VIs (wide arrow (2)). The
+torque.vi’s SM sends conﬁrmation messages back to the se-
+quencer.vi. Solid black arrows indicate direct access between
+the BD and the UI, whereas dotted arrows represent data
+transmission via queues and DataSockets.
+
+ature. In this example settemp and waittemp are key-
+words and 20 is the argument to the keyword settemp.
+Such sequencing possibilities are already well known in
+control software of commercially available measurement
+equipment (eg. SQUID magnetometers or the Quantum
+Design Physical Property Measurement System5). Now
+such eﬃcient and ﬂexible data taking is also possible with
+our home made torque magnetometer.
+
+VI. EXAMPLE OF APPLICATION
+
+In order to demonstrate the possibilities of such an au-
+tomatable measurement system we present some results
+of a systematic study6 of the so called lock-in transition
+in the high temperature superconductor La2−xSrxCuO4.
+Details about this eﬀect can be obtained from various
+other sources and are not discussed here7,8. Most easily
+this eﬀect is visible in angle dependent torque measure-
+ments and manifests itself as a deviation from an other-
+wise smooth behaviour. An example of such a measure-
+ment is shown in Fig. 5, where the measured data points
+close to 90◦ deviate from a theoretical curve9 which ﬁts
+well to the remaining angle range. The same model can
+also be used to describe data taken as a function of mag-
+netic ﬁeld magnitude H at a ﬁxed angle. It is commonly
+accepted that in ﬁrst approximation the magnetic mo-
+ment m = τ /H of a superconductor is proportional to
+ln(H).
+
+Within our study we measured six La2−xSrxCuO4 sin-
+gle microcrystals with varying Sr content 0.07 ≤ x ≤ 0.23
+
+Lock−In effect
+
+La1.93Sr0.07CuO4
+T = 8 K
+µ0H = 1 T
+
+)
+s
+t
+i
+n
+u
+ 
+y
+r
+a
+r
+t
+i
+b
+r
+a
+(
+ 
+/
+ 
+ 
+τ
+
+20
+
+10
+
+0
+
+0
+
+30
+
+60
+
+θ  (deg)
+
+90
+
+FIG. 5: Angle dependent torque measurement (circles) of an
+underdoped crystal of La2−xSrxCuO4 with x = 0.07 (Tc =
+17 K), performed at T = 8 K in a magnetic ﬁeld µ0H = 1 T.
+The solid line is a ﬁt of a model derived by Kogan9. The
+◦
+deviation close to θ ≈ 90
+stems from the lock-in transition.
+
+and critical temperatures Tc varying from 17 K to 35 K.
+They were mounted on a highly sensitive torque sen-
+sor and cooled below Tc. Field dependent measure-
+ments (µ0H = 0 . . . 1.5 T at 5 mT steps with increasing
+and decreasing ﬁeld) were taken at 60 ﬁeld orientations
+(θ = −90◦ . . . 90◦ with varying steps) and at about ten
+temperatures below the critical temperature Tc. We em-
+phasize that such extensive measurements would hardly
+be possible without our software’s automation possibil-
+ities. As each ﬁeld scan takes about six minutes, with-
+out automation user interaction would be necessary at
+this interval during one week to collect all these data for
+one crystal. After writing the sequence and starting its
+execution, the measurement system, on the other hand,
+ﬁnishes such a measurement set within about three days
+with no need of intervention. The experiment is ﬁnished
+faster, because less time is lost between consecutive ﬁeld
+scans and because the measurement is running day and
+night.
+
+We present here only one dataset of a single crystal
+taken at one particular temperature. Such a dataset
+consists of 60 ﬁeld scans taken at various orientations.
+The two ﬁeld scans shown in Fig. 6 illustrate the devi-
+ations of ﬁeld dependent data due to the lock-in tran-
+sition. Clearly visible are two regions (I and II) where
+τ /H is proportional to ln(H). A comparison of these
+measurements to angle dependent measurements at sim-
+ilar conditions indicate that region I corresponds to the
+part where lock-in takes place, whereas data in region II
+are well described by the theoretical curve in Fig. 5. By
+analysing the whole data set it is now easy to investigate
+the evolution of these two regions as a function of angle
+θ. The result is shown in Fig. 7, where the extents of
+the two regions, obtained from ﬁeld dependent measure-
+ments, are plotted vs. the angle θ. The horizontal line
+A indicates the cut of the measurement in Fig. 5 and
+the vertical lines B and C the measurements shown in
+Fig. 6. The observed region, separating regions I and II
+
+10
+
+)
+s
+t
+i
+n
+u
+ 
+y
+r
+a
+r
+t
+i
+b
+r
+a
+(
+ 
+
+H
+
+/
+ 
+τ
+
+0
+10−2
+
+1.5
+
+1.0
+
+0.5
+
+0.0
+0
+
+5
+
+La1.93Sr0.07CuO4
+T = 8 K
+
+θ  = 75°
+
+θ  = 80°
+
+I
+
+10−1
+µ0H  (T)
+
+II
+
+100
+
+FIG. 6: Field dependent measurement τ (H) of the same
+La2−xSrxCuO4 crystal as was used for the measurement in
+Fig. 5. The angle of the magnetic ﬁeld was ﬁxed at θ = 75◦
+◦
+. The measurements are plotted as τ /H vs. ln(H).
+and θ = 80
+The lines are guides to the eye to show the two linear regions
+I (low ﬁeld) and II (high ﬁeld).
+
+La1.93Sr0.07CuO4; T = 8 K
+
+)
+T
+(
+ 
+
+H
+0
+
+µ
+
+A
+
+II
+
+C
+
+B
+
+I
+
+90
+
+30
+
+θ  (deg)
+
+60
+
+FIG. 7: Summary of ﬁeld dependent measurements performed
+on a La2−xSrxCuO4 single crystal at T = 8 K. Only the
+extents of the linear regions such as shown in Fig. 6 as a
+function of ﬁeld orientation θ are shown. The enhancement
+of the low-ﬁeld region I close to the ab-plane (θ ≈ 90◦) is
+clearly visible. The horizontal line A indicates the position of
+the measurement shown in Fig. 5. The vertical lines B and C
+indicate the position of the measurements shown in Fig. 6.
+
+manifests the lock-in transition and can be understood
+in terms of a model proposed by Feinberg and Villard10.
+
+VII. ACKNOWLEDGEMENTS
+
+This work was supported in part by the Swiss National
+
+Science Foundation.
+
+6
+
+current e-mail address: kohout@physik.unizh.ch
+
+∗
+1 Source code examples available on request.
+2 URL http://www.ni.com/labview/.
+3 M. Willemin, C. Rossel, J. Brugger, M. H. Despont,
+H. Rothuizen, P. Vettiger, J. Hofer, and H. Keller, J. Appl.
+Phys. 83, 1163 (1998).
+
+4 C. Rossel, M. Willemin, A. Gasser, H. Bothuizen, G. I.
+Meijer, and H. Keller, Rev. Sci. Instrum. 69, 3199 (1998).
+
+5 URL http://www.qdusa.com/.
+6 S. Kohout et al., to be published (2005).
+
+7 G. Blatter, M. V. Feigel’man, V. B. Geshkenbein, A. I.
+Larkin, and V. M. Vinokur, Rev. Mod. Phys. 66, 1125
+(1994).
+
+8 F. Steinmeyer, R. Kleiner, P. M¨uller, and K. Winzer, Phys-
+
+ica B Condensed Matter 194, 2401 (1994).
+9 V. G. Kogan, Phys. Rev. B 38, 7049 (1988).
+10 D. Feinberg and C. Villard, Phys. Rev. Lett. 65, 919
+
+(1990).
+
+

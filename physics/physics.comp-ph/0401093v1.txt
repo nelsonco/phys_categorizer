@@ -1,0 +1,1229 @@
+4
+0
+0
+2
+ 
+n
+a
+J
+ 
+0
+2
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+3
+9
+0
+1
+0
+4
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Hybrid molecular-continuum ﬂuid dynamics
+
+Rafael Delgado-Buscalioni∗ and Peter V. Coveney†
+Centre for Computational Science, Department of Chemistry
+University College London,
+20 Gordon Street, London WC1 OAJ, UK
+
+We describe recent developments in the hybrid atomistic/continuum modelling of dense ﬂuids.
+We discuss the general implementation of mass, momentum and energy transfers between a region
+described by molecular dynamics and the neighbouring domain described by the Navier-Stokes
+equations for unsteady ﬂow.
+
+PACS numbers:
+
+I.
+
+INTRODUCTION
+
+The ﬂow of complex ﬂuids near interfaces is governed by a subtle interplay between the fast microscopic dynamics
+within a small localised region of the system close to the interface and the slow dynamics in the bulk ﬂuid region.
+This scenario is encountered in a wide variety of applications ranging from nanotechnology (nanoﬂuidics) and other
+industrial processes (such as wetting, droplet formation, critical ﬂuids near heated surfaces or crystal growth from
+a ﬂuid phase) to biological systems (for example, membranes or biomolecules near interfaces). The dynamics of
+these systems depends on the intimate connection of many diﬀerent spatio-temporal scales: from the nanoscale to
+the microscale and beyond. Realistic simulations of such systems via standard classical molecular dynamics (MD)
+are prohibitive, while continuum ﬂuid dynamics (CFD) cannot describe the important details within the interfacial
+region. In view of this fact, the ﬁeld of computer simulation is now faced with the need for new techniques, which
+bridge a wider range of time and length scales with the minimum loss of information. A hybrid particle-continuum
+approach provides a resolution to this dilemma. A hybrid algorithm retains all the atomistic detail within the
+relevant localized domain and couples this region to the continuum hydrodynamic description of the remainder of the
+system. Indeed hybrid algorithms for liquids can be expected to provide a powerful tool for the fast growing ﬁeld
+of nanoﬂuidics in micro electro-mechanical systems (MEMS) and our ongoing contributions have been recognized by
+the nanoscience community (R. Delgado-Buscalioni and Coveney 2003a) as oﬀering a promising simulation technique
+with nanotechnological applications.
+
+Hybrid algorithms for solids (Abraham et al. 1998) and gases (Garcia et al 1999) were the ﬁrst to be fully developed
+in the literature. As expected in most theoretical descriptions of matter, the hybrid description of the liquid state is
+the most challenging one. The general procedure is to connect the particle domain (P) and the continuum domain (C)
+within an overlapping region comprised of two buﬀers: C→P and P→C (see ﬁgure 1). Within the P→C buﬀer the
+particle dynamics are coarse-grained to extract the boundary conditions for the C-region. The most complicated part
+of any hybrid scheme is the C→P coupling where the microscopic dynamics need to be reconstructed to adhere to
+the prescriptions given by the continuum variables. Moreover, in doing so the unphysical artifacts thereby introduced
+should be minimized (following Occam’s razor).
+
+In this paper we provide an overview of the state-of-the-art of the hybrid modelling of liquids. In §II we start by
+presenting an overview of the hybrid scheme and some preliminary topics such as the inherent constraints on the
+continuum time step and the spatial-grid size. Section III discusses several implementations of the temporal-coupling.
+The C→P coupling scheme is then explained in §IV for the general case of mass, momentum and energy. We illustrate
+this important part of the scheme by reproducing the three hydrodynamic modes (shear, sound and heat) governing
+the relaxing ﬂows in an inﬁnite medium. Section V is devoted to the P→C coupling, based on a ﬁnite volume method
+solving the ﬂow within the C domain. Some comments on the eﬀect of noise on the accuracy of the scheme are made.
+The full method is used in §VI to solve the problem of shear ﬂow driven by oscillatory wall motion in a nano-slot.
+Finally, conclusions and future directions for this research are described in §VII.
+
+∗Electronic address: R.Delgado-Buscalioni@ucl.ac.uk
+†Electronic address: p.v.coveney@ucl.ac.uk
+
+II. OVERVIEW
+
+2
+
+The domain decomposition deployed in our hybrid scheme is depicted in ﬁgure 1. Within domain P the ﬂuid is
+described at the atomistic level via Newtonian dynamics. The position of the N (t) atoms at time t inside P is updated
+each ∆tP time interval using a standard MD scheme. The present calculations were done with a Lennard-Jones (LJ)
+ﬂuid. Throughout the ongoing discussion all quantities are given in reduced Lennard Jones units:
+length σ, mass
+m, energy ǫ, time (mσ2/ǫ)1/2 and temperature ǫ/kB. We refer to Hoheisel 1996, for the estimated physical values
+of the LJ parameters for several substances (as an example, for a simple molecular ﬂuid as N2, σ ≃ 0.35nm and
+ǫ/kB ≃ 100K).
+
+The rest of the computational domain (C) is described by the Navier-Stokes equations. The ﬂuid variables at C are
+the densities of the conserved quantities for which the equations of motion in conservative form are ∂Φ/∂t = −∇ · JΦ
+with Φ = {ρ, ρu, ρe} and JΦ = {ρu, ρu + Π, ρu e + Π · u + q} standing for the mass, momentum and energy ﬂuxes
+respectively. Here ρ is the density, u the local velocity, e the speciﬁc energy, Π = P 1 + τ the stress tensor which
+contains the pressure P and the viscous tensor τ (for a Newtonian ﬂuid) and q = −κ∇ · T , the heat ﬂux by conduction
+expressed via Fourier’s law. These continuum equations may be solved via standard CFD methods. Alternatively, for
+low-Reynolds number ﬂows (Re ≤ O(10)) the equations can be solved analytically (Delgado-Buscalioni & Coveney
+2003b), as is done in the tests presented in §IV.
+
+The kind of information to be transferred in the overlapping region has been the subject of some discussion. The
+ﬁrst attempts in the literature (Delgado-Buscalioni & Coveney 2003b and references therein) considered the transfer
+of momentum in steady shear ﬂows and proposed a matching procedure based on the continuity of velocity across
+the overlapping region. This sort of coupling strategy may be referred to as “coupling-through-state”. An alternative
+formulation of the information exchange for liquids based on matching the ﬂuxes of conserved quantities (to/from P
+and C) was proposed by Flekkøy et al. 2000. These authors considered steady shear ﬂows with mass transfer. In
+subsequent work by Delgado-Buscalioni & Coveney (2003b) the ﬂux-coupling scheme was generalized to enable transfer
+of mass, energy and momentum (along both transversal and longitudinal directions). Delgado-Buscalioni & Coveney
+2003b also present a comparative study of the coupling-through-ﬂuxes and coupling-through-state schemes for ﬂows
+involving energy transfer (longitudinal waves). It was shown that the coupling-through-ﬂuxes scheme provides the
+correct physical behaviour, while the coupling-through-state scheme does not guarantee positive entropy production.
+Consequently the coupling of ﬂuxes is of central importance in our hybrid scheme (see §IV and §V).
+
+III. TEMPORAL COUPLING
+
+In general there are three times involved in the coupling scheme: the MD time-step ∆tP , the time-step for the
+C-solver ∆tC (>> ∆tP ) and the averaging time ∆tav, which are presented below as outline two possible strategies for
+merging the time-evolution of C and P. The information transfer (from C→P and P→C) is updated over each time
+interval, ∆tC . As stated above, the P→C coupling consists ﬁrstly of a coarse-graining procedure. In particular, for
+any particulate quantity, Φi, the spatial average over each P→C cell of volume VP C (= A∆XP C , in ﬁgure 1) is deﬁned
+as Φ(R, t) = Σi∈VP C Φi/NP C, where R is the position of the cell in the coarse-grained coordinates and NP C is the
+number of particles inside VP C . The time average also needs to be local with respect to the coarse-grained dynamics.
+To that end, the microscopic quantities are sampled over a time interval ∆tav which is treated as an independent
+parameter of the simulation:
+
+hΦi (R, tC ) =
+
+tC
+
+1
+∆tC Z
+
+tC −∆tav
+
+Φ(R, t)dt.
+
+(1)
+
+The magnitudes ∆tC and ∆tav are constrained by several physical and numerical prerequisites quoted in Table 1.
+
+There are essentially two ways to deal with the coupling of time within the hybrid scheme: sequential coupling
+or synchronized coupling. The diagrams in ﬁg. 2 illustrate two possible choices for these time-coupling strategies
+starting from given initial conditions. In the sequential coupling scheme, both P and C are ﬁrst moved to t = ∆tC
+using the initial conditions. The C→P coupling is performed ﬁrst at t = ∆tC and the P system is advanced to
+t = 2∆tC ∼ 300∆tP . The averaged P-information collected over time interval ∆tav = 2∆tC within the P→C
+cell is then transferred to the C domain, giving the required boundary condition to advance C towards the same
+time t = 2∆tC. This procedure is suited for serial processing. More reﬁned versions of sequential coupling can be
+constructed to perform averaging over times ∆tav greater than ∆tC .
+
+In the synchronized coupling scheme both domains advance in time independently until a certain instant at which
+both C→P and P→C information transfers are exchanged. This scheme is suitable for parallel processing because the
+P and C domains are being solved concurrently. We note that in this case the averaged information from P transferred
+
+Algebraicconstraints
+
+Physical condition
+Local Equilibrium ∆tC > τcol = 0.14ρ−1T −1/2 ∆x > λ = 0.2ρ−1
+Flow resolution
+∆tav < O(0.1) τf low
+VP C∆tav > T /(γ2η)
+Accuracy
+Courant condition ∆tC < ∆x/(2uf low)
+
+Eq.
+C.1
+|Φ−1 dΦ/dx|∆x < 1 C.2
+C.3
+C.4
+
+3
+
+TABLE I: Constrains on the coarse grained time and length scales within our hybrid MD-CFD scheme. Condition C.1 ensures
+the local thermodynamical equilibrium at the averaging region: the coarse-graining time ∆tav and grid-spacing ∆x needs to be
+larger than the collision time τcol and the mean free path λ, respectively. In C.1 τcol and λ are estimated by the hard-sphere
+approximation. Condition C.2 is needed to resolve the fastest ﬂow characteristic time τf low and the spatial variation of any
+physical variable Φ over the control cell |Φ−1 dΦ/dx|∆x. Depending on the ﬂow behaviour, in C.2, τf low may stand for the
+period of the oscillatory ﬂow f −1 or for the diﬀusive time L2
+x/ν, etc. The accuracy condition in eq.(C.3) ensures that the signal-
+to-noise ratio of the transversal momentum ﬂux in a ﬂow with shear rate γ is greater than one (similar kind of relationships
+can be derived for the longitudinal momentum and energy ﬂuxes). The conditions C.1, C.2 and C.3 are applied within the
+P→C cell. The last condition, C.4, ensures the stability of the numerical (explicit) scheme used for time-integration of the C
+ﬂow. The characteristic velocity of the ﬂow (on one grid space) is denoted by uf low.
+
+at any of these times is obtained during the previous time interval ∆tav. This fact introduces a delay of O(∆tav/2) in
+the C ﬂow. Hence, it is important to ensure that ∆tav is about O(10−1) times smaller than the fastest physical time
+of the ﬂow process (see Table 1).
+
+IV. CONTINUUM-TO-PARTICLE COUPLING AND ITS VALIDATION
+
+The generalized forces arising from ﬂuxes of mass, momentum and energy measured from the C ﬂow are to be
+injected into the particle system at the C→P cell. Table 2 summarizes how each ﬂux contribution arising within C is
+translated into the P domain.
+
+Mass continuity is ensured by inserting or extracting particles at a rate given by eq.
+
+(T.1) in Table 2. The
+convection of momentum is determined by the product of the rate of particle insertion s and the average velocity of
+the incoming/outgoing particles hv′i. By injecting eq. (T.1) into eq. (T.2) it is easily seen that convection balance
+requires hv′i = u. New particles are therefore introduced with velocities sampled from a Maxwellian distribution
+at temperature T and mean velocity u. On the other hand, the local equilibrium h¯vi = u ensures that the average
+velocity of any extracted particles is equal to that of the continuum prescription
+
+P
+
+NP C F(ext)
+i
+
+Viscous and pressure forces are introduced via external forces acting on the particles at P→C. An important issue
+, over the individual particles. We refer to
+is to decide how to distribute the overall force in eq. (T.3),
+Flekkøy et al. (2000) and Delgado-Buscalioni & Coveney (2003b) for a full discussion. Although in general the force
+to be felt by each particle i within the P→C cell can be distributed according to the particle positions (see Flekkøy
+et al. 2000), we have adopted a ﬂat distribution F ext
+i = AΠ · n/NP C because it provides by construction, a correct
+rate of energy dissipation in eq. (T.5) (see Delgado-Buscalioni & Coveney 2003b). Using eq. (T.1) it is seen that
+the balance of advected energy in eq. (T.4) implies hǫ′i = e. The energy of each particle is composed of kinetic and
+i /2 + ψi({r}N ). The speciﬁc energy of the continuum is e = u2/2 + 3kT /(2m) + φ (here φ is
+potential parts, ǫi = v2
+= u2/2 + 3kT /(2m) is ensured by inserting the
+the excess potential energy). The balance of kinetic energy
+new particles with the proper Maxwellian distribution. The balance of the potential energy requires a more diﬃcult
+condition
+= φ to be satisﬁed. When inserting a new particle, this involves ﬁnding a precise location within
+the C→P cell with the desired potential energy. To solve this problem in a fast and eﬀective way we have constructed
+an algorithm for particle insertion called usher (Delgado-Buscalioni & Coveney 2003c). In order to ﬁnd the site
+with the desired energy within the complex potential energy landscape, the usher algorithm uses a variation of the
+steepest descent algorithm including an adaptable displacement. For densities within the range ρ = [0.4 − 0.8], the
+usher scheme needs around 8−30 iterations, each one involving the evaluation of a single-force. The usher algorithm
+can be also applied in other problems involving particle insertion, such as grand-canonical molecular dynamics.
+
+ψ({r}N )
+E
+
+(v′)2
+(cid:10)
+
+D
+
+(cid:11)
+
+Finally, eq. (T.6) in Table 2 determines the rate of heat transfer into P by conduction. This energy can be injected by
+reproducing a non-isothermal environment within the C→P cell. To that end we have implemented a set of (typically
+2-3) Nos´e-Hoover thermostats (NHT) separated by a distance d with temperatures diﬀering by ∆T = [∇T ·n] d, where
+∇T is the C-temperature gradient at C→P.
+
+The decay of transversal and longitudinal waves is an excellent test for the validity of our proposed the C→P
+coupling as they comprise the whole set of hydrodynamic modes: shear, sound and heat waves. For these tests we
+implemented a set-up consisting of a P region of length Lx (with periodic boundary conditions in y and z directions)
+
+Fluxes
+
+←
+
+C
+
+eq.
+
+Conserved
+quantity
+Mass
+
+Energy
+
+Momentum Convection
+
+Stress
+
+Advection
+Dissipation
+
+Conduction
+
+P
+
+ms
+
+ms hv′i
+NCP Fext
+
+i
+
+E
+
+DP
+
+ms hǫ′i
+NCP Fext
+
+i
+
+Jext
+Q
+
+· n
+
+(cid:10)
+
+(cid:11)
+
+· vi
+
+E
+
+DP
+
+= Aρu · n (T.1)
+
+= Aρuu · n (T.2)
+= AΠ · n (T.3)
+
+= Aρue · n (T.4)
+= AΠ · u · n (T.5)
+
+= Aq · n (T.6)
+
+TABLE II: The balance of mass, momentum and energy ﬂuxes at each C → P cell. The ﬂuxes measured within C (third
+column) are imposed into P via the expressions given at the second column. The cell’s surface is A, and the surface vector n
+points outwards (ﬁg. 1). The mass rate is s(t) (s>0 for inserted and s<0 for removed particles). The velocity and energy of
+the inserted/removed particles are v′ and ǫ′ respectively. The external force and heat ﬂux inserted within the C→P cell are
+
+NP C F ext
+
+i
+
+and
+
+Jext
+Q
+
+, respectively.
+
+P
+
+(cid:10)
+
+(cid:11)
+
+surrounded by two C domains. We initially imposed on the P system a sinusoidal (x- or y-) velocity proﬁle along
+the x direction. By extracting the initial amplitudes of the spatial Fourier components of all the hydrodynamic
+quantities it is then possible to trace the entire time-evolution of the relaxing ﬂow using linear hydrodynamics. In
+particular, this permits us to calculate at any time the generalized forces to be inserted within the C→P cell. The
+time evolution of the spatial Fourier components of the P-variables is ﬁnally compared with the analytical expressions.
+Such kinds of comparisons are shown in ﬁgures 3 and 4, for the case of a relaxing shear wave and a longitudinal wave,
+respectively. The excellent agreement obtained indicates that the C→P coupling protocol can be used for capturing
+fast and low-amplitude ﬂows, such as those governed by sound, shear or heat waves.
+
+The entropy perturbation, shown in ﬁg. 5, was calculated from the temperature and density perturbative ﬁeld. The
+results clearly show that using only one thermostat per C→P cell (denoted by 1-NHTCP , in ﬁgs. 3 and 4) leads to
+negative entropy production. The pure exponential decay of heat due to diﬀusion is only recovered when the correct
+(averaged) heat ﬂux is connected to each C→P cell; in ﬁgs. 4 and 5 we present a result with two thermostats per cell
+(2-NHTCP ). This result conﬁrms that the coupling-through-ﬂuxes scheme is the correct matching procedure.
+
+V. PARTICLE-TO-CONTINUUM COUPLING: FINITE VOLUMES AND FLUCTUATIONS
+
+Within the P→C cells the information coming from the particle dynamics is coarse-grained to provide boundary
+conditions at the “upper” C-level. In §II we introduced the averages needed to produce such information. At the
+P→C interface the C region receives the averaged particle-ﬂuxes as open-ﬂux (von Neumann) boundary conditions.
+The averaged mass, momentum and energy particle-ﬂuxes through the P→C interface are constructed as follows,
+
+ρu · nP C =
+
+Π · nP C =
+
+q · nP C =
+
+1
+V P C D
+1
+V P C (cid:28)(cid:18)
+1
+V P C (cid:28)(cid:18)
+
+ΣNP C
+
+i=1 mvi
+
+· nP C
+
+E
+i=1 mvivi −
+
+ΣNP C
+
+1
+2
+
+ΣNP C
+i,j rij Fij (cid:19)(cid:29)
+
+· nP C
+
+ΣNP C
+
+i=1 ǫivi −
+
+ΣNP C
+i,j rij viFij(cid:19)(cid:29)
+
+· nP C
+
+1
+2
+
+where NP C is the number of particles inside the P→C cell of volume VP C and nP C is the surface vector shown in ﬁg.
+1.
+
+A. Hybrid ﬁnite volume: boundary conditions
+
+Let us now illustrate how these ﬂuxes can be injected into the C domain in the framework of the ﬁnite volumes
+method (Patankar 1980). The ﬁnite volumes method is ideally suited to our scheme because it exactly balances the
+ﬂuxes across the computational cells. Its principle is simple. Brieﬂy, the computational domain (C) is divided into
+
+4
+
+(2)
+
+(3)
+
+(4)
+
+5
+
+(7)
+
+(8)
+
+cells of volume Vl whose size and location is given by the nodes of a speciﬁed mesh, {Rl}, l = {1, ..., Mc}. Integrating
+the conservation equation ∂Φ/∂t = −∇ · JΦ over each computational cell (say the cell H in ﬁg. 1) one obtains,
+1
+VH Xf
+where Af stands for the area of the face f and nf is the outwards normal surface vector. The volume integral of the
+transient term of the conservation equation has been approximated by VH times the explicit time derivative of the
+value of the integrand at the cell centre, halfway between the surfaces: ρH ΦH . Equation (5) yields a set of ordinary
+diﬀerential equations (ODE’s) involving the ﬂow variables at each cell face, f . The set of equations is closed for the
+ﬂow variables at the cell centre by expressing the ﬂuxes at the interfaces JΦ,f in terms of diﬀerences of ﬂow variables
+at neighbouring cell centres, via the constitutive relations.
+
+d ρH ΦH
+dt
+
+Af JΦ,f · nf .
+
+(5)
+
+=
+
+Let us consider the momentum ﬂux balance for the low Reynolds number ﬂow of an incompressible and isothermal
+ﬂuid driven by diﬀusion of y-velocity along x direction: u = u(x)j.
+In this case J · n = P i − η(du/dx)j, where
+the surface vector of the P→C surface is n = i. Let us consider an isobaric environment and restrict ourselves to
+the transfer of transversal (y) momentum, governed by the momentum ﬂux J ≡ J · j = −ηγ and the shear rate
+Integrating along the cell H (see ﬁg. 1), using a ﬁrst order space discretisation of the stress (e.g.
+γ ≡ du/dx.
+Jw = −η(uH − uW )/∆x) and an explicit time integration scheme, one obtains
+
+un
+H = uH(1 − 2r) + ruE + ruW ,
+where the subscripts H denote the set of cell centres H = {1, M }, and the symbols E (east) and W (west) denote
+variables measured: x = E(= H + 1) and x = W (= H − 1). The time instant is denoted by uH = u(xH , t) and
+H = u(xH , t + ∆tC ) and r ≡ ν∆t/(∆x2). with ν = η/ρ the kinematic viscosity. In order to guarantee the numerical
+un
+stability of the explicit scheme in eq. (6), the size of the (smallest) control cell inside the C region ∆x and the time
+step ∆t are related through r ≤ 1/2, which corresponds to the grid-diﬀusive-velocity uf low = ν/∆x in the Courant
+condition C.4 of Table 1. In solving eq. (6) we used a uniform grid with a typical value of ∆x ∼ 0.5.
+
+(6)
+
+In order to impose the boundary condition one needs to determine the velocity within the outer cells: at the
+rightmost x = xM+1 = Lx and at the leftmost boundary (inside the P→C cell, see ﬁg. 1) x = x0 = lC − ∆x/2. At
+xM+1 = Lx there is a rigid wall which moves at a velocity uwall(t) and provides the Dirichlet boundary condition
+uM+1 = uwall(t). The hybrid formulation is applied at the left boundary x0 = lC − ∆x/2. To evaluate the outer
+velocity uW = u0 we impose the balance of momentum ﬂux across the w surface at x = lC. This means that the
+continuum ﬂux evaluated at x = w is made equal to the corresponding averaged particle ﬂux hjiw = −η(¯uH −uW )/∆x.
+The outer velocity to be inserted in eq. (6) is then uW = ¯uH + hjiw∆x/η. The velocity ¯uH is evaluated as a linear
+combination of the continuum uH(= u1) and the average particle velocity hviH at x1 = lC + ∆x/2:
+
+By inserting eq. (7) into eq. (6) one obtains the velocity at the boundary cell
+
+¯uH = (1 − α)uH + αhviH .
+
+un
+H = uH (1 − r) + r uE +
+
++ αr (hviH − uH ) .
+
+hjiw∆t
+ρ∆xH
+
+The reason for the choice of ¯uH in eq. (7) now becomes clear. It introduces the last term on the right hand side
+of eq. (8) which acts as a forcing term ensuring velocity continuity by gently driving the continuum velocity to the
+corresponding particle average uH = hviH . The strength of the velocity coupling is maximal when α = 1 and is absent
+if α = 0. The idea of using a hybrid gradient (arising for any α 6= 0 in eq. (7)) arose from the outcome of calculations
+performed at very low shear rates (γ < 10−2). Using α = 0 one obtains a velocity discontinuity at P→C which is
+of the same order of magnitude as the ﬂuctuations of the mean instantaneous velocity within the overlapping region.
+At low shear rates this means substantial relative diﬀerences in the C and P velocities, < v >H −uH)/uH ∼ O(1).
+This problem is solved by introducing a small velocity coupling in the continuum scheme, with a small value of
+α ∈ [0.2, 0.5], which drives the continuum velocity to the average particle velocity in a time of O[∆x2/(να)]. To check
+any inﬂuence of the velocity coupling term in eq. (8) on the ﬂux balance, we performed simulations of the Couette
+ﬂow at diﬀerent shear rates and compared its average over time with the time averaged momentum particle ﬂux. The
+results showed that, in average, the velocity coupling term is vanishingly small so it does not introduce any extra ﬂux
+in the coarse-grained time scale.
+
+B. The eﬀect of ﬂuctuations: shear stress
+
+In our scheme, the ﬂuctuating nature of the ﬂuxes introduced into the C region at P→C imposes a limitation on
+our ability to resolve the ﬂow ﬁeld, as also arises in experiments and full MD simulations. This limit is determined by
+
+6
+
+signal-to-noise ratio becoming smaller than one. A theoretical expression for the amplitude of the stress ﬂuctuations
+can be obtained (Delgado-Buscalioni et al. 2003), providing a relationship between the signal-to-noise ratio and the
+coarse-grained time and space scales ∆tav and VP C . Table 1 contains the condition to ensure an averaged shear force
+larger than its variance. It is clear that in weak steady ﬂows it is always possible to increase the signal-to-noise ratio
+by enlarging ∆tav. Nevertheless, in a general space and time-dependent ﬂow, the sizes of the averaging windows in
+space and time (VP C and ∆tav) are bounded above by the minimum wavelength and characteristic time which need
+to be treated within the ﬂow. Such requirements on spatial and temporal ﬂow resolution are also quoted in Table 1.
+
+VI. OSCILLATORY WALL FLOW
+
+In order to test the applicability of the full hybrid scheme under unsteady ﬂows, we have considered the ﬂow of an
+incompressible and isothermal ﬂuid between two parallel walls in relative oscillatory motion. This set-up is widely
+used to investigate the reological properties of complex ﬂuids attached to surfaces, as polymer brushes (see C.M.
+Wijmans & B. Smit (2002) for a recent review). These systems are good examples of the sort of applications of the
+hybrid scheme, which can treat the complex ﬂuid region by MD and the momentum transfer from the bulk by CFD.
+A similar set-up can be also used in the simualation of nanotechnological process. For instance, Stroock et al. (2002)
+showed that the mixing of solutions in low Reynolds number ﬂows in microchannels can be enhanced by introducing
+bas-relief nano-structures on the ﬂoor of the slot. In our test ﬂow, the simulation domain is 0 ≤ x ≤ Lx and it is
+periodic along y and z directions. The particle domain occupies the region x < lP , and it includes the LJ liquid
+and the atomistic wall composed of two layers LJ particles at x ≤ 0. The continuum domain comprises the region
+x ∈ [lC , Lx]. The sizes of the simulation domains were within the nanoscale Lx ∼ 50σ, and lP ∼ 15σ, while the width
+of the overlapping region, lP − lC , was set to arround 5σ. The ﬂow is uniquely driven by the oscillatory motion of the
+x = Lx wall along the y direction, meaning that the mean pressure is constant throughout the domain and there are
+no transfers of mean energy or mass in the x direction (perpendicular to the P→C surface). Therefore the mean ﬂow
+carries transversal momentum by diﬀusion only, and the equation of motion for the y-velocity is ∂u/∂t = ν∂2u/∂x2,
+with boundary conditions u(0, t) = 0 and u(L, t) = uwall(t) = umax sin(ωt). This equation can be solved analytically
+(H. Schliting 1958; C.M. Wijmans & B. Smit 2002). The ﬂow proﬁle has a maximum amplitude at the moving wall
+and the momentum introduced by its motion penetrates into a ﬂuid layer of width δ ∼
+πν/f . Beyond this layer
+the ﬂow amplitude tends to zero diﬀusively as it approaches the other wall held at rest. Therefore, the maximum
+shear rate attained inside the momentum layer is of order γ ∼ umax/δ. Inserting this relation into the signal-to-noise
+condition (C.3 in Table 1), we ﬁnd
+
+p
+
+ρu2
+
+max∆tav > πf −1
+
+kBT
+VP C (cid:19)
+
+.
+
+(cid:18)
+
+(9)
+
+Equation (9) means that in order to attain a signal-to-noise ratio larger than one, the mean kinetic energy per unit
+volume of the ﬂow integrated over the averaging time ∆tav needs to be larger than the corresponding energy due to
+ﬂuctuations over the period of the mean ﬂow. It is important to mention that at low enough frequencies (f > ν/L2),
+there is suﬃcient time for momentum to be spread by diﬀusion over the whole domain. In such situations the correct
+condition is given by the signal-to-noise condition (C.3 in Table 1) with γ ∼ umax/L2.
+
+As indicated by condition C.2 in Table 1, in order to solve for the temporal variation of the ﬂow it is required that
+
+. For kBT = 1.0, ρ = 0.8
+∆tavf ≥ O(0.1). Inserting this condition into eq. (9) one obtains umax > 5
+and VP C = O(100) the above inequality yields umax > 0.5. We performed oscillatory shear simulations for values
+of umax above, close to and below the threshold given by eq. (9). As shown in ﬁg. 6a, calculations made at large
+ﬂow amplitudes are in excellent agreement with the analytical solution. In ﬁgure 6b we present results for the same
+density and temperature (ρ = 0.8 and T = 1) and a wall velocity umax = 0.5 right at the accuracy limit predicted by
+(9). The averaging time was chosen to be ∆tav = 10. As shown by the instantaneous velocity within the P→C cell,
+the noise amplitude is nearly equal to the ﬂow amplitude and its time-averaged value shows traces of ﬂuctuations.
+Figure 6c corresponds to the same velocity and density but at a larger temperature T = 4. This case is below the
+accuracy limit (given by C.3 in Table 1) where forces arising from thermal ﬂuctuations dominate the hydrodynamic
+ones.
+
+(cid:16)
+
+(cid:17)
+
+1/2
+
+kB T
+ρVP C
+
+VII. CONCLUSIONS AND FUTURE DIRECTIONS
+
+We have presented a hybrid continuum-particle scheme for moderate-to-large ﬂuid densities which takes into account
+mass, momentum and energy exchange between a domain described by discrete particle Newtonian molecular dynamics
+
+7
+
+(P) and an interfacing domain described by continuum ﬂuid dynamics (C). The coupling scheme is applied within
+an overlapping region comprised of two sub-cells where the two-way exchange of information is performed: C→P
+and P→C. We have shown that the coupling-through-variables scheme (which simply ensures continuity of variables
+within the overlapping region) is not suﬃcient to guarantee positive entropy production. However, by generalizing
+the coupling-through-ﬂuxes scheme proposed by Flekkøy et al., 2000 to energy and mass transfer we ﬁnd that the
+correct decay of shear, sound and heat waves is obtained.
+
+We are now deploying the present scheme to study the dynamics of a tethered polymer under shear ﬂow. The
+polymer and its local environment are treated via MD, while the shear ﬂow imposed on the outer domain is treated
+via the ﬁnite volume CFD method. In the future, we plan to apply our hybrid scheme to the study of membrane
+dynamics.
+
+Enhancements to the present hybrid algorithm are under investigation. In the scheme described here the energy
+ﬂux balance is ensured only over time averages. We are currently studying alternative schemes which exactly balance
+this ﬂux. From a numerical standpoint, we plan to implement the P→C coupling in conjunction with a ﬁnite volume
+CFD solver in 3D.
+
+Also, the present scheme can be easily adapted to couple molecular dynamics with another mesoscopic scheme that
+takes into account hydrodynamic ﬂuctuations. This sort of hybrid scheme could be used in applications where the
+ﬂuctuations are relevant (microﬂuidics, ﬂuids near critical point, etc...). An important condition for the interfacing
+mesoscopic scheme is that it needs to be fully consistent with thermodynamics. Also important is that the transport
+coeﬃcients of the mesoscopic model should be adjustable to represent the correct coarse-grained dynamics of the
+selected working ﬂuid. Natural candidates are the Lagrangian schemes involving Voronoi tesselation (Flekkøy et
+al. 2000a) or the Smooth Particle Dynamics model and related mesoscopic techniques (Espa˜nol 2003). The lattice
+Boltzmann (LB) method is another possible candidate to interface with the MD domain. This model has been already
+used in multiscale modelling (Succi et al 2001). Nevertheless, the problem with LB methods at present is that there is
+no truly reliable thermohydrodynamic model other than for single phase ﬂow. Energy conservation remains unsolved
+and most models are athermal; even the thermohydrodynamic lattice-BGK models for the ideal gas are vastly over-
+determined and get the temperature dependence of the viscosity wrong (Boghosian and Coveney 1998). Therefore
+the hybrid scheme proposed here could only be interfaced with the lattice Boltzmann model in certain applications
+involving isothermal and incompressible single phase ﬂows.
+
+A longer term goal of this research is to develop a ﬂexible, componentized, hybrid coupling environment into which
+any molecular dynamics and any continuum ﬂuid dynamics codes may be inserted. This will require considera-
+tion of electrostatic forces and, therefore, an additional conserved quantity, the electric charge, whose ﬂux coupling
+will requires use of Poisson-Boltzmann solvers. Moreover, such multiscale hybrid schemes are attractive candidates
+for eﬃcient deployment on computational grids, a feature now under investigation with the RealityGrid project
+(www.realitygrid.org).
+
+VIII. ACKNOWLEDGEMENTS
+
+We gratefully acknowledge fruitful discussions with Professor Eirik Flekkøy. This research is supported by the Euro-
+pean Commission through a Marie Curie Fellowship to RD-B (HPMF-CT-2001-01210) and by the EPSRC RealityGrid
+project GR/R67699. R. D-B also acknowledges support from the project BFM2001-0290.
+
+References
+
+• Abraham F. F., Broughton J. Q., Berstein N. and Kaxiras E. 1998 Spanning the continuum to quantum length
+
+scales in a dynamic simulation of brittle fracture. Europhys. Lett., 44 783
+
+• Boghosian B. and Coveney P. V 1998 Inverse Chapman-Enskog derivation of the thermohydrodynamic lattice-
+
+BGK model for the ideal gas, Int. J. Mod. Phys. C 9, 1231-1245
+
+• Delgado-Buscalioni & Coveney P. V. 2003a Continuum-particle hybrid coupling for mass, momentum and energy
+transfers in unsteady ﬂuid ﬂow, Virtual Journal of NanoScale Science & Technology 7, Issue 16, April 21,
+http://ojps.aip.org/nano
+
+• Delgado-Buscalioni R. & Coveney P. V. 2003b Continuum-particle hybrid coupling for mass, momentum and
+
+energy transfers in unsteady ﬂuid ﬂow, Phys. Rev. E 67, 046704.
+
+• Delgado-Buscalioni R. & Coveney P. V. 2003c Usher: an algorithm for particle insertion in dense ﬂuids. J.
+
+Chem. Phys 119, 978.
+
+8
+
+• Delgado-Buscalioni R., Coveney P. V. and Flekkøy E. 2003, Oscillatory shear ﬂow in liquids via hybrid
+
+continuum-particle scheme, submitted to Phys. Rev. E
+
+• Espa˜nol P. 2003 Dissipative Particle Dynamics, in Trends in Nanoscale Mechanics: Analysis of Nanostructured
+
+Materials and Multi-Scale Modeling, V. M. Harik and M. D. Salas editors (Kluwer 2003).
+
+• Flekkøy E., Wagner G. and Feder J. 2000 Hybrid Model for Combined Particle and Continuum Dynamics.
+
+Europhys. Lett. 52(3) 271-276.
+
+62, 2140
+
+• Flekkøy E, P.V. Covney and G. De Fabritiis 2000a, Foundations of dissipative particle dynamics, Phys. Rev. E
+
+• Garcia A., Bell J., Crutchﬁeld Y. and Alder B. 1999 Adaptive Mesh and Algorithm Reﬁnement using Direct
+
+Simulation Monte Carlo. J. Comp. Phys., 154, 134.
+
+• Hoheisel C. 1996, Computer Calculation, in Transport properties of ﬂuids:
+
+their correlation, prediction and
+
+estimation, H. Millat, J.J. Dymomd and C.A. Nieto de Castro eds., Cambridge University Press.
+
+• Schliting H. 1958 Grenzchicht-Theory, Braun ed., Karlsruhe.
+
+• Stroock A. D., S. K. W. Dertinger, A. Ajdar, I. Mezi´c, H. A. Stone, G. M. Whithesides 2002 Chaotic mixer for
+
+microchannels, Science 295, 647.
+
+• Patankar S. 1980, Numerical Heat Transfer and Fluid Flow, Hemisphere, New York.
+
+• Succi et al 2001 Applying the lattice Boltzmann equation to multiscale ﬂuid problems, Computers in Sci. and
+
+Eng. 3, 26-37
+
+• Wijmans C.M. & Smit B. 2002 Simulating thethered polymer layers in shear ﬂow with dissipative particle
+
+dynamics. Macromolecules 35, 7138-7148.
+
+9
+
+x=lP
+
+x=l
+C
+
+x=l
+P
+
+x=l
+
+C
+
+(a)
+
+P
+
+C
+
+A
+
+C -> P
+
+P -> C
+
+P -> C
+
+W
+
+(b)
+
+n
+
+H
+
+E
+
+∆ x
+
+e
+
+∆ x
+
+PC
+
+w
+x=l
+P
+
+FIG. 1: The domain decomposition of the hybrid scheme: (a) displays P and C regions separatedly. The shaded region
+represents the overlapping domain comprised by a 2D array of C→P and P→C cells where the exchange of microscopic and
+macroscopic information is carried out. The surface area of each cell is A. (b) shows the P→C region in more detail and the
+neighbouring control cells pertaining to the ﬁnite volume discretization of the C region. In this one-dimensional example, the
+width of the P→C cell is ∆xP C and its volume is VP C = A∆xP C.
+
+P
+
+δt s
+
+∆t = n δt 
+
+s
+
+s
+
+av
+
+(a)
+C
+
+t=0
+
+P
+
+C
+
+(b)
+
+t=0
+
+∼100∆tP
+
+∆t
+
+C
+
+∆t av
+
+∆t
+
+C
+
+synchronized
+
+time
+
+sequential
+
+time
+
+FIG. 2: Two possible time coupling strategies in a particle-continuum hybrid scheme: (a) synchronized coupling and (b)
+sequential coupling. Bold arrows indicate the direction of the information transfer. The time average of the P variables is
+performed during the time interval ∆tav by ns samplings separated in time by δts. ∆tC and ∆tP are the continuum time step
+and the MD time step respectively.
+
+Transversal wave
+
+Longitudinal wave
+
+1
+
+0.1
+
+1
+
+ACF
+
+0.01
+
+0.1
+
+0
+
+2
+
+4
+
+6
+
+8
+
+(s,1)
+
+vy
+
+1
+
+0.5
+
+0
+
+-0.5
+
+0.5
+
+1
+
+0
+
+-0.5
+
+(c,1)
+
+vx
+(c,0)
+
+vx
+
+(s,1)
+
+vx
+
+ACF[vx
+
+(c,1)]
+
+0
+
+5
+
+10
+
+15
+
+20
+
+0
+
+2
+
+8
+6
+4
+time (LJ units)
+
+10
+
+0
+
+5
+
+10
+
+15
+
+20
+
+time (LJ units)
+
+FIG. 3: The Fourier components of the transversal and longitudinal velocity perturbation. In the notation v(s,n)
+; s indicates
+the sinusoidal component and c cosinusoidal and n the wavenumber kn = nk0. The transversal wave has k0 = 0.35, the size
+of the P region was and Lx = 20 (in LJ-units) and the temperature was T = 2.5; while for the longitudinal wave k0 = 0.168,
+Lx = 40 and T = 3.5. In both cases ρ = 0.53 The autocorrelation of the velocity is also shown. In all graphs the dashed lines
+are the analytic solution from linear hydrodynamics. Reproduced from R. Delgado-Buscalioni & Coveney 2003b with permision
+
+y
+
+10
+
+0.4
+
+0.2
+
+0
+
+-0.2
+
+-0.4
+
+-0.6
+
+0.4
+0.2
+0
+-0.2
+-0.4
+-0.6
+
+Temperature
+
+2-NHT
+
+CP
+
+Density
+
+0
+
+5
+
+10
+
+15
+
+20
+
+25
+
+30
+
+0
+
+5
+
+10
+
+15
+
+20
+
+25
+
+30
+
+1-NHT
+
+CP
+
+2-NHT
+
+CP
+
+1-NHT CP
+
+Energy
+
+2-NHT
+
+CP
+
+Pressure
+
+2-NHT CP
+
+1-NHT
+
+CP
+
+-1
+
+1-NHT CP
+
+0
+
+5
+
+15
+10
+time (LJ-units)
+
+20
+
+25
+
+30
+
+0
+
+5
+
+10
+
+20
+
+25
+
+30
+
+15
+time
+
+0.08
+
+0.06
+
+0.04
+0.02
+
+0
+
+-0.02
+
+-0.04
+
+2
+
+1
+
+0
+
+FIG. 4: The dominant Fourier mode of the various thermodynamic variables in the decay of the same longitudinal wave
+shown in ﬁgure 3. Comparison is made between a calculation with tow Nos´e-Hoover thermostats per C→ P cell (2-NHTCP )
+and another using only one thermostat (1-NHTCP ). Dashed lines are the analytical hydrodynamic solution. The entropy
+production from these two simulations is shown in ﬁgure 5, only the one with two thermostats yields th correct physical
+behaviour. Reproduced from R. Delgado-Buscalioni & Coveney 2003b with permision
+
+1
+
+0.1
+
+ 
+
+)
+1
+,
+>(
+s
+Q
+<
+-
+ 
+ 
+ 
+
+ 
+
+0.01
+
+1-NHTCP
+
+ 0.2 exp(-t/22)
+
+2-NHTCP
+
+0
+
+5
+
+10
+
+15
+
+20
+
+25
+
+time
+
+FIG. 5: The main Fourier mode of the entropy density (as a product with the mean temperature) −
+time-averaged
+along ∆tav = 1.0. The result comes from the same longitudinal wave shown in ﬁgs. 3 and 4. Comparison is made between
+a ﬂux-coupling scheme (using 2-NHTCP ) and the coupling-state scheme using 1-NHTCP (cf. ﬁg. 4). The latter violates the
+second law of thermodynamics. The dashed line is the analytical hydrodynamic result. Reproduced from R. Delgado-Buscalioni
+& Coveney 2003b with permision.
+
+D
+
+E
+
+Q(s,1)
+
+11
+
+4
+3
+2
+1
+0
+-1
+-2
+
+P -> C cell
+
+C-> P cell
+
+0
+
+50
+
+100 150 200 250 300
+
+y
+t
+i
+c
+o
+l
+e
+v
+-
+y
+
+0.3
+0.2
+0.1
+0
+-0.1
+-0.2
+
+0.4
+
+0.2
+
+0
+
+-0.2
+
+-0.4
+
+0
+
+100
+
+200
+
+300
+
+400
+
+500
+
+0
+
+200
+
+600
+
+800
+
+400
+
+time 
+
+(a)
+
+(b)
+
+(c)
+
+FIG. 6: Mean molecular velocities within the overlapping region for several oscillatory-wall shear ﬂows applied to a LJ ﬂuid;
+umax is the maximum wall velocity and f its frequency. (a) Flow corresponds to umax = 10, f = 0.01 and T = 1.0; we plot the
+instantaneous particle velocity at P→C and the time-averaged particle velocity (along ∆tav = 1) at C→P; (b) corresponds to
+umax = 0.5, f = 0.01 and T = 1.0; (c) to umax = 0.5, f = 0.01 and T = 4.0. In all cases ρ = 0.8, the extent of the periodic
+directions are Ly = Lz = 9, while VP C = ∆x Ly Lz = 178. In (b) and (c) we show the P→C mean velocity (instantaneous and
+time-averaged velocity with ∆tav = 10); dashed lines are the analytical hydrodynamic solutions of the imposed shear ﬂows. All
+quantities are given in reduced LJ units.
+
+

@@ -1,0 +1,2583 @@
+StatPatternRecognition: A C++ Package for Statistical Analysis
+of High Energy Physics Data ∗
+
+Ilya Narsky†
+
+California Institute of Technology
+(Dated: February 2, 2008)
+Abstract
+Modern analysis of high energy physics (HEP) data needs advanced statistical tools to separate
+signal from background. A C++ package has been implemented to provide such tools for the HEP
+community. The package includes linear and quadratic discriminant analysis, decision trees, bump
+hunting (PRIM), boosting (AdaBoost), bagging and random forest algorithms, and interfaces to
+the standard backpropagation neural net and radial basis function neural net implemented in the
+Stuttgart Neural Network Simulator. Supplemental tools such as bootstrap, estimation of data
+moments, and a test of zero correlation between two variables with a joint elliptical distribution
+are also provided. The package oﬀers a convenient set of tools for imposing requirements on
+input data and displaying output. Integrated in the BABAR computing environment, the package
+maintains a minimal set of external dependencies and therefore can be easily adapted to any other
+environment. It has been tested on many idealistic and realistic examples.
+
+PACS numbers: 02.50.Tt, 02.50.Sk, 02.60.Pn.
+
+5
+0
+0
+2
+ 
+l
+u
+J
+ 
+0
+2
+ 
+ 
+]
+n
+a
+-
+a
+t
+a
+d
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+3
+4
+1
+7
+0
+5
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+∗ Work partially supported by Department of Energy under Grant DE-FG03-92-ER40701.
+†Electronic address: narsky@hep.caltech.edu
+
+1
+
+1.
+
+INTRODUCTION
+
+Pattern recognition, or pattern classiﬁcation, developed signiﬁcantly in the 60’s and 70’s
+as an interdisciplinary eﬀort. Several comprehensive reviews of the ﬁeld are available [1, 2,
+3, 4].
+
+The goal of pattern classiﬁcation is to separate events of diﬀerent categories, e.g., signal
+and background, mixed in one data sample. Using event input coordinates, a classiﬁer labels
+each event as consistent with either signal or background hypotheses. This labeling can be
+either discrete or continuous.
+In the discrete case, with each category represented by an
+integer label, the classiﬁer gives a ﬁnal decision with respect to the event category. In case
+of continuous labeling, the classiﬁer gives real-valued degrees of consistency between this
+event and each category. In the simplest case of only two categories, a continuous classiﬁer
+produces one real number for each event with high values of this number corresponding to
+signal-like events and low values corresponding to background-like events. The analyst can
+then impose a requirement on the continuous classiﬁer output to assign each event to one
+of the two categories.
+
+A primitive pattern classiﬁer with discrete output is a binary split in one input variable.
+This classiﬁer has been used by every physicist many times and is typically referred to as
+“cut” in HEP jargon. More advanced classiﬁers are also available. Linear discriminant
+analysis was introduced by Fisher [5] in 1936 and became a popular tool in analysis of HEP
+data. Neural networks [6], originally motivated by studies of the human brain, were adopted
+by HEP researchers in the late 80’s and early 90’s [7]. The feedforward backpropagation
+neural net with a sigmoid activation function appears to be the most popular sophisticated
+classiﬁer used in HEP analysis today.
+
+The range of available classiﬁers is, of course, not limited to the Fisher discriminant and
+neural net. Unfortunately, classiﬁcation methods broadly used by other communities are
+largely unknown to physicists. Radial basis function networks [8] are seldom used in HEP
+practice [9]. Decision trees [10, 11] introduced in the 80’s have been barely explored by
+physicists [12]. There is only one documented application of boosted decision trees [13], a
+powerful and ﬂexible classiﬁcation tool, to analysis of HEP data [14]. Multivariate adaptive
+regression splines [15], projection pursuit [16] and bump hunting [17] have yet to ﬁnd their
+way to HEP analysts.
+
+To some extent, these methods can be popularized through active advertisement. How-
+ever, comparison of various classiﬁers on the same input data and therefore an educated
+choice of an optimal classiﬁer for the problem at hand are hardly possible without con-
+sistent and reliable code. In principle, implementations of all classiﬁcation methods listed
+above are available, as either commercial or free software. In practice, one has to deal with
+diﬀerent formats of input and output data, diﬀerent programming languages, diﬀerent lev-
+els of support and documentation, and sometimes with incomprehensible coding. Until an
+average analyst ﬁnds a way to feed data to various classiﬁers with minimal eﬀort, advanced
+pattern recognition in HEP will be left to a few enthusiasts.
+
+StatPatternRecognition is an attempt to provide such consistent code for physicists. This
+package implements several classiﬁers suited for physics analysis and serves them together
+in a ﬂexible framework.
+
+This note describes basic mathematical formalism behind the implemented classiﬁers,
+illustrates their performance with examples and gives general recommendations for their
+use. If you are planning to apply classiﬁcation methods to practice, I strongly recommend
+
+2
+
+that you look more deeply into the topic. The comprehensive reviews [1, 2, 3, 4] are an
+excellent place to start.
+
+Section 2.1 describes linear and quadratic discriminant analysis broadly known in the
+physics community as “Fisher”. Section 2.2 covers the feedforward backpropagation neural
+net and the radial basis function neural net, two classiﬁers implemented in the Stuttgart
+package. Although StatPatternRecognition does not oﬀer tools for training neural nets
+and can be used only for reading trained network conﬁgurations and computing network re-
+sponse for input data, I felt obligated to include a brief description of the formalism for these
+two methods as well. Section 2.3 describes the StatPatternRecognition implementation of
+decision trees. Section 2.4 describes PRIM, an algorithm for bump hunting. Section 2.5 de-
+scribes our implementation of AdaBoost, a quick, powerful, and robust classiﬁer. Section 2.7
+discusses a method for combining classiﬁers implemented in StatPatternRecognition. A de-
+scription of other tools useful for classiﬁcation and included in the package can be found in
+Section 3. Technical details of the C++ implementation are brieﬂy reviewed in Section 4.
+γlν
+Finally, application of several classiﬁers to a search for the radiative lepton decay B
+at BABAR is discussed in Section 5.
+
+→
+
+2. CLASSIFIERS
+
+The main feature of a classiﬁer is its predictive power, i.e., how eﬃciently this classiﬁer
+separates events of diﬀerent categories from each other. Mathematical deﬁnition of the
+predictive power can vary from analysis to analysis. For example, in some situations one
+might want to minimize the fraction of misclassiﬁed events, while under other circumstances
+one might focus on maximizing the signal signiﬁcance, S/√S + B, where S and B are
+signal and background, respectively, found in the signal region. Irrespective of the exact
+mathematical deﬁnition, non-linear classiﬁers such as neural nets or boosted decision trees
+typically provide a better predictive power than simple robust classiﬁers such as binary splits
+or the linear Fisher discriminant.
+
+For optimization and estimation of the predictive power of a classiﬁer, a three-stage
+procedure is typically used: training, validation, and test. First, the classiﬁer is optimized on
+a training data set. The classiﬁer performance on a validation set is used to stop the training
+when necessary. Finally, the predictive power of the classiﬁer is estimated using test data.
+The three data sets must be independent of each other. Non-compliance with this three-
+stage procedure can result in sub-optimal classiﬁer performance and a biased estimate of
+the predictive power. For example, the classiﬁcation error tends to decrease for the training
+sample even after the error reached minimum and turned over for the validation sample.
+This phenomenon is called “overtraining”. Estimates of the predictive power obtained from
+training or validation sets are most usually over-optimistic. These considerations are less
+important for robust classiﬁers. For instance, a simple binary split in one variable does not
+need validation, and the eﬃciency of the imposed cut for the training set is usually very close
+to that for the test set for large data samples. For small samples or non-linear classiﬁers,
+the three-stage routine is a necessity.
+
+Other important characteristics of classiﬁers include interpretability, ability to deal with
+irrelevant inputs, stability of training and performance in high-dimensional data, ease of
+training, and classiﬁcation response time per event. An ideal classiﬁer oﬀers a high pre-
+dictive power and provides insight into the data structure. These two requirements are
+unfortunately at odds with each other. Powerful classiﬁers such as neural nets or boosted
+
+3
+
+decision trees typically work as black boxes. On the other hand, decision trees split data
+into rectangular regions suitable for easy interpretation but rarely provide a competitive
+quality of classiﬁcation. This motivated Breiman to postulate his uncertainty principle [18]:
+
+Ac
+
+Sm > b ,
+
+·
+
+where Ac stands for accuracy, Sm stands for simplicity, and b is the Breiman constant1. An
+optimal classiﬁer for every problem has to be chosen with regard to all its features.
+
+Methods implemented in StatPatternRecognition can only process data sets with two
+event categories — signal and background. Perhaps, one day I will extend these implemen-
+tations to include multi-category classiﬁcation — if the community shows suﬃcient interest
+for such multi-class methods.
+
+2.1. Linear and Quadratic Discriminant Analysis
+
+If the likelihood function for each class is a multivariate Gaussian
+
+fc(x) =
+
+Wc
+(2π)d/2
+
+Σc|
+
+1/2 exp
+
+1
+2
+
+−
+
+(x
+
+−
+
+µc)T Σ−1
+
+c (x
+
+−
+
+(cid:20)
+the two classes can be separated by taking the log-ratio of the two likelihoods:
+
+(cid:21)
+
+|
+
+µc)
+
+;
+
+c = 0, 1;
+
+(1)
+
+log
+
+f1(x)
+f0(x)
+
+= log
+
+W1
+W0 (cid:19)
+
+(cid:18)
+
+−
+
++ xT
+
+1
+2
+
+1
+2
+
+Σ1|
+Σ0|(cid:19)
+Σ−1
+
+log
+
+|
+(cid:18)
+|
+Σ−1
+1 µ1 −
+
+−
+
+0 µ0
+
+1 Σ−1
+µT
+
+1 µ1 −
+Σ−1
+xT
+
+(cid:0)
+−
+
+1
+2
+
+1 −
+
+0 Σ−1
+µT
+
+0 µ0
+
+Σ−1
+0
+
+(cid:1)
+x .
+
+(2)
+
+(cid:0)
+
+(cid:1)
+
+(cid:0)
+
+×
+
+d covariance matrix for class c with determinant
+
+Above, x is a d-dimensional vector of point coordinates, µc is a d-dimensional mean vector
+for class c, Σc is a d
+, and Wc is the
+total weight of events in class c. Here and below I use index 0 for background and 1 for
+signal. In reality, the mean vectors and covariance matrices are unknown and need to be
+estimated from observed data:
+n=1 w(c)
+n x(c)
+n
+n=1 w(c)
+
+−
+n=1 w(c)
+n is the observed vector for event n in class c, and w(c)
+n is the weight of this event:
+n = Wc. Signal and background can now be separated by requiring the log-ratio (2)
+
+n (x(c)
+n
+Nc
+
+where x(c)
+n=1 w(c)
+
+n=1 w(c)
+
+ˆµc)(x(c)
+n
+
+ˆΣc =
+
+ˆµc =
+
+ˆµc)T
+
+(3)
+
+P
+
+P
+
+P
+
+P
+
+−
+
+Nc
+
+Nc
+
+Nc
+
+Nc
+
+n
+
+n
+
+|
+
+;
+
+;
+
+(cid:1)
+Σc|
+
+to be above a certain value.
+P
+
+If the covariance matrices of the two classes are equal, this expression simpliﬁes to
+
+log
+
+W1
+W0 (cid:19)
+where Σ is the common covariance matrix usually estimated as
+
+f1(x)
+f0(x)
+
+µ0)T Σ−1(µ1 + µ0) + xT Σ−1(µ1 −
+
+(µ1 −
+
+= log
+
+1
+2
+
+−
+
+(cid:18)
+
+µ0) ,
+
+(4)
+
+ˆΣ =
+
+W0 ˆΣ0 + W1 ˆΣ1
+W0 + W1
+
+.
+
+(5)
+
+1 In case you were fooled, this is an example of statistician’s humor.
+
+4
+
+Formula (4) is widely known among physicists as “the Fisher discriminant”; in the statistics
+literature this method is usually referred to as “linear discriminant analysis” (LDA). If the
+covariance matrices are not equal, the quadratic term in Eqn. (2) gives rise to quadratic
+discriminant analysis (QDA).
+
+The three constant terms in the expression (2), often omitted by analysts, are needed for
+proper normalization. With these terms included, the equality log(f1(x)/f0(x)) = 0 implies
+that the likelihoods for the two classes at point x are equal. The region log(f1(x)/f0(x)) > 0
+is therefore populated with signal-like events and the region log(f1(x)/f0(x)) < 0 is popu-
+lated with background-like events.
+
+If the signal and background densities are truly Gaussian with equal covariance matrices,
+the linear discriminant (4) for each class has a univariate Gaussian distribution with mean
+log(W1/W0) + ∆/2 (signal) or log(W1/W0)
+∆/2 (background) and standard deviation
+√∆, where ∆ = (µ1 −
+µ0). The overall distribution of the discriminant (4)
+is therefore a sum of two Gaussians with areas W1 and W0. The separation, in numbers of
+sigmas, between the two univariate Gaussians is Nσ =
+
+µ0)T Σ−1(µ1 −
+
+∆/2.
+
+−
+
+If the true signal and background densities are indeed Gaussian and if the data have
+enough points to obtain reliable estimates of their covariance matrices, the quadratic dis-
+criminant will perform at least not worse than the linear one and usually better. In real-
+ity, the signal-background separation is often improved by keeping the quadratic term in
+Eqn. (2); however, if one of the above conditions is not satisﬁed, omission of the quadratic
+term can occasionally result in a better predictive power.
+
+p
+
+The quadratic discriminant can give a substantial improvement over the linear discrimi-
+nant, for instance, if the two densities are centered at the same location µ0 = µ1 but one of
+the densities is more spread than the other:
+. The linear discriminant is useless
+Σ0|
+|
+in this case. The quadratic discriminant separates signal from background by drawing a
+0 )x = const. If the matrix Σ−1
+2nd-order surface xT (Σ−1
+is positive deﬁnite,
+this surface is elliptical, wrapped around the more compact density, as shown in Fig. 1. For
+pedagogical reasons, I show in Fig. 2 an attempt to classify the same data using a linear
+Fisher discriminant.
+
+1 −
+
+1 −
+
+Σ1|
+
+Σ−1
+0
+
+Σ−1
+
+>
+
+|
+
+2.2. Neural Networks
+
+The Stuttgart Neural Network Simulator (SNNS) [19] provides a variety of tools for
+classiﬁcation including feedforward neural networks with backpropagation and radial basis
+function networks. Because the SNNS package is well maintained and has already earned
+a good reputation in the world of HEP, there is no need to reimplement these methods.
+However, SNNS does not oﬀer convenient tools for plotting its output and classifying new
+data with a trained network conﬁguration. StatPatternRecognition implements interfaces
+to the two types of networks mentioned above. The user can read a saved SNNS network
+conﬁguration and apply it to any independently-supplied data. The format of input ascii
+ﬁles implemented in StatPatternRecognition is very close to that used by SNNS. The user
+can therefore switch between SNNS and StatPatternRecognition with minimal eﬀort.
+
+A disadvantage of the SNNS package is its inability to process weighted events. All other
+
+methods implemented in StatPatternRecognition accept weighted data.
+
+5
+
+Separation of a signal bivariate Gaussian with mean (0, 0) and identity
+FIG. 1:
+covariance matrix from uniform background by quadratic discriminant analysis. 10,000
+true signal events (top left). QDA output for signal events (solid red) and background
+events (hollow blue) is shown in the upper right plot. True signal events selected by
+requiring the QDA output to be positive (bottom left). True background events selected
+by the same requirement (bottom right).
+
+2.2.1. Feedforward Neural Network with Backpropagation
+
+A feedforward neural network consists of one input, one output and several hidden layers
+linked sequentially. Training of a neural net consists of two stages: forward and backward
+propagation. At the ﬁrst stage, a d-dimensional vector x of input event coordinates z(0)
+i =
+xi; 1
+
+d; is propagated from the input to the output layer using
+
+i
+
+≤
+
+≤
+
+v(l+1)
+i
+z(l+1)
+i
+
+=
+
+=
+
+d(l)
+j=1 α(l)
+
+ji z(l)
+j ;
+v(l+1)
+i
+(cid:16)
+
+;
+
+(cid:17)
+
+(l+1)
+P
+i
+A
+
+6
+
+(6)
+
+Separation of a signal bivariate Gaussian with mean (0, 0) and identity
+FIG. 2:
+covariance matrix from uniform background by linear discriminant analysis. 10,000
+true signal events (top left). LDA output for signal events (solid red) and background
+events (hollow blue) is shown in the upper right plot. True signal events selected by
+requiring the LDA output to be positive (bottom left). True background events selected
+by the same requirement (bottom right).
+
+i
+
+is the local ﬁeld, and
+
+where z(l)
+is the output generated by the ith node in layer l, d(l) is the number of nodes in
+i
+layer l, α(l)
+ji is a linear weight associated with the link between node j in layer l and node i in
+layer l + 1, v(l+1)
+(l)
+i (v) is an activation function for node i in layer l.
+The sequential order of this propagation from input to output through a predetermined set
+of links explains why such a network is called “feedforward” or “acyclic”. For a two-category
+classiﬁcation problem, the output layer has only one node with real-valued output ranging
+from 0 to 1. The real-valued output o = z(L)
+; d(L) = 1; of a network with L + 1 layers
+1
+indexed from 0 to L is used to compute the quadratic classiﬁcation error for each training
+
+A
+
+7
+
+(7)
+
+(8)
+
+(9)
+
+(10)
+
+event
+
+= (y
+
+o)2 ,
+
+E
+
+−
+
+where y is the true class of the input vector x, 0 for background and 1 for signal.
+
+The network weights α(l)
+
+ij are then updated by propagating the computed classiﬁcation
+
+error backwards from the output to the input layer:
+
+ij = ηδ(l+1)
+∆α(l)
+i = dA(l)
+δ(l)
+
+i
+dv
+
+j
+
+z(l)
+i
+
+;
+
+d(l+1)
+j=1 α(l)
+
+ij δ(l+1)
+
+j
+
+;
+
+where ∆α(l)
+the learning rate of the network. At the output node l = L the local gradient is simply
+
+ij are weight adjustments, δ(l)
+
+i
+
+i
+
+v=v(l)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+is the local gradient at node i of layer l, and η is
+
+P
+
+δ(L)
+1 = (y
+
+o)
+
+−
+
+.
+
+d
+
+(L)
+1
+A
+dv (cid:12)
+v=v(L)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+1
+
+This two-pass procedure is repeated for each training event. After the pool of training
+events is exhausted, the neural net goes back to the ﬁrst event and reprocesses the whole
+training sample.
+
+For the activation
+
+, a sigmoid, or logistic, function is often chosen:
+
+A
+
+(v) =
+
+A
+
+1
+1 + exp(
+
+; a > 0.
+
+av)
+
+−
+The backpropagation algorithm described above and the sigmoid activation function are
+among the many possibilities oﬀered by the SNNS package. They are emphasized here
+simply because they are often chosen by HEP analysts.
+
+To apply a neural net to classiﬁcation, the user must choose the number and size of
+hidden layers and specify the learning rate η. Both selections are typically optimized by
+studying the network performance on training and validation data.
+
+Compared to other classiﬁers, neural networks usually oﬀer an excellent predictive power.
+Their main disadvantage is the lack of a meaningful interpretation. A neural net works as a
+black box. Its output is a non-linear function which is hard to visualize, especially in high
+dimensions.
+
+Training of neural nets, however, is subject to certain subtleties. A neural net can get
+“confused” if it is presented with strongly correlated input variables or irrelevant variables
+that do not contribute to the predictive power. Mixed input data, i.e., a combination
+of continuous and discrete variables, can also cause training instabilities. Adding extra
+variables to a neural net not only increases the size of the input layer but also requires an
+expansion of hidden layers for an adequate representation of the data complexity. In many
+dimensions, therefore, training of neural nets can be painfully slow.
+
+A neural net can fail even in low dimensions if it is presented with suﬃciently complex
+data. Consider, for example, separating two signal Gaussians from uniform background in
+two dimensions, as shown in Fig. 3. A 2:4:2:1 fully-connected feedforward neural net with
+a sigmoid activation function eﬃciently ﬁnds one Gaussian but not the other. The network
+performance can be, of course, improved. For example, one could build two independent
+networks, each optimized for one of the two Gaussians, and then combine them into one
+
+8
+
+common network. But to perform such an exercise, one must already have a good knowledge
+of the data structure. The neural net construction would be therefore unnecessary — if we
+already know so much about the data, we can separate signal from background “by hand”,
+i.e., using simple and well-understood selection requirements.
+
+FIG. 3: Separation of two bivariate Gaussians from uniform background by a 2:4:2:1
+feedforward backpropagation neural net with a sigmoid activation function. Two sig-
+5), respectively, and
+nal Gaussians, 5000 events each, with means (
+identity covariance matrices (top left). Neural net output for signal (solid red) and
+background (hollow blue) events (top right). True signal events selected by requiring
+the neural net output to be above 0.5 (bottom left). True background events selected
+by the same requirement (bottom right). The background density, not shown here, is
+(10, 10). In this example, the neural net fails to
+10,
+uniform on the square (
+ﬁnd the left signal Gaussian.
+
+5) and (5,
+
+10)
+
+5,
+
+−
+
+−
+
+−
+
+−
+
+−
+
+−
+
+9
+
+2.2.2. Radial Basis Function Networks
+
+In the radial basis function (RBF) formalism [8], an unknown real-valued function f (x)
+
+is regressed on an input space x using
+
+f (x) =
+
+αmK(x, tm) ,
+
+M
+
+m=1
+X
+
+α = (GT G + λT )−1GT y ,
+
+where
+coeﬃcients αm can be estimated from observed data
+
+tm}
+
+M
+m=1 are regression centers and K(x, t) is the regression kernel. The regression
+
+{
+
+xn, yn}
+
+{
+
+N
+n=1:
+
+where α is an M-dimensional vector of coeﬃcients, y is an N-dimensional vector of the func-
+M matrix deﬁned by Gnm = K(xn, tm),
+tion values observed at points
+T is an M
+M matrix deﬁned by Tij = K(ti, tj), and λ is a regularization parameter
+included to avoid overtraining. The kernel is usually chosen to be radially symmetric,
+
+N
+n=1, G is an N
+
+xn}
+
+×
+
+×
+
+{
+
+K(xn, tm) = Krbf(
+
+xn −
+
+|
+
+tm|
+
+) ,
+
+hence the name “radial basis function”. The two-class recognition problem is equivalent
+to the regression problem with the real-valued function f (x) replaced by an integer-valued
+function f (x) allowed to take only two values, 0 for background and 1 for signal.
+
+Three popular choices for the kernel Krbf(r) have been implemented in the Stuttgart
+
+package [19]:
+
+Gaussian
+
+•
+
+•
+
+•
+
+Multiquadratic
+
+Thin plate spline
+
+Krbf(r) = exp
+
+r2
+σ2
+
+;
+
+(cid:19)
+
+−
+
+(cid:18)
+
+Krbf(r) = √σ2 + r2;
+
+Krbf(r) =
+
+2
+
+log
+
+r
+σ
+
+r
+σ
+
+;
+
+(cid:16)
+
+(cid:17)
+
+(cid:16)
+
+(cid:17)
+
+(11)
+
+(12)
+
+(13)
+
+(14)
+
+(15)
+
+(16)
+
+where σ is a scale parameter.
+
+The RBF formalism is represented by a 3-layer neural network. The input layer consists of
+d nodes, one for each component of the d-dimensional input vector x. M nodes representing
+the regression centers compose the hidden layer. The output layer for a two-class recognition
+problem is a single node with real-valued output ranging from 0 to 1. Components of the
+input vector x are delivered to the hidden nodes which compute distances between the
+input vector and the corresponding regression centers. The hidden units are then activated
+by applying the chosen kernel to the computed distances. The result of the activation
+is linearly propagated from the hidden layer to the output node. This node applies an
+activation function, either an identity or sigmoid transformation, to its input to produce
+the network output. Shortcut connections between the input and output layers are allowed
+but not required; such shortcuts are implemented by adding linear terms to the regression
+
+10
+
+formula (11). One can also bias the output node by adding a constant term to its input.
+The ﬁnal expression for the network output is then
+
+o(x) =
+
+M
+
+A  
+
+m=1
+X
+
+αmKrbf(
+
+x
+
+|
+
+−
+
+tm|
+
+) + βx + b
+
+,
+
+!
+
+where
+linear shortcut coeﬃcients, and b is the bias applied to the output node.
+
+is the activation function for the output node, β is a d-dimensional vector of the
+
+A
+
+Several algorithms are available for training RBF networks; for a brief survey see a
+subsection on learning strategies for RBF nets in Ref. [3]. The SNNS implementation [19]
+minimizes quadratic error
+
+(17)
+
+(18)
+
+=
+
+E
+
+o(xn))2
+
+(yn −
+
+N
+
+n=1
+X
+
+by using gradient descent. In this approach, the weights αm are not computed using Eqn. (12)
+but adjusted to minimize the classiﬁcation error on training data. The regularization pa-
+rameter λ is not used, and smootheness of the regression surface is maintained by stopping
+the training routine when the validation error reaches minimum.
+
+A non-trivial part of the training procedure is initialization of the regression centers
+M
+tm}
+m=1. A conservative approach is to treat every observed point as a regression center
+{
+by setting M = N; tn = xn; 1
+N. While this approach generally guarantees a high
+predictive power, it is hardly practical for large data sets. In practice, one usually selects
+a smaller number of regression centers and then samples the observed distribution to ﬁnd
+an eﬃcient initial center assignment. This sampling can be accomplished by a number of
+algorithms; see a section on RBF implementation in the SNNS manual [19].
+
+≤
+
+≤
+
+n
+
+RBF nets share most ﬂaws and advantages with the backpropagation neural network of
+
+Section 2.2.1.
+
+The SNNS implementation of the RBF training procedure optimizes the RBF weights
+M
+α, the scale parameter σ for each RBF center and positions of the RBF centers
+m=1.
+The RBF training mechanism is therefore quite ﬂexible and provides a good predictive
+power. However, the large number of optimized parameters makes an RBF network more
+fragile than a backpropagation neural net of the same size. RBF networks also suﬀer a
+great deal from the “curse of dimensionality”. In high-dimensional data, the performance of
+distance-based classiﬁers crucially depends on the chosen deﬁnition of distance between two
+points. In addition, the number of points required to adequately sample a distribution grows
+exponentially with the dimensionality of input space thus making every realistic data set
+undersampled in a high-dimensional representation. The combination of these two features
+makes every distance-based classiﬁer highly unstable in a multidimensional setting.
+
+tm}
+
+{
+
+Despite these setbacks, RBF nets should be considered as a good competitor to the
+backpropagation neural net in low dimensions. For example, the problem with two signal
+Gaussians and uniform background discussed in Section 2.2.1 can be solved, as shown in
+Fig. 4, using a very simple RBF network with only 3 regression centers — one for each
+Gaussian and one for background. If the two signal peaks were not Gaussian, more regression
+centers would be needed. But it is clear that the RBF net is superior over the standard
+backpropagation neural net in this case.
+
+11
+
+−
+
+5,
+
+5) and (5,
+
+Separation of two bivariate Gaussians from uniform background by a 2:3:1
+FIG. 4:
+RBF net with Gaussian kernels. Two signal Gaussians, 5000 events each, with means
+(
+5), respectively, and identity covariance matrices (top left). RBF
+−
+net output for signal (solid red) and background (hollow blue) events (top right). True
+signal events selected by requiring the neural net output to be above 0.5 (bottom
+left). True background events selected by the same requirement (bottom right). The
+background density, not shown here, is uniform on the square (
+
+(10, 10).
+
+10)
+
+10,
+
+−
+
+−
+
+−
+
+−
+
+2.3. Decision Trees
+
+A decision tree recursively splits training data into rectangular regions (nodes). It starts
+with all input data and looks at all possible binary splits in each dimension to select one
+with a highest ﬁgure of merit. Then the tree examines each of the obtained nodes and splits
+it into ﬁner nodes. This procedure is repeated until a stopping criterion is satisﬁed.
+
+Each binary split is optimized using a certain ﬁgure of merit. Suppose we are solving a
+classiﬁcation problem with only two categories, signal and background. Suppose we start
+with a parent node with the total weight of events given by W and split it into two daughter
+
+12
+
+W (1), respectively. The parent node was labeled
+nodes with weights W (1) and W (2) = W
+as either “signal” or “background”, and we assign temporary labels to the two daughter
+nodes; the daughter labels can be, of course, swapped if this results in a better ﬁgure of
+merit. Let p and q = 1
+p be fractions of correctly classiﬁed and misclassiﬁed events in each
+node, with proper indices supplied for the daughter nodes. Three popular ﬁgures of merit,
+Q, used in conventional classiﬁcation trees are given by
+
+−
+
+−
+
+Correctly classiﬁed fraction of events: Q(p, q) = p.
+
+Negative Gini index: Q(p, q) =
+
+2pq.
+
+−
+
+Negative cross-entropy: Q(p, q) = p log p + q log q.
+
+A split is optimized to give the largest overall ﬁgure of merit,
+
+Qsplit =
+
+W (1)Q1 + W (2)Q2
+W
+
+,
+
+(19)
+
+where Q1 and Q2 are ﬁgures of merit computed for the two daughter nodes. If the initial
+ﬁgure of merit Q cannot be improved, this node is not split and becomes “leaf”, or “termi-
+nal”. A terminal node is labeled as “signal” if the total weight of signal events contained in
+this node is not less than the total weight of background events in this node.
+
+Several criteria can be used to stop training; for a brief review see, e.g., a section on
+decision trees in Ref. [4]. Only one stopping criterion is implemented in StatPatternRecog-
+nition: the user must specify the minimal number of events per tree node. The tree continues
+making new nodes until it is composed of leaves only — nodes that cannot be split without
+a decrease in the ﬁgure of merit and nodes that cannot be split because they have too few
+events.
+
+Note that the quantities p and q used for the split optimization were deﬁned with no
+regard to event categories. A conventional decision tree makes no distinction between signal
+and background and spends an equal amount of time optimizing nodes dominated by signal
+and background events. In HEP analysis, one most usually treats the two categories asy-
+metrically, i.e., one is only concerned with optimizing signal but not background. If w1 and
+w0 are weights of the signal and background components, respectively, in a given node, one
+can use the following asymmetric optimization criteria included in StatPatternRecognition:
+
+Signal purity: Q(w1, w0) = w1/(w1 + w0).
+
+Signal signiﬁcance: Q(w1, w0) = w1/√w1 + w0.
+
+Tagging eﬃciency: Q(w1, w0) = (w1 + w0) [1
+
+2w0/(w1 + w0)]2
++.
+
+−
+
+The “+” subscript above indicates that the expression in the brackets is used only when it
+is positive; at negative values it yields zero. The ﬁgure of merit for split optimization then
+becomes
+
+Qsplit = max(Q1, Q2) .
+Similarly, if the parent ﬁgure of merit Q cannot be improved, this node is labeled as “termi-
+nal”. The algorithm for class assignment to terminal nodes will be discussed in detail later
+in this section.
+
+(20)
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+13
+
+The choice of an optimization criterion is not straightforward. Consider, for example,
+separating the two bivariate Gaussians from uniform background shown in Fig. 5. A decision
+tree based on the signal signiﬁcance ﬁnds a big rectangle that covers both Gaussians. At
+the same time, a tree using the Gini index puts a separate rectangle around each Gaussian.
+Although the Gini-based tree yields a slightly worse (by 4%) signal signiﬁcance, it provides
+more insight into the data structure. A purity-based tree makes many small terminal nodes
+with high signal-to-background ratios and is hardly appropriate for this problem. However,
+if one wants to search for small pure signal clusters, the purity criterion comes in handy, as
+discussed in Section 2.4.
+
+Two popular commercial decision trees, CART [10] and C4.5 developed on the basis of
+the ID3 algorithm [11], are undoubtedly implemented at a higher level of sophistication.
+CART, for example, allows to make splits on linear combinations of input variables. To
+simplify the tree architecture, CART deploys a pruning algorithm after all terminal nodes
+have been found. Suppose that a non-terminal node in a tree is connected to T terminal
+nodes with optimized ﬁgures of merit Qt and weights W (t); t = 1, ..., T . The cost complexity
+criterion for this non-terminal node is deﬁned as
+
+t=1 W (t)Qt −
+W
+T
+t=1 W (t) is the total weight of the terminal
+where α > 0 is the cost parameter and W =
+nodes. If the cost complexity criterion is less than the ﬁgure of merit for this non-terminal
+node Q, the node is declared “terminal” and all its daughters are discarded.
+
+Qcost =
+
+(21)
+
+αT
+
+P
+
+P
+
+,
+
+T
+
+Decision trees are not pruned in the StatPatternRecognition implementation. It is possi-
+ble, however, to merge terminal signal nodes if requested by the user. The merging procedure
+selects a subset of terminal nodes to optimize the overall ﬁgure of merit. Searching through
+all possible combinations of terminal nodes would be CPU-exhaustive, especially for a large
+number of nodes; hence, a more eﬃcient algorithm is deployed. First, all signal terminal
+nodes obtained in the training phase are sorted by signal purity in descending order. The
+algorithm then computes the overall ﬁgure of merit for the n ﬁrst nodes in the sorted list
+with n taking consecutive values from 1 to the full length of the list. The optimal combina-
+tion of the terminal nodes is given by the highest ﬁgure of merit computed in this manner.
+It can be shown that this algorithm selects the optimal subset of the terminal nodes for any
+ﬁgure of merit, Q = Q(w1, w0), which increases with purity, P = w1/(w1 + w0), if the total
+event weight, W = w1 + w0, is kept constant. Rigorous proof of this statement is beyond
+the scope of this paper.
+
+If the user wants to have terminal signal nodes merged, the tree assigns all terminal
+nodes with a non-zero signal contribution to the signal category. Terminal nodes that do
+not contribute to the overall ﬁgure of merit are rejected by the merging procedure.
+
+In eﬀect, the StatPatternRecognition implementation of decision trees oﬀers two diﬀer-
+ent algorithms. The ﬁrst algorithm, close to that used by conventional decision trees such
+as CART and C4.5, chooses a symmetric ﬁgure of merit and ﬁnds signal and background
+terminal nodes. In this case terminal nodes are not merged. The second algorithm, suited
+speciﬁcally for HEP analysis, uses an asymmetric ﬁgure of merit, assigns all terminal nodes
+with non-zero signal content to the signal category and never attempts to ﬁnd regions with
+high background purity. Terminal nodes are then merged to get rid of those that do not con-
+tribute to the overall signal ﬁgure of merit. The distinction between these two algorithms is
+not enforced by the package. For example, the user can choose a symmetric optimization cri-
+terion and merge terminal nodes or choose an asymmetric criterion without merging. These
+
+14
+
+0
+
+-5
+
+0
+
+-5
+
+-10
+
+-10
+
+0
+true signal
+
+10
+
+-10
+
+-10
+
+0
+signal significance
+
+10
+
+-10
+
+-10
+
+0
+signal purity
+
+10
+
+-10
+
+-10
+
+0
+Gini index
+
+10
+
+FIG. 5:
+Separation of the two signal Gaussians from uniform background by clas-
+siﬁcation trees. True signal events drawn from two bivariate Gaussians with means
+5, 5) and (5, 5), respectively, and identity covariance matrices (top left). The most
+(
+−
+signiﬁcant terminal node of the tree based on the signal signiﬁcance (top right). Two
+most signiﬁcant terminal nodes of the purity-optimized tree with at least 200 events
+per node (bottom left). Two terminal nodes of the tree based on the Gini index with
+at least 4350 events per node (bottom right). True signal events are shown in red, and
+true background events are shown in blue. The minimal node size for each tree was
+chosen by maximizing the selected ﬁgure of merit on a validation set.
+
+possibilities, however, do not make much sense for most practical problems. To summarize
+— if you choose a symmetric ﬁgure of merit such as the correctly classiﬁed fraction, Gini
+index or cross-entropy, do not merge terminal nodes; if you choose an asymmetric ﬁgure of
+merit such as the signal purity or signal signiﬁcance, make sure to merge terminal nodes.
+
+Compared to neural nets, decision trees typically oﬀer an inferior predictive power. Their
+main strength is interpretability. Rectangular regions can be easily understood in many
+dimensions. Decision trees that allow splits on linear combinations of variables give a better
+predictive power but at the same time, following the Breiman uncertainty principle, become
+
+0
+
+-5
+
+0
+
+-5
+
+15
+
+harder to interpret.
+
+Another disadvantage of decision trees is the lack of training stability. Binary splits
+cannot be reversed. If a tree cuts too deep into the signal region, it will never recover and
+it will fail to ﬁnd a small subset of optimal nodes. This is especially true for trees without
+pruning.
+
+Due to the simplicity of the training mechanism, decision trees are less fragile than neural
+
+nets. They can easily deal with strongly correlated variables and mixed data types.
+
+The three-stage training-validation-test routine is absolutely necessary for decision trees.
+If the tree is constructed by maximizing the chosen ﬁgure of merit on the training set, it
+will most likely be overtrained. At the same time, the ﬁgure of merit computed for the
+validation set can be substantially larger than that for the test set.
+
+Several applications of decision trees to HEP analysis [12] gave optimistic conclusions
+about their predictive power. While it is entirely plausible that in some cases decision trees
+can compete with neural nets and even exceed their predictive power, a signiﬁcantly better
+performance can imply that the neural net was not properly trained. The last publication
+in Ref. [12] is particularly alarming in this sense. According to this paper, CART gives a
+spectacular improvement over the neural net for the quality of the π/K separation at the
+BABAR detector. However, the paper says close to nothing about what neural net was used
+and how it was trained. It is not even clear if the neural net and CART were trained on the
+same set of input variables and similar data sets. About 70 input variables, both discrete and
+continuous, were used for CART optimization in this analysis; some of them are strongly
+correlated. This is a hard problem for neural nets — processing a large training sample
+with dozens of input variables can be excruciatingly slow, and the presence of mixed inputs
+and strongly correlated variables can make the training procedure unstable. To obtain an
+accurate estimate of the neural net performance, one would have to get rid of the strongly
+correlated variables, exclude inputs that do not contribute much to the predictive power,
+and try several network conﬁgurations. Without this exercise, such a comparison is hardly
+useful.
+
+2.4. Bump Hunting
+
+Another useful tool implemented in StatPatternRecognition is PRIM, a bump hunting
+algorithm [17]. PRIM searches for rectangular regions with an optimal separation between
+the categories but, unlike a decision tree, it follows a more conservative approach. Instead
+of recursively splitting the input space into ﬁner nodes, this algorithm attempts to ﬁnd one
+rectangular region with a globally optimized ﬁgure of merit. This search is implemented in
+two steps:
+
+•
+
+Shrinkage. At this stage, the bump hunter gradually reduces the size of the signal
+box by imposing binary splits. The most optimal split is found at each iteration by
+searching through all possible splits in all input variables. The rate of shrinkage is
+controlled by a “peel” parameter, the maximal fraction of events that can be peeled
+oﬀ the signal box with one binary split. This parameter is supplied by the user and
+If the bump hunter cannot ﬁnd a
+can be used to adjust the level of conservatism.
+binary split to improve the ﬁgure of merit, shrinkage is stopped.
+
+•
+
+Expansion. At this stage, the hunter attempts to relax the bounds of the signal box
+to optimize the ﬁgure of merit.
+
+16
+
+After the signal box has been found, the hunter removes points located inside this box from
+the original data set and starts a new search from scratch.
+
+The bump hunting algorithm is slower and more conservative than the recursive splitting
+used by decision trees.
+It is most suitable for problems where the user wants to ﬁnd a
+pre-determined number of signal regions. For example, if you wish to ﬁnd one signal box,
+the bump hunter is the right tool. A decision tree can be forced to produce only one signal
+terminal node too — by requesting a large enough minimal size of a terminal node. But the
+bump hunter is more ﬂexible. By trying various peel parameters, one can ﬁnd a box close
+to the optimal one.
+
+An interesting application of bump hunting is exploratory search for new signatures in
+a multidimensional space. The Sleuth algorithm [20] developed by the D0 Collaboration
+searches for new signatures by splitting data into Voronoi cells and identifying cells with
+low probabilities of observing that many events given the Monte Carlo expectation. A
+closely related problem is estimation of the goodness of ﬁt [21] by comparing minimal and
+maximal sizes of observed event clusters to those expected from Monte Carlo simulation.
+These methods unfortunately rely on a uniformity transformation from the space of physical
+observables into the ﬂattened space where Voronoi cells or clusters are constructed. A
+uniformity transformation is not unique. The choice of this transformation can have a
+serious impact on the result, especially in multidimensional problems. With bump hunting,
+a uniformity transformation is not necessary. One simply labels Monte Carlo events as
+category 0 and observed data as category 1, and then searches for bumps in the space of
+unaltered physical variables.
+
+−
+
+It is surprising how good are the bump hunter and decision trees for locating even tiny
+clusters of events. Suppose we expect 10,000 points drawn from a uniform 2D distribution
+within a unit square (0, 0)
+(1, 1) and observe 9910 uniformly distributed points with two
+tiny peaks included: a 60 event peak located at (0.25, 0.25) and a 30 event peak located
+at (0.75, 0.75). The standard deviations for both peaks are 0.05 and there is no correlation
+between the variables. The two bumps are hardly visible on the scatter plot shown in Fig. 6:
+the larger bump can be seen but the smaller bump is practically lost among uniformly
+distributed points. We now attempt to ﬁnd these tiny bumps with a decision tree and a
+bump hunter. The most eﬃcient ﬁgure of merit for this task is the signal purity. The decision
+tree easily ﬁnds the larger bump but typically misses the smaller bump at (0.75, 0.75). The
+best result is obtained with a decision tree with at least 30 events per node; the smaller bump
+in this case is found as the 6th most signiﬁcant terminal node and it is stretched vertically
+bearing little resemblance to the real bump. The bump hunter is more ﬂexible. Depending
+on the peel parameter and the requested minimal bump size, one can obtain a variety of
+bump conﬁgurations. For example, the bump hunter with at least 20 events per node and
+peel parameter 0.7 places the most signiﬁcant bump with 20 signal and 1 background events
+in the vicinity of (0.75, 0.75) and locates several bumps at (0.25, 0.25). Note that the most
+signiﬁcant bumps are not necessarily found in the order of their signiﬁcance. The most
+signiﬁcant bump marked in red is only the 11th found by the hunter.
+
+2.5. AdaBoost
+
+The training instability of decision trees can be alleviated by using a more ﬂexible train-
+ing algorithm. Instead of imposing irreversible hard splits, one can impose “soft” splits. The
+ﬁnal category is then assigned to an event using a weighted vote of all soft splits. This classi-
+
+17
+
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+0.00
+
+0.25
+
+0.50
+true signal
+
+0.75
+
+1.00
+
+FIG. 6: Distribution of signal events for the bump hunting problem: 9910 events
+uniformly distributed on the unit square, 60 events drawn from a two-dimensional
+Gaussian centered at (0.25, 0.25) with standard deviation 0.05 on each axis, and 30
+events drawn from a two-dimensional Gaussian centered at (0.75, 0.75) with standard
+deviation 0.05 on each axis. Honestly, can you see the peaks?
+
+ﬁer replaces the hard decision, signal versus background, with a continuous output obtained
+by summation of weights from relevant splits. AdaBoost is one popular implementation of
+this approach.
+
+AdaBoost works by enhancing weights of misclassiﬁed events and training new splits on
+the reweighted data sample. At the ﬁrst step, all weights are set to initial event weights in
+the training sample of size N:
+
+n = wn; n = 1, ..., N.
+At iteration k, the algorithm imposes a new binary split ηk(x) to minimize the misclassiﬁed
+fraction of events and computes the associated misclassiﬁcation error:
+
+(22)
+
+w(0)
+
+N
+
+n=1 w(k−1)
+
+n
+
+I(ηk(xn)
+n=1 w(k−1)
+
+N
+
+n
+
+= yn)
+
+,
+
+ǫk =
+
+P
+
+P
+
+18
+
+(23)
+
+6
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+0.00
+
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+0.00
+
+0.25
+
+0.50
+purity tree 30 pts/node
+
+0.75
+
+1.00
+
+0.25
+
+0.50
+purity bump hunter 20 pts/node peel=0.7
+
+0.75
+
+1.00
+
+FIG. 7: Six most signiﬁcant terminal nodes produced by a purity-based decision tree with at least
+30 points per node (left) and six most signiﬁcant bumps produced by a purity-based bump hunting
+algorithm with at least 20 points per node and peel parameter 0.7 (right). The nodes/bumps
+are sorted by their purity in the descending order as follows: red (most signiﬁcant), yellow, green,
+magenta, cyan, and blue (least signiﬁcant). The bump hunting algorithm is somewhat more eﬃcient
+for ﬁnding the two signal peaks at (0.25, 0.25) and (0.75, 0.75).
+
+where I is an indicator function equal to 1 if the indicator expression is true and 0 otherwise,
+yi is the true category of event n (-1 for background and 1 for signal), and the binary split
+ηk(x) is a function with discrete output, equal to 1 if an event is accepted by the split and
+-1 otherwise. The weights of misclassiﬁed events are then enhanced:
+
+and the weights of correctly classiﬁed events are suppressed:
+
+(24)
+
+(25)
+
+To impose splits, the algorithm loops through data dimensions cyclically — if the kth split
+was imposed on dimension d, the (k + 1)st split will be imposed on dimension d + 1, and
+after the last dimension has been processed, the algorithm goes back to the ﬁrst dimension.
+This iterative process is continued as long as the misclassiﬁcation error at iteration k is less
+than 50%, ǫk < 0.5, and the number of training splits requested by the user is not exceeded.
+After the training has been completed, a new event is classiﬁed by a weighted vote of all
+binary splits:
+
+f (x) =
+
+βkηk(x)
+
+(26)
+
+w(k)
+
+n =
+
+w(k−1)
+n
+2ǫk
+
+,
+
+w(k)
+
+n =
+
+w(k−1)
+n
+ǫk)
+2(1
+
+.
+
+−
+
+K
+
+Xk=1
+
+19
+
+with the beta weight of each split given by
+
+βk = log
+
+1
+
+ǫk
+−
+ǫk (cid:19)
+
+.
+
+(cid:18)
+For a large number of binary splits K, the function f (x) is practically continuous. It gives
+negative values for background-like events and positive values for signal-like events.
+
+Formally, the AdaBoost algorithm described above can be derived by minimization of the
+
+exponential loss
+
+(27)
+
+(28)
+
+=
+
+E
+
+exp(
+
+ynf (xn)) .
+
+−
+
+N
+
+n=1
+X
+
+Phenomenologically, AdaBoost can be understood as a clever mechanism which improves
+the quality of classiﬁcation by enhancing poorly classiﬁed events and training new splits on
+these events. The trained splits are then rated by their quality: if the misclassiﬁcation error
+for split k is small, this split is included with a large weight βk; if the misclassiﬁcation error
+is barely better than 50%, this split will only have a small eﬀect on the output.
+
+Note that above I used a diﬀerent convention for signal and background labeling — unlike
+in the rest of the paper, background is labeled as -1, not 0. This was done simply to preserve
+the notation in which AdaBoost is explained in statistical textbooks and to illustrate the
+concept of the exponential loss. To maintain consistency with other methods, the AdaBoost
+implementation in StatPatternRecognition uses the conventional labeling (0 for background)
+and normalizes the beta weights to a unit sum. The AdaBoost output from Eqn. (26) is
+therefore shifted by 0.5 and conﬁned between 0 and 1. Signal-like events populate the region
+above 0.5 and background-like events populate the region below 0.5.
+
+AdaBoost has been discussed here as a method of consecutive application of binary
+splits. The AdaBoost algorithm, of course, can be as well used with any other classiﬁers.
+StatPatternRecognition includes AdaBoost implementations with binary splits, with linear
+and quadratic Fisher discriminants, and with decision trees.
+
+AdaBoost combines the best features of decision trees and neural nets — needless to say,
+at the expense of interpretability. The training algorithm is very robust. AdaBoost can easily
+deal with mixed discrete and continuous input variables, and it gives a high predictive power.
+Unlike neural nets, AdaBoost does not require any pre-training initialization. AdaBoost
+generally takes less training time than the two neural nets discussed in this note. This
+advantage in the training speed becomes spectacular in high-dimensional problems. For
+example, the training time for AdaBoost with soft binary splits scales linearly with the
+number of dimensions, while for the standard backpropagation neural net this dependence
+is at best quadratic and can be much worse if more than one hidden layer is used.
+
+Separation of two bivariate Gaussians from uniform background by AdaBoost with 500
+
+soft binary splits on each input variable is shown in Fig. 8.
+
+2.6. Bagging and Random Forest
+
+Another powerful tool for combining weak classiﬁers is bootstrap aggregating, or “bag-
+ging” [22]. Also implemented in StatPatternRecognition, this method will be described in
+more detail in a separate note submitted simultaneously.
+
+20
+
+5,
+
+5) and (5,
+
+FIG. 8: Separation of two bivariate Gaussians from uniform background by AdaBoost
+with 500 soft binary splits on each input variable. Two signal Gaussians, 5000 events
+each, with means (
+5), respectively, and identity covariance matrices
+(top left). AdaBoost output for signal (solid red) and background (hollow blue) events
+(top right). True signal events selected by requiring the AdaBoost output to be above
+0.5 (bottom left). True background events selected by the same requirement (bottom
+right). The background density, not shown here, is uniform on the square (
+(10, 10).
+
+10)
+
+10,
+
+−
+
+−
+
+−
+
+−
+
+−
+
+−
+
+2.7. Combining Classiﬁers
+
+Classiﬁers independently trained on data subsets can be combined to obtain a higher
+overall predictive power. Methods for combining classiﬁers have been a subject of recent
+research [4]. One approach is to train one global classiﬁer in the space of subclassiﬁer outputs.
+For example, to discriminate signal from background, one could look at various sources of
+background and train a separate classiﬁer for each data subset composed of the signal and a
+corresponding background source. Then output values of all individual classiﬁers computed
+for the full training set that includes all sources of background could be processed by one
+
+21
+
+global classiﬁer. StatPatternRecognition implements a classiﬁer combiner using AdaBoost.
+The user supplies trained subclassiﬁers to the combiner, and the combiner runs the AdaBoost
+algorithm, either with soft binary splits or with Fisher discriminants or with decision trees,
+using output values of the subclassiﬁers as input data.
+
+I would like to stress the distinction between AdaBoost and the classiﬁer combiner de-
+scribed in the previous paragraph. The former combines a large number of weak classiﬁers
+by applying them sequentially. The latter combines a few powerful classiﬁers by training
+another powerful classiﬁer in the space of their output values.
+
+3. OTHER METHODS
+
+in StatPatternRecognition.
+
+A few other methods of general use for statistics analysis in HEP have been implemented
+
+Computation of data moments is sometimes necessary in analysis applications. Mean,
+variance and kurtosis for variables and their combinations can be computed. A test of
+independence of two variables drawn from a joint elliptical distribution2 can be performed
+using a simple analytic formula [24].
+
+Bootstrap [23] is a convenient tool that can be used to estimate the distribution of a
+statistic computed for a small data set if Monte Carlo or other means of sample regeneration
+are not available. This can be done by sampling from the data set with replacement. To
+build one bootstrap replica, one needs to draw N events with replacement out of the data
+set of size N. To study the distribution of the statistic of interest, one typically needs to
+build 100-200 bootstrap replicas. This method can be eﬃciently used for data sets of size
+N = 20 or larger.
+
+Fig. 9 illustrates bootstrap application for computation of the error of a correlation co-
+eﬃcient estimator. Two random variables, x and y, have a joint bivariate Gaussian dis-
+tribution with a covariance matrix Σ: Σ11 = Σ22 = 1; Σ12 = Σ21 = 0.5. The correlation
+coeﬃcient between the two variables is estimated for a sample of 20 events in the usual way:
+
+ˆρ =
+
+20
+
+i=1(xi −
+
+¯x)(yi −
+
+¯y)
+
+/
+
+20
+
+i=1(xi −
+
+¯x)2
+
+·
+
+20
+
+i=1(yi −
+
+(cid:18)qP
+
+(cid:1)
+
+(cid:0)P
+
+two means. Imagine that you only have a data set with 20 events and you do not know
+the underlying distribution. How would compute the error associated with the estimator ˆρ?
+The usual approach in HEP analysis is to assume an underlying distribution for x and y
+and study the distribution of ˆρ based on this assumption. Bootstrap oﬀers a non-parametric
+and assumption-free approach — the distribution of ˆρ is studied on bootstrap replicas. As
+shown in Fig. 9, bootstrap provides an unbiased estimate of the error of ˆρ based on 100
+replicas for each data set.
+
+qP
+
+(cid:19)
+
+¯y)2
+
+, where ¯x and ¯y are the
+
+4. A C++ IMPLEMENTATION: OBJECT-ORIENTED DESIGN
+
+The methods described above have been implemented in C++ using ﬂexible object-
+oriented design patterns. A detailed description of this implementation would be lengthy
+
+2 A distribution is called “elliptical” if its density is constant on the surface xT Ax with a positive deﬁnite
+
+matrix A. This class obviously includes multivariate Gaussian distributions.
+
+22
+
+corr
+
+bCorrRMS
+
+FIG. 9: Bootstrap analysis of 500 estimators of the correlation coeﬃcient computed
+for samples of 20 events drawn from a bivariate Gaussian distribution described in the
+text. Distribution of 500 correlation estimates (above). Distribution of 500 bootstrap
+estimates of the correlation estimator standard deviation obtained by generating 100
+bootstrap replicas for each sample of 20 events (bottom). The r.m.s. of the top dis-
+tribution is fairly close to the mean of the bottom distribution. This shows that the
+bootstrap method on average gives a decent estimate of the standard deviation of the
+correlation coeﬃcient estimator.
+
+and is already included in the README ﬁle distributed with the package. Flexible tools have
+been provided for imposing selection requirements on input data — the user can choose input
+variables, restrict analysis to a few event categories, select events within a speciﬁed index
+range, and impose orthogonal cuts on input variables. The user can easily add new classiﬁers
+and new ﬁgures of merit for classiﬁer optimization by providing new implementations to the
+abstract interfaces set up in the package. Executables using the new classiﬁers and new
+ﬁgures of merit can be copied from existing executables with few modiﬁcations.
+
+At the moment, the package accepts input data only in ascii, in a format very similar to
+
+that used by SNNS. An optional extension to the SNNS format is weighted input data.3
+
+External dependencies of the package include: CLHEP libraries [25] used for matrix
+operations, CERN libraries [26] used for random number generation and various probability
+calculations, and an internal BABAR interface for HBOOK or ROOT ntuple generation. If
+used by researchers outside BABAR, the latter will need to be replaced with a similar interface.
+Essentially, only two methods need to be implemented — one for booking an ntuple and
+another one for ﬁlling ntuple columns. Because every collaboration has a set of tools for this
+purpose, this should hardly pose a problem.
+
+3 SNNS assumes uniform weights for all input events.
+
+23
+
+5. SEPARATION OF SIGNAL AND BACKGROUND IN A SEARCH FOR THE
+RADIATIVE LEPTONIC DECAY B
+
+γlν AT BABAR
+
+→
+
+→
+
+→
+
+µν and B
+
+A search for the radiative leptonic decay B
+
+γlν is currently in progress at BABAR;
+results of this analysis will be made available to the public in the near future. This anal-
+ysis focuses on measuring the B meson decay constant, fB, which has not been previously
+measured. While purely leptonic decays such as B
+eν oﬀer the cleanest
+way of measuring this decay constant, these decays are not accessible at the present level
+10−5
+of experimental sensitivity. The decay B
+→
+predicted by the Standard Model, suﬀers from substantial background due to the presence
+of two or three neutrinos in the ﬁnal state. Due to helicity suppression, the decays B
+µν
+eν are suppressed by factors of 225 and 107, respectively, and are therefore not
+and B
+observable at current luminosities. The presence of the photon removes the helicity suppres-
+sion but introduces theoretical uncertainties into the calculation of the branching fraction.
+10−6 to
+Theoretical estimates of the radiative leptonic branching fraction vary from 1.0
+10−5 for
+10−4 and 5.2
+4.0
+the electron and muon channels, respectively, were set by CLEO in 1997 using 2.5 fb−1 of
+on-resonance data.
+
+10−6. Present upper limits on the branching fractions, 2.0
+
+τ ν, with a branching fraction of 6.6
+
+×
+×
+
+→
+
+→
+
+→
+
+×
+
+×
+
+×
+
+→
+
+→
+
+→
+
+→
+
+→
+
+→
+
+→
+
+→
+
+γeν (B
+
+πlν, B0
+
+ρlν, B+
+
+ηlν, B+
+
+η′lν, B+
+
+γµν) analysis.
+
+π0lν, and B+
+
+ρ0lν. For the B
+
+Large samples of simulated Monte Carlo events are used to study signal and background
+signatures in this analysis. To model the signal, about 1.2M B
+γlν signal events were
+generated in each channnel. Large samples of generic B+B−, B0 ¯B0, c¯c, uds and τ +τ − Monte
+Carlo events were used to estimate background contributions. Because semileptonic decays
+of B are an important source of background, several exclusive semileptonic modes were
+simulated by Monte Carlo as well with a typical sample size of several hundred thousand
+events. These modes include: B0
+ωlν,
+→
+B+
+γµν analysis, 224M radiative muon Monte
+→
+Carlo events were also included. Overall, 12 (13) background sources were studied for the
+B
+
+→
+Various preliminary requirements have been imposed to enhance the signal purity and at
+the same time reduce the Monte Carlo samples to a manageable size. These requirements
+include tight PID quality cuts on the signal lepton and photon candidates and relaxed PID
+cuts on the rest of the charged tracks detected by the tracking system and neutral clusters
+detected by the calorimeter, a cut on the ratio of the 2nd and 0th Wolfram moments, cuts
+on momenta and polar angles of the photon and lepton candidates, a cut on the angle
+between the recoil B candidate and the lγ momentum in the center-of-mass frame, a cut on
+the lateral proﬁle of the calorimeter shower used for the signal photon reconstruction, and a
+ﬁducial cut on the direction of the missing momentum. After these preliminary requirements
+have been imposed, eleven variables are identiﬁed to be included in the ﬁnal optimization
+procedure: cosine between the signal lepton and photon candidates in the center-of-mass
+frame (coslg), the inverse of the diﬀerence between the mass of the π0 combination obtained
+from the signal photon candidate and any other photon in the event closest to the nominal
+π0 mass and the nominal π0 mass (ipi0), cosine of the angle between the recoil B candidate
+and the lγ momentum in the center-of-mass frame (costheblg), energies of the lepton and
+photon candidates in the center-of-mass frame (leptonE and photonE), the total number of
+identiﬁed leptons in the event (numLepton), a Fisher discriminant composed of the 0th and
+2nd Legendre moments of all tracks forming the recoil B candidate computed with respect
+to the thrust axis given by the lγ system (Fisher), magnitude of the cosine between the
+
+24
+
+thrust axis of the recoil B and the thrust axis of the lγ system (acthrust), the diﬀerence
+between the energy of the recoil B candidate and the beam energy in the center-of-mass
+frame (deltaE), the beam-energy-constrained mass of the recoil B candidate (mES), and
+the diﬀerence between the missing energy and the magnitude of the missing momentum
+(nuEP). Distributions of these variables for signal and background are shown in Fig. 10. The
+correlation between Fisher and acthrust is 0.80 for both signal and combined background
+from all listed sources. costheblg and nuEP show a strong negative correlation, -0.87, for
+the combined background and a weaker correlation, -0.62, for the signal. All other included
+variables show less signiﬁcant levels of correlation.
+
+coslg
+
+ipi0
+
+costheblg
+
+leptonE
+
+photonE
+
+numLepton
+
+Fisher
+
+4000
+
+acthrust
+
+mES
+
+deltaE
+
+nuEP
+
+24000
+16000
+8000
+0
+
+5000
+
+2500
+
+0
+
+130000
+90000
+50000
+10000
+
+10000
+
+5000
+
+0
+
+0
+
+5000
+
+2500
+
+5000
+
+2500
+
+5000
+
+2500
+
+5000
+
+2500
+
+0
+
+0
+
+0
+
+0
+
+0
+
+5000
+
+2500
+
+6000
+4000
+2000
+0
+
+FIG. 10: Separation variables for the B
+γlν analysis. Signal MC is shown with a solid line
+(triangles in the numLepton plot), and the overall combined background is shown with a dashed
+line (squares in the numLepton plot).
+
+→
+
+Distributions of these eleven variables in the signal and combined background Monte
+
+25
+
+×
+
+Carlo samples are used by various optimization algorithms to maximize the signal signiﬁ-
+cance expected in 210 fb−1 of data. The training samples used for this optimization consist
+of roughly half a million signal and background Monte Carlo events in both electron and
+muon channels, appropriately weighted according to the integrated luminosity observed in
+the data. The training:validation:test ratio for the sample sizes is 2:1:1. The exact break-
+down of generated events for each channel is shown in Table I. Signal Monte Carlo samples
+are weighted assuming a branching fraction of 3
+
+10−6 for each channel.
+
+Authors of this analysis deploy an original cut optimization routine for separation of
+signal and background. Four variables (coslg, numLepton, acthrust, and mES) are used
+for one-sided optimization, and the other seven variables are used for two-sided optimization.
+The available range for each variable is divided into intervals of preselected length. At each
+iteration step of the optimization procedure, a 1D plot of the signal signiﬁcance versus
+the cut position is constructed for each one-sided optimization variable; for each two-sided
+optimization variable, a similar 2D plot is made of the signal signiﬁcance versus all possible
+combinations of the two cut positions on both ends of the variable range. At each iteration
+step, the optimization algorithm ﬁnds the best variable and the best one- or two-sided cut on
+this variable that maximizes the signal signiﬁcance. This optimal cut on one variable is then
+imposed and remains in eﬀect for all next iterations of the algorithm. This cut is in eﬀect for
+the optimization of all selection variables except the variable on which it has been imposed.
+For example, events that are rejected by a cut on numLepton are included in the optimization
+of a new cut on numLepton at the next iteration of the algorithm. This allows the algorithm
+to relax the cut and even remove it completely if it improves the signal signiﬁcance. This
+algorithm makes 10-20 iterations and produces an optimized rectangular region in the 11-
+dimensional space. The optimized signal region is then tested on independently generated
+test data. Note that this algorithm does not include a validation stage.
+
+TABLE I: Generated signal and background contributions used for the training samples in the
+B
+
+γlν analysis.
+
+Decay Signal, events Background, events
+
+B
+B
+
+→
+→
+
+γeν
+γµν
+
+197k
+161k
+
+352k
+431k
+
+Besides the original method designed by the analysts, I use several classiﬁers described
+
+in this note:
+
+Decision tree optimizing the signal signiﬁcance S/√S + B, with merged terminal
+nodes. The minimal node sizes were chosen by maximizing the signal signiﬁcance on
+the validation samples to be 5k events and 13k events for the B
+γµν
+decays, respectively. For each decay, the optimal tree contains two terminal signal
+nodes.
+
+γeν and B
+
+→
+
+→
+
+Bump hunter optimizing the signal signiﬁcance, with peel parameter 0.05, requested to
+ﬁnd one bump only. The optimal value of the peel parameter was found by maximizing
+the signal signiﬁcance on the validation samples.
+
+AdaBoost with binary splits. The number of binary splits was somewhat arbitrarily
+set to 700. The validation samples were used to ﬁnd the optimal cuts on the AdaBoost
+output by maximizing the signal signiﬁcance.
+
+26
+
+→
+
+•
+
+•
+
+•
+
+•
+
+•
+
+I used 50 decision trees trained by optimizing the
+AdaBoost with decision trees.
+Gini index and combined them using the AdaBoost algorithm. Terminal nodes of
+the decision trees were not merged. The minimal node size, 100 events or, roughly,
+0.02% of the training sample, was found by maximizing the signal signiﬁcance on
+the validation samples. The number of terminal signal nodes in a trained tree varied
+from 700 to 1200, except for the tree built at the very ﬁrst iteration of the boosting
+algorithm, which was much smaller (150 signal nodes for B
+γeν and 90 signal nodes
+for B
+
+γµν).
+
+→
+
+→
+
+AdaBoost-based combiner of subclassiﬁers trained on individual background compo-
+I trained an individual AdaBoost classiﬁer built with binary splits for each
+nents.
+γµν) analysis. These
+of the 12 (13) background components in the B
+subclassiﬁers were then combined by training a global AdaBoost with binary splits in
+the 12-(13-)dimensional space of the subclassiﬁer outputs. The optimal cuts on the
+output of the global AdaBoost were found using the validation samples.
+
+γeν (B
+
+→
+
+→
+
+I also attempted to train a feedforward backpropagation neural net with one hidden layer,
+but the network was unstable and it failed to converge to an optimum. The signal signiﬁcance
+obtained for the training, validation and test samples in both channels is shown in Table II.
+The output of the AdaBoost with decision trees, the most powerful classiﬁer among those
+included, is shown in Fig. 11.
+
+Strain,
+
+Svalid, and
+
+Stest, for the B
+
+γlν training, validation, and
+TABLE II: Signal signiﬁcance,
+test samples obtained with various classiﬁcation methods. The signal signiﬁcance computed for the
+test sample should be used to judge the predictive power of the included classiﬁers. A branching
+γeν decays. W1 and W0 represent the
+fraction of 3
+signal and background, respectively, expected in the signal region after the classiﬁcation criteria
+have been applied; these two numbers have been estimated using the test samples. All numbers
+have been normalized to the integrated luminosity of 210 fb−1. The best value of the expected
+signal signiﬁcance is shown in boldface.
+
+10−6 was assumed for both B
+
+γµν and B
+
+→
+
+→
+
+→
+
+×
+
+Method
+
+B
+
+γeν
+
+→
+
+B
+
+γµν
+
+→
+
+Strain Svalid Stest W1 W0 Strain Svalid Stest W1 W0
+1.62 25.8 227.4
+2.66
+-
+1.54 29.0 325.9
+3.28
+1.63
+1.54 31.7 393.8
+2.72
+1.54
+1.71
+2.53
+1.44 45.2 935.6
+1.97 1.75 41.6 523.0
+13.63
+1.66 55.2 1057.1
+1.90
+Combiner of background subclassiﬁers 3.03
+
+1.75
+2.42 37.5 202.2
+-
+1.74
+2.16 20.3 68.1
+2.72
+1.76
+2.31 47.5 376.6
+2.54
+2.65
+2.25 76.4 1077.3 1.66
+2.99 2.62 58.0 432.8 11.87
+2.49 83.2 1037.2 1.84
+2.88
+
+Original method
+Decision tree
+Bump hunter with one bump
+AdaBoost with binary splits
+AdaBoost with decision trees
+
+I draw several conclusions from this exercise:
+
+•
+
+The signal region does not have a well-deﬁned optimum. Using various methods, it is
+possible to ﬁnd signal regions that are very diﬀerent yet comparable in terms of the
+expected signal signiﬁcance.
+
+27
+
+signal
+background
+
+105
+
+104
+
+103
+
+102
+
+101
+
+1
+0.00
+
+4
+
+3
+
+2
+
+1
+
+0
+0.00
+
+0.25
+
+0.50
+Classifier output
+
+0.75
+
+1.00
+
+0.25
+
+0.50
+Signal significance
+
+0.75
+
+1.00
+
+FIG. 11: Output of the AdaBoost trained with 100 decision trees (left) and the signal signiﬁcance
+versus the lower cut on the output (right) for the B
+γeν test sample. The cut maximizing the
+signal signiﬁcance, obtained using the validation sample, is shown with a vertical line.
+
+→
+
+•
+
+•
+
+•
+
+From the point of view of classiﬁcation, the physics data in this analysis are quite
+simple. This is why simple-minded classiﬁers such as the bump hunter and the original
+method developed by the analysts are competitive with ﬂexible classiﬁers such as
+decision trees and AdaBoost.
+
+The two classiﬁers that require more training time, AdaBoost with decision trees and
+AdaBoost-based combiner of individual background subclassiﬁers, provide a somewhat
+better performance.
+
+AdaBoost with binary splits shows similar output distributions for the training and
+validation samples.
+It is so robust that the validation stage can be safely omitted.
+For AdaBoost with decision trees, the situation is dramatically diﬀerent. Now the use
+of the validation samples is crucial for ﬁnding the optimal tree node size and, even
+more importantly, the optimal cut on the AdaBoost output. This shows the distinction
+between using primitive classiﬁers (binary splits) and ﬂexible classiﬁers (decision trees)
+as building blocks for AdaBoost.
+
+The second item needs a little more comment. The simplicity of the data in this analysis
+is not completely accidental. Physicists tend to include only those variables in analysis
+that obviously contribute to the signal-background separation. The traditional approach
+is to visually inspect one-dimensional distributions of a certain variable for the signal and
+background components and include this variable only if the two distributions are clearly
+distinct. With this mindset, one will rarely ﬁnd himself in a situation where a sophisticated
+ﬂexible classiﬁer shows a signiﬁcant improvement over simpler methods, e.g., orthogonal
+
+28
+
+cuts. Physicists are beginning to adopt more advanced methods that search for trends,
+hardly visible to the human eye, in data with dozens of input variables. In such analyses,
+AdaBoost, decision trees and other powerful classiﬁers will prove most useful.
+
+Although none of the attempted classiﬁers gives a signiﬁcantly better performance over
+the original method designed by the analysts, it is possible to improve the signal signiﬁcance
+in this analysis by a considerable amount. This can be accomplished by using a powerful
+technique known in the statistics literature as “bagging”. This method will be described in
+a separate note.
+
+Among the listed classiﬁers, AdaBoost with binary splits, the decision tree and the bump
+hunter are the fastest. Training these classiﬁers on a sample of 550k events takes only several
+minutes on a Linux node with a 1.8 GHz CPU processor and 2 Gb of available memory.
+Training of the AdaBoost classiﬁer built with 50 decision trees and the AdaBoost-based com-
+biner of background-categorized subclassiﬁers requires batch job submissions and consumes
+4-8 hours of running on allocated batch nodes. Because the CPU speed and available mem-
+ory vary from one batch node to another, a straightforward comparison of the training time
+is not feasible. The original method developed by the analysts also requires several hours
+of training time; however, this training procedure is performed in a substantially diﬀerent
+framework and its speed could be signiﬁcantly limited by ROOT output.
+
+A C++ package tailored for needs of HEP analysts has been implemented and is available
+
+for free distribution to HEP researchers.
+
+6. SUMMARY
+
+Acknowledgments
+
+Thanks to Gregory Dubois-Felsmann for useful discussions and the idea to sort terminal
+nodes of a decision tree by signal purity. Thanks to Ed Chen for data and documentation
+on the B
+γlν analysis. Thanks to Byron Roe and Frank Porter for their comments on a
+draft of this note.
+
+→
+
+[1] T. Hastie, R. Tibshirani and J. Friedman, The Elements of Statistical Learning, Springer
+
+Series in Statistics, 2001.
+
+[2] A. Webb, Statistical Pattern Recognition, John Wiley & Sons Ltd, 2002.
+[3] S. Haykin, Neural Networks: A Comprehensive Foundation, Prentice Hall, 1999.
+[4] L.I. Kuncheva, Combining Pattern Classiﬁers, John Wiley & Sons, Inc., 2004.
+[5] R.A. Fisher, The use of multiple measurements in taxonomic problems, Annals of Eugenics 7,
+
+179-188 (1936).
+
+[6] W.S. McCulloch and W. Pitts, A logical calculus of the ideas immanent in nervous activity,
+Bulletin of Mathematical Biophysics 5, 115-133 (1943); F. Rosenblatt, The Perceptron: A
+probabilistic model for information storage and organization in the brain, Psychological Re-
+view 65, 386-408 (1958); J.J. Hopﬁeld, Neural networks and physical systems with emergent
+collective computational abilities, Proceedings of the National Academy of Sciences, USA, 79,
+
+29
+
+2554-2558 (1982); D.E. Rumelhart et al., Learning internal representation by error propa-
+gation, Parallel Distributed Processing: Explorations in the Microstructure of Cognition 1,
+318-362 (1986); J.A. Anderson and E. Rosenfeld, Neurocomputing. Foundations of Research,
+MIT Press, 1988.
+
+[7] Artiﬁcial Neural Networks in High Energy Physics,
+
+http://neuralnets.web.cern.ch/NeuralNets/nnwInHep.html; C. Peterson, Track Finding
+with Neural Networks, Nucl. Instr. and Meth. A279, 537 (1989); L. Lonnblad et al., Finding
+Gluon Jets with a Neural Trigger, Phys. Rev. Lett. 65, 1321-1324 (1990); D. Cutts et al.,
+Neural Networks for Event Filtering at D0, Comput. Phys. Commun. 57, 478-482 (1989);
+D. Cutts et al., The Use of Neural Networks in the D0 Data Acquisition System, IEEE Trans.
+Nucl. Sci. 36, 1490-1493 (1989); B.H. Denby et al., Neural Networks for Triggering, IEEE
+Trans. Nucl. Sci. 37, 248-254 (1990).
+
+[8] D.S. Broomhead and D. Lowe, Multi-variable function interpolation and adaptive networks,
+Complex Systems 2(3), 269-303 (1988); T. Poggio and F. Girosi, Networks for approximation
+and learning, IEEE Proceedings 78, 1481-1497 (1990).
+
+[9] J. Allison, Multiquadratic radial basis functions for representing multidimensional high-energy
+physics data, Comput. Phys. Commun. 77, 377-395 (1993); J.C. Ribes et al., RBF neural net
+based classiﬁer for the AIRIX accelerator fault diagnosis, physics/0008030, 2000.
+[10] L. Breiman et al., Classiﬁcation and Regression Trees, Waldsworth International, 1984.
+[11] J.R. Quinlan, Induction of decision trees, Machine Learning 1, 81-106 (1986).
+[12] D. Bowser-Chao and D.L. Dzialo, A Comparison of Binary Decision Trees and Neural Net-
+works in Top Quark Detection, Phys. Rev. D47, 1900-1905 (1993); M. Mjahed, Multivariate
+Decision Tree Designing for the Classiﬁcation of Multi-Jet Topologies in e+e− Collisions, Nucl.
+Instrum. and Meth. A481, 601-614 (2002); R. Quiller, Decision Tree Technique for Particle
+Identiﬁcation, SLAC-TN-03-019, 2003.
+
+[13] Y. Freund and R.E. Schapire, A decision-theoretic generalization of on-line learning and an
+application to boosting, J. of Computer and System Sciences 55, 119-139 (1997); L. Breiman,
+Arcing classiﬁers, The Annals of Statistics 26, 801-849 (1998); R.E. Schapire et al., Boosting
+the margin: A new explanation for the eﬀectiveness of voting methods, The Annals of Statistics
+26, 1651-1686 (1998).
+
+[14] B.P. Roe et al., Boosted Decision Trees, an Alternative to Artiﬁcial Neural Networks,
+
+physics/0408124, 2004.
+
+[15] J. Friedman, Multivariate adaptive regression splines, Annals of Statistics 19(1), 1-141 (1991).
+[16] J. Friedman and J. Tukey, A projection pursuit algorithm for exploratory data analysis, IEEE
+Trans. on Computers C23, 881-889 (1974); J. Friedman and W. Stuetzle, Projection pursuit
+regression, J. of the Amer. Stat. Assoc. 76, 817-823 (1981).
+
+[17] J. Friedman and N. Fisher, Bump hunting in high dimensional data, Statistics and Computing
+
+9, 123-143 (1999).
+
+[18] L. Breiman, Combining Predictors, in A.J.C. Sharkey (Ed.) Combining Artiﬁcial Neural Nets,
+
+Springer Perspectives in Neural Computing series, 30-50, 1999.
+
+[19] Institute
+
+for Parallel
+
+and Distributed High Performance Systems
+
+and Wilhelm-Schickard
+
+Stuttgart)
+Stuttgart Neural Network Simulator:
+of T¨ubingen),
+http://www-ra.informatik.uni-tuebingen.de/SNNS/.
+
+Institute
+
+for Computer
+
+(University of
+(University
+User Manual, Version 4.2,
+
+Science
+
+[20] D0 Collaboration (B. Abbott et al.), Search for New Physics in eµX Data at D0 Using Sleuth:
+A Quasi-Model-Independent Search Strategy for New Physics, hep-ex/0006011 v2, 2000.
+
+30
+
+[21] I. Narsky, Estimation of Goodness-of-Fit in Multidimensional Analysis Using Distance to
+
+Nearest Neighbor, physics/0306171, 2003.
+
+[22] L. Breiman, Bagging Predictors, Machine Learning 26, 123-140 (1996); 553-568 (1997).
+
+L. Breiman, Random Forests, Machine Learning 45, 5-32 (2001).
+
+[23] B. Efron and R.J. Tibshirani, An Introduction to the Bootstrap, Chapman & Hall/CRC, 1993.
+[24] T.W. Anderson, An Introduction to Multivariate Statistical Analysis, John Wiley & Sons, Inc.,
+
+2003.
+
+[25] CLHEP — A Class Library for High Energy Physics,
+
+http://wwwasd.web.cern.ch/wwwasd/lhc++/clhep/index.html.
+[26] http://wwwasd.web.cern.ch/wwwasd/cernlib/libraries.html,
+
+http://wwwasdoc.web.cern.ch/wwwasdoc/cernlib.html.
+
+31
+
+

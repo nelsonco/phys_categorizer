@@ -1,0 +1,1392 @@
+3
+0
+0
+2
+ 
+c
+e
+D
+ 
+5
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+8
+3
+0
+2
+1
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Large-scale grid-enabled lattice-Boltzmann simulations of
+complex ﬂuid ﬂow in porous media and under shear
+
+B Y JENS HARTING1, MADDALENA VENTUROLI1,2 AND PETER V. COVENEY1
+1Centre for Computational Science, Christopher Ingold Laboratories, University College London, 20
+Gordon Street, London WC1H 0AJ, UK
+2Schlumberger Cambridge Research, High Cross, Madingley Road, Cambridge CB3 0EL, UK
+
+Well designed lattice-Boltzmann codes exploit the essentially embarrassingly parallel features of the
+algorithm and so can be run with considerable efﬁciency on modern supercomputers. Such scalable codes
+permit us to simulate the behaviour of increasingly large quantities of complex condensed matter systems.
+In the present paper, we present some preliminary results on the large scale three-dimensional
+lattice-Boltzmann simulation of binary immiscible ﬂuid ﬂows through a porous medium derived from
+digitised x-ray microtomographic data of Bentheimer sandstone, and from the study of the same ﬂuids
+under shear. Simulations on such scales can beneﬁt considerably from the use of computational steering
+and we describe our implementation of steering within the lattice-Boltzmann code, called LB3D, making
+use of the RealityGrid steering library. Our large scale simulations beneﬁt from the new concept of
+capability computing, designed to prioritise the execution of big jobs on major supercomputing resources.
+The advent of persistent computational grids promises to provide an optimal environment in which to
+deploy these mesoscale simulation methods, which can exploit the distributed nature of compute,
+visualisation and storage resources to reach scientiﬁc results rapidly; we discuss our work on the
+grid-enablement of lattice-Boltzmann methods in this context.
+
+Keywords: Lattice-Boltzmann, porous media, complex ﬂuids under shear,
+grid computing, computational steering
+
+1. Introduction
+
+The length and time scales that can be modelled using microscopic modelling techniques such as molecular
+dynamics are circumscribed by the limited computational resources available today. Even with today’s
+fastest computers, the accessible length scales are on the order of nanometres and the time scales restricted
+to the nanosecond range. Mesoscopic models open the way to studies of time dependent, non-equilibrium
+phenomena occurring in much larger systems and on orders of magnitude longer timescales, thus bridging
+scales between microscopic models and macroscopic or continuum approaches.
+
+In this paper, we use the lattice-Boltzmann method to model binary ﬂuids under shear and ﬂow in a
+porous medium. In the porous medium case, we are now able to reach length scales for the simulated
+ﬂuid ﬂow which can be compared directly to data gleaned from magnetic resonance imaging experiments.
+In the case of ﬂuids under shear, one must take care of ﬁnite size effects which make it undesirable to
+study cubic systems, but rather preferable to study systems of high aspect ratio. In this paper we present
+preliminary results, but expect to return with extensive descriptions of the two applications in the near future.
+Both problems are very computationally demanding and require today’s top-of-the-range supercomputers
+and large scale data storage facilities. Since these resources are expensive, we have to handle them with
+care and minimize wastage of CPU time and disk space. A good initial position is to make sure that our
+simulations do not last longer than needed and do not produce more data than necessary. But more than this,
+
+Article submitted to Royal Society
+
+TEX Paper
+
+2
+
+J. Harting, M. Venturoli and P.V. Coveney
+
+computational steering allows us to interact with a running simulation and adjust simulation parameters and
+data dumping rates; it also enables us to monitor the state of our simulations and react immediately if they
+do not behave as expected, as we shall discuss later. The world wide effort to develop reliable computational
+grids gives us hope to run our simulations in an even more efﬁcient way. Computational grids are a collection
+of geographically distributed and dynamically varying resources, each providing services such as compute
+cycles, visualization, storage, or even experimental facilities. It is hoped that computational grids will offer
+for information technology what electricity grids offer for other aspects of our daily life: a transparent and
+reliable resource that is easy to use and conforms to commonly agreed standards (Foster and Kesselman,
+1999a; Berman et al., 2003). Then we shall be able to use the available compute resources in a transparent
+way, leaving to smart middleware the task of ﬁnding the best available machines to run simulations on and
+migrate them to other platforms if necessary to ensure optimal performance. Grids will also allow storage,
+compute and visualization resources to be widely distributed without our having to care about their location.
+The main purpose of the present paper is to introduce the concepts of computational steering and grid
+computing to an audience of computational scientists, concerned here with simulation of ﬂuid dynamics.
+The paper is structured as follows. After a short introduction to our lattice-Boltzmann method in Section
+2, we give a description of our implementation of computational steering in Section 3 and explain the
+advantages we expect to gain from the advent of computational grids in Section 4. Sections 5 and 6 contain
+our preliminary results on large scale grid-enabled simulations of ﬂuids under shear and in porous media.
+We present our conclusions in Section 7.
+
+2. A lattice-Boltzmann model of immiscible ﬂuids
+
+During the last decade, many authors have shown that the lattice-Boltzmann algorithm is a powerful method
+for simulating ﬂuid dynamics. This success is due to its simplicity and to facile computational implementa-
+tions (Chin et al., 2003; Love et al., 2003; Nekovee et al., 2001; Succi, 2001). Instead of tracking individual
+atoms or molecules, the lattice-Boltzmann method describes the dynamics of the single-particle distribution
+function of mesoscopic ﬂuid packets.
+
+In a continuum description, the single-particle distribution function f1(r, v, t) represents the density of
+ﬂuid particles with position r and velocity v at time t, such that the density and velocity of the macroscop-
+ically observable ﬂuid are given by ρ(r, t) =
+f1(r, v, t)vdv respectively.
+In the non-interacting, long mean free path limit, with no externally applied forces, the evolution of this
+R
+function is described by the Boltzmann equation
+
+f1(r, v, t)dv and u(r, t) =
+
+R
+
+While the left hand side describes changes in the distribution function due to free particle motion, the
+right hand side models pairwise collisions. This collision operator Ω is an integral expression that is often
+simpliﬁed (Bhatnagar et al., 1954) to the linear Bhatnagar-Gross-Krook (BGK) form
+
+(∂t + v · ∇) f1 = Ω[f1].
+
+Ω[f ] ≃ −
+
+f − f (eq)
+
+.
+
+1
+τ
+
+(2.1)
+
+(2.2)
+
+h
+This collision operator describes the relaxation, at a rate controlled by a characteristic time τ , towards a
+local Maxwell-Boltzmann equilibrium distribution f (eq). It can be shown that distributions governed by the
+simple Boltzmann-BGK equation conserve mass, momentum, and energy (Succi, 2001). They obey a non-
+equilibrium form of the second law of thermodynamics (Liboff, 1990) and the Navier-Stokes equations for
+macroscopic ﬂuid ﬂow are obeyed on coarse length and time scales (Chapman and Cowling, 1952; Liboff,
+1990).
+
+i
+
+Article submitted to Royal Society
+
+Large-scale grid-enabled lattice-Boltzmann simulations of complex ﬂuid ﬂow in porous media and under shear 3
+
+By discretizing the single-particle distribution function in space and time, one obtains the usual lattice-
+Boltzmann formulation, where the positions r on which f1(r, v, t) is deﬁned are restricted to points ri on
+a Bravais lattice. The velocities v are restricted to a set ci joining points on the lattice and the density of
+particles at lattice site r travelling with velocity ci, at timestep t is given by fi(r, t) = f (r, ci, t). The ﬂuid’s
+density and velocity are given by
+
+ρ(r) =
+
+fi(r)
+
+u(r) =
+
+fi(r)ci
+
+i
+X
+
+i
+X
+
+(2.3)
+
+(2.4)
+
+(2.6)
+
+(2.7)
+
+(2.8)
+
+(2.9)
+
+The discretized Boltzmann description can be evolved as a two-step procedure. In the collision step,
+particles at each lattice site are redistributed across the velocity vectors; this process corresponds to the
+action of the collision operator. In the advection step, values of the post-collisional distribution function are
+propagated to adjacent lattice sites.
+
+By combining the two steps, one obtains the lattice-Boltzmann equation (LBE)
+
+fi(r, t + 1) − fi(r, t) = Ω[f ] = −
+
+[fi(r, t) − Ni (ρ, u)] ,
+
+(2.5)
+
+1
+τ
+
+where Ni = Ni (ρ(r), u(r)) is a polynomial function of the local equilibrium density and velocity, and can
+be found by discretizing the Maxwell-Boltzmann equilibrium distribution.
+
+Our lattice-Boltzmann implementation uses the Shan-Chen approach (Shan and Chen, 1993), by incor-
+porating an explicit forcing term in the collision operator in order to model multicomponent interacting
+ﬂuids. Shan and Chen extended the single-particle distribution function fi to the form f σ
+i , where each
+component is denoted by a different value σ, so that the density and momentum of a single component σ
+ci respectively. The ﬂuid viscosity νσ is proportional to
+are given by ρσ =
+(τ σ − 1/2) and the mass of each particle is mσ. This results in a lattice BGK equation (2.5) of the form
+
+i and ρσuσ =
+
+i f σ
+
+i f σ
+i
+
+P
+
+P
+i (r, t + 1) − f σ
+f σ
+
+i (r, t) = −
+
+i − Ni(ρσ, vσ)]
+
+1
+τ σ [f σ
+
+The velocity vσ is found by calculating a weighted average velocity
+
+and then adding a term Fσ to account for additional forces,
+
+u′
+
+=
+
+ρσ
+τ σ
+
+uσ
+
+/
+
+ 
+
+σ
+X
+
+!
+
+ 
+
+σ
+X
+
+ρσ
+τ σ
+
+,
+
+!
+
+vσ = u′
+
++
+
+Fσ.
+
+τ σ
+ρσ
+
+Fσ = −ψσ(x)
+
+gσ¯σ
+
+ψ ¯σ (x + ci) ci,
+
+¯σ
+X
+
+i
+X
+
+To produce nearest-neighbour interactions between ﬂuid components, this term assumes the form
+
+where ψσ(x) = ψσ(ρσ(x)) is an effective charge for component σ, set equal to the ﬂuid component density,
+that is ψσ(x) = ρσ(x) ; gσ¯σ is a coupling constant controlling the strength of the interaction between two
+components σ and ¯σ. If gσ¯σ is set to zero for σ = ¯σ, and to a positive value for σ 6= ¯σ then, in the interfacial
+region between bulk domains of each component, particles experience a force in the direction away from
+
+Article submitted to Royal Society
+
+4
+
+J. Harting, M. Venturoli and P.V. Coveney
+
+the interface, producing immiscibility. For two-component systems, we use the notation gσ¯σ = g¯σσ = gbr.
+External forces are added in a similar manner. For example, in order to produce a gravitational force acting
+in the z-direction, the force term Fσ can take the form gρσˆz.
+
+A convenient way to characterize binary ﬂuid mixtures is in terms of the order parameter or colour ﬁeld
+
+φ(x) = ρr(x) − ρb(x).
+
+(2.10)
+
+The order parameter is positive in areas of high concentration of ‘red’ ﬂuid and negative in areas of ‘blue’
+dominance; the isosurface φ(x) = 0 denotes the interface between both ﬂuid constituents.
+
+The model has been extended to handle amphiphiles, which are treated as massive point like dipoles
+with different interaction strengths on each end and a rotational degree of freedom (Chen et al., 2000). Our
+code, LB3D, can handle binary and ternary ﬂuid mixtures with or without amphiphiles. But since we only
+discuss simulations of binary ﬂuids in this paper, we refer the reader to other papers (Chen et al., 2000;
+Nekovee et al., 2001; Love et al., 2003; Chen et al., 2000) for a more comprehensive description of the
+amphiphilic case.
+
+3. Computational steering of lattice-Boltzmann simulations
+
+This section outlines the beneﬁts of computational steering for high performance computing applications.
+Our three-dimensional lattice-Boltzmann code (LB3D) and its computational steering implementation are
+used to illustrate the substantial improvements which computational steering offers in terms of resource
+efﬁciency and time to discover new physics.
+
+Traditionally, large, compute-intensive simulations are run non-interactively. A text ﬁle describing the
+initial conditions and parameters for the course of a simulation is prepared, and then the simulation is
+submitted to a batch queue on a large compute resource. The simulation runs entirely according to the
+prepared input ﬁle, and outputs the results to disk for the user to copy to his local machine and examine
+later.
+
+This mode of working is sufﬁcient for many simple investigations of mesoscale ﬂuid behaviour, but
+has several drawbacks. Firstly, consider the situation where one wishes to examine the dynamics of the
+separation of two immiscible ﬂuids: this is a subject which has been of considerable interest in the modelling
+community in recent years (Gonz´alez-Segredo et al., 2003; Kendon et al., 2001). Typically, a guess is made
+as to how long the simulation must run before producing a phase separation, and then the code is run for
+a ﬁxed number of timesteps. If a phase transition does not occur within this number of timesteps, then the
+job must be resubmitted to the batch queue, and restarted. However, if a phase transition occurs in the early
+stages of the simulation, then the rest of the compute time will be spent simulating an equilibrium system
+of very little interest. Even worse, the initial parameters of the system might turn out not to produce a phase
+separation at all and all of the CPU time invested in the simulation will have been wasted.
+
+Computational steering is a way to overcome these drawbacks. It allows the scientist to interact with
+a running simulation and to change or monitor simulation parameters on the ﬂy. Examples of monitored
+parameters are the timestep, surface tension, density distributions, or ‘colour’ ﬁelds. Steerable parameters
+are data dumping frequencies, relaxation times or shear rates. One can also ‘stop’, ‘pause’ or ‘restart’ from
+a previously saved checkpoint. A ‘checkpoint’ is a set of ﬁles representing the state of the simulation and
+allowing the code to be restarted without rerunning earlier steps of the simulation. The ‘restart’ function-
+ality is particularly important since it provides the basis of a system that allows the scientist to ‘rewind’ a
+simulation. Having done so, it can then be run again, perhaps after having steered some parameter or altered
+the frequency with which data from the simulation is recorded.
+
+We have implemented computational steering within the LB3D code with the help of colleagues at
+Manchester Computing as part of the ongoing RealityGrid project (http://www.realitygrid.org) (Chin et al.,
+
+Article submitted to Royal Society
+
+Large-scale grid-enabled lattice-Boltzmann simulations of complex ﬂuid ﬂow in porous media and under shear 5
+
+2003; Brooke et al., 2003; Coveney, 2003). The RealityGrid project aims to enable the modelling and
+simulation of complex condensed matter structures at the molecular and mesoscale levels as well as the
+discovery of new materials using computational grids. The project also involves biomolecular applications
+and its long term ambition is to provide generic computational grid based technology for scientiﬁc, medical
+and commercial activities.
+
+Within RealityGrid, computational steering has been implemented in order to enable existing scientiﬁc
+computer programs (often written in Fortran90 and designed for multi-processor/parallel supercomputers)
+to be made steerable while minimising the amount of work required. The steering software has been im-
+plemented as a library written in C and is thus callable from a variety of languages (including C, C++ and
+Fortran90). The library completely insulates the application from any implementation details. For instance,
+the process by which messages are transferred between the steering client and the application (e.g. via ﬁles
+or sockets) is completely hidden from the application code and the steering library does not assume or
+prescribe any particular parallel-programming paradigm (such as message passing or shared memory). The
+steering protocol has been designed so that the use of steering is never critical to the simulation. Thus, a
+steering client can attach and detach from a running application without affecting its state.
+
+The ability to monitor the state of a simulation and use this to make steering decisions is very important.
+While a steering client provides some information via the simulation’s monitored parameters, a visualisation
+of some aspect of the simulation’s state is often required. In our case this is usually a three-dimensional data
+set, visualised by a second software component using isosurfacing or volume rendering.
+
+The steering library itself consists of two parts: an application side and a client side. Using a generic
+steering client written in C++ and Qt (a GUI toolkit, http://www.trolltech.org) one is capable to steer any
+application that has been ‘steering enabled’ using the library.
+
+The RealityGrid steering library and client are generic enough to be interfaced to by almost any simu-
+lation code. Usually only a couple of hours have to be invested in adapting a code to do simple parameter
+steering and monitoring. Indeed, since the initial version of the steering library was written at least four
+other codes have been made steerable in this way (these include molecular dynamics, Monte Carlo and
+other lattice-Boltzmann codes).
+
+In addition to the features the steering library provides, LB3D has its own logging and replay facilities
+which permit the user to ‘replay’ a steered simulation. This is an important feature since it allows the data
+from steered simulations to be reproduced without human intervention. Moreover, this feature can be used
+as an ‘auto-steerer’. Thus multiple simulations, which read different input ﬁles at startup and are ‘steered’
+in the same way, can be launched without the need for human intervention during the simulation. One
+application of this particular feature appears in studies of how changes in parameters affect a simulation
+that has evolved for a given number of timesteps. Another application is the automatic adaptation of data
+dumping or checkpointing frequencies. If the user has found from a manually steered simulation that no
+effects of interest are expected for a given number of initial timesteps, he can reduce the amount of data
+written to disk for early times of the simulation.
+
+A more detailed description of computational steering and its implementation within RealityGrid can
+be found in recently published papers (Chin et al., 2003; Brooke et al., 2003). (Chin et al., 2003) also
+contains an example demonstrating the usefulness of computational steering of three dimensional lattice-
+Boltzmann simulations: parameter searches are a common task we have to handle because our lattice-
+Boltzmann method has a range of free parameters - only by choosing them correctly, can one simulate
+effects of physical interest. Previously, these parameter searches have been performed using a taskfarming
+approach: many small simulations with different parameters have been launched. In such cases we have
+used up many thousands of CPU hours and needed hundreds of gigabytes of simulation data to be stored
+for a single large scale parameter search. Computational steering offers the possibility to ‘joystick’ through
+parameter space in order to ﬁnd regions of interest. In this way, the resources needed can be substantially
+
+Article submitted to Royal Society
+
+6
+
+J. Harting, M. Venturoli and P.V. Coveney
+
+reduced. The main beneﬁt, however, is the reduced amount of data that has to be analysed subsequently
+since this is the most time consuming and demanding task. While simulations can be completed within
+days or weeks, analysis usually takes months. We have also found that if the amount of data to be searched
+for interesting effects exceeds certain bounds, it is almost impossible for a human to keep track of it. One
+might suggest automation of the analysis process, but the human eye turned out to be the only reliable tool
+for our simulations. It is often very easy to spot effects occurring in data sets by looking at isosurfaces or
+volume-rendered visualisations; by contrast automation of the analysis of the generated data is much harder
+because it can be difﬁcult to deﬁne the effects sufﬁciently well, impossible to anticipate the effects sought in
+advance, or simply not worthwhile to invest additional effort in the development of algorithms to automate
+the process.
+
+4. Capability computing and terascale computational grids
+
+Three-dimensional lattice-Boltzmann simulations are very computationally demanding and need high per-
+formance computing resources (i.e. supercomputers). In order to reach length and time scales which can be
+compared with experimental data and to eliminate ﬁnite size effects, one needs large lattices, for example
+5123 or 10243. Simulations also have to run for several thousands or tens of thousands of time steps, thus
+pushing the required compute and storage resources beyond what is typically available to users on medium
+scale supercomputers today. In the case of LB3D, the main restriction is the per CPU memory available,
+which on all machines we have access to currently is not more than 1GB. For example, we require at least
+1024 CPUs to simulate a 10243 system.
+
+Obviously, computational steering becomes an even more useful tool here because large scale simu-
+lations are very expensive; it is essential that the simulation does not generate useless data, and that the
+expensive resources are used as efﬁciently as possible. The need for vast compute power has brought with
+it the concept of ‘capability computing’. We understand this term as a description of how large jobs are
+handled by supercomputing centres: large jobs are favoured and assigned a higher priority by the queueing
+system. In these terms, ‘large’ refers to jobs that request at least half of the total number of CPUs avail-
+able. With standard job queue conﬁgurations operating on batch systems, there is a strong disincentive to
+submit large jobs: if a user submits a ‘large’ job, turn around times can be very long, making such high
+end resources incompetitive compared to modern commodity clusters which are becoming widely avail-
+able locally. In some cases, supercomputing centres can offer discounts for large (capability computing)
+jobs if the simulation code can be shown to scale well. LB3D has recently been awarded a gold-star rating
+for its excellent scaling capabilities by the HPCx Consortium (http://www.hpcx.ac.uk) allowing us to run
+simulations on 1024 CPUs (the full production partition) of their 1280 CPU IBM SP4, with a discount
+of 30% (Harting et al., 2003). The ﬂow in porous media simulations described later in this chapter have
+been done on up to 504 CPUs of a 512 CPU SGI Origin 3800 at the CSAR service in Manchester, UK
+(http://www.csar.cfs.ac.uk). LB3D scales linearly on all platforms available to us. In addition to those men-
+tioned above, these include a CRAY T3E, a 3000 CPU Compaq Alpha cluster ‘Lemieux’ (at Pittsburgh
+Supercomputing Center), various Linux clusters and SGI Origin 2000 and 3800 systems.
+
+We expect it to become easier to simulate systems of a size which is comparable to experimental data
+with the advent of computational grids (Foster and Kesselman, 1999a; Berman et al., 2003). Grids are ge-
+ographically distributed and dynamically varying collections of resources such as supercomputers, storage
+facilities or advanced experimental instruments that are connected by high speed networks, thus allow-
+ing widespread human collaborators to work together closely. In the same way that large scale lattice-
+Boltzmann simulations require a supercomputer, the visualisation of the large and complex data sets that
+these simulations produce also require specialist hardware that few scientists have direct access to. As we
+shall see, visualisation engines can also be treated as distributed resources on the grid.
+
+Article submitted to Royal Society
+
+Large-scale grid-enabled lattice-Boltzmann simulations of complex ﬂuid ﬂow in porous media and under shear 7
+
+Computational grids are related to traditional distributed computing, with the major extension that they
+enable the transparent sharing and collective use of resources, which would otherwise be individual and
+isolated facilities. With growing intensity, signiﬁcant effort is being invested worldwide in grid computing
+(http://www.gridforum.org). The grid aims to present the elements required for a computational task (e.g.
+calculation engine, ﬁlters, visualisation capability) as components which can be effectively and transpar-
+ently coupled through the grid framework using middleware. In this scenario, any application or simulation
+code can be viewed simply as a data producing or consuming object on the grid and computational steering
+is a way of allowing users to interact with such objects.
+
+Our lattice-Boltzmann code LB3D is now a fully grid-enabled, steerable application. LB3D simulations
+can then be launched and steered on a remote machine, with the visualisations being performed in other
+geographic locations. One or more users control the workﬂow from a laptop running a steering client and
+client software to interact remotely with the compute and visualisation engines. Behind the scenes, the ‘grid
+middleware’ moves ﬁles, simulation data and commands between the resources involved. We have used both
+Globus (Foster and Kesselman, 1999b) (http://www.globus.org) and Unicore (http://www.unicore.org) as
+the basic middleware fabric in this work, and digital certiﬁcates provided by the UK e-science certiﬁcation
+authority (http://www.grid-support.ac.uk).
+
+The grids being used in these demonstration activities have been assembled especially for each event.
+By contrast, the UK e-Science community has constructed an ambitious Level 2 Grid (http://www.grid-
+support.ac.uk/l2g) that aims to provide the user community with a persistent grid of heterogenous resources.
+LB3D and the RealityGrid steering framework have already been deployed on this Level 2 Grid, which uses
+Globus GT2 as middleware. Thus we are amongst the ﬁrst groups in the world to use a persistent grid for
+scientiﬁc research requiring high performance computing and computational steering.
+
+In a major US/UK grid project leading up to and including Supercomputing 2003 we are studying the
+defect formation and dynamics within a self-assembled gyroid mesophase (Gonz´alez-Segredo and Coveney,
+2003) utilizing a fast network between the ‘Extended Terascale Facility’ (http://www.teragrid.org) in the
+USA and the national supercomputing centres at Manchester (CSAR) and Daresbury (HPCx) in the UK.
+This gives us access to machines in the US including Lemieux and various Itanium (IA64) systems. In the
+UK, access to the total combined resources of CSAR and HPCx provides us with a 1280 CPU IBM SP4
+machine, a 504 CPU SGI Origin 3800, and a 256 CPU SGI Altix. For visualization there are resources
+available on both sides of the Atlantic as well, including various SGI Onyx machines and commodity
+clusters which use ‘Chromium’ (http://chromium.sourceforge.net) for parallel rendering. The Visualisation
+Toolkit (VTK, http://www.kitware.com) allows us to generate isosurfaces or volume-rendered visualisations
+of even our largest data sets on these platforms (see http://www.realitygrid.org/TeraGyroid.html).
+
+However, the vision of a computational grid that furnishes for information technology what electricity
+(and other utility) grids have achieved in terms of almost universal and transparent access to energy (and
+other resources) within modern civilised societies remains a dream today. Many problems remain to be
+addressed before computational grids become easy to use. At the time of writing, it remains very awkward
+both to access and utilise grid-enabled resources and the much vaunted advantages are yet to be realised. In
+fact, our own experiences indicate that real progress towards usablity will be achieved most quickly with the
+development and deployment of leightweight middleware, in marked contrast with the existing heavyweight
+behemoths.
+
+Moreover, for effective utilisation of computational steering together with large scale simulations, it is
+very important that supercomputing centres change their policy of job scheduling since advanced reserva-
+tion for the co-allocation of compute and visualisation resources becomes essential. Today, this is possible
+for small scale simulations which do not run on the grid if turn around times are short, but for large scale
+jobs one needs special arrangements with the resource owners. It is also important that users will be able to
+request access to resources at convenient times, i.e. during working hours rather than in the middle of the
+
+Article submitted to Royal Society
+
+8
+
+J. Harting, M. Venturoli and P.V. Coveney
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+
+∆−
+
+u Z
+
+d
+
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)
+(cid:0)
+(cid:0)
+(cid:1)
+(cid:0)
+(cid:1)
+(cid:0)
+(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)
+(cid:1)
+(cid:0)
+(cid:1)
+(cid:0)
+(cid:1)
+(cid:0)
+(cid:1)
+(cid:0)
+(cid:1)
+
+∆
+u Z
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+
+x = nx
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+
+x = 0
+
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+
+Figure 1. Our lattice-Boltzmann code LB3D implements shearing by use of Lees-Edwards boundary conditions: parti-
+cles crossing the x = 0 = nx boundary have their z-velocities altered by ±∆uZ and are displaced in the ±z direction
+by d = t∆uZ (t = simulation time). The corresponding shear rate is s = ∆uZ/nx; oscillatory shear is achieved by
+′
+setting ∆u
+Z = cos(ωt)∆uZ.
+
+night. We expect that the huge effort currently being invested in the development of grid standards will re-
+sult in a satisfactory solution of these issues. We believe that computational grids will revolutionise the way
+scientiﬁc simulations are performed in the near future because they should then offer an easy and effective
+way to access distributed resources in an optimal way for the scientiﬁc problem under investigation.
+
+5. Immiscible ﬂuid mixtures under shear
+
+Lees and Edwards published their method for the application of shearing in molecular dynamics simulations
+in 1972 (Lees and Edwards, 1972). Since then Lees-Edwards boundary conditions have become a popular
+method for simulating ﬂuid rheology under shear using a variety of different methods and have been im-
+plemented in lattice-Boltzmann codes before (Wagner and Yeomans, 1999; Wagner and Pagonabarraga,
+2002).
+
+The method can be described as an extension of the use of standard periodic boundary conditions and
+is illustrated in ﬁgure 1. While with periodic boundary conditions particles that arrive at a system boundary
+leave the simulation volume and ‘re-enter’ it on the opposite side, for a sheared system this is only true
+for the boundaries not subject to shear. Particles crossing the shear planes, which are the x = 0 and
+x = nx planes in our case, get their z-velocities altered by ±∆uZ and are displaced in the ±z direction
+by d = t∆uZ (t is the simulation time and nx is the lattice size in the x direction). The corresponding
+shear rate s is ∆uZ/nx. This algorithm can be extended for simulations of ﬂuids under oscillatory shear by
+multiplying ∆uZ with a time dependent cosine function of frequency ω: ∆u′
+
+Z = cos(ωt)∆uZ.
+
+We are applying our model to study spinodal decomposition under shear, also referred to as Couette
+ﬂow. The phase separation of binary immiscible ﬂuids without shear has been studied in detail by different
+authors and LB3D has been shown to model the underlying physics successfully (Gonz´alez-Segredo et al.,
+2003). It has been shown in the non-sheared studies of spinodal decomposition that lattice sizes need to
+be large in order to overcome ﬁnite size effects, i.e. 1283 has been found the minimum acceptable number
+of lattice sites (Gonz´alez-Segredo et al., 2003). For high shear rates, systems also have to be very long
+because, if the system is too small, the domains interconnect across the z = 0 and z = nz boundary
+and form interconnected lamellae in the direction of shear. Such artefacts need to be eliminated from our
+simulations.
+
+Computational steering is a very useful tool for checking on ﬁnite size effects in an ongoing sheared
+ﬂuid simulation. While being able to constantly monitor volume-rendered colour ﬁelds or ﬂuid densities, the
+
+Article submitted to Royal Society
+
+Large-scale grid-enabled lattice-Boltzmann simulations of complex ﬂuid ﬂow in porous media and under shear 9
+
+s = 0.0
+s = 7.8x10
+s = 1.6x10
+s = 3.1x10
+s = 4.7x10
+
+-4
+
+-3
+
+-3
+
+-3
+
+)
+t
+(
+
+L
+
+x
+
+20
+
+40
+
+30
+
+10
+
+0
+
+0
+
+s = 0.0
+s = 7.8x10
+s = 1.6x10
+s = 3.1x10
+s = 4.7x10
+
+-4
+
+-3
+
+-3
+
+-3
+
+100
+
+75
+
+)
+t
+(
+
+L
+
+z
+
+50
+
+25
+
+0
+
+0
+
+1000
+
+3000
+
+4000
+
+1000
+
+3000
+
+4000
+
+2000
+t
+
+2000
+t
+
+Figure 2. The time-dependent lateral domain size L in x (left) and z directions (right) for different shear rates. Initial
+ﬂuid densities are randomly distributed between 0 and 0.7, the system size is 64x64x512, and τ
+= 1 (all
+quantities are reported in lattice units).
+
+= m
+
+σ
+
+σ
+
+human eye turned out to be very reliable in spotting the moment when these simulations become unphysical.
+In this way, we were able to keep the computational resources required at a minimum.
+
+From our studies we found that to avoid ﬁnite size effects 64x64x512 systems are sufﬁcient for low
+shear rates and short simulation times, but 128x128x1024 lattices are needed for higher shear rates and/or
+very long simulations.
+
+The results presented in this section were all obtained for a 64x64x512 system with all relaxation times
+and masses set to unity, i.e. τ σ=1.0, mσ=1.0. The initial oil and water ﬂuid densities fr and fb were given
+by a random distribution between 0.0 and 0.7 (in lattice units). All simulations were performed on 64 CPUs
+of a SGI Origin 3800 at CSAR in Manchester, UK. Shear rates s were set to 0, 7.8 × 10−4, 1.6 × 10−3,
+3.1 × 10−3 and 4.7 × 10−3 (in lattice units) in order to study the inﬂuence of shear on the domain growth.
+In order to compare between different simulations, we deﬁne the time dependent lateral domain size L(t)
+along direction i = x, y, z as
+
+where
+
+Li(t) ≡
+
+2π
+hk2
+i (t)i
+
+,
+
+p
+
+P
+
+i S(k, t)
+k k2
+k S(k, t)
+
+k2
+i (t)
+
+≡
+
+(cid:10)
+
+(cid:11)
+
+(5.1)
+
+(5.2)
+
+is the second order moment of the three-dimensional structure function
+
+P
+1
+V
+with respect to the cartesian component i. hi denotes the average in Fourier space, weighted by S(k) and V
+is the number of nodes of the lattice, φ′
+k(t) the Fourier transform of the ﬂuctuations of the order parameter
+φ′ ≡ φ − hφi, and ki is the ith component of the wave vector.
+
+S(k, t) ≡
+
+′
+k(t)|2
+|φ
+
+(5.3)
+
+Figure 2 shows the time dependent lateral domain size in x and z directions for the abovementioned
+parameters and up to 4000 timesteps. At the beginning of simulations, there is a steep increase of L due to
+rapid diffusion of mass to nearest neighbours before the domain growth starts. As expected, the behaviour
+of L(t) is identical in x and z directions for s = 0.0, but is very different for s > 0.0. The average
+
+Article submitted to Royal Society
+
+10
+
+J. Harting, M. Venturoli and P.V. Coveney
+
+a)
+
+y
+
+x
+
+z
+
+b)
+
+c)
+
+s = 0.0
+
+s = 1.6 * 10
+
+−3
+
+s = 4.7 * 10
+
+−3
+
+Figure 3. Volume rendered order parameter φ for increasing shear rates all shown at timestep 3000. The system size is
+64x64x512. Blue areas denote high density of ‘blue’ ﬂuid and red denotes the interface between ﬂuids. With increasing
+shear rate, domains become more elongated and tilted.
+
+slope of Lx(t) decreases for increasing s until phase separation almost arrests and multiple peaks occur for
+s = 1.6 × 10−3 and s = 3.1 × 10−3 (in lattice units). These peaks arise very regularly at approximately
+every 700 timesteps in the former case and every 1500 timesteps in the latter case. For s = 4.7 × 10−3
+these peaks cannot be observed. They can be explained as follows: if a domain reaches a substantial size,
+the probability of it coalescing with a similarly sized one becomes high, but the resulting very large domain
+will be unable to withstand the strain caused by the shear and will break up a few timesteps later. For higher
+shear rates, domain growth in the x direction is slower than for lower shear rates and the peaks occur with
+a smaller frequency. If s becomes too high (as in the s = 4.7 × 10−3 case), the imposed strain prevents
+domains substantially larger than the average domain size from forming.
+
+In the z direction, shear causes elongated domains resulting in increasing values of L(t) for increasing
+shear rates. For s = 4.7 × 10−3, Lz(t) grows rapidly until it saturates at t = 1100. A critical domain size
+is reached after which domains still grow, but are very elongated and tilted by an angle. Due to this tilting,
+Lz saturates since it only measures the size of the domains in z direction.
+
+This effect is illustrated in ﬁgure 3 which shows volume-rendered snapshots of the order parameter φ
+for shear rates s = 0.0, 1.6 × 10−3, and 4.7 × 10−3, all at timestep 3000. Areas of high density of ‘blue’
+ﬂuid are coloured blue and the interface between both ﬂuids is coloured red. The ﬁgure shows how the
+domains develop evenly in x and z direction for s = 0.0, but become tilted and elongated under shear. This
+effect increases with increasing shear rate, resulting in very long and slim lamellae in the s = 4.7 · 10−3
+case.
+
+The results presented in this section are preliminary. We hope to be able to report on more detailed stud-
+ies of essentially ﬁnite-size-free simulations of complex ﬂuid mixtures under shear in the near future. We
+are planning to utilize our code to quantify domain growth and compare our results to previous theoretical
+
+Article submitted to Royal Society
+
+Large-scale grid-enabled lattice-Boltzmann simulations of complex ﬂuid ﬂow in porous media and under shear 11
+
+work and experimental results (Cates et al., 1999; Wagner and Yeomans, 1999; Corberi et al., 2002). Ap-
+plying oscillatory instead of constant shear is a natural extension of this work and simulations are already
+ongoing (Xu et al., 2003). We are also studying the properties of amphiphilic ﬂuid mixtures under shear
+including the effect shear has on previously formed cubic mesophases such as the ’P’-phase (Nekovee and
+Coveney, 2001) and the gyroid cubic mesophase (Gonz´alez-Segredo and Coveney, 2003). Such complex
+ﬂuids are expected to exhibit non-Newtonian properties.
+
+6. Multiphase ﬂow in porous media
+
+The study of transport phenomena in porous media is of great interest in ﬁelds ranging from oil recovery and
+water puriﬁcation to industrial processes like catalysis. In particular, the oilﬁeld industry uses complex, non-
+Newtonian, multicomponent ﬂuids (containing polymers, surfactants and/or colloids, brine, oil and/or gas),
+for processes like fracturing, well stimulation and enhanced oil recovery. The rheology and ﬂow behaviour
+of these complex ﬂuids in a rock is different from their bulk properties. It is therefore of considerable interest
+to be able to characterise and predict the ﬂow of these ﬂuids in porous media.
+
+The ﬂow of a single phase non-Newtonian ﬂuid through two-dimensional porous media has been ad-
+dresses with lattice-Boltzmann methods (Aharonov and Rothman, 1993; Chin et al., 2002), using a ‘top-
+down’ approach, in which the effective dynamic viscosity of the ﬂuid, and hence the relaxation parameter
+in the BGK equation 2.5, explicitly depends on the strain rate tensor through a power law.
+
+However, from the point of view of a modelling approach, the treatment of complex ﬂuids in three-
+dimensional complex geometries is an ambitious goal. In this paper we shall only consider binary (oil/water)
+mixtures of Newtonian ﬂuids, since this is a ﬁrst and necessary step in the understanding of multiphase ﬂuid
+ﬂow in porous media.
+
+The advantage of using lattice-Boltzmann (or lattice-gas) techniques in studying ﬂow in porous media
+is that complex geometries can be easily implemented and the ﬂow problem solved therein, since the evo-
+lution of the particle distribution functions can be described in terms of local collisions with the obstacle
+sites using simple bounce-back boundary conditions. Synchrotron based X-ray microtomography (XMT)
+imaging techniques provide high resolution, three-dimensional digitised images of rock samples. By us-
+ing the lattice-Boltzmann approach in combination with these high resolution images of rocks, not only
+it is possible to compute macroscopic transport coefﬁcients, such as the permeability of the medium, but
+information on local ﬁelds, such as velocity or ﬂuid densities, can also be obtained at the pore scale thus pro-
+viding a detailed insight into local ﬂow characterisation and supporting the interpretation of experimental
+measurements (Auzerais et al., 1996).
+
+The XMT technique measures the linear attenuation coefﬁcient from which the mineral concentration
+and composition of the rock can be computed. From the tomographic image of the rock volume the topology
+of the void space can be derived, such as pore size distribution and tortuosity, and the permeability and
+conductivity of the rock can be computed (Spanne et al., 1994). The tomographic data are represented by
+a reﬂectivity greyscale value and are arranged in voxels in a three dimensional coordinate system. The
+linear size of each voxel is deﬁned by the imaging resolution, which is usually on the order of microns.
+By introducing a threshold to discriminate between pore sites and rock sites, these greyscale images can be
+reduced to a binary (0’s and 1’s) representation of the rock geometry. Using the lattice-Boltzmann method,
+single phase or multiphase ﬂow can then be described in these real porous media.
+
+Lattice Boltzmann and lattice gas techniques have already been applied to study single and multiphase
+ﬂow through three-dimensional microtomographic reconstruction of porous media. For example, Martys
+and Chen (Martys and Chen, 1996) and Ferr´eol and Rothman (Ferr´eol and Rothman, 1995) studied relative
+permeabilities of binary mixtures in Fontainebleau sandstone. These studies validated the model and the
+simulation techniques, but were limited to small lattice sizes, of the order of 643.
+
+Article submitted to Royal Society
+
+12
+
+J. Harting, M. Venturoli and P.V. Coveney
+
+The possibility of describing ﬂuid ﬂow in real rock samples gives the advantage of being able to make
+comparisons with experimental results obtained on the same, or similar, pieces of rock. Of course, to achieve
+a reasonable comparison, the size of the rock used in lattice-Boltzmann simulations should be of the same
+order of magnitude as the system used in the experiments, or at least large enough to capture the rock’s
+topological features. The more inhomogeneous the rock, the larger the sample size needs to be in order
+to describe the correct pore distribution and connectivity. Another reason for needing to use large lattice
+sizes is the inﬂuence of boundary conditions and lattice resolution on the accuracy of the lattice-Boltzmann
+method. It has been shown (see for example (He et al., 1997), (Chen and Doolen, 1998) and references
+therein) that if the Bhatnagar-Gross-Krook (BGK) (Bhatnagar et al., 1954) approximation of the lattice-
+Boltzmann equation is used, the so-called bounce-back boundary condition at the wall sites actually mimics
+boundaries which move with a speed that depends on the relaxation parameter τ of the collision operator
+in the BGK equation (2.5). The relaxation parameter determines the kinematic viscosity of the simulated
+ﬂuid. This implies that the computed permeability is a function of the viscosity.
+
+The accuracy of lattice-Boltzmann simulations also depends on the Knudsen number which represents
+the ratio of the mean free path of the ﬂuid particles and the characteristic length scale of the system (such as
+the pore diameter). To accurately describe hydrodynamic behaviour this ratio has to be small. If the pores
+are resolved with an insufﬁcient number of lattice points ﬁnite size effects arise, leading to an inaccurate
+description of the ﬂow ﬁeld.
+
+The error in solving the ﬂow ﬁeld increases with increasing viscosity (relaxation time), but this viscosity
+dependence becomes weak with increasing lattice resolution. Hence it is desirable to use a high resolution
+within the pore space in order to decrease the error induced by the use of bounce-back boundary conditions.
+However, increasing the resolution means increasing the lattice size, hence the computational cost of the
+simulation.
+
+Boundary conditions other than bounce-back have been proposed and shown to give correct velocities
+at the boundaries. However these methods are either suitable only for ﬂat interfaces (Inamuro et al., 1995)
+or they are cumbersome to implement (Verberg and Ladd, 2001), reducing the efﬁciency of the lattice-
+Boltzmann method.
+
+Large lattices require a highly scalable code, access to high performance computing, terascale storage
+facilities and high performance visualisation. LB3D provides the ﬁrst of these, while the others are now
+offered by the UK High Performance Computing services, and are also accessible via the UK e-Science
+Grid using RealityGrid capabilities.
+
+Using LB3D and capability computing services provided by Manchester CSAR SGI Origin 3800, we
+were able to simulate drainage and imbibition processes in a 5123 subsample of Bentheimer sandstone
+X-ray tomographic data. The whole set of XMT data represented the image of a Bentheimer sandstone of
+cylindrical shape with diameter 6mm and length 4.725mm. The XMT data were obtained at the European
+Synchrotron Research Facility (Grenoble) at a resolution of 7.5µm, resulting in a data set of 800x800x630
+voxels. Figure 4 shows a snapshot of the 5123 subsystem.
+
+The aim of this study is to compare velocity distributions with the ones measured by magnetic resonance
+imaging (MRI) of oil and brine inﬁltration into saturated Bentheimer rock core (Sheppard et al., 2003).
+The rock sample used in these MRI experiments had a diameter of 38 mm and was 70 mm long; three-
+dimensional images of the rock were acquired at a resolution of 280 microns. The system size we used in
+lattice-Boltzmann simulations was smaller than the sample used in MRI experiments, but still of a similar
+order of magnitude and large enough to represent the rock geometry. On the other hand, the higher space
+resolution provided by the lattice-Boltzmann method permits a detailed characterisation of the ﬂow ﬁeld in
+the pore space, hence providing a useful tool to interpret the MRI experiments, for example in identifying
+regions of stagnant ﬂuid. Detailed results of these lattice-Boltzmann simulations will be presented in a
+future paper.
+
+Article submitted to Royal Society
+
+Large-scale grid-enabled lattice-Boltzmann simulations of complex ﬂuid ﬂow in porous media and under shear 13
+
+Figure 4. Rendering of an X-ray microtomographic image of a 5123 sample of Bentheimer sandstone. The data have a
+resolution of 7.5µm. The pore space is shown in red, while the rock is represented in blue.
+
+(a) Binary ﬂow in a digitised Bentheimer rock sample.
+
+Darcy’s law (Darcy, 1856) for binary immiscible (oil/water) ﬂuid mixtures was investigated and the
+dependence of the relative permeability coefﬁcients on water saturation was derived and compared with
+lattice-gas studies. The extended Darcy’s law for binary ﬂow takes the form
+
+Ji =
+
+kij(S)
+
+Xj,
+
+(i = 1, 2)
+
+(6.1)
+
+2
+
+j=1
+X
+
+k
+µi
+
+where Ji is the ﬂux of the ith component and Xj is the force acting on the jth component. kij (S) is the
+relative permeability coefﬁcient depending on the saturation S, k is the permeability of the medium and µi
+the viscosity of component i.
+
+Using the lattice-Boltzmann method it is easy to selectively force only one component in a binary
+mixture, leaving the other one unforced. In this way the diagonal terms of the relative permeability matrix
+(kii) can be computed by analysing the ﬂux of one component when it is forced, while the cross terms (kij)
+can be computed from the ﬂux of one component when the other one is forced.
+
+Since we want to study the ﬂow behaviour for different forcing levels and for forcing applied in turn
+to both ﬂuids, a large number of simulations is required. Hence we limited the size of our system to a
+subsample of 64x64x32 voxels, mirrored in the z-direction (ﬂow direction) to give a ﬁnal size of 643 lattice
+sites (see ﬁgure 5). Periodic boundary conditions were applied in all directions. Immiscible, binary mixtures
+of oil and water were ﬂowed in this sample, at different forcing levels and by forcing in turn either the water
+or the oil component. In each of these numerical experiments, the system was initialised with a 50:50
+mixture of oil and water, both given the same viscosity and the same initial density distributions. The rock
+walls were made fully water wettable, to reproduce experimental conditions and to discriminate between
+the two ﬂuids which would otherwise be equivalent. The rock wettability is implemented by assigning each
+rock site a density distribution equal to the initial density of water. These density distributions do not ﬂow,
+but exert a (repulsive) force on the oil component, pushing it away from the rock walls.
+
+Article submitted to Royal Society
+
+14
+
+J. Harting, M. Venturoli and P.V. Coveney
+
+Figure 5. A 643 sample of Bentheimer sandstone at a lattice resolution of 7.5µm. The ﬁgure shows the isosurface
+delimiting the pore volume. The pore space is in the inner region of the isosurface.
+
+As the two components ﬂow, they initially phase separate and, after some time, a steady state is reached.
+Here we are only interested in the velocity ﬁeld at the steady state. If the total time allocated for the sim-
+ulation is longer than the time needed to reach the steady state, we would waste CPU time performing
+calculations which are useless. If we run a simulation for less time than needed to reach the steady state,
+using the checkpoint-restart facility within LB3D we can resume the simulation and continue the run until
+the steady state is reached. In both cases, steering improves the efﬁciency of the runs. By steering we can
+dump velocity and density ﬁelds at variable frequency, check whether the ﬁelds at two different times differ
+or not, and in case their difference is less than a given threshold, decide that the steady state is reached and
+stop the simulation. In the simulations presented here an average of 15000 time steps is needed to reach the
+steady state. At this time the total ﬂux (normalised by the pore volume) can be computed.
+
+Figure 6(a) shows the force/ﬂux dependence for the forced ﬂuids. The linearity of force/ﬂux holds for
+all the forcing levels considered. At any given forcing level, the wetting ﬂuid ﬂows less than the non-wetting
+one. This is due to the fact that the wetting ﬂuid interacts with the rock walls, and adheres to them, hence
+exerting more resistance to ﬂow, while the non-wetting ﬂuid is lubricated by the wetting ﬂuid. Similar results
+have been achieved in three-dimensional lattice-gas studies of binary ﬂow in Fontainebleau sandstone (Love
+et al., 2001; Olson and Rothman, 1997). A difference between our results and the lattice-gas ones is that in
+the latter the authors observed the presence of a capillary threshold, a minimum forcing level required to
+make the non-wetting ﬂuid ﬂow, while here we observe ﬂow even at small forcing levels. The presence of
+this threshold is due to geometric constraints imposed by the distribution and size of rock pores and throats,
+which can trap bubbles of the non wetting ﬂuid. In the rock sample we used for this study there are no such
+narrow throats, hence we would not expect to observe any capillary threshold.
+
+In ﬁgure 6(b) the force/ﬂux relation is plotted for the non-forced ﬂuids. In this case at any applied
+forcing the non wetting ﬂuid ﬂows more than the wetting one. For the non wetting ﬂuid we observe viscous
+coupling, i.e. the ﬂuid ﬂows even if it is not directly forced, and Darcy’s linearity is found for all forcing
+levels. On the other hand, the wetting ﬂuid does not ﬂow until a sufﬁciently high force is applied. This is
+due to the capillary forces. Hence Darcy’s law is observed to hold only for sufﬁciently high forcing.
+
+From the linear regime regions in both graphs we computed the relative permeability coefﬁcients:
+
+Article submitted to Royal Society
+
+Large-scale grid-enabled lattice-Boltzmann simulations of complex ﬂuid ﬂow in porous media and under shear 15
+
+10−1
+
+l
+
+e
+m
+u
+o
+v
+ 
+e
+r
+o
+p
+/
+x
+u
+F
+
+l
+
+10−2
+
+10−3
+
+non wetting fluid
+wetting fluid
+
+non wetting fluid
+wetting fluid
+
+10−2
+
+10−3
+
+10−4
+
+l
+
+e
+m
+u
+o
+v
+ 
+e
+r
+o
+p
+/
+x
+u
+F
+
+l
+
+10−4
+
+10−4
+
+10−2
+
+10−5
+
+10−4
+
+10−3
+Forcing level
+
+(a)
+
+10−3
+Forcing level
+
+10−2
+
+(b)
+
+Figure 6. Flux of binary ﬂuid when forced (a) and when unforced (b). All quantities are given in lattice units and the
+ﬂux is normalised by the pore volume.
+
+kww = 1.6, koo = 3.3, kow = 0.77, kwo = 0.57, where the subscripts indicate water (w) and oil (o).
+The diagonal terms are one order of magnitude larger than the cross terms, which can be expected because
+the cross terms represent the response of one ﬂuid when the other one is forced. This is also in agreement
+with the results from lattice-gas studies (Love et al., 2001).
+
+A previous much debated issue is whether the off-diagonal terms in the relative permeability matrix
+should satisfy a reciprocity relationship. The reciprocity of the coefﬁcients in macroscopic linear transport
+laws of the form
+
+Ji =
+
+LijXj,
+
+(6.2)
+
+j
+X
+where Ji is a current and Xj is a force conjugate to the current, is a consequence of Onsager’s regression
+hypothesis and it holds for systems which are linearly perturbed from equilibrium (de Groot and Mazur,
+1985).
+
+Our results show a linear dependence between force and ﬂow, but the off-diagonal coefﬁcients we ob-
+tained from the linear regime region have slightly different values for the wetting and non-wetting ﬂuids.
+For binary immiscible ﬂuid ﬂow in porous media, where complex interfacial dynamics plays a major role,
+it is not clear if Onsager’s theory can be applied. In the aforementioned lattice-gas studies, Onsager’s reci-
+procity was found, but no clear theoretical justiﬁcation has been given for the reason that this should hold
+under the general nonlinear conditions pertaining (Flekkøy and Pride, 1999).
+
+It can also be observed that there are no error bars provided with our results. This is due to the fact that
+in lattice-Boltzmann, as opposite to lattice-gas simulations, there is no noise, and indeed this is one of the
+major computational advantages of the method. Nevertheless, we plan to perform the same set of simula-
+tions starting from different initial conditions, which may lead to different ﬂuid/ﬂuid interfacial structures
+and ﬂuid transport coefﬁcients, and then derive error bars from the ﬂow computed in each of these simu-
+lations. More studies on different pore space geometries and larger systems need to be done to address the
+general validity of Darcy’s law for binary mixtures and Onsager’s reciprocity hypothesis.
+
+Article submitted to Royal Society
+
+16
+
+J. Harting, M. Venturoli and P.V. Coveney
+
+7. Conclusions
+
+This paper describes optimal implementation of large scale lattice-Boltzmann simulations of two-phase
+ﬂuid dynamics through exploitation of capability computing and computational steering. Capability com-
+puting promotes the execution of scalable codes that utilise a large fraction and sometime the entire allo-
+cation of processors on a big supercomputer. Computational steering then ensures that this massive set of
+resources is used optimally to generate meaningful scientiﬁc data. We illustrated the use of these approaches
+by reporting preliminary results from two applications which beneﬁt substantially from large scale simu-
+lation. The ﬁrst of these was concerned with Couette (shear) ﬂow, where simulation cells of high aspect
+ratio are needed to eliminate ﬁnite size effects; the second described two-phase ﬂow in large portions of
+digitised data obtained from X-ray microtomographic studies of Bentheimer sandstone. The most efﬁcient
+utilisation of computational steering of such large scale simulations utilises a computational grid. These
+grids are in their infancy today and much more work needs to be done to render them transparent to users.
+Nevertheless, important advances have already been made, and here we described the grid-enablement of
+our lattice-Boltzmann codes. Our experience with grids to date leads us to conclude that much lighter mid-
+dleware solutions will be required to foster their widespread use.
+
+Acknowledgements
+
+We would like to thank J. Chin, N. Gonz´alez-Segredo, and S. Jha (University College London), A.R. Porter,
+and S.M. Pickles (University of Manchester), E.S. Boek, and J. Crawshaw (Schlumberger Cambridge Re-
+search) for fruitful discussions and E. Breitmoser from the Edinburgh Parallel Computing Centre for her
+contribution to the Lees-Edwards routines in our code. We are grateful to EPSRC for funding much of this
+research through RealityGrid grant GR/R67699 and for providing access to SGI Origin 3800, and Origin
+2000 supercomputers at Computer Services for Academic Research (CSAR), Manchester, UK.
+
+We acknowledge the European Synchrotron Radiation Facility for provision of synchrotron radiation
+facilities and we would like to thank Dr Peter Cloetens for assistance in using beamline ID19, as well
+as Professor Jim Elliott and Dr Graham Davis of Queen Mary, University of London, for their work in
+collecting the raw data and reconstructing the x-ray microtomography data sets used in our Bentheimer
+sandstone images.
+
+References
+
+Aharonov, E. and Rothman, D. H.: 1993, Geophys. Research Lett. 20, 679
+Auzerais, F. M., Dunsmuir, J., Ferreol, B. B., Martys, N., Olson, J., Ramakrishnan, T., Rothman, D., and
+
+Schwartz, L.: 1996, Geophys. Research Lett. 23(7), 705
+
+Berman, F., Fox, G., and Hey, T.: 2003, Grid Computing: Making The Global Infrastructure a Reality, John
+
+Wiley and Sons
+
+Bhatnagar, P. L., Gross, E. P., and Krook, M.: 1954, Phys. Rev. 94(3), 511
+Brooke, J. M., Coveney, P. V., Harting, J., Jha, S., Pickles, S. M., Pinning, R. L., and Porter, A. R.:
+the UK e-Science All Hands Meeting, September 2-4, pp 885–889,
+
+in Proceedings of
+
+2003,
+(http://www.nesc.ac.uk/events/ahm2003/AHMCD/pdf/179.pdf)
+
+Cates, M. E., Kendon, V. M., Bladon, P., and Desplat, J. C.: 1999, Faraday Disc. 112, 1
+Chapman, S. and Cowling, T. G.: 1952, The Mathematical Theory of Non-Uniform Gases, Cambridge
+
+University Press, second edition
+
+Chen, H., Boghosian, B. M., Coveney, P. V., and Nekovee, M.: 2000, Proc. R. Soc. Lond. A 456, 2043
+Chen, S. and Doolen, G. D.: 1998, Annu. Rev. Fluid Mech. 30, 329
+
+Article submitted to Royal Society
+
+Large-scale grid-enabled lattice-Boltzmann simulations of complex ﬂuid ﬂow in porous media and under shear 17
+
+Chin, J., Boek, E. S., and Coveney, P. V.: 2002, Proc. R. Soc. Lond. A 360, 547
+Chin, J., Harting, J., Jha, S., Coveney, P. V., Porter, A. R., and Pickles, S. M.: 2003, Contemporary Physics
+
+44(5), 417
+
+Corberi, F., Gonnella, G., and Lamura, A.: 2002, Phys. Rev. E 66(016114)
+Coveney, P. V.: 2003, Phil. Trans. R. Soc. Lond. A 361(1807), 1057
+Darcy, H.: 1856, Les Fontaines Publiques de la Ville de Dijon, Dalmont, Paris
+de Groot, S. R. and Mazur, P.: 1985, Nonequilibrium thermodynamics, Dover Publications Inc., New York
+Ferr´eol, B. and Rothman, D. H.: 1995, Transport in porous media 20, 3
+Flekkøy, E. G. and Pride, S. E.: 1999, Phys. Rev. E 60(4), 4130
+Foster, I. and Kesselman, C.: 1999a, in I. Foster and C. Kesselman (eds.), The Grid: Blueprint for a New
+
+Computing Infrastructure, pp 15–25, Morgan Kaufmann
+
+Foster, I. and Kesselman, C.: 1999b, in I. Foster and C. Kesselman (eds.), The Grid: Blueprint for a New
+
+Computing Infrastructure, p. 259, Morgan Kaufmann
+
+Gonz´alez-Segredo, N. and Coveney, P. V.: 2003, e-print: www.arXiv.org/cond-mat/0310390
+Gonz´alez-Segredo, N., Nekovee, M., and Coveney, P. V.: 2003, Phys. Rev. E 67(046304)
+Harting, J., Wan, S., and Coveney, P. V.: 2003, Capability Computing: The newsletter of the HPCx commu-
+
+nity 2
+
+147
+
+He, X., Q. Zou, L. L., and Dembo, M.: 1997, J. Stat. Phys. 87(115),
+Inamuro, T., Yoshino, M., and Ogino, F.: 1995, Phys. Fluids 7(12), 2928
+Kendon, V. M., Cates, M. E., Pagonabarraga, I., Desplat, J. C., and Bladon, P.: 2001, J. Fluid Mech. 440,
+
+Lees, A. W. and Edwards, S. F.: 1972, J. Phys. C. 5(15), 1921
+Liboff, R. L.: 1990, Kinetic Theory: Classical, Quantum, and Relativistic Descriptions, Prentice-Hall
+Love, P. J., Maillet, J., and Coveney, P. V.: 2001, Phys. Rev. E 64(061302)
+Love, P. J., Nekovee, M., Coveney, P. V., Chin, J., Gonz´alez-Segredo, N., and Martin, J. M. R.: 2003, Comp.
+
+Phys. Comm. 153(3), 340
+
+Martys, N. S. and Chen, H.: 1996, Phys. Rev. E 53(1), 743
+Nekovee, M., Chin, J., Gonz´alez-Segredo, N., and Coveney, P. V.: 2001, in E. Ramos et al (ed.), Compu-
+tational Fluid Dynamics, Proceedings of the Fourth UNAM Supercomputing Conference, Singapore, pp
+204–212, World Scientiﬁc
+
+Nekovee, M. and Coveney, P. V.: 2001, J. Am. Chem. Soc. 123(49), 12380
+Olson, J. F. and Rothman, D. H.: 1997, J. Fluid Mech. 341, 343
+Shan, X. and Chen, H.: 1993, Phys. Rev. E 47(3), 1815
+Sheppard, S., Mantle, M., Sederman, A., Johns, M., and Gladden, L. F.: 2003, Magnetic Resonance Imaging
+
+Spanne, P., Thovert, J. F., Jacquin, C. J., Lindquist, W. B., Jones, K. W., and Adler, P. M.: 1994, Phys. Rev.
+
+21, 365
+
+Lett. 73(14), 2001
+
+Succi, S.: 2001, The Lattice Boltzmann Equation for Fluid Dynamics and Beyond, Oxford University Press
+Verberg, R. and Ladd, A. J. C.: 2001, Phys. Rev. E 65,
+Wagner, A. J. and Pagonabarraga, I.: 2002, J. Stat. Phys. 107, 521
+Wagner, A. J. and Yeomans, J. M.: 1999, Phys. Rev. E 59(4), 4366
+Xu, A., Gonnella, G., and Lamura, A.: 2003, Phys. Rev. E 67(056105)
+
+Article submitted to Royal Society
+
+

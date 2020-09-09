@@ -1,0 +1,4102 @@
+Dynamic Delaunay tetrahedralizations and Voronoi
+
+tessellations in three dimensions
+
+Gernot Schaller∗ and Michael Meyer-Hermann
+
+Institut f¨ur Theoretische Physik, Technische Universit¨at Dresden, D-01062 Dresden,
+
+Germany
+
+(Dated: May 14, 2008)
+
+Abstract
+
+We describe the implementation of an incremental insertion algorithm to construct
+
+and maintain three-dimensional Delaunay triangulations with dynamic vertices us-
+
+ing a three-simplex data structure. The code is capable of constructing the ge-
+
+ometric dual, the Voronoi or Dirichlet tesselation. A given list of generators is
+
+triangulated and volumes as well as contact surfaces of the Dirichlet regions can
+
+be calculated. We use three-dimensional simplex ﬂip algorithms, an algorithm for
+
+point location that does not rely on the history of the triangulation construction
+
+and in addition, we develop a simple method of deleting vertices from an existing
+
+three-dimensional Delaunay triangulation which was a diﬃcult problem until now.
+
+The dynamics of the triangulation may therefore not only be governed by dynamic
+
+vertex positions but also by a changing number of vertices. The dual Dirichlet tes-
+
+sellation can be used to solve diﬀerential equations on an irregular grid, to deﬁne
+
+partitions in cell tissue simulations, for collision detection etc. The straightforward
+
+generalization to power-weighted Voronoi tessellations is outlined.
+
+3
+0
+0
+2
+ 
+b
+e
+F
+ 
+6
+ 
+ 
+]
+h
+p
+-
+o
+i
+b
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+8
+1
+0
+2
+0
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+∗Electronic address: schaller@theory.phy.tu-dresden.de
+
+1
+
+In nearly all aspects of science nowadays simulations of discrete objects underlying dif-
+
+ferent interactions play a very important role. Such an interaction for example could be
+
+mediated by colliding grains of sand in an hourglass (Ferrez, 2001) or – more abstract – the
+
+neighborhood question of inﬂuence regions (also sometimes called the neighborhood prob-
+
+lem). One general method to represent possible two-body interactions within a system of
+
+N objects is given by a network which can be described by an N
+
+N adjacency matrix ν,
+
+×
+
+with its matrix elements νij = νji (undirected graph) representing the interaction between
+
+the objects i and j. However, for most realistic systems the graph deﬁned this way is not
+
+practical if one remembers that the typical size of a system of atoms in chemistry can be
+
+(1023), the human body consists of
+
+(1018) cells and even simple systems such as a grain-
+
+O
+ﬁlled hourglass contain
+
+O
+
+O
+
+(103) constituents. Even some reasonable fraction of such systems
+
+would be far too complex to be simulated by adjacency matrices. However, in most systems
+
+in reality the interactions at work have only a limited range. The physical force of adhesion
+
+for example, can only be mediated between next neighbors. In the example of colliding sand
+
+grains in an hourglass it is obvious that the grain i can not directly aﬀect the dynamics of
+
+grain j if the grains do not touch. Here the adjacency matrix elements νij would vanish for
+
+all distant grains. A more eﬃcient description of such systems, where interaction is only
+
+mediated locally, can be given by a sparse graph, where the adjacency relations between ob-
+
+jects moving in their parameter space can be updated using rather simple methods. In the
+
+case of solids crystallizing in a certain lattice, the neighborship relations are a priori known
+
+and can be eﬀectively exploited if one considers all deviations from a lattice conﬁguration as
+
+small perturbations. For many crystals, this approximation is a very good one. This method
+
+of cellular automata (von Neumann, 1966) can also be applied to heterogenous systems such
+
+as cell tissues (Baer and Martinez, 1974; Meyer-Hermann, 2002), several adaptations have
+
+to be performed in order to account to the diﬀerent nature of next-neighborship in these
+
+systems. For example, in the realistic system of cells in a human tissue, the number of next
+
+neighbors per cell is neither constant over the cell ensemble nor are the interaction forces.
+
+To make things worse, all these parameters become time dependent for dynamic systems.
+
+The same holds true in the framework of collision detection.
+
+In this article it is our aim to describe our implementation of a code generating three-
+
+dimensional Delaunay triangulations. Delaunay triangulations can cope with these prob-
+
+lems which makes them a suitable tool to model cell tissues (Weliky and Oster, 1990;
+
+2
+
+Weliky et al., 1991), collision detection (Ferrez, 2001) etc.
+
+The generation of two-dimensional (plane) Delaunay triangulations is a well-covered topic,
+
+for a review see e.g. (De Berg et al., 1997; Fortune, 1992; Okabe et al., 1999). Such tri-
+
+angulations are widely used for grid generation in ﬁnite element calculations and surface
+
+generation for image analysis (L¨urig and Ertl, 1996). Since the Delaunay triangulation in
+
+general tries to avoid ﬂat simplices, it also produces a good quality mesh for the solution
+
+of diﬀerential equations (Bottino, 2000; Miller et al., 1995). The higher-dimensional case
+
+however, is much more complicated. For example, three-dimensional triangulations of the
+
+same number of points may have diﬀerent number of tetrahedra (Okabe et al., 1999). This
+
+can be compensated by using more dynamic data structures that allow for a varying number
+
+of simplices such as lists. A more serious problem however, is posed by the fact, that a two-
+
+dimensional polygon can always be triangulated, whereas a three-dimensional nonconvex
+
+polyhedron may not admit a decomposition in tetrahedra without using artiﬁcial (Steiner)
+
+points (Goodman and O’Rourke, 1997; Sch¨onhardt, 1928). These diﬀerences result in the
+
+important consequence that not all algorithms can be generalized in a straightforward way
+
+from two-dimensional Delaunay triangulations. The maintenance of the triangulation in the
+
+case of dynamic (moving) vertices now requires a data structure capable of handling a vary-
+
+ing number of simplices in time. Another important problem is the deletion of vertices from
+
+a Delaunay triangulation which is simple in two dimensions (Brouns et al., 2001; Devillers,
+
+2002) but goes along with problems in higher dimensions, because in three dimensions there
+
+exist nonconvex polyhedra (e.g. Steiner’s polyhedron) that can not not be triangulated.
+
+We have implemented algorithms for both adding and deleting vertices to a three-
+
+dimensional Delaunay triangulation that are incremental in the sense that they trans-
+
+form a Delaunay triangulation with n vertices into a Delaunay triangulation with (n + 1)
+
+or (n
+
+1) vertices, respectively.
+
+In addition, we have implemented ﬂip algorithms
+
+−
+
+(Edelsbrunner and Shah, 1996; Ferrez, 2001; M¨ucke, 1998) to maintain the Delaunay-
+
+property of the triangulation in the case of dynamic vertices. These ingredients together
+
+allow to provide a code for three-dimensional Delaunay triangulations with both dynamic
+
+(i.e. moving) vertices as well as a variable total number of vertices. Such a code is suitable
+
+for the detection of neighborship relations in dynamic cell tissue simulations, where cell
+
+proliferation and cell death are essential elements that have not been covered by Delaunay
+
+triangulations in three dimensions before. Since for many neighborhood interaction forces
+
+3
+
+(especially in cell tissues), the contact surfaces and volumes of the dual Dirichlet tessellation
+
+is of importance, we have also implemented algorithms to compute these values from a given
+
+Delauanay triangulation.
+
+This article is organized as follows:
+
+In section I we brieﬂy review the concept of the Delaunay triangulation by addressing
+
+the basic conventions in I.A, the elementary topological transformations in a triangulation
+
+in I.B, deﬁning the Delaunay criterion in I.C and consider the geometric dual in I.D as well
+
+as the more technical volume and surface calculation of Voronoi cells in I.E. In section II we
+
+describe the actual implementation of the algorithms by presenting the used data structure
+
+in II.A, an incremental insertion algorithm in II.B, a point location algorithm in II.C, the
+
+used ﬂip algorithms in II.D and close with a description of an algorithm for incremental
+
+vertex deletion in II.E. In section III we analyze performances of the incremental insertion
+
+algorithm in III.A, the incremental deletion algorithm in III.B, the transformation of slightly
+
+perturbed Delaunay triangulations into Delaunay triangulations in III.C, and ﬁnally consider
+
+the performance of a combination in III.D. We will close with a summary in section IV.
+
+I. THE DELAUNAY TRIANGULATION
+
+A. Conventions
+
+For the sake of clarity, the illustrations in this article will be two-dimensional, unless
+
+noted otherwise. Following the notation in the literature (Edelsbrunner and Shah, 1996;
+
+M¨ucke, 1998) we denote by the term vertex a position1 in three-dimensional space. By an
+n-simplex in Rd (n
+
+d) we understand the convex hull of a set T of n+1 aﬃnely independent
+
+vertices, which reduces in the three-dimensional case to tetrahedra (3-simplices), triangles
+
+(2-simplices), edges (1-simplices) and vertices (0-simplices). Every n-simplex has a uniquely
+
+deﬁned n-circumsphere. Recall in three dimensions that a tetrahedron is bounded by four
+
+triangles, six edges and four points. These (n
+
+d)-simplices σU – formed by the convex
+
+≤
+
+hull of a subset U
+
+T – are also called faces of T . Since we will work in three dimensions,
+
+≤
+
+⊆
+
+we will shortly denote 3-simplices by the term simplex. A collection of these simplices
+
+is
+
+K
+
+1 If one extends the algorithms towards weighted (regular) triangulations a vertex in addition contains a
+
+weight.
+
+4
+
+called a simplicial complex if:
+
+The faces of every simplex in
+
+are also in
+
+K
+
+K
+
+and σT ′
+
+If σT ∈ K
+(the intersection of two simplices is at most a face of both, the simplices are ¨disjoint¨)
+
+, then σT ∩
+
+σT ′ = σT ∩T ′.
+
+∈ K
+
+In numerical calculations with dynamic vertices the above criterion can be destroyed: A
+
+vertex might move inside another simplex thus yielding two n-simplices whose intersection
+
+is again an n-simplex. We will refer to this situation as an invalid triangulation. To be more
+exact, a triangulation is deﬁned as follows. If S is a ﬁnite set of points in Rd, then such a
+
+simplicial complex
+
+is called a triangulation of S if
+
+each vertex of
+
+is in S
+
+K
+
+K
+
+the underlying space of
+
+is conv(S)
+
+K
+
+By the degree of a vertex in a triangulation we will denote the number of simplices in the
+
+triangulation containing the vertex as endpoints. Furthermore, we will use the terms tetra-
+
+hedralization and triangulation in three dimensions synonymously, unless noted otherwise.
+
+B. Elementary Topological Transformations
+
+To an existing triangulation in R3 several topological transformations can be ap-
+
+plied. We will brieﬂy remind the main ideas.
+
+For a more detailed discussion see
+
+e.g. (Edelsbrunner and Shah, 1996; Xinjian et al., 1997). The discussion basically relys on
+
+Radon’s theorem (see e.g. (Edelsbrunner and Shah, 1996; Goodman and O’Rourke, 1997)):
+
+Let X be a set of d + 2 points in Rd. Then a partition X = X1 ∪
+conv(X2)
+exists such that conv(X1)
+
+=
+
+.
+
+∪
+
+∅
+
+X2 with X1 ∩
+
+X2 =
+
+∅
+
+If X is in general position – meaning that every subset of X with at most d + 1 elements
+
+is aﬃnely independent – then this partition is also unique. In our case this simply means
+
+that (Fortune, 1992; M¨ucke, 1998)
+
+no four points lie on a common plane
+
+no ﬁve points lie on a common sphere
+
+5
+
+•
+
+•
+
+•
+
+•
+
+•
+
+•
+
+6
+Figure 1 illustrates the idea of Radon’s theorem in three dimensions.
+
+From the Radon partition in R3 one ﬁnds that there exist four possible ﬂips in three
+
+dimensions, two for every partition in ﬁgure 1.
+
+In the case of one vertex being situated
+
+within the simplex formed by the remaining four vertices the two possible ﬂips are shown in
+
+ﬁgure 2. The ﬂip changing the triangulation from 1 to 4 simplices corresponds to adding a
+
+vertex to an existing triangulation. Note however, that in practice the inverse transformation
+
+may not always be applicable, since the conﬁguration of one vertex (E in ﬁgure 2) being
+
+the endpoint of exactly four simplices may not be present in a triangulation. This fact –
+
+in combination with the existence of non-tetrahedralizable polyhedra in three dimensions –
+
+severely complicates the deletion of vertices from triangulations, see subsection II.E.
+
+The second partition following from Radon’s theorem requires a more careful evaluation,
+
+see ﬁgure 3. The ﬂips 2
+2) can only be performed if the polyhedron formed
+by the ﬁve points in R3 is convex, otherwise the operation would yield overlapping simplices
+
+3 (and 3
+
+→
+
+→
+
+in the triangulation. The convexity of A, B, C, D, E in ﬁgure 3 can be tested by checking if
+
+for every edge A, B and B, C and C, A there exists a hyperplane which has the remaining
+
+three points (D, E, A/B/C) on the same side (Edelsbrunner and Shah, 1996; M¨ucke, 1998;
+
+Sauer, 1995).
+
+C. The Delaunay Criterion
+
+Every tetrahedron in R3 has a uniquely deﬁned circumsphere, if the four vertices do not
+
+lie on a common plane (i.e. if the tetrahedron is not ﬂat). Recall that the centers of the
+
+circumspheres may lie outside the simplices as is the case with triangles in two dimensions.
+
+The Delaunay triangulation is a triangulation where all the simplices satisfy the Empty-
+
+Circumsphere-Criterion: No vertex of the triangulation may lie inside the circumspheres
+
+of the triangulation simplices. Thus, the Delaunay triangulation is uniquely deﬁned if the
+
+vertices are in general position, i.e. if no ﬁve vertices must lie on a common sphere and no
+
+four vertices may lie on a common plane (Fortune, 1992). For an illustration of a Delaunay
+
+triangulation see ﬁgure 4. Delaunay triangulations have many interesting properties and
+
+have been extensively studied in the literature, see e.g.
+
+(De Berg et al., 1997; Fortune,
+
+1992; Goodman and O’Rourke, 1997; Okabe et al., 1999).
+
+The simplest method to determine, whether a vertex lies outside or inside the circum-
+
+6
+
+sphere of a simplex (A, B, C, D) is to solve the associated four sphere equations. However,
+
+this problem can be solved more eﬃciently by adding one more dimension (Ferrez, 2001;
+
+Goodman and O’Rourke, 1997; M¨ucke, 1998).
+
+Suppose we would like to know whether the vertex E lies in- or outside the circumsphere of
+
+the simplex (A, B, C, D), which we will – without loss of generality – assume to be positively
+oriented. Then one can proceed as follows: Project the coordinates in R3 onto a paraboloid
+in R4 via
+
+A = (Ax, Ay, Az)
+
+A+ = (Ax, Ay, Az, A2
+
+x + A2
+
+y + A2
+
+z) .
+
+(1)
+
+→
+
+The four points A+, B+, C +, D+ deﬁne a hyperplane in R4. If E is within the circumsphere
+of (A, B, C, D), then E+ will be below this hyperplane in R4 and above otherwise. Conse-
+quently, the in-circumsphere-criterion in R3 reduces to a simple orientation computation in
+R4, i.e. by virtue of this lifting transformation one ﬁnds (Ferrez, 2001)
+
+in circumsphere((A, B, C, D), E)
+
+= oriented(A+, B+, C +, D+, E+)
+
+= sign
+
+Ax Ay Az A2
+Bx By Bz B2
+Cx Cy Cz C 2
+Dx Dy Dz D2
+Ex Ey Ez E2
+
+x + A2
+x + B2
+x + C 2
+x + D2
+x + E2
+
+y + A2
+y + B2
+y + C 2
+y + D2
+y + E2
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+= sign
+
+y + A2
+z)
+y + B2
+z )
+y + C 2
+z )
+y + D2
+z)
+where a positive sign is to be taken as an aﬃrmative answer.
+
+Ex Ay −
+Ex By −
+Ex Cy −
+Ex Dy −
+
+Ey Az −
+Ey Bz −
+Ey Cz −
+Ey Dz −
+
+x + A2
+x + B2
+x + C 2
+x + D2
+
+Ax −
+Bx −
+Cx −
+Dx −
+
+−
+
+−
+
+−
+
+−
+
+(E2
+
+(E2
+
+(E2
+
+x + E2
+x + E2
+x + E2
+x + E2
+
+y + E2
+z )
+y + E2
+z )
+y + E2
+z )
+y + E2
+z )
+
+(E2
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+,
+
+(2)
+
+Several algorithms have been developed for the construction of static triangulations
+
+(Goodman and O’Rourke, 1997) as well as for the maintenance of dynamic triangulations
+
+(Ferrez, 2001; Xinjian et al., 1997), some of which will be discussed in section II. The De-
+
+launay triangulation is often used to construct good quality meshes in graphic simulations,
+
+engineering, geography and for numerical calculations. In many applications, also the geo-
+
+metric dual, the Voronoi (or Dirichlet) tessellation is of importance, which will be introduced
+
+in the following subsection.
+
+z 1
+
+z 1
+
+z 1
+
+z 1
+z 1
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+Ez (A2
+Ez (B2
+Ez (C 2
+Ez (D2
+
+7
+
+D. The Geometric Dual: Voronoi Tessellation
+
+The Voronoi tessellation (sometimes also called Dirichlet tessellation) of a set of genera-
+
+tors
+
+ci}
+
+{
+
+in Rd is deﬁned as a partition of space into regions Vi:
+
+Vi =
+
+=
+
+Rn :
+
+Rd :
+
+x
+
+x
+
+{
+
+{
+
+∈
+
+∈
+
+Pi(x)
+x
+|
+
+≤ Pj(x)
+x
+ci| ≤ |
+
+−
+
+−
+
+cj|
+
+j
+∀
+
+= i
+}
+= i
+}
+
+j
+∀
+
+,
+
+(3)
+
+. . .
+|
+|
+
+denotes the euclidean distance.
+
+In other words, the Voronoi cell around the
+where
+generator ci contains all points in Rd that are closer to ci than to any other generator cj.
+
+Note that this partition is – unlike the Delaunay triangulation – uniquely deﬁned also for
+
+point sets that do not fulﬁll the general position assumption. Voronoi tessellations have
+
+many interesting applications in practice – for a survey see e.g. (Okabe et al., 1999) – since
+
+they do in some sense describe inﬂuence regions (in many real problems the inﬂuence of a
+
+generator ci on a point x scales with their euclidean distance).
+
+Consider for instance the two-dimensional example of the post oﬃce problem: In a city
+
+a certain number of post oﬃces is distributed. Now one could ask the question which
+
+region every post oﬃce should deliver, such that the postal service in town is as eﬀective
+
+as possible. For simplicity one could assume that all post workers have the same carts and
+
+the same eﬃciency and that the density of the streets in the town is very large (such that
+
+the carts do not have to take detours). Obviously, then every point being closer to a certain
+
+post oﬃce i than to any other postoﬃce j
+
+= i should be delivered by the post oﬃce i. In
+
+other words, the inﬂuence region of the post oﬃce i is given by the Voronoi cell Vi deﬁned
+
+in (3).
+
+In 2 dimensions Voronoi cells are convex polygons completely covering the plane, see
+
+e.g. ﬁgure 5. Note that per deﬁnition the Voronoi cells around generators Zi situated on the
+
+convex hull of the point set Z =
+
+will extend to inﬁnity and thus will have an
+
+Z1, Z2, . . . , Zn}
+
+{
+
+inﬁnite volume. This ﬁnding generalizes to arbitrary dimensions: The boundaries between
+
+two d-dimensional Voronoi regions Vi and Vj as deﬁned in (3) reduce to the equation for a
+
+d
+
+1 hyperplane.
+
+−
+
+A very simple construction algorithm is to draw connection lines between the generator
+
+i and all other generators j of the set. In the half-distance between i and j a perpendicular
+
+half-plane generates two half-spaces.
+
+If this procedure is performed for all neighbors j
+
+8
+
+6
+6
+6
+then the intersection of all half-spaces containing i deﬁnes the Voronoi cell around the
+
+generator i.
+
+In three dimensions this algorithm coincides with that for the construction
+
+of the famous Wigner-Seitz cell in solid state physics (Kittel, 1996). This construction
+
+algorithm is extremely slow, but fortunately there are much more eﬃcient ways to construct
+
+the Voronoi tessellation.
+
+We would like to summarize some properties of the Voronoi tessellation: In two dimen-
+
+sions, the corners of the Voronoi polygons are the centers of the circumcircles of the triangles
+
+contained in the Delaunay triangulation of the Voronoi generators, see ﬁgure 5. This reﬂects
+
+the geometric duality between the Delaunay triangulation and the Voronoi tessellation. This
+
+duality enables us to focus on the dual Delaunay triangulation in this article. In section I.E
+
+we will describe how to convert it into the Voronoi tessellation.
+
+The introduction of inﬂuence regions also enables the deﬁnition of a euclidean neighbor-
+
+ship between vertices: We understand two vertices to be direct neighbors (in the sense that
+
+their inﬂuence regions touch) if they share a common face in their Voronoi diagram or –
+
+equivalently – if they are direct neighbors (both contained in at least one common simplex)
+
+in the dual Delaunay triangulation, see ﬁgure 5.
+
+Consequently, Dirichlet tessellations play a very important role in the detection of col-
+
+lisions between equally sized spheres. Furthermore, the concept of the Voronoi cell can
+
+be extended towards inﬂuence regions of generators with a varying strength, the weighted
+
+weight, i.e. the functions
+
+Voronoi tessellation (Okabe et al., 1999). In such extensions, every generator is assigned a
+Pi(x) in (3) are not given by a simple euclidean distance anymore
+but rather by a function describing the inﬂuence strength of the generator i at ci on x. Thus,
+
+a weighted Voronoi region Wi of the generator ci is deﬁned in n dimensional space via
+
+Wi =
+
+x
+
+{
+
+∈
+
+Rn :
+
+Pi(x)
+
+≤ Pj(x)
+
+j
+∀
+
+.
+
+= i
+}
+
+Obviously, the weighted Dirichlet regions can – in contrast to the unweighted case – be empty,
+
+e.g. if a vertex with a weak inﬂuence is surrounded by strong vertices. The boundaries of
+
+these Dirichlet regions are (n
+
+1)-hypersurfaces deﬁned via
+
+−
+
+Sij =
+
+x
+
+{
+
+∈
+
+Rn :
+
+Pi(x) =
+
+Pj(x)
+
+j
+∀
+
+.
+
+= i
+}
+
+Among many possible choices for weight functions (Aurenhammer, 1991; Okabe et al., 1999)
+
+we will explicitly mention here the case of power-weighted Voronoi diagrams, also often
+
+(4)
+
+(5)
+
+9
+
+6
+6
+called the Laguerre complex (Ferrez, 2001; Xinjian et al., 1997). It is obtained by assigning
+a weight ωi ∈
+(4). The Laguerre cells are then deﬁned via
+
+R to every generator ci, i.e. by replacing
+
+→ Pi,ωi(x) = (ci −
+
+Pi(x)
+
+i in
+
+x)2
+
+ω2
+
+−
+
+Li =
+
+x
+
+{
+
+∈
+
+Rn : (ci −
+
+x)2
+
+ω2
+
+i ≤
+
+(cj −
+
+−
+
+x)2
+
+−
+
+ω2
+j
+
+j
+∀
+
+.
+
+= i
+}
+
+(6)
+
+Thinking in terms of distances, the Laguerre cells can also be deﬁned as Voronoi diagrams of
+
+a set of diﬀerently sized spheres, since they can also be constructed by inserting perpendicular
+
+planes in the half distance between the sphere surfaces. The advantage is that with this
+
+construction, the contact region between two Laguerre cells does not necessarily have the
+
+same distance from the two generators. Therefore, the Laguerre tessellation is suitable for
+
+collision detection between diﬀerently sized spheres (Ferrez, 2001).
+
+In the power-weighted case one can still show that in three dimensions the Laguerre
+
+cells are convex polyhedra, whose corners can be obtained from the weighted centers of the
+
+corresponding weighted Delaunay triangulation tetrahedra – where the empty circumsphere
+
+criterion is simply replaced by its weighted counterpart (Ferrez, 2001). We would like to
+
+stress that our assumptions in this article can be generalized to the power-weighted case in
+
+a straightforward way.
+
+E. Voronoi surfaces and volumes
+
+Within the framework of growth models (Xinjian et al., 1997), tissue simulations
+
+(Weliky and Oster, 1990; Weliky et al., 1991) and the solution of partial diﬀerential equa-
+
+tions on irregular grids (Bottino, 2000; Miller et al., 1995), not only the neighborship rela-
+
+tions in the Delaunay triangulation but also the corresponding Voronoi cell volumes as well
+
+as the contact surface between two Voronoi cells may become important. In this section we
+
+will describe how to compute these from the corresponding Delaunay triangulation.
+
+We ﬁrst illustrate the volume computation in two dimensions and then generalize this
+
+result to three dimensions. Obviously, to the surface of a Voronoi cell around a vertex Z
+
+every incident simplex σ with Z
+
+σ contributes, see ﬁgure 5.
+
+In two dimensions every
+
+triangle (Z, Ni, Ni+1) contributes two surfaces, spanned by the half distances between the
+vertices A = 1/2(Ni −
+of R = COC(Z, Ni, Ni+1)
+
+Z. If (A, B) are positively oriented (which we will furtheron
+
+Z) and B = 1/2(Ni+1 −
+
+Z), and the center of the circumcircle
+
+∈
+
+−
+
+10
+
+6
+assume without loss of generality), then the oriented 2-volume contribution of the simplex
+
+(Z, Ni, Ni+1) to the Voronoi cell volume of the vertex Z is given by
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+see also ﬁgure 6 for illustration. Obviously, the sum of the three volumes has to equal
+
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
++ (cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+Ry By
+
+Ay Ry
+
+VZ =
+
+(7)
+
+,
+
+Ax Rx
+
+Rx Bx
+
+1
+2
+
+the total simplex volume VZ + VNi + VNi+1 = VS . One can show algebraically, that this
+
+identity holds true for any R, i.e. also in the interesting case where R being the center of
+
+the circumcircle lies outside the triangle as in ﬁgure 6.
+
+In this case one of the two area
+
+contributions in (7) will be negative. Now when considering ﬁgure 6 it becomes clear that
+
+by adding the oriented volume contributions of all simplices containing the vertex Z one
+
+obtains the correct volume for the Voronoi cell around Z.
+
+This ﬁnding generalizes to three dimensions very well (concerning the surface contribution
+
+see (Xinjian et al., 1997) for a similar approach). The volume contribution of the simplex
+
+spanned by (2A, 2B, 2C) (with Z being situated at the origin and A, B, C being positively
+
+oriented) to the vertex Z is given by
+
+VZ = 1
+
++
+
+RAB,
+
+B, R
+
+1
+2
+1
+2
+1
+2
+
+6 (cid:18)(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
++
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
++
+
+A, RAB, R
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+B, RBC, R
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
++
+
+C, RCA, R
+
++
+
+RBC,
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+RCA,
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+1
+2
+1
+2
+1
+2
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+C, R
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:19)
+(cid:12)
+(cid:12)
+(cid:12)
+
+A, R
+
+.
+
+(8)
+
+In above equation R denotes the center of the circumsphere of the simplex, and RAB, RBC,
+
+and RCA denote the centers of the circumcircles of the simplex facets spanned by (A, B),
+
+(B, C) and (C, A), respectively. Again the sum over all volume contributions of one simplex
+
+(A, B, C, D) returns the simplex volume: VS = VA + VB + VC + VD. Also in the three-
+
+dimensional case the volume contributions of all simplices around one vertex add up to
+
+the total Voronoi cell volume around this vertex. These algorithms easily generalize to the
+
+power-weighted case since – as pointed out in (Fortune, 1992) – the centers to be computed
+
+are now simply the weighted centers of the simplices or triangles, respectively.
+
+The contact surface contribution of a simplex containing both vertices can be computed
+
+in analogy to the two-dimensional example in ﬁgure 6, since the contact surfaces between
+
+two Voronoi polyhedra are two-dimensional polygons.
+
+11
+
+Note that these algorithms do not rely on a speciﬁc order of the simplex contributions,
+
+since the relative sign of the volumes takes complete care of the correct summation to
+
+volumes or surfaces, respectively. Of course, the algorithm leads to a wrong Voronoi cell
+
+volume at the boundary, where the Voronoi cells are per deﬁnition inﬁnite. However, if the
+
+centers of the circumspheres of the simplices at the boundary do not lie outside the convex
+
+hull of the triangulation, then the volume summation yields the part of the Voronoi cells
+
+which is inside the convex hull. This is desirable for some conﬁgurations, such as the solution
+
+of partial diﬀerential equations (Bottino, 2000).
+
+The numerical complexity of the volume computation is linear with the number of sim-
+
+plices surrounding the vertex, whereas the complexity of contact surface calculation between
+
+two generators grows linear with the number of simplices containing both generators as end-
+
+points.
+
+We have checked our implementation by using the fact that the sum over all Voronoi cell
+
+volumes in a tessellation of the point set T has to equal the sum of the simplex volumes in
+
+the dual Delaunay triangulation of T .
+
+II. ALGORITHMS AND IMPLEMENTATION
+
+A. The Data Structure
+
+As has already been mentioned in the introduction, three-dimensional Delaunay triangu-
+
+lations are much more complicated than in two dimensions. The ﬁrst diﬀerence is that the
+
+number of triangulation simplices may vary for a constant number of mobile vertices. This
+
+requires a more ﬂexible data structure. However, modern programming languages such as
+
+C++ enable a straightforward implementation. Our triangulation basically consists of two
+
+data structures:
+
+•
+
+•
+
+of the vertices.
+
+a list of the vertices that are to be triangulated
+
+a list of the 3-simplices (tetrahedra) contained in the triangulation
+
+Both structures are organized in a list to enable for the dynamic movement, addition, deletion
+
+of vertices and the corresponding dynamic update of the simplex list, e.g. after the movement
+
+12
+
+A vertex consists of the x, y and z coordinates2 and – to compute the Voronoi cells
+
+eﬃciently – a list of the incident tetrahedra. A simplex consists of four pointers on vertices
+
+and of four pointers on the neighboring simplices. The latter is required by the fact that
+
+we use local neighborhood to locate the simplices (see section II.C) and to extract the facet
+
+between two simplices. The neighbors are stored in a deﬁned order that allows to identify
+
+the neighbor simplex which is opposite to the vertex Ai, i.e. which does not contain Ai but
+
+the other three vertices Aj6=i as endpoints.
+
+The construction of the Delaunay triangulation basically relies on two basic predicates:
+
+The determination whether two points lie on the same side of a plane deﬁned by three
+
+others and the question whether a point lies in- or outside the circumsphere circumscribing
+
+the simplex of four others (enforcement of the Delaunay criterion). By using these two
+
+simple predicates the whole triangulation can be built up.
+
+B. Incremental Insertion Algorithms
+
+This well-known algorithm answers the question: Suppose we have a Delaunay trian-
+
+gulation with n vertices, how can one ﬁnd the Delaunay triangulation with an additional
+
+arbitrary vertex (thus having n + 1 vertices)? Unfortunately in Delaunay triangulations the
+
+insertion of one new vertex can change the whole triangulation, but this only holds true for
+
+some extreme vertex conﬁgurations, for some examples see (Okabe et al., 1999). In prac-
+
+tice, the eﬀect of adding a new vertex to a Delaunay triangulation will nearly always be
+
+local. Anyhow, the algorithms we describe here can of course also cope with these worst
+
+case scenarios.
+
+So let us assume we have a valid Delaunay triangulation with n vertices. Let us further-
+
+more assume that the new vertex lies within the convex hull of the n vertices. Then the
+
+updated Delaunay triangulation can be constructed as follows (see ﬁgure 7):
+
+Identify all invalid simplices in the triangulation, i.e. all those containing the new
+
+vertex within their circumsphere.
+
+•
+
+•
+
+valid simplices.)
+
+Collect the external facets of the invalid simplices. (Those are the triangles facing
+
+2 Note that for power-weighted triangulations a vertex also contains a weight ω.
+
+13
+
+Replace the invalid simplices by new ones formed via combining the external facets
+
+•
+
+with the new vertex.
+
+Sometimes
+
+this
+
+incremental
+
+algorithm is
+
+also
+
+called Bowyer-Watson Algorithm
+
+(Boissonnat and Teillaud, 1993; Choi, 1997). Once all the invalid simplices have been found,
+
+its computational cost is very low (linear with the total number of invalid simplices). At
+
+ﬁrst it actually suﬃces to ﬁnd one invalid simplex. The remaining invalid simplices can be
+
+found iteratively by checking all neighbors of the known invalid simplices for invalidity. This
+
+algorithm is illustrated in ﬁgure 7.
+
+The result of this procedure is a Delaunay triangulation with n + 1 vertices. No ﬂips or
+
+further transformations are required, therefore this algorithm turned out to be faster in prac-
+
+tice than the incremental Green-Sibson Algorithm (Boissonnat and Teillaud, 1993), which
+
+needs the simplex containing the new vertex as an input. Then the elementary topological
+
+transformation 1
+
+4 is performed with this simplex and the resulting (Delaunay-invalid)
+
+→
+
+triangulation is transformed to a Delaunay triangulation by performing 2
+
+3 and 3
+
+→
+
+2
+
+→
+
+ﬂips until all simplices fulﬁll the Delaunay property.
+
+Obviously, for every incremental algorithm one has to construct an initial Delaunay tri-
+
+angulation ﬁrst. It is trivial that every triangulation consisting of just one simplex fulﬁlls
+
+the Delaunay property. Therefore the idea is to use an artiﬁcial large simplex which contains
+
+all the data to be triangulated within its convex hull. This simplex can be determined by
+
+ﬁnding the maximum abolute value of all coordinates of all vertices, i.e.
+
+M =
+
+max
+j=1...n,i=1,2,3
+
+x(j)
+i
+
+,
+
+(9)
+
+where x(j)
+
+i
+
+denotes the ith coordinate of vertex j. Thus, all the data lies within a sphere
+
+situated at the origin with radius M. This sphere must be smaller than the insphere of the
+
+initial simplex which completely contains the data. One choice for such an initial simplex
+
+could be given by the four vertices
+
+2√2, 0,
+
+v2 =
+
+v1 = 2M (0, 0, 1)
+2M
+3 (cid:16)
+2M
+3 (cid:16)−
+2M
+3 (cid:16)−
+
+v3 =
+
+v4 =
+
+√2,
+
+−
+√2, +√6,
+
+1
+−
+(cid:17)
+√6,
+
+1
+−
+
+1
+−
+
+(cid:17)
+
+(cid:17)
+
+,
+
+14
+
+(10)
+
+which resemble the CH4 conﬁguration. Note however, that the maximum norm of the
+
+vertices must be known in the beginning. In practice however, one will simply assume a
+
+safely large value for M.
+
+C. Location of Simplices
+
+In the previous section we have described the incremental insertion algorithm. It should
+
+be stressed that the neighbor simplices of a vertex that is to be added to the triangulation are
+
+not a priori known. So far, we have not mentioned how to ﬁnd the ﬁrst invalid simplex within
+
+the triangulation, i.e. the simplex containing the new vertex within its convex hull. Note
+
+that our approach of point location only uses the present triangulation and not some kind
+
+of construction history (e.g. the so-called Delaunay tree (Boissonnat and Teillaud, 1993) or
+
+history dag (Facello, 1993)) or levels of artiﬁcial triangulations of subsets (Devillers, 1998).
+
+The history approach is rather suitable for triangulations that do not change in time. We are
+
+aiming at dynamic triangulations, where the length of a history stack cannot be controlled.
+
+Therefore we employ another way of locating the invalid simplices.
+
+The naive method to do this would be to check all simplices in the triangulation. However,
+
+for large triangulations this is obviously not practical, since for regular vertex distributions
+
+only a small fraction of the simplices will become invalid. Therefore, we perform a directed
+
+walk algorithm to locate the ﬁrst invalid simplex, which is similiar to that in (Ferrez, 2001),
+
+though there a more complicated data structure (doubly connected facet-edge list – DCFL)
+
+is used. Starting with an arbitrary initial simplex A and a new vertex v to be inserted in
+
+the triangulation, we choose one of the four neighbor simplices of A by using the following
+
+criterion.
+
+•
+
+•
+
+vertices Aj6=i?
+
+⇒
+
+For all four vertices ai=1,2,3,4 of the simplex A check with the new vertex v:
+
+Are the vertices ai and v on diﬀerent sides of the plane deﬁned by the other three
+
+yes : =
+
+Jump to the simplex opposite to Ai. no : =
+
+Check the next vertex Ai.
+
+⇒
+
+If no neighbor simplex is found, the vertex v is contained within the simplex A and
+
+the destination is thus reached.
+
+Note that in valid triangulations – where all simplices lie within the convex hull – this
+
+15
+
+hopping algorithm cannot cross the boundary. Obviously, the algorithm can take diﬀerent
+
+pathways (see ﬁgure 8) since there may be more than one neighbor fulﬁlling this criterion.
+
+However, since a further test would require much higher eﬀort we stick to this simple crite-
+
+rion. Note also that due to numerical errors the hopping algorithm can produce loops when
+
+triangulating regular lattices (such as cubic, ...) that violate the general position assump-
+
+tion. Such pathologic situations can easily be recognized by counting the number of steps
+
+and comparing with the overall number of simplices. Possible counter strategies include the
+
+selection of another starting simplex or the brutal method of checking all the simplices in
+
+the triangulation.
+
+The expected speedup becomes visible if one compares the number of the simplices that
+
+have to be checked on a pathwalk to the total number of the simplices in the triangulation,
+
+see ﬁgure 8. The complexity is directly proportional to the length of the path to be walked
+
+– measured in units of traversed simplices. For n uniformly distributed vertices for example,
+
+the total number of simplices grows linearly (n) with the number of vertices, whereas the
+
+average distance between two arbitrarily selected simplices will grow like n1/3. Once the
+
+invalid simplex has been found, the avarage remaining complexity will be constant (in n),
+
+i.e. the overall theoretical complexity behaves like αn4/3+βn for uniformly distributed points
+
+and generalizes in higher dimensions d to αn1+1/d + βn, see (Bowyer, 1981).
+
+Obviously, the algorithm heavily depends on a good choice of the starting simplex. The
+
+method could therefore be improved by checking whether the new vertices lies within a cer-
+
+tain subregion and choosing a corresponding starting simplex. In many practical simulations,
+
+some neighborship relations may already be known when building the initial triangulation.
+
+Our implementation of the incremental algorithm expects the vertices to be included in some
+
+order, such that successive vertices are also very close to each other in the ﬁnal triangulation
+
+and therefore chooses the starting simplex in the walk algorithm accordingly. For processes
+
+as cell proliferation modeled in the Voronoi cell picture, the situation is even better: New
+
+cells can be created by cell division which corresponds to the insertion of a new vertex close
+
+to an existing one. Consequently, one always has a perfect guess for the starting simplex in
+
+these cases.
+
+16
+
+D. Updating the triangulation
+
+So far we have not mentioned how to maintain the Delaunay criterion in dynamic trian-
+
+gulations where the vertices are moving and therefore neighborship relations can change. In
+
+this subsection we will only consider the case where the positions of the vertices change in
+
+time but their overall number remains constant. As already mentioned, in three dimensions
+
+this usually implies a changing number of simplices.
+
+It is evident that in the case of moving vertices the Delaunay criterion may be violated,
+
+i.e. after the vertices have moved one may end up with a triangulation that violates the
+
+Delaunay criterion. Even worse, if the vertices move too far, e.g. if one vertex moves inside
+
+another simplex, the triangulation will become invalid (contain overlapping simplices). This
+
+must be avoided by either computing the maximum pathway (see e.g. section II.E) or choos-
+
+ing a position displacements that are safely small. So let us assume here that after vertex
+
+movement one is left with a triangulation violating the Delaunay criterion but not contain-
+
+ing any overlapping simplices. If one is interested in Voronoi tessellations or in good quality
+
+meshes, then the Delaunay property must be restored. Recomputing the whole triangulation
+
+is usually not an option for large data sets, since there is no linear triangulation algorithm
+
+available. However, the elementary topological transformations in subsection I.B can be
+
+exploited to restore the Delaunay criterion. Since we will neither add nor delete vertices in
+
+this subsection it is evident that the ﬂips 1
+
+4 and 4
+
+1 are not necessary. Consequently,
+
+→
+
+→
+
+the transformations 2
+
+3 and 3
+
+2 will suﬃce to transform the given triangulation into
+
+→
+
+→
+
+a Delaunay triangulation, which has been shown to work in (Edelsbrunner and Shah, 1996;
+
+Ferrez, 2001; M¨ucke, 1998). Since we rely on a simpler data structure we will reformulate
+
+the ﬂip criterions that need to be imposed.
+
+Suppose we want to check and update a list of simplices of a triangulation to transform it
+
+into the Delaunay triangulation. This list of simplices can either be the complete triangula-
+
+tion, or only a small subset, e.g. the simplices incident to one vertex which has moved or the
+
+simplices incident to a new vertex that has been inserted via the Green-Sibson algorithm.
+
+By analyzing the meaning of neighborship in Voronoi diagrams and Delaunay triangulations
+
+one ﬁnds that only two situations can occur: The vertex vi can either approaches the vertex
+
+vj, such that a previously non-existent neighborship entry between vi and vj must be created
+
+(their two Voronoi cells share a common face) or the the vertex vi departs from the vertex
+
+17
+
+vj so far that a previously existent neighborship entry must be removed, the Voronoi cells
+
+do not touch anymore.
+
+With a glance at ﬁgure 3 one can see that the ﬂip 2
+
+3 eﬀectively creates a neighborship
+
+→
+
+relation, whereas the ﬂip 3
+
+2 removes it. Our simple data structure enables a convenient
+
+→
+
+calculation of the ﬂip criteria in three dimensions in subsection I.B. The main advantage of
+
+the ﬂip algorithm is that it is – in average – linear in the number of simplices which – in
+
+most practical applications – is also linear with the number of vertices.
+
+We iterate through the list of simplices and perform checks among every simplex and its
+
+neighbors for the ﬂips 2
+
+3 and 3
+
+2. If the ﬂip criterion is fulﬁlled, then the ﬂip is
+
+→
+
+→
+
+performed – thus changing the total number of simplices. The new simplices are inserted
+
+at the end of the list of simplices to be checked and are therefore checked again at a later
+
+time. This algorithm terminates if the end of the list of simplices is reached.
+
+Given two simplices S and its neighbor Ni, the ﬂip 2
+
+3 is performed if the following
+
+→
+
+two conditions are met:
+
+•
+
+•
+
+•
+
+•
+
+The opposing vertex of the neighbor Ni lies within the circumsphere of the simplex S.
+
+The ﬁve points SA, SB, SC, SD, N i
+
+opp form a convex polyhedron, where N i
+
+opp is the one
+
+vertex in Ni that is not part of S.
+
+In the last criterion it suﬃces because of Radon’s theorem to check whether the edges of
+
+the common triangle (without loss of generality (SA, SB, SC)) are convex with respect to the
+other two points (SD and N i
+matter whether one asks if N i
+
+opp lies within the circumsphere of S or if Sopp(Ni) lies within
+the circumsphere of Ni. In this context, we also prefer to talk about active (S) and passive
+
+opp) (Edelsbrunner and Shah, 1996; M¨ucke, 1998). It does not
+
+(Ni) simplices.
+
+The criterion for the ﬂip 3
+
+2 can be written as follows: Given the simplex S and two
+
+of its neighbors Ni and Nj, the ﬂip 3
+
+2 is performed if the following conditions are met:
+
+→
+
+→
+
+The simplex Ni is a neighbor of Nj.
+
+The neighbor pairs (S, Ni),(S, Nj) and (Ni, Nj) violate the Delaunay criterion.
+
+Note however, that for these ﬂips to be possible, all simplices must be disjoint, i.e. the
+
+intersection of two simplices may at most be a triangle. Flips cannot be used to recover
+
+18
+
+from a triangulation with intersecting simplices. In other words, the triangulation must be
+
+valid for the ﬂips to be performed. This becomes an issue when choosing the timestep size
+
+for the vertex positions, compare subsection II.E.
+
+E. Deletion of Vertices
+
+In many problems (e.g. mesh generation) the deletion of vertices from a Delaunay trian-
+
+gulation is not of great importance, since there is no great advantage other than a negligible
+
+gain in eﬃciency. However, if the triangulation is used for example for growth models based
+
+on Voronoi/Laguerre tessellations, vertex deletion may become important if the model also
+
+includes the vanishing of cells. Obviously, the ﬂip 4
+
+1 (see ﬁgure 2) eﬀectively deletes a
+
+→
+
+vertex from the triangulation by removing all simplices containing this vertex as endpoint.
+
+This transformation however, can only be applied to vertices whose degree is four – such a
+
+conﬁguration could be achieved by ﬂipping. In this article, we will follow another idea.
+
+Several algorithms have been developed to manage the deletion of vertices in two di-
+
+mensions, see e.g. (Brouns et al., 2001; Devillers, 2002). As has already been argued, there
+
+exist fundamental diﬀerences between the twodimensional and the higherdimensional case.
+
+Simply removing a vertex together with its incident simplices leaves a star-shaped hole in
+
+the triangulation, which is not necessarily convex. The non-convexity of this hole poses a
+
+problem for vertex deletion in dimensions larger than two. Unlike in two-dimensional case,
+
+where a star-shaped polygon always admits a triangulation which can be transformed by
+
+ﬂips into the Delaunay triangulation (Brouns et al., 2001; Devillers, 2002) in three dimen-
+
+sions a star-shaped polyhedron may not admit a tetrahedralization. The simplest example
+
+for such a polyhedron is Sch¨onhardt’s polyhedron (Sch¨onhardt, 1928), reported among oth-
+
+ers in (Boissonnat and Yvinec, 1998). We think that the algorithm presented in (Devillers,
+
+2002) can therefore not be easily generalized to higher dimensions. This algorithm only
+
+attempts to ﬁll the hole created by deleting a vertex, it does not treat the rest of the trian-
+
+gulation, which may be aﬀected by vertex deletion in three dimensions (compare the end of
+
+the section).
+
+Another approach that uses the history of the triangulation is given in (Vigo and Pla,
+
+2000), where the history is used to reconstruct the triangulation such that the vertex has
+
+never been inserted. Since this algorithm uses ﬂips, it might also correctly handle the rest
+
+19
+
+of the triangulation. Again, in our approach we did not want to use some kind of history,
+
+since for dynamic triangulations there is no way to control the size of the history.
+
+The basic idea of our approach to delete a vertex is to move it towards its nearest neighbor
+
+in several steps, each followed by a sequence of ﬂips 2
+
+3 and 3
+
+2 restoring the Delaunay
+
+→
+
+→
+
+property, until the simplices between the two vertices are very ﬂat and can be clipped out
+
+of the triangulation without harming its validity. In some sense we project the problem of
+
+vertex deletion on the already presented algorithm for vertex movement. Figure 9 illustrates
+
+the idea of the algorithm.
+
+The main questions to be answered all reduce to the problem of the stepsize. How far can
+
+a vertex vi be moved into a certain direction without damaging the triangulation, i.e. without
+
+creating overlapping simplices? If the vertex vi penetrates another simplex, the orientation
+
+of at least one of its surrounding simplices will change. Therefore one can derive a stepsize
+
+criterion by demanding that the orientation of the simplices incident to vi may not change
+sign. We deﬁne the pseudo-orientation of a simplex Si = (A(i), B(i), C (i), D(i)) as follows:
+
+(i)
+0 =
+
+V
+
+=
+
+z 1
+
+z 1
+
+A(i)
+B(i)
+C (i)
+D(i)
+
+x A(i)
+x B(i)
+x C (i)
+x D(i)
+
+y A(i)
+y B(i)
+y C (i)
+y D(i)
+
+z 1
+
+z 1
+
+A(i)
+x
+A(i)
+y
+A(i)
+z
+
+−
+
+−
+
+−
+
+B(i)
+B(i)
+B(i)
+
+x B(i)
+x
+y B(i)
+y
+z B(i)
+z
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+−
+
+−
+
+−
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+C (i)
+C (i)
+C (i)
+
+x B(i)
+x
+y B(i)
+y
+z B(i)
+z
+
+D(i)
+x
+D(i)
+y
+D(i)
+z
+
+−
+
+−
+
+−
+
+.
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(i)
+1 =
+
+(i)
+0 + λi
+
+V
+
+V
+
+∆x B(i)
+x
+∆y B(i)
+y
+∆z B(i)
+z
+
+C (i)
+C (i)
+C (i)
+
+x B(i)
+x
+y B(i)
+y
+z B(i)
+z
+
+D(i)
+x
+D(i)
+y
+D(i)
+z
+
+−
+
+−
+
+−
+
+−
+
+−
+
+−
+
+∈
+
+.
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+→
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+20
+
+In the second line we have reordered the terms such that the vertex to be moved is in the
+
+ﬁrst column. In fact, this is – up to a factor of 1/6 – the signed volume of the simplex Si.
+
+Now suppose that one of the vertices – without loss of generality we have chosen A – is
+R and ∆ = (∆x, ∆y, ∆z).
+
+moved along the direction of ∆, i.e. A
+
+A′ = A + λi∆ with λ
+
+Then the new pseudo-orientation is obtained via
+
+If the orientation of the simplex Si = (Ai, Bi, Ci, Di) is not allowed to change one has found
+
+(11)
+
+(12)
+
+an upper bound for λi via
+
+λi(Si) =
+
+(i)
+0
+(cid:16)V
+
+(cid:12)
+(cid:12)
+∆x B(i)
+(cid:12)
+x
+∆y B(i)
+y
+∆z B(i)
+z
+
+−
+
+−
+
+−
+
+(cid:17)(cid:12)
+(cid:12)
+x B(i)
+C (i)
+(cid:12)
+x
+y B(i)
+C (i)
+y
+z B(i)
+C (i)
+z
+
+D(i)
+x
+D(i)
+y
+D(i)
+z
+
+−
+
+−
+
+−
+
+.
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+abs
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+λ = min
+
+λk
+
+Sk:A∈Sk
+
+(13)
+
+(14)
+
+Of course this check has to be done for all simplices incident to the moving vertex A, i.e. with
+
+one has an overall measure of the maximum stepsize of A in the direction of ∆. If λ > 1,
+
+then the vertex can simply be moved along the complete path (∆x, ∆y, ∆z), whereas if
+
+λ < 1 the vertex A can only be moved by a fraction of that pathway. Note that λ = 0 will
+
+correspond to
+
+= 0 for at least one i meaning that A would be incident to a simplex
+
+with a vanishing volume. This is not the case in valid triangulations but nevertheless poses
+
+a problem with rounding errors. Let us furthermore deﬁne A′ to be the nearest neighbor of
+
+A. These vertices will have a certain number of simplices in common. For the remaining
+
+(i)
+0
+(cid:16)V
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:17)(cid:12)
+(cid:12)
+(cid:12)
+
+simplices we deﬁne the quantity λREST in analogy to λ via
+
+λREST =
+
+min
+Sk:A∈Sk,A′ /∈Sk
+
+λk
+
+(15)
+
+Thus, our algorithm for deleting a vertex A can be summarized as follows:
+
+1. Find the nearest neighbor vertex A′.
+
+2. repeat
+
+set ∆ = A′
+
+A
+
+−
+
+determine λ = minSk : A∈Sk λk
+
+determine λREST = minSk : A∈Sk,A′ /∈Sk λk
+
+until λREST > 1.0
+
+3.
+
+delete the simplices containing both A and A′
+
+21
+
+•
+
+•
+
+•
+
+•
+
+•
+
+if λREST ≤
+→
+surrounding A with ﬂips to restore Delaunay property
+
+1.0 move A
+
+A + αλ∆ with α < 1 and update the simplices
+
+replace A by A′ in all simplices surrounding A
+
+set the correct neighborship relations in these simplices
+
+update the simplices incident to A′ with ﬂips
+
+•
+
+•
+
+•
+
+The simplices containing both A and A′ will change their orientation in the last step, since
+
+their volume vanishes when A and A′ merge. However, since these simplices are deleted
+
+anyway, their orientation does not need to be maintained within this last step. The orien-
+
+tation of the simplices containing A but not A′ (described by λREST) however, needs to be
+
+maintained, since these simplices will not be deleted afterwards. Therefore, the quantity
+
+λREST should be the criterion for the last vertex step, whereas λ accounts for the maximum
+
+length of the previous steps.
+
+The possibility of the moving vertex colliding with another vertex is not given, because
+
+we are moving the vertex towards its nearest neighbor – there is no vertex in the Delaunay
+
+triangulation that can be closer than the nearest neighbor, therefore such a case cannot
+
+happen. Another problem is posed by rounding errors in (13): If the numerator becomes
+
+very small – i.e. if one has simplices with an extremely small volume or very skinny simplices,
+
+then λ may tend to assume very small vallues. Rounding errors are then likely to happen
+
+as well. This problem can be weakened by using exact arithmetics when computing (13) or
+
+– when working with random data – by distributing the data over a larger region of space
+
+(larger simplices).
+
+We have run several tests on the deletion algorithm by ﬁrst triangulating a number of
+
+points and then deleting all the points one by one. Before we applied the deletion algorithm
+
+we determined the simplices surrounding the hole that would be created by naively removing
+
+the vertex without triangulation – roughly speaking, we identiﬁed the next-next neighbor
+
+simplices. After the deletion algorithm had been applied we checked if these simplices were
+
+still existent in the ﬁnal triangulation. It turned out that over 10 sample test runs of a 1000
+
+uniformly distributed points in about 25.3
+
+0.8% (1 standard deviation) of the cases the
+
+±
+ﬁnal triangulation did not contain all of the next-next neighbor simplices – in other words:
+
+the rest of the triangulation was aﬀected as well! This conﬁrms that deletion algorithms
+
+in more than two dimensions have to treat more than the simplices incident to the deleted
+
+vertex and that a straightforward generalization of algorithms working in two dimensions
+
+may fail.
+
+22
+
+III. PERFORMANCE
+
+To test our implementation, we performed calculations on a 1.8 MHz AMD Athlon pro-
+
+cessor with 1 GByte of RAM. The code has been compiled using the GNU g++ compiler
+
+with compiler optimization set. The times were then obtained using the clock() command.
+
+The seed values of the random number generator have been determined using the system
+
+time. In all test runs, the data consisted of 64-bit double variables.
+
+A. Incremental Insertion Algorithm
+
+The algorithmic complexities of the walk algorithm and of the Green-Sibson algorithm
+
+have been extensively studied (Edelsbrunner and Shah, 1996). Here we have studied the
+
+computation time in dependence of the number of points to be triangulated. Test runs
+
+were performed for diﬀerent conﬁgurations of points ranging from 25000 to 1000000. The
+
+variation of the results was extremely small, that’s why no statistical error bars are given.
+
+In a ﬁrst series of runs, we considered a slightly perturbed cubic lattice with the average
+
+lattice constant a = 1.0, see ﬁgure 10. As a starting simplex for the simplex walk we
+
+always took a simplex in the center of the cubus. The theoretical algorithmic complexity of
+
+αcN 4/3+βcN is in complete agreement with the simulation. In a second test run, we took the
+
+same lattice conﬁguration but improved the walk algorithm by giving a guess for the simplex
+
+walk. This guess was chosen to be good within the cubus (i.e. good for all points within
+
+the cubus) and bad at the surface of the cubus. For large numbers of points – where the
+
+ratio between vertices at the boundary of the cubus and the total number of vertices in the
+
+cubus becomes small – we ﬁnd a linear algorithmic complexity, as is expected if the cost for
+
+simplex location becomes constant. The triangulations of cubic lattices in three dimensions
+
+are known to produce bad quality simplices (called slivers) and therefore a larger number of
+
+simplices. To compare with a uniform random distribution we triangulated diﬀerent numbers
+
+of points within the cubus [
+
+1.0, +1.0]
+
+1.0, +1.0]
+
+1.0, +1.0]. A much better behaviour
+
+−
+
+[
+−
+
+×
+
+[
+−
+
+×
+
+of the algorithmic complexity is found. However, since for random data no guess for the
+
+simplex walk can be given, the algorithmic complexity remains αrN 4/3 + βrN – though with
+
+αr < αc and βr < βc. Furthermore, ﬁgure 10 shows that the running times with our simple
+
+data structure are competitive with the more sophisticated three-dimensional DCFL data
+
+23
+
+structure (Ferrez, 2001), and other available code (M¨ucke, 1998), where the used algorithms
+
+code scale similiarly on random data.
+
+It is evident that the incremental insertion of data points depends on the choice of the
+
+initial simplex. Figure 11 shows the increase in the average number of hopping steps nec-
+
+essary for the location of the invalid simplices in a triangulation of uniformly distributed
+
+points. The expected n1/3 relation is found.
+
+B. Incremental Deletion Algorithm
+
+In simulation of growth models it will often be necessary to delete vertices from a Delaunay
+
+triangulation. It turns out, that vertex deletion is even more eﬃcient than vertex insertion, at
+
+least for larger point sets. This is mainly due to the fact that no simplex walk is necessary,
+
+since no simplices have to be located, as the simplices incident to the deleted vertex are
+
+already known. Furthermore, one would expect the average algorithmic complexity of vertex
+
+deletion to be constant (i.e. not to depend on the total number of points). In this experiment
+
+we have ﬁrst created a Delaunay triangulation and deleted it afterwards by removing point
+
+by point. Again, the mean out of ten test runs has been calculated. Figure 12 gives an
+
+impression of the expected linear relationship.
+
+C. Restoring the Delaunay property
+
+A simulation hosting dynamic vertices will be especially sensitive on the cost of checking
+
+all simplices for Delaunay invalidity and restoring the Delaunay property. Recall that re-
+
+triangulation is usually not an option for larger data sets. We have triangulated a varying
+
+number of points and moved these points by a slight step in a random direction. Afterwards
+
+the Delaunay property was restored (with a few hundred 2
+
+3 or 3
+
+2 ﬂips. As is ex-
+
+→
+
+→
+
+pected for randomly distributed point sets, the complexity behaves linear in the number of
+
+points, see e.g. ﬁgure 13. By comparing ﬁgure 13 with ﬁgure 10 one ﬁnds that restoring
+
+the Delaunay criterion in a slightly perturbed Delaunay triangulation is much faster than
+
+recomputing the whole triangulation.
+
+24
+
+D. Mixed algorithms
+
+To check whether a simulation can cope with a varying number of dynamic vertices, we
+
+combined the algorithms on vertex insertion, vertex deletion and vertex movement. For
+
+diﬀerent numbers of uniformly distributed vertices 100 time steps have been performed. In
+
+each time step, with probability p = 0.5 an arbitrary vertex was deleted from the triangula-
+
+tion and with probability p = 0.5 a random vertex was inserted. Afterwards all the vertices
+
+were moved by a small deviation followed by the restoration of the Delaunay criterion. If in
+
+average a constant number of vertices are deleted or inserted per timestep, we can expect a
+
+linear behaviour of the code as is shown in table V.
+
+IV. SUMMARY
+
+In this article we have shown that it is possible to construct three-dimensional Delaunay
+
+triangulations that can cope with a changing number of vertices as well as with moving
+
+vertices by using a very simple data structure. This data structure is obtained by adding
+
+neighborship entries to every simplex and by storing the tetrahedra within a list. The
+
+performance of our data structure is comparable to that of more sophisticated data structures
+
+(Ferrez, 2001), which may pose an advantage for parallelization.
+
+We have proposed a new incremental method of vertex deletion solving the serious prob-
+
+lems in maintaining a valid three-dimensional Delaunay triangulation. We found that indeed
+
+by incrementally deleting a vertex from a Delaunay triangulation in a non-negligible fraction
+
+of cases the outside simplices (that were not incident to the deleted vertex) are aﬀected by
+
+deletion. Numerical tests revealed our method of vertex deletion to be in practice faster
+
+than the vertex insertion algorithm, since no simplex walk is necessary – this advantage
+
+compensates the higher eﬀort required by the ﬂips.
+
+Note that the code allows to be generalized towards power-weighted Delaunay triangula-
+
+tions in a straightforward way by replacing the normal circumsphere criterion by its weighted
+
+counterpart. In addition, the code already provides functionality to compute volumes and
+
+contact surfaces of the associated Voronoi cells which are of importance in some simulations
+
+of interacting particle systems. The generalization to Laguerre cells can also be done by
+
+replacing the in-sphere criterion by its weighted counterpart. The resulting tessellation of
+
+25
+
+space in Voronoi/Laguerre cells can be used to model growth/shrinking processes or for the
+
+numerical solution of diﬀerential equations on irregular grids. The ﬁrst implementation of a
+
+vertex deletion algorithm for three-dimensional dynamic tessellations thus makes our code
+
+suitable for the simulation of dynamically interacting complex systems with variable particle
+
+numbers as e.g. cell tissues.
+
+V. ACKNOWLEDGEMENTS
+
+code and the algorithms.
+
+References
+
+G. S. is indebted to T. Beyer and U. Brehm for discussing many problems concerning the
+
+Aurenhammer, F., 1991, ACM Computing Surveys 23(3), 345.
+
+Baer, R. M., and H. M. Martinez, 1974, Ann. Rev. Biophys. Bioeng. 3, 255.
+
+Boissonnat, J.-D., and M. Teillaud, 1993, Theoretical Computer Science 112(2), 339.
+
+Boissonnat, J.-D., and M. Yvinec, 1998, Algorithmic Geometry (Cambridge University Press, Cam-
+
+bridge), 1 edition.
+
+Bottino, D. C., 2000, IMA Volumes in Mathematics and its Applications, Frontiers in Applied
+
+Mathematics Series 121, 295.
+
+Bowyer, A., 1981, The Computer Journal 24(2), 162.
+
+Brouns, G., A. De Wulf, and D. Constales, 2001, The Hydrographic Journal 101.
+
+Choi, T. J.,
+
+1997, Generating optimal
+
+computational grids:
+
+Overview and review,
+
+http://www.me.cmu.edu/faculty1/shimada/cg97/taek/.
+
+De Berg, M., M. van Kreveld, M. Overmars, and O. Schwarzkopf, 1997, Computational Geometry
+
+(Springer, Berlin), 1 edition.
+
+Devillers, O., 1998,
+
+in Proc. 14th Annu. ACM Sympos. Comput. Geom., pp. 106–115, URL
+
+http://www-sop.inria.fr/prisme/publis/d-iirdt-98.ps.gz.
+
+Devillers, O., 2002, Internat. J. Comput. Geom. Appl. 12, 193.
+
+Edelsbrunner, H., and N. R. Shah, 1996, Algorithmica 15, 223.
+
+Facello, M. A., 1993, Constructing Delaunay and regular triangulations in three dimensions, Mas-
+
+ter’s thesis, University of Illinois at Urbana-Champaign.
+
+26
+
+Ferrez, J.-A., 2001, Dynamic triangulations for eﬃcient 3d simulations of granular materials, Ph.D.
+
+thesis, EPFL, thesis 2432.
+
+Fortune, S., 1992, Computing in Euclidean Geometry 1.
+
+Goodman, J., and J. O’Rourke, 1997, Handbook of Discrete and Computational Geometry (CRC
+
+Kittel, C., 1996, Introduction to Solid State Physics, 7th Ed., Wiley, (1996). (John Wiley and
+
+Press, New York), 1 edition.
+
+Sons), 7 edition.
+
+L¨urig, C., and T. Ertl, 1996, 3D Image Analysis and Synthesis ’96 , 183.
+
+Meyer-Hermann, M., 2002, Journal of Theoretical Biology 216, 273.
+
+Miller, G. L., D. Talmor, S.-H. Teng, and N. Walkington, 1995, Proceedings of the 27th Annual
+
+ACM Symposium on Theory of Computing , 683.
+
+M¨ucke, E., 1998, International Journal of Computational Geometry and Applications 2(8), 255.
+
+von Neumann, J., 1966, Theory of Self-Reproducing Automata (University of Illinois Press), 1
+
+edition.
+
+Okabe, A., B. Boots, K. Sugihara, and S. Chiu, 1999, Spatial Tessellations: Concepts and Appli-
+
+cations of Voronoi Diagrams (John Wiley and Sons), 1 edition.
+
+Sauer, J., 1995, Allgemeine Kollisionserkennung und Formrekonstruktion basierend auf Zellkom-
+
+plexen, Master’s thesis, Universit¨at des Saarlandes, Fachbereich 14 Informatik.
+
+Sch¨onhardt, E., 1928, Math. Annalen 98, 309.
+
+Vigo, M., and N. Pla, 2000, Regular Triangulations of Dynamic Sets of Points, Technical Report.
+
+Weliky, M., and G. Oster, 1990, Development 109, 373.
+
+Weliky, M., G. Oster, S. Minsuk, and R. Keller, 1991, Development 113, 1231.
+
+Xinjian, X., R. Franco, T. Hubert, T. M. Liebling, and A. Mocellin, 1997, Philosophical Magazine
+
+B 75(4), 567.
+
+Figures
+
+27
+
+D
+
+E
+
+B
+
+A
+
+(a)
+
+D
+
+B
+
+E
+
+A
+
+(b)
+
+C
+
+C
+
+FIG. 1 Illustration of the Radon partition in three dimensions. There are two possible constella-
+
+tions of the 5 points A, B, C, D, E in three dimensions. In (a) the point E lies within the simplex
+
+formed by (A, B, C, D), whereas in (b) none of the vertices lies within the simplex formed by the
+
+other ones.
+
+D
+
+E
+
+4 to 1
+
+B
+
+B
+
+D
+
+E
+
+A
+
+(a)
+
+C
+
+FIG. 2 Three-dimensional illustration of the addition or deletion of a vertex E. In the left picture
+
+(a) one has exactly four simplices: (A, B, C, E), (A, B, D, E), (A, C, D, E), (B, C, D, E),
+
+whereas in the right picture (b) the vertex E lies within the simplex (A, B, C, D). The edges
+
+that can principally not be seen from the outside are drawn dashed. Switching between the two
+
+conﬁguration corresponds to adding (1
+
+4) the vertex E to an existing triangulation or deleting
+
+→
+
+it (4
+
+1), respectively. Note that for these operations to be possible, the point E must lie within
+
+→
+
+the simplex (A, B, C, D).
+
+1 to 4
+
+C
+
+A
+
+(b)
+
+28
+
+D
+
+B
+
+A
+
+C
+
+3 to 2
+
+A
+
+2 to 3
+
+C
+
+D
+
+B
+
+E
+
+(a)
+
+E
+
+(b)
+
+FIG. 3 Three-dimensional illustration of the possible triangulations of ﬁve points. In (a) there
+
+are two simplices: (A, B, C, D), (A, B, C, E), sharing the common triangle (A, B, C), whereas the
+
+right picture (b) consists of three simplices (A, B, D, E), (B, C, D, E), (C, A, D, E). The simplices
+
+have been taken apart for clarity and the dotted lines have been drawn to connect the identical
+
+points. Edges that are invisible from the outside have been drawn with dashed lines. Note that
+
+the ﬂips can only be performed, if the polyhedron (A, B, C, D, E) is convex, since otherwise the
+
+ﬂips will result in overlaps with additional neighboring simplices (not shown here).
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+
+29
+
+FIG. 4 Two-dimensional illustration of the Delaunay triangulation of 10 vertices. The circum-
+
+circles (drawn with dotted lines) of each 2-simplex may not contain any further vertex of the
+
+triangulation. If d + 2 points lie on a common sphere, their position is also often called degener-
+
+ate, since there are two possible triangulations satisfying the Delaunay criterion. In this example
+
+the two hatched simplices are close to a degenerate position, since their circumspheres do nearly
+
+coincide.
+
+FIG. 5 Two-dimensional Voronoi cell around a generator Z, which is surrounded by other gen-
+
+erators Ni. All points within the shaded region are closer to the generator Z than to any other
+
+generator. The corners of the Voronoi cell polygons Mi are the centers of the circumcircles (drawn
+
+with dotted lines) of the Delaunay triangulation (solid lines) of the generator set.
+
+N2
+
+Mk
+(cid:0)(cid:1)
+
+M1
+(cid:0)(cid:1)
+
+M2
+
+(cid:0)(cid:1)
+
+Z
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+
+(cid:0)(cid:1)
+M4
+
+M3
+
+(cid:0)(cid:1)
+
+(cid:0)(cid:1)
+M5
+
+N3
+
+Nk
+
+N5
+
+Z
+
+N2
+
+N1
+
+a1
+
+a3
+
+a2
+
+r12
+
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)
+
+r23
+
+N1
+
+N4
+
+N3
+
+30
+
+FIG. 6 Volume (area) computation of a two-dimensional Voronoi cell around the generator Z.
+
+Here for clarity only two simplices are shown. The ﬁrst simplex (Z, N1, N2) contributes the positive
+
+area spanned by (a1, r12) and the negative area spanned by (r12, a2). The second contribution is
+
+negative because the center of the circumcircle of (Z, N1, N2) is outside the simplex. Most of the
+
+negative volume contribution is thus cancelled – up to a small part (hatched region) situated outside
+
+the Voronoi cell boundary (thick lines). However, when considering the next simplex (Z, N2, N3)
+
+the positive contribution spanned by (a2, r23) cancels with this remaining negative contribution
+
+from the ﬁrst simplex. The last contribution comes from (r23, a3) and is again positive.
+
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+
+(cid:0)(cid:1)
+(cid:0)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+
+(cid:0)(cid:1)
+
+(cid:0)(cid:1)
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+
+(cid:0)(cid:1)
+
+(cid:0)(cid:1)
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+
+FIG. 7 Two-dimensional illustration of the incremental insertion algorithm. In this example, a
+
+new vertex (large point) is inserted into an existing triangulation (not all simplices are shown).
+
+Most of the simplices remain valid (shaded region), but 3 simplices (dashed lines) contain the new
+
+vertex within their circumspheres (dotted lines). These are replaced by 5 new simplices (solid
+
+lines) formed by the new vertex and the external facets (which are simply lines in two dimensions).
+
+The resulting triangulation fulﬁlls the Delaunay criterion. In practice as in the above example the
+
+overall change to the triangulation will in most cases be local.
+
+31
+
+11
+
+12
+
+10
+
+15
+
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+13
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+14
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+
+6
+
+9
+
+8
+
+7
+
+5
+
+4
+
+5
+
+6
+
+3
+
+2
+
+4
+
+3
+
+1
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+
+0
+
+FIG. 8 Two-dimensional illustration of the hopping algorithm in a triangulation (not all simplices
+
+are shown). Starting from the hatched initial simplex 0 the algorithm ﬁnds its way towards the
+
+invalid simplex 15 (cross-hatched) that contains the new vertex (large point). The remaining
+
+two invalid simplices (brick-pattern) are found by iteratively checking the neighbors for Delaunay
+
+invalidity. Note that there are multiple possible paths as in simplices 2 to 7, which per accident do
+
+recombine after an equal number of steps in this example (only two possible paths are shown). The
+
+computational time necessary for the walk algorithm is proportional to the number of traversed
+
+simplices.
+
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+
+(a)
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+(cid:0)(cid:0)
+(cid:1)(cid:1)
+
+(b)
+
+FIG. 9 Two-dimensional illustration of vertex deletion from a Delaunay triangulation. In part a,
+
+the vertex to be deleted (large hatched point) is moved in several steps followed by ﬂips restoring
+
+the Delaunay property towards its closest neighbor (large solid point), until the inner simplices
+
+(shaded region) can be safely deleted (part b). The two vertices are simply merged and the
+
+remaining opposing simplices are connected as neighbors. Finally, the Delaunay criterion is again
+
+restored by using ﬂips.
+
+32
+
+1000
+
+]
+s
+[
+ 
+e
+m
+
+i
+t
+ 
+n
+o
+i
+t
+a
+l
+u
+g
+n
+a
+i
+r
+t
+
+800
+
+600
+
+400
+
+200
+
+0
+
+0
+
+120
+
+100
+
+80
+
+60
+
+40
+
+20
+
+s
+p
+e
+t
+s
+ 
+
+g
+n
+i
+p
+p
+o
+h
+x
+e
+l
+p
+m
+i
+s
+
+ 
+
+0
+
+0
+
+perturbed cubic (centered guess)
+curve fit to 5.6e-06 N^(4/3)+3.4e-04 N
+perturbed cubic (with guess)
+uniform random (no guess)
+curve fit to 3.6e-06 N^(4/3)+5.4e-05 N
+
+2e+05
+
+4e+05
+
+6e+05
+
+8e+05
+
+1e+06
+
+number of vertices inserted
+
+FIG. 10 Times necessary for the tetrahedralization of diﬀerent point numbers for diﬀerent dis-
+
+tributions. In the case of a cubic lattice without guess the calculation time is largest because the
+
+simplex location’s algorithmic complexity is N 1/3 and because the triangulation of cubic lattices
+
+produces many slivers. In the case of the points distributed on (perturbed) lattices, the cost of the
+
+simplex location can be reduced to constant by giving a good ﬁrst guess. In the case of randomly
+
+distributed points, both the simplex location and the update of the triangulation are much faster
+
+than in the cubic lattice – provided no guess is given. Therefore the overall algorithmic complexity
+
+is αrN 4/3 + βrN . Note that when tetrahedralizing even larger point sets, the random distribution
+
+will ﬁnally be worse than cubic distribution with a good guess at some number of points.
+
+mean number of steps (10 runs)
+fit to s=2.95 n^(1/3)
+
+2000
+
+4000
+
+6000
+
+8000
+
+10000
+
+number of vertices in triangulation
+
+33
+
+1,5
+
+2
+
+1
+
+0,5
+
+]
+s
+[
+ 
+e
+m
+
+i
+t
+ 
+n
+o
+i
+t
+e
+l
+e
+d
+ 
+l
+a
+r
+e
+v
+o
+
+0
+
+0
+
+8
+
+6
+
+4
+
+2
+
+]
+s
+[
+ 
+y
+t
+r
+e
+p
+o
+r
+p
+ 
+y
+a
+n
+u
+a
+l
+e
+D
+ 
+e
+r
+o
+t
+s
+e
+r
+ 
+o
+t
+ 
+e
+m
+
+i
+t
+
+0
+
+0
+0
+
+FIG. 11 The number of necessary steps starting from an arbitrary simplex in the triangulation
+
+towards another arbitrary simplex scales like n1/3. Shown is the mean out of ten runs.
+
+deletion of randomly distributed points
+linear regression
+
+1000
+
+2000
+
+3000
+
+4000
+
+5000
+
+number of deleted points
+
+FIG. 12 Shown are the calculation times necessary for the deletion of diﬀerent numbers of points.
+
+The expected linear relation is found. Furthermore, vertex deletion is much more eﬃcient than
+
+vertex insertion, if in the latter case no good guess for a start simplex is provided.
+
+randomly distributed points
+linear fit 1.7e-05 N
+
+1e+05
+1e+05
+
+2e+05
+2e+05
+
+3e+05
+3e+05
+
+4e+05
+4e+05
+
+5e+05
+5e+05
+
+number of moving vertices
+
+FIG. 13 Shown are the calculation times necessary for the restoration of the Delaunay criterion
+
+after the vertices have moved. The expected linear relation is found.
+
+34
+
+Tables
+
+TABLE I Code performance for diﬀerent numbers of vertices. In every run, 100 timesteps have
+
+been performed. In each timestep, with probability p = 0.5 either an old vertex was deleted or a
+
+new vertex was inserted into the triangulation (second and third columns). Then all the vertices
+
+were moved by a small amount and the ﬂips necessary to restore the Delaunay criterion have been
+
+counted – the fourth column does not include the ﬂips necessary for the deletion process. In the
+
+last column, the calculation time per timestep is given.
+
+points deletions (total) insertions (total) ﬂips (total) one timestep [s]
+
+20000
+
+40000
+
+60000
+
+80000
+
+100000
+
+120000
+
+140000
+
+160000
+
+180000
+
+200000
+
+59
+
+51
+
+52
+
+46
+
+42
+
+47
+
+62
+
+56
+
+50
+
+49
+
+41
+
+49
+
+48
+
+54
+
+58
+
+53
+
+38
+
+44
+
+50
+
+51
+
+0.26
+
+0.54
+
+0.84
+
+1.15
+
+1.47
+
+1.81
+
+2.14
+
+2.49
+
+2.84
+
+3.21
+
+426
+
+1098
+
+2067
+
+2749
+
+3521
+
+5154
+
+6297
+
+7207
+
+7918
+
+9766
+
+35
+
+

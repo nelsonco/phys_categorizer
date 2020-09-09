@@ -1,0 +1,484 @@
+2
+0
+0
+2
+ 
+v
+o
+N
+ 
+7
+ 
+ 
+]
+n
+a
+-
+a
+t
+a
+d
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+6
+3
+0
+1
+1
+2
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+GUI Tools for an Enhanced User Experience
+
+P.A. Kienzle1
+1National Institute of Standards and Technology, Gaithersburg, MD 20899, USA
+(Dated: October 31, 2002)
+
+For instruments with many occasional users, it is important to have easy to use software. To
+support the frequent users it is important to be ﬂexible. Using a scripting language to design a GUI
+and exposing it to the user allows us to do both. We present our work on a GUI for reﬂectometry data
+reduction and analysis written in Tcl/Tk and Octave, with underlying C code for the numerically
+intensive portions. As well as being easier to train new users, the new software allows existing users
+to do in minutes what used to take hours.
+
+I.
+
+INTRODUCTION
+
+Reﬂectivity data reduction and analysis at the NCNR
+has been a mix of various command line tools written in C
+and Fortran, often hidden behind scripts. Over the past
+year we have been reimplementing the functionality of
+these tools using a combination of Tcl/Tk1 and Octave2.
+As we describe reﬂectometry data reduction and anal-
+ysis there are a number of themes to keep in mind. Soft-
+ware should do the right thing most of the time. Software
+should allow you to do the wrong thing if necessary. Soft-
+ware should not be limited to just those features that are
+programmed in by hand. Users should be free to per-
+form special calclations on their data without losing all
+the beneﬁts of the GUI environment.
+
+II. REFLECTOMETRY
+
+A reﬂectometer consists of an incident beam, slits to
+control beam width and beam divergence, attenuators to
+control ﬂux, the sample mount, and one or more detec-
+tors. Users can control the slits, the attenuators, the
+incident angle of the beam and the reﬂected angle to the
+detector. The slits are chosen such that the sample is
+fully illuminated throughout the entire range of angles.
+At very low angles the slits are ﬁxed slightly open other-
+wise the beam intensity would go to zero.
+
+After reducing the reﬂectometry data, the user is left
+with a reﬂectivity curve giving the proportion of reﬂected
+beam as a function of Q in reciprocal space. In practice,
+users want to be able to see both Q and angle theta
+throughout the reduction process.
+
+There are four scans that are used to compute the ﬁnal
+reﬂectivity, as determined by the incident and reﬂected
+angles. Keeping the reﬂected angle equal to the incident
+angle measures the specular reﬂection. Keeping the re-
+ﬂected angle slightly above or below the incident angle
+measures the oﬀ-specular reﬂection. Under the assump-
+tion of a perfectly ﬂat sample, the oﬀ-specular reﬂection
+is considered to be background noise, and is to be sub-
+tracted from the specular reﬂection when producing the
+ﬁnal reﬂectivity curve. The positive oﬀset and a negative
+oﬀset background scans are averaged before subtracting
+them from the specular scan. Keeping the incident and
+
+reﬂected angles at zero but gradually opening the slits
+measures the slit scan. This records the power of the
+incident beam which you need in order to normalize the
+ﬁnal reﬂectivity curve.
+
+There is also the rocking curve. Here the incident an-
+gle is ﬁxed and the reﬂected angle is varied. If the peak
+does not occur when the reﬂected angle matches the in-
+cident angle, then the user knows that the sample is not
+mounted properly. The rocking curve will also give an in-
+dication of the validity of the assumption that the sample
+surface is perfectly ﬂat. Using a set of detectors at dif-
+ferent reﬂected angles rather than a single one, users can
+measure an entire rocking curve at a time. At present
+this is used to estimate the specular and background sig-
+nals simultaneously so it makes more eﬃcient use of the
+instrument. A topic of research is how to extract informa-
+tion about the surface of samples which are not uniform
+from the grid of rocking curves taken at various incident
+angles.
+
+There are a variety of other measurements that are
+made, such as ﬁxing slits and angles but varying temper-
+ature or ﬁeld (or occasionally on NG7, the height of the
+sample). Our software can display these curves, but they
+do not enter into further reduction or analysis.
+
+III. DATA SELECTION
+
+Many raw data ﬁles are required to produce one reﬂec-
+tivity curve. Individual runs are used to cover diﬀerent
+parts of the Q range due to things such as diﬀering count-
+ing times, sampling densities or beam attenuation. With
+polarized beam, the data for each polarization state (A,
+B, C or D) is taken separately. In an extreme case (po-
+larized data with positive and negative Q ranges each
+split into several runs) over 100 ﬁles may be required to
+produce a single reﬂectivity curve.
+
+The attenuators are placed in the beam by hand, so
+each time an attenuator is changed, there will be another
+ﬁle created. Because the detector needs time to recover
+between events, we need attenuators whenever the rate
+of neutrons entering the detector is too high. This is
+mainly an issue for slit scans because then the detector
+is exposed directly to the beam.
+
+The motor control program only allows motors to be
+
+moved by ﬁxed increments during a single run. At low
+angles the user has ﬁxed slits, so low angle data must be
+in a separate run. Depending on what they are measur-
+ing, users will want to sample some parts of the reﬂec-
+tivity curve more densely than others. Each change in
+sampling density requires a new run.
+
+The measurable reﬂectivity signal can change by seven
+orders of magnitude from below the critical angle where
+it is one, to high angles where it is indistinguishable
+from background. To get statistically signiﬁcant counts
+throughout the entire range, diﬀerent sections are mea-
+sured for diﬀerent times. Whenever the measurement
+time changes, a new run is needed.
+
+One instrument has ﬂippers to change the polarization
+state of the neutrons. A complete set of data consists of
+A,B,C,D ﬁles depending on which of the pair of ﬂippers
+is activated. Sometimes reﬂectivity is measured through
+front and back surfaces, so each positive Q run will have
+a corresponding negative Q run.
+
+For a variety of reasons the same Q range is often mea-
+sured several times. Sometimes it is because the sample
+is dynamic. Users will reject the ﬁrst few passes because
+the specular curve is still changing, but they will want
+to combine the remaining passes in the ﬁnal reﬂectivity.
+Plus there are the usual problems that crop up during
+an experiment which cause some runs to be aborted or
+some ranges to be remeasured.
+
+To make sorting through the data easier, our software
+automatically categorizes each ﬁle according to what it is
+trying to measure. This is easy for reﬂectometry because
+that information is completely determined by the motor
+movements as recorded in the data ﬁle. The data range
+is displayed along with the run number. This makes it
+easy to see which runs compose the entire Q-range of the
+curve without having to select the ﬁles or read from the
+log book. Double-clicking the ﬁrst ﬁle in the Q-range au-
+tomatically selects all ﬁles of the same type which extend
+the Q-range. Data taken with diﬀerent ﬂippers or diﬀer-
+ent slits or at diﬀerent temperature or diﬀerent ﬁeld are
+skipped. Users can add or remove ﬁles individually, and
+with a little extra eﬀort they can force otherwise incom-
+patible ﬁles to be selected together. An ongoing theme
+is to provide convenience without sacriﬁcing ﬂexibility.
+
+Even as a tool for sorting data ﬁles without perform-
+ing any reduction, experienced users have found our soft-
+ware to be worthwhile. Being special purpose software
+it knows how to plot reﬂectometry data and automati-
+cally normalize for things like monitor count. What you
+can do with a double click would take several minutes
+to do with command line tools. The result is that data
+reduction which used to take hours can now be done in
+minutes.
+
+Even better, our software encourages users to examine
+the data at each step of the reduction process. In one case
+a subtle problem with the instrument controller lead to a
+small discrepency in one of the scans. Because the data
+is visible at every step of the way the discrepency was
+easy to spot. With command line and batch ﬁles, there
+
+2
+
+isn’t a strong inclination to view the data every step of
+the way, and the discrepency wasn’t noticed.
+
+For novice users the software is a boon. Yes they ben-
+eﬁt as much from the data browsing capabilities as the
+experienced users, but they also beneﬁt from the consis-
+tency checks which restrict the data that can be selected
+together. Furthermore certain questionable data points
+such as those in which the data rate exceeds the known
+recovery time for the detector are automatically tagged
+for exclusion. While it may not be obvious to the user
+why the points are being excluded, it should be enough
+of a clue that they will ask a more experienced user what
+is going on. Better that than to quietly accept question-
+able data. Users can override the exclusion easily enough
+in keeping with the theme of convenience and correctness
+without sacriﬁcing ﬂexibility.
+
+IV. DATA REDUCTION
+
+Once the ﬁles are selected the data reduction process
+is fairly straight forward. A set of specular, background
+and slit scans are selected. Specular runs are averaged
+and the average background is subtracted. The result
+is divided by the slit scan and by the incident medium
+transmission coeﬃcient if the beam is attenuated by the
+sample environment.
+If the data was taken with ﬁxed
+slits at low Q, users need to apply a footprint correction
+to account for the fact that some of the beam spills over
+the edges of the sample.
+
+There are of course complications. For example, the
+slit scan is based on slit conﬁguration rather than an-
+gle so specular and background data need to carry slit
+information along with them so they can be normalized
+later on. That means the data saved in intermediate ﬁles
+must also record the slits associated with each data point.
+This complicates saving and reloading data ﬁles. There
+are also the same sorts of complications which arise with
+data selection: the software tries to ensure that the scans
+selected for reduction are consistent, allowing the user to
+override if necessary.
+
+Again the GUI interface allows a novice user to easily
+learn the necessary steps for data reduction. The soft-
+ware can keep track of the state of the data reduction and
+warn if for example the user tries to do a footprint cor-
+rection before selecting the slit scan which will normalize
+the data [this is work in progress].
+
+V. DATA ANALYSIS
+
+After the data has been reduced to a reﬂectivity curve,
+the next step is to try to ﬁnd a density proﬁle which gives
+rise to that proﬁle. If you can change a property of the
+the sample such as the fronting medium you can solve
+the inverse problem directly5. Without additional con-
+straints however, ﬁnding the density proﬁle is an ill-posed
+problem since many diﬀerent proﬁles can give rise to the
+
+same reﬂectivity curve. This situation is exacerbated by
+a search space with many, many local minima and an
+expensive cost function (about one second per function
+evalation for a proﬁle of moderate complexity on my slow
+machine).
+
+Some ﬁtting tools are model independent in that they
+try to ﬁnd a density proﬁle which generates the reﬂec-
+tivity curve without making any assumptions about the
+shape of the proﬁle other than an initial guess4. Other
+ﬁtting tools are model dependent in that they assume
+the sample is made up of particular layers of particular
+depths with particular diﬀusion across the layer bound-
+ary. The user then codes constrains among the parame-
+ters the software ﬁnds the best ﬁt.
+
+An example of the latter program is mlayer3. This is
+the ﬁrst analysis program for which we have provided a
+GUI interface. Unlike other model-based interfaces, ours
+lets the user directly manipulate the density proﬁle. As
+they drag interfaces, roughnesses and scattering length
+densities, users are treated to automatic updates of the
+theoretical density curve overlaid on the reﬂectivity data
+which they are trying to ﬁt. Users can also enter speciﬁc
+known values into a table of layers.
+
+VI. TOOLS
+
+The GUI interface we have been working on over the
+past year has been developed primarily in Tcl/Tk. Tcl
+is an excellent scripting environment in this case because
+it is simple to learn but still powerful. Because it is a
+popular language, there are a number of tools available
+for it. Usually, if you need some kind of interface widget it
+is a matter of ﬁnding one that somebody else has written
+rather than writing a new one for yourself.
+
+One big piece missing from Tcl/Tk for scientiﬁc pro-
+gramming is that it does not deal well with vectors
+and matrices. There are some pure Tcl implementa-
+tions of matrix operations but they are too slow. The
+BLT package provides vectors and some vector opera-
+tions, but many operations are not available. Instead we
+use the Octave numerical environment as a compute en-
+gine. Again it is a simple language to learn, and again
+it is similar enough to Matlab that are large number of
+tools are available for it. Usually, if you need to solve
+some kind of numerical problem it is a matter of ﬁnding
+a solution that someone else has written.
+
+While not a full featured publication quality graph lay-
+out application, the graph widget we use (BLT) provides
+enough control to make an excellent data browser. Being
+tightly bound to the rest of our GUI allows us to imple-
+ment certain conveniences which we could not easily do
+with a separate graphing application such as switching
+from log to linear by clicking on the axis or displaying
+the point under the cursor as both Q and angle coordi-
+nates which are very useful in our application.
+
+Because we are using a scripting language, we can open
+up a console which allows us to enter commands directly
+
+3
+
+in that language, including commands for manipulating
+data that is shown on the screen. For example, certain
+specialized processing of the counts may be required to
+correct for an instrument error. These procedures only
+need to be applied to a few ﬁles (e.g., 3 months worth the
+runs) so it isn’t reasonable to expect support for the spe-
+cialized processing to go into the general reﬂectivity re-
+duction software. Instead they should be able to modify
+the aﬀected ﬁles by hand (e.g., using a correction script)
+and continue processing the data using the usual gui in-
+terface.
+
+Once the experiment is running smoothly, data is taken
+very regularly. In that case it should not be necessary to
+select all the data by hand for reduction, but instead be
+able to write a script which reduces all the data, showing
+a few key steps along the way so that the user can be sure
+that the data is reasonable. If it is not, the user should
+be able to take corrective action using the usual user in-
+terface then continue with the script. The script should
+also allow the user to perform steps that cannot be auto-
+mated, such as selecting the linear part of the ﬁxed slit
+region used to ﬁt the footprint correction. In this way,
+processing data sets can be reduced from minutes to sec-
+onds. Even more importantly, instrument responsibles
+can set up automated procedures for their users to follow
+for particular kinds of experiments. If all goes well, they
+should then be able to process their data with little has-
+sle or detailed knowledge of the usual sequence of steps
+required.
+
+Providing a scriptable interface is a medium term goal
+for the project. We have not yet formalized the under-
+lying data manipulation in a way that makes this con-
+venient. An issue with all GUI programming, no mat-
+ter what the language is that it is by nature anathema
+to modular programming. Because the user is free to
+wander backward and forward through the process, it is
+diﬃcult to implement the procedural aspects of the in-
+terface. For example, footprint correction requires that
+the user ﬁt a curve to the ﬂat portion of the onset of the
+background subtracted, slit scan divided data. However,
+changing the background runs may change the position
+of the ﬂat portion of the onset, so the footprint that the
+user speciﬁed is no longer applicable. So somehow select-
+ing new background data has to signal that the footprint
+correction used elsewhere in the program is now invalid
+and should be ignored. This two way ﬂow of information
+is very disruptive.
+
+In my experience Tcl/Tk facilitates hiding the inter-
+Individual widgets can
+connections better than most.
+take a variable name as a parameter rather than the cur-
+rent variable value. They then put a trace on the vari-
+able so that the widget is notiﬁed when the value is read,
+written or deleted. Using techniques like this, we should
+be able to make the GUI independent of the scripting
+language, so that new gui elements can be added with-
+out updating the existing gui elements or the scripting
+interface.
+
+Again, because it is a scripting environment it is rel-
+
+4
+
+atively easy to support extensions to the environment.
+As the project has grown from supporting one data for-
+mat (NG-1) to four (NG-1, NG-7, X-RAY, NG-7 with
+position sensitive detector), it has become necessary to
+modularize the ﬁle loading process. Adding support for
+a new ﬁle type now consists of writing two functions, one
+to quickly load the header so that the ﬁle can be catego-
+rized, the data range displayed, and constraints applied
+to the selection process, and another to load the data
+and do initial conversions to Q vs intensity. There is
+also some code to associate ﬁle extensions with the ﬁle
+categorization function which needs to be changed in sev-
+eral places, so further refactoring is necessary. Also, as
+diﬀerent instruments have diﬀerent capabilities and lim-
+itations, some aspects of the reduction process will need
+to change elsewhere in the program.
+
+VII. CONCLUSIONS
+
+While not yet complete, our data reduction and anal-
+ysis tools lead to a marked increase in productivity. So
+
+much so that even long time users with dozens of spe-
+cialized scripts for data reduction are happy to convert
+to using them. Through careful design we have man-
+aged to provide convenience and ﬂexibility in the same
+package.
+
+While a concern throughout the development, modern
+PC’s are able to handle the performance penalty of run-
+ning scripted applications. The user interface is adequate
+even on a relatively old pentium II, 300Mz computer. In
+the case of mlayers, the GUI is bound by the cost of gen-
+erating the reﬂectivity curve for the layers so I would not
+anticipate a signiﬁcantly enhanced user experience if the
+whole interface were translated into C.
+
+Tcl/Tk plus Octave has proven itself to be a ﬁne plat-
+form for rapid development of scientiﬁc applications. In-
+terface ideas can be tested quickly and the more promis-
+ing ones can be developed more fully without too much
+overhead. This allowed us to experiment with a number
+of diﬀerent interfaces in less time than we would take to
+produce a single interface in C.
+
+1 Tcl Developer Xchange http://www.tcl.tk
+2 Octave home page, http://www.octave.org
+3 J. F. Ankner and C. F. Majkrzak, Subsurface proﬁle re-
+ﬁnement for neutron specular reﬂectivity Neutron Optical
+Devices and Appl. 1738, 260 (1992).
+
+4 N. F. Berk and C. F. Majkrzak, Using Parametric B Splines
+
+to Fit Specular Reﬂectvities Phys. Rev. B 51, 11296 (1995).
+5 C. F. Majkrzak and N. F. Berk, Exact Determination of the
+Phase in Neutron Reﬂectometry by Variation of the Sur-
+rounding Media Phys. Rev. B 58, 15416 (1998).
+
+

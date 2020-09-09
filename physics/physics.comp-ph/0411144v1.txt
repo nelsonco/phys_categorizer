@@ -1,0 +1,2581 @@
+4
+0
+0
+2
+ 
+v
+o
+N
+ 
+6
+1
+ 
+ 
+]
+h
+p
+-
+p
+m
+o
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+4
+4
+1
+1
+1
+4
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+A new parallel strategy for two-dimensional incompressible
+
+ﬂow simulations using pseudo-spectral methods
+
+Z. Yin a, Li Yuan a, Tao Tang b,a
+
+aLSEC, Institute of Computational Mathematics, Chinese Academy of Sciences,
+P.O. Box 2719, Beijing 100080, P.R.China
+bDepartment of Mathematics, Hong Kong Baptist University, Hong Kong,
+P.R. China
+
+Abstract
+
+A novel parallel technique for Fourier-Galerkin pseudo-spectral methods with applications to two-dimensional
+Navier-Stokes equations and inviscid Boussinesq approximation equations is presented. It takes the ad-
+vantage of the programming structure of the phase-shift de-aliased scheme for pseudo-spectral codes, and
+combines the task-distribution strategy [Yin, Clercx and Montgomery, Comput. Fluids, 33, 509 (2004)]
+and parallelized Fast Fourier Transform scheme. The performances of the resulting MPI Fortran90 codes
+with the new procedure on SGI 3800 are reported. For ﬁxed resolution of the same problem, the peak
+speed of the new scheme can be twice as fast as the old parallel methods. The parallelized codes are used
+to solve some challenging numerical problems governed by the Navier-Stokes equations and the Boussinesq
+equations. Two interesting physical problems, namely, the double-valued ω-ψ structure in two-dimensional
+decaying turbulence and the collapse of the bubble cap in the Boussinesq simulation, are solved by using
+the proposed parallel algorithms.
+
+Key words: Parallel computing; Pseudo-spectral methods; Task distribution; Navier-Stokes equations;
+Boussinesq equations
+
+1 Introduction
+
+The pseudo-spectral method has been very popular in the research of highly accurate numerical
+simulations since the pioneer work of Orszag and Patterson [2,3]. For smooth solutions, the
+convergence order of the spectral methods is higher than any algebraic power of mesh size. For a
+comparable error on the uniform mesh, a much ﬁner mesh is required for ﬁnite diﬀerence or ﬁnite
+element methods. This is one of the reasons that the spectral method has been widely used in
+
+Email addresses: yinzh@lsec.cc.ac.cn (Z. Yin), lyuan@lsec.cc.ac.cn (Li Yuan),
+
+ttang@math.hkbu.edu.hk (Tao Tang).
+
+spite of the prosperous development of adaptive grid methods. Some comprehensive overviews of
+the various applications of spectral methods in ﬂuid dynamics can be found in [4,5]. With the
+fast development of supercomputers, more and more eﬀorts have been devoted to parallelizing
+spectral methods. For challenging simulation problems such as turbulence research, many new
+interesting phenomena are discovered using large scale parallel computations (5123 − 40963) (e.g.
+see [6,7], and a review paper
+[8]). The parallel schemes based on spectral methods have also
+been intensively investigated over the last decade—mainly for three-dimensional (3D) problems
+[9,10,11,12,13,14,15,16]. The main computation time for spectral methods is concentrated in the
+part of the Fast Fourier Transform (FFT), around which the 3D parallel schemes are constructed.
+In the following, we will denote this parallel FFT procedure as PFFT.
+
+For high dimensional FFT, the transpose-split method can provide very high parallel eﬃciency, so
+most commonly used 3D parallel schemes employ this kind of parallel FFT [9,10,11,12,13]. Iovieno
+et al. [14] combined the transpose-split method and de-aliased procedure in pseudo-spectral codes
+together to yield high parallel eﬃciency. Based on the three time-evolution equations of the 3D
+Navier-Stokes (NS) equations, Basu adopted a parallel scheme which can only be used on a 3-
+[16] try to parallel the 3D code by combining the 3-CPU
+processor computer
+method and the PFFT scheme, and a comparison showed that the combined scheme is always
+slower than PFFT.
+
+[15]. Ling et al.
+
+In contrast to the world-wide eﬀorts in 3D parallelization, rather limited eﬀorts have been devoted
+to parallelizing the two-dimensional simulations [17,1]. It is quite common to treat the 2D parallel
+spectral code as a simpliﬁed version of the 3D codes, which are very eﬃcient only in 3D cases
+(PFFT). As a result, the ratio of the communication time to the computation time in those 2D
+parallel codes is relatively large, and the parallel eﬃciency is much lower compared with the
+corresponding 3D codes (see a short discussion about this topic in [1]).
+
+To minimize the relative long communication time, Yin et al.
+[1] propose a parallel task distri-
+bution scheme (PTD) in the 2D pseudo-spectral NS code. Although this scheme is very easy to
+implement with a good parallel eﬃciency, it has the limitation that the code can only use 2, 4,
+and 6 processors to do the calculation.
+
+In this paper, we will parallel the 2D spectral codes by combining the PTD and PFFT schemes.
+The new strategy overcomes the shortcomings of the former schemes and shows a signiﬁcant
+improvement in parallel eﬃciency. In the following, we will denote this combined strategy as PTF
+scheme (parallelization through task distribution and FFT).
+
+The paper is organized as follows. In Section 2, the PTF scheme is applied to solve the 2D NS equa-
+tion; the benchmark of the parallel code on SGI 3800 is presented. We also show several long-time
+numerical simulations with high resolutions, which reveal some interesting physical phenomena
+of 2D decaying turbulence [18,19]. Of course, PTF plays an important role in those long-time
+runs. In section 3, the new scheme is applied to solve the 2D inviscid Boussinesq equations. A
+challenging numerical problem, which is studied previously in [20,21,22], is investigated with three
+kinds of resolutions (10242, 20482, and 40962). Finally, a summary of this work is given, where the
+
+prospects of the new scheme are also discussed.
+
+2 Parallel 2D pseudo-spectral code for the NS equations
+
+The study of the 2D turbulence distinguishes itself from the 3D turbulence due to its unique
+phenomena such as inverse energy cascade and self-organization. In the past few decades, a par-
+ticular kind of statistical mechanics [23] has been widely adopted to study the 2D freely decaying
+turbulence (see [18] and references therein).
+
+As a powerful tool, direct numerical simulations (DNS) provide some useful theory check and
+inspire the deeper thoughts of the statistical theory (e.g. see [18,19]). Those simulations normally
+need to last as long as 100-1000 eddy turnover times before ﬁnal states of the 2D decaying tur-
+bulence are reached. This means that the total calculations of this kind of 2D DNS, although has
+a smaller array, are more or less the same as those of some short-term 3D DNS. For example, 20
+time steps of a 2D DNS with the resolution of 10242 will take roughly the same CPU time as one
+time step of a 3D DNS on a grid of 2563 on the same computer. On the other hand, because the
+time evolution loop is impossible to be parallelized, the parallel procedure within one time step
+becomes essential to improve the performance of a 2D DNS code.
+
+On modern supercomputers, the total CPU time involved in the 2D DNS is not as enormous as
+that of the 3D DNS if the grid points are the same in each dimension. The peak performance of
+the parallel code, which is indicated by the shortest wall clock time regardless of the number of
+CPUs used, becomes more important in 2D DNS. In our research, we would like to get our 2D
+DNS results in 3 days using 32 CPUs rather than wait for a week using 8 CPUs, although we
+only achieve a speedup of 2.33 by the fourfold processors. As will be seen later in this paper, the
+signiﬁcant improvement of the peak speed is a big advantage of the PTF scheme.
+
+2.1 The governing equations and pseudo-spectral methods
+
+The 2D incompressible NS equation are usually written as
+
+where u = (u,v) is the velocity, p is the pressure, and ν is the kinematic viscosity. Using the
+vorticity ω = (0, 0, ω) = ∇ × u and stream function ψ, Eq. (1) and (2) can be rewritten as:
+
++ u · ∇u = −∇p + ν∆u,
+
+∇ · u = 0,
+
+∂u
+∂t
+
+∂ω
+∂t
+
++ u · ∇ω = ν∆ω,
+
+∆ψ = −ω.
+
+(1)
+
+(2)
+
+(3)
+
+(4)
+
+Table 1
+Ten FFTs need to be calculated in each time step of NS spectral solver.
+
+A
+
+B
+
+C
+
+D
+
+ˆu → u
+
+ˆv → v
+
+ˆU → U
+
+ˆV → V
+
+ˆω → ω
+
+ˆΩ → Ω
+
+uω →
+
+(uω)
+
+vω →
+
+(vω)
+
+UΩ →
+
+[
+(UΩ) VΩ →
+
+[
+(VΩ)
+
+1
+
+2
+
+3
+
+The stream function is related to velocity by u = ∂ψ/∂y and v = −∂ψ/∂x. In the conservative
+form, Eq. (3) becomes
+
+d
+
+d
+
+∂ω
+∂t
+
++ ∇ · (ω u) = ν∆ω.
+
+(5)
+
+We adopted ABCN scheme to carry out the time integration, which discretizes the nonlinear term
+∇ · (ω u) with a 2nd order Adams-Bashforth scheme and the dissipation term ν∆ω with the Crank-
+Nicolson scheme. The particular time-stepping used is independent of the parallelization. More
+accurate schemes, such as 4th order Runge-Kutta, could also be used.
+
+When Eqs. (4) and (5) are solved by Galerkin pseudo-spectral methods, the Fourier coeﬃcients of
+ω are evaluated at each time step. The nonlinear term ∇ · (ω u) is obtained by being transferred
+back and from the physical space with FFTs; in the meantime, the de-aliasing procedure has to
+be adopted to remove the aliasing error. There are two kinds of de-aliasing techniques available:
+padding-truncation and phase-shifts [4]. The FFT we used requires the dimension size to be the
+power of 2, which is faster than those FFTs that has prime factors other than 2. The costs of two
+de-aliasing techniques are the same as that for our FFTs. Therefore, in this paper we use the phase-
+shifts, which reserves more high wave numbers information than that for padding-truncation.
+
+Table 1 shows the ten FFTs needed to solve Eqs. (4) and (5) in each time step. The expression
+[
+with a hat (e.g. ˆu,
+(UΩ)) is the spectral space value of the corresponding physical value without
+hat (u, (UΩ ), etc.). The capital letters denote the phase-shift values of the corresponding lower
+case variables. For example, in a simulation with M 2 resolution:
+
+Ωj =
+
+ˆωkeik·(xj+δ),
+
+Xk
+
+where, j indicates the grid point, k is the wave number, x = (x, y), and δ = (π/M, π/M). Each
+arrow in Table 1 indicated one 2D FFT, and the four FFTs in the third row should be calculated
+after the six FFTs in the ﬁrst two rows (see Fig.3 of
+
+[1] for an even clear picture).
+
+It is worth to mention that the pseudo-spectral method needs to evaluate twelve FFTs for the non-
+conservative form (Eqs. (3) and (4)) 1 , since the two FFTs in the 2nd row of Table 1 are replaced
+
+1 The nonlinear term in Eq. (1) and Fig.3 of Ref
+[1] is inconsistently written in the non-conservative
+form (u · ∇ω), which should be in conservative form (∇ · (ω u)) to march the structure of the program.
+
+\
+(∂ω/∂x),
+
+\
+
+(∂ω/∂y), and their phase-shift counterparts to physical space.
+by four FFTs to transfer
+(Of course, the FFTs in the 3rd row need to be changed correspondingly although no more FFT
+is needed.) Hence, it is a natural choice to use the conservative formulation when we use PFFT
+scheme to parallel the 2D NS code.
+
+In the following subsection, we will give a brief discussion for the PFFT scheme. We will also
+introduce some symbols and analyzing tools that will be used throughout the paper.
+
+2.2 A brief discussion for the PFFT scheme
+
+The PFFT scheme calculates the ten parallelized FFTs one after another according to certain
+sequence mentioned in the previous subsection. In our case, the parallelized FFT is the widely-
+adopted transpose-split parallel scheme, which computes one dimensional (1D) FFT in each di-
+rection combined with the data transfer between CPUs and matrix transpose [10,24].
+
+It is observed that the research on parallel FFT is a fast developed ﬁeld (e.g. see [25,26,27,28],
+or a relatively complete review in [29]). It is diﬃcult to rank the available FFTs, since there are
+so many diﬀerent versions of FFTs, diﬀerent parallel schemes for the FFTs, and diﬀerent parallel
+computers to implement them. There is an argument that the transpose-split scheme is no longer
+the clear winner (chapter 23 of Ref
+[29]) because it can not avoid the data communication
+while using 1D FFT in two directions. In this paper, we will not devote our eﬀorts to parallel
+FFT (simply use the most popular transpose-split), instead, we will try to ﬁnd other methods to
+improve the parallel eﬃciency. Our parallel scheme will be even faster if a faster parallel FFT is
+adopted.
+
+The total time (Tsum) for each processor is the sum of the computation time (Tcomp) and the
+communication time (Tcomm):
+
+Tsum = Tcomp + Tcomm.
+
+In the case of PFFT, the 2D NS equations need to calculate ten FFTs, which makes the major
+part of the computations. If the resolution of the simulation is M 2, then
+
+Tcomp = 10 ×
+
+tF F T
+p
+
+=
+
+10
+p
+
+×
+
+M 2 log2
+
+(cid:16)
+
+M 2
+(cid:16)
+
+(cid:17)
+
+tc
+
+,
+
+(cid:17)
+
+where, p is the total number of processors, tF F T is the time that requires by one processor to
+compute one FFT, and tc is CPU time of one FFT in a single processor times a factor (the factor
+is 5 in the case of full complex FFT, and 5/2 for real-complex FFT)
+[4]. For each FFT, one
+processor needs to send (p − 1) blocks of data to other (p − 1) processors, and receives the same
+amount of data from all other processors. The size of each block is M 2/p2, so
+
+Tcomm = 2 ×
+
+(p − 1) ×
+
+ 
+
+M 2
+p2 × tsendrec + (p − 1) × tdelay
+
+!
+
+× 10,
+
+(6)
+
+(7)
+
+(8)
+
+where, tsendrec is the time to transmit a word between processors, and tdelay is the latency time for
+a message passing. For the convenience of the analysis later, it is useful to divide Tcomm into two
+parts – transmission time (Tsendrec) and latency time (Tdelay):
+
+Hence, according to our analytical model, the total time for one time step on one processor is:
+
+Tsendrec = 2 ×
+
+(p − 1) ×
+
+ 
+
+M 2
+p2 × tsendrec
+
+!
+
+× 10,
+
+Tdelay = 2 × ((p − 1) × tdelay) × 10.
+
+Tsum = (20p − 20) ×
+
+M 2
+p2 × tsendrec + (20p − 20) × tdelay
+
++
+
+10
+p
+
+×
+
+M 2 log2
+
+(cid:16)
+
+M 2
+(cid:16)
+
+(cid:17)
+
+tc
+
+.
+
+(cid:17)
+
+(9)
+
+(10)
+
+(11)
+
+In fact, the values of tc is smaller for larger CPU numbers because of the cache eﬀect (see the
+discussion later in this subsection), while tsendrec and tdelay are almost constant for a given parallel
+computer. Here, we are only trying to give an estimated analysis and treat tsendrec, tdelay, and tc as
+constant; accurate timing work will be the speedup plot resulting from the wall clock time (see,
+e.g., Fig. 1, the similar approach is also adopted in [13]).
+
+For many parallel systems, tdelay is much larger than tsendrec (sometimes a factor of 1000 [30]), so
+Tdelay is a nontrivial part of Tsum, especially when M 2 is small. According to Eq. (11), if we use
+more processors in the simulation, Tdelay will become larger while the rest part (Tsendrec + Tcomp)
+will be smaller. Eventually, Tdelay will become the dominating part of Tsum, which aﬀects the
+parallel eﬃciency of the PFFT scheme. In the case of the 2D DNS, this phenomenon is seen in
+relatively small CPU numbers, because Tsendrec + Tcomp is not very large. In the 3D DNS with high
+resolutions (5123 or higher), Tdelay will take a very small portion in Tsum except for very large p.
+This is the main diﬀerence between the 2D and 3D problems.
+
+Fig. 1 shows the speedup of PFFT on diﬀerent resolutions. The speedup factor is the wall clock
+time of serial code divided by that of the parallel code in the same resolution. For the resolution of
+1282, the run with eight processors has the top speed. If the CPU number is larger than eight, the
+speed of the code drops down, and the parallel code with 32 or 64 processors is even slower than
+the serial code. For resolutions of 2562 and 5122, 16 CPUs give the best performance, while 32
+and 64 CPUs lead to worse performance. For 10242, the fastest run is the one with the maximum
+available CPUs. (The SGI 3800 in our laboratory is a 64-nodes system; we can not test the cases
+with more than 64 processors.) We can predict from the tendency of the curve (or, Eq. (11)) that
+the speedup will also drop down for the 10242 run with 128 or more processors.
+
+One may notice that the super-linear speedup for runs with 10242 resolution: in the case of 16
+CPUs, a speedup of 21 is observed. The super-linear speedup is due to the so-called cache eﬀect. In
+the architecture of modern computers, caches, which can be viewed as a smaller and faster memory,
+are widely used to increase the computer performance. For the PFFT NS simulation with ﬁxed
+
+ideal speedup
+128 x 128
+256 x 256
+512 x 512
+1024 x 1024
+
+60
+
+50
+
+40
+
+30
+
+20
+
+10
+
+p
+u
+d
+e
+e
+p
+S
+
+10
+
+20
+
+50
+Number of Processors
+
+30
+
+40
+
+60
+
+Fig. 1. The speedup of 2D Navier-Stokes code with PFFT scheme (or “1-n” scheme).
+
+M 2, the more CPUs are involved, the higher hit rate of cache will be obtained because the code
+exhibits suﬃcient data locality in its memory accesses. Hence, the unit calculation ﬁnished on one
+CPU in the PFFT code is faster than one CPU with the serial codes, that is, tc is smaller. The
+behavior of the cache memory is very hard to predict, because modern computer architectures
+have very complex internal organizations: diﬀerent levels of caches, branch predictors, etc. It is
+challenging to predict the cache eﬀect in the research of parallel computation [31,32]. Therefore,
+we do not take the cache eﬀect into the consideration of the analyzing model in Eqs. (6-11).
+
+To sum up, Tdelay takes a large portion in the total communication time (Tcomm) and seriously re-
+duces the parallel eﬃciency for larger CPU numbers in the PFFT scheme. The issue of minimizing
+Tdelay is the key to enhance the parallel eﬃciency.
+
+If we start parallel programming from an available serial code, the PTD scheme is always the ﬁrst
+choice because it is very easy to implement
+[1]. Our new parallel scheme (PTF) will combine
+PTD and PFFT scheme together, with PTD being a special case.
+
+2.3 A new parallel strategy - PTF
+
+As mentioned earlier, there are ten FFTs needed to be evaluated at each time step. In PTF
+scheme, they can be divided into two, four, and six groups corresponding to the 2, 4, and 6 CPUs
+scheme in PTD [1]. In the following, we will call these three PTF schemes as “2-n,” “4-n,” and
+“6-n” scheme, respectively. (We also denote PFFT scheme as “1-n” scheme to unify notations).
+There are six FFTs in the 2-n scheme for each group, while three FFTs in the 4-n scheme. Note
+that there are twelve FFTs in the 2-n and 4-n schemes at each time step (there is only ten FFTs
+in serial and PFFT codes) because the two FFTs in the 2nd row of Table 1 are calculated twice
+to eliminate the total communication time.
+
+The 6-n scheme will not be discussed in the rest of the paper, because we want to compare the
+parallel eﬃciency of the PTF scheme with the PFFT (1-n) scheme, the number of CPUs involved
+should be powers of 2.
+
+For any type of PTF scheme, one group will be called “master group,” on which the time in-
+tegration and data input and output (I/O) are carried out, and the other groups will be called
+“slave groups.” When calculating FFT, data are exchanged only within each group. When it is
+necessary to transfer information between groups, the ﬁrst node in master group will and only
+will communicate with the ﬁrst nodes in the slave groups; likewise, the second nodes in diﬀerent
+groups will communicate with each other, etc.
+
+For the 2-n scheme, the computation time of one processor is
+
+Tcomp = 6 ×
+
+tF F T
+p/2
+
+=
+
+12
+p
+
+×
+
+M 2 log2
+
+(cid:16)
+
+M 2
+(cid:16)
+
+tc
+
+,
+
+(cid:17)
+
+(cid:17)
+
+where, the factor 6 comes from the six FFTs in each group, and tF F T is divided by p/2 because
+the processors available are split into two groups. In the beginning of time loop, each node in the
+master group needs to send one M 2
+p/2 block data to the corresponding node in the slave group, and
+receive the same amount of data at the end of time loop. So together with the data transferred
+within each FFT, the two parts of the communication time are:
+
+Tsendrec = 2 ×
+
+− 1) ×
+
+× tsendrec = (28p − 48) ×
+
+(
+ 
+
+p
+2
+p
+2
+
+M 2
+p/2 !
+
+M 2
+(p/2)2 × 6 +
+× 6 + 2
+
+(cid:19)
+
+Tdelay =
+
+2 ×
+
+− 1
+
+× tdelay = (6p − 10) × tdelay.
+
+(cid:18)
+The total time per time step is
+
+(cid:18)
+
+(cid:19)
+
+M 2tsendrec
+p2
+
+Tsum = (28p − 48) ×
+
+M 2
+p2 × tsendrec + (6p − 10) × tdelay +
+
+12
+p
+
+×
+
+M 2 log2
+
+(cid:16)
+
+M 2
+(cid:16)
+
+(cid:17)
+
+tc
+
+.
+
+(cid:17)
+
+Similarly, for the 4-n scheme, there is one master group and three slave groups. The computation
+time is
+
+Tcomp = 3 ×
+
+tF F T
+p/4
+
+=
+
+12
+p
+
+×
+
+M 2 log2
+
+(cid:16)
+
+M 2
+(cid:16)
+
+tc
+
+.
+
+(cid:17)
+
+(cid:17)
+
+In the beginning of time loop, each node in the master group needs to broadcast one M 2
+p/4 block
+data to the corresponding node in slave groups, and gather the same amount of data at the end of
+time loop. The standard broadcast and gather routine in MPI require logg
+2 steps (g is the size of
+the group; here, g = 4) in sending and receiving to ﬁnish the group communication. So together
+with the data transferred within each FFT, the two parts of the communication time are:
+
+(12)
+
+(13)
+
+(14)
+
+(15)
+
+(16)
+
+Tsendrec = 2 ×
+
+− 1) ×
+
+2 × 3 +
+
+p
+4
+
+(
+ 
+
+M 2
+(p/4)
+
+M 2
+p/4
+
+× log4
+2
+
+× tsendrec
+
+!
+
+60 (a)
+
+60 (b)
+
+ideal speedup
+128 x 128
+256 x 256
+512 x 512
+1024 x 1024
+
+ideal speedup
+128 x 128
+256 x 256
+512 x 512
+1024 x 1024
+
+p
+u
+d
+e
+e
+p
+S
+
+50
+
+40
+
+30
+
+20
+
+10
+
+p
+u
+d
+e
+e
+p
+S
+
+50
+
+40
+
+30
+
+20
+
+10
+
+(17)
+
+(18)
+
+(19)
+
+10
+
+20
+
+50
+Number of Processors
+
+40
+
+30
+
+60
+
+10
+
+20
+
+50
+Number of Processors
+
+30
+
+40
+
+60
+
+Fig. 2. The speedup of 2D Navier-Stokes code with “2-n” scheme (a) and “4-n” scheme (b).
+
+= (40p − 96) ×
+
+M 2tsendrec
+p2
+
+,
+
+Tdelay =
+
+2 ×
+
+− 1
+
+× 3 + 2 × log4
+2
+
+× tdelay = (
+
+− 2) × tdelay,
+
+3p
+2
+
+p
+4
+
+(cid:18)
+and the total time used per time step is
+
+(cid:19)
+
+(cid:18)
+
+(cid:19)
+
+Tsum = (40p − 96) ×
+
+M 2
+p2 × tsendrec + (
+
+3p
+2
+
+− 2) × tdelay +
+
+×
+
+M 2 log2
+
+12
+p
+
+(cid:16)
+
+M 2
+(cid:16)
+
+tc
+
+.
+
+(cid:17)
+
+(cid:17)
+
+As can be seen from Eqs. (11), (15), and (19), Tcomp in the 1-n, 2-n, and 4-n schemes are roughly
+the same (20% diﬀerence at most) for ﬁxed M and p; Tdelay in the 1-n scheme is about three times
+as large as that in the 2-n scheme, and about thirteen times as large as that in 4-n scheme. In the
+meanwhile, Tsendrec in the 2-n or 4-n scheme is increased by relatively small factor (no more than
+2) compared with 1-n scheme. Hence, Tdelay in the 1-n scheme will occupy the largest partition of
+Tsum among the 1-n, 2-n, and 4-n schemes.
+
+As discussed in the previous subsection, Tdelay is the main barrier for achieving high parallel
+eﬃciency when p is large for relatively low resolution (M 2). This problem is partly solved by using
+2-n and 4-n schemes. However, even in the 2-n and 4-n schemes, Tdelay still increases and the
+remaining parts of Tsum decrease for larger p; the bottleneck eﬀect in parallelization still exits.
+
+Figs. 2(a) shows the speedup plot for the 2-n scheme. For the resolution of 1282, the peak speed
+appears at 16 CPUs run (compared with 8 CPUs run for the 1-n scheme). For the resolution of
+2562, the peak speed appears at 32 CPUs run (compared with 16 CPUs run for 1-n scheme). For
+5122 and 10242 in the 2-n scheme, and all the resolutions in the 4-n scheme (Fig. 2(b)), 64 CPUs
+run is the fastest.
+
+Because two extra FFTs are introduced and Tsendrec is slightly larger in 2-n and 4-n schemes,
+some runs in Figs. 2 are slower than the corresponding 1-n ones for certain resolution and p. For
+example, there is no super-linear speedup observed for the 10242 curve in Fig. 2(b), although the
+4-n scheme is twice as fast as the 1-n scheme when 64 processors are used.
+
+10
+
+20
+
+50
+Number of Processors
+
+30
+
+40
+
+60
+
+Fig. 3. The speedup of 2D Navier-Stokes code with “ideal” scheme. The values used here are the top
+speedup among 1-n, 2-n, and 4-n scheme for same resolutions and same numbers of processors.
+
+Table 2
+The corresponding schemes for the values in Fig. 3.
+
+ideal speedup
+128 x 128
+256 x 256
+512 x 512
+1024 x 1024
+
+60
+
+50
+
+40
+
+30
+
+20
+
+10
+
+p
+u
+d
+e
+e
+p
+S
+
+1282
+
+2562
+
+5122
+
+10242
+
+1 CPU
+
+2 CPUs
+
+4 CPUs
+
+8 CPUs
+
+16 CPUs
+
+32 CPUs
+
+64 CPUs
+
+1-n
+
+2-n
+
+4-n
+
+4-n
+
+4-n
+
+4-n
+
+4-n
+
+1-n
+
+1-n
+
+4-n
+
+2-n
+
+4-n
+
+4-n
+
+4-n
+
+1-n
+
+1-n
+
+1-n
+
+1-n
+
+4-n
+
+4-n
+
+4-n
+
+1-n
+
+1-n
+
+1-n
+
+1-n
+
+1-n
+
+2-n
+
+4-n
+
+In practice, the fastest scheme for ﬁxed p and M 2 is always what we want to use to do long time
+simulation. Fig.3 is a combined ﬁgure which consists of the best performance point in Figs. 1 and
+2. Table 2 indicates the corresponding schemes adopted to draw this “best speedup” plot.
+
+It should be emphasized that most points in the 10242 curve show super-linear speedup. The points
+when p ≤ 16 come from the 1-n scheme, while the 2-n and 4-n schemes are faster for p ≥ 32.
+
+For lower resolutions, the 1-n scheme works the best for small p, and the 2-n or 4-n scheme
+dominates the points on the corresponding curve in Fig.3 gradually for larger p. On the ﬁrst
+column of Table 2, which corresponds to the resolution of 1282, the 4-n scheme dominates for
+p ≥ 4.
+
+The situations of p = 2 in the 2-n scheme and p = 4 in the 4-n scheme correspond to the PTD
+scheme. Although the benchmark results are slightly diﬀerent from [1] due to diﬀerent computers
+used, the conclusion is the same: PTD is an easily implemented and eﬃcient parallel scheme for
+the 2D DNS for relatively small resolutions.
+
+The easy implementary property of PTD is inherited by PTF schemes: once the PFFT code is
+ready, it is very easy to change it to PTF codes. Hence, PTF is an attractive strategy, especially
+in 2D simulations.
+
+2.4 Numerical results for 2D decaying turbulence
+
+In this subsection, we will use our PTF codes to investigate an interesting phenomenon in 2D
+decaying turbulence – the multi-valued ω-ψ structure.
+
+It is well known that if there is a functional relation ω = f (ψ), then the nonlinear term in Eq. (3)
+gives:
+
+u · ∇ω =
+
+∂ψ
+∂y
+
+∂ω
+∂x
+
+−
+
+∂ψ
+∂x
+
+∂ω
+∂y
+
+=
+
+∂f (ψ)
+∂x
+
+∂ψ
+∂y
+
+−
+
+∂f (ψ)
+∂y
+
+∂ψ
+∂x
+
+= (
+
+∂f
+∂ψ
+
+∂ψ
+∂x
+
+)
+
+∂ψ
+∂y
+
+− (
+
+∂f
+∂ψ
+
+∂ψ
+∂y
+
+)
+
+∂ψ
+∂x
+
+= 0.
+
+(20)
+
+Thus Eq. (3) becomes
+
+∂ω
+∂t
+
+= ν∆ω.
+
+∂ω
+∂t
+
+= 0.
+
+(21)
+
+(22)
+
+For very high Reynolds number or ν → 0, Eq. (21) turns to a stationary equation
+
+It is common to treat ω = f (ψ) as an indication of the ﬁnal state of 2D turbulence, but the
+[18] gives a counter example: the double-valued ω-ψ
+simulation shown in Figs. 18-19 of Ref
+structure (see [19] for a detailed discussion about this kind of structure). We will seek some other
+simulations to validate the generality of multi-valued structures, and there are mainly two choices
+to do this:
+
+• Make changes in the initial conditions;
+• Test diﬀerent values of ν for certain kind of initial condition.
+
+[1]) has a very limited speedup because the
+The parallel code we used before (PTD scheme
+maximum number of CPUs used is limited to six. Most simulations were carried out by changing
+the initial condition for relatively small ν with the resolution of 5122
+[19], which normally last
+from several days to a few weeks. For 10242 runs, the calculations for one time step are four times
+as large as those for 5122, and the time step has to be smaller due to the CFL condition. A typical
+2D decaying turbulence lasts from two months to half year if we only use PTD schemes. With the
+
+    contours of  ω at t=0
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+Fig. 4. Contour plot of the initial condition in a simulation of Navier-Stoke equation which is initialized
+by two positive and two negative ﬂat vortices (these four vortices are placed asymmetrically in the ﬂow
+ﬁeld). Dashed contours represent positive vorticity and drawn contours represent negative vorticity.
+
+PTF codes, it is now possible to carry out 10242 simulations to ﬁnd the new double-valued ω-ψ
+structure.
+
+We carried out two simulations starting from four equal sized vortices patches, which are asym-
+metrically placed in a double periodic box (Fig. 4). The ﬁrst run adopted relatively low Reynolds
+number (1/ν = 4000) with the resolution of 5122. The time step is 0.0005. We used 32 CPUs
+in total (this is the maximum nodes available for long time simulations in LSEC). According to
+Table 2, the 4-n scheme is the fastest approach under this situation. The simulation lasted for 17
+hours, and reached the quasi-steady state at t ≈ 200 (Fig. 5(a)). Fig. 5(b) shows a simple function
+relation of ω-ψ. The same run lasts for 29 hours if we use the PFFT scheme (32 CPUs), and 82
+hours for the PTD scheme (4 CPUs).
+
+The second run adopted a large Reynolds number (1/ν = 40000) with the resolution of 10242. We
+used the 2-n scheme code on 32 processors, and the quasi-steady state was reached at t ≈ 800
+after 16 days’ calculation. In the late state of this simulation, the orientation of the ﬂow pattern is
+totally diﬀerent from that obtained with the 5122 run (Fig. 6(a)). Moreover, the double-valued ω-ψ
+structure is recovered (Fig. 6(b)), which ﬁts the deﬁnition of the ﬁnal state of the 2D turbulence
+given in [19]. Hence, it seems that further computations do not lead to any new phenomenon.
+The same run lasts for 20 days if we use the PFFT scheme (32 nodes), and about one year for the
+PTD scheme (4 nodes).
+
+It is interesting to see the appearance of multi-valued ω-ψ structures in high Reynolds number
+(40000), while relatively low Reynolds number (4000) leads to traditional functional relation.
+
+(a) contours of ω at t = 200
+
+(b) t = 200
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+ω
+
+0
+
+1.5
+
+1
+
+0.5
+
+−0.5
+
+−1
+
+−1.5
+
+−1.5
+
+ω
+
+0
+
+1.5
+
+1
+
+0.5
+
+−0.5
+
+−1
+
+−1.5
+
+−1.5
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+Fig. 5. (a) is the vorticity contour plot at t = 200 evolving from the initial condition shown in Fig. 4
+(Re=4000). The resolution adopted is 5122. (b) is the ω-ψ scatter plot at the same time, which shows a
+simple functional relation.
+
+−1
+
+−0.5
+
+0.5
+
+1
+
+1.5
+
+0
+ψ
+
+(a) contours of ω at t = 800
+
+(b)  t = 800
+
+−1
+
+−0.5
+
+0.5
+
+1
+
+1.5
+
+0
+ψ
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+Fig. 6. (a) is the vorticity contour plot at t = 800 evolving from the initial condition shown in Fig. 4
+(Re=40000). The resolution adopted is 10242. (b) is the ω-ψ scatter plot at the same time, which shows
+a double-valued structure.
+
+Although the physical mechanism of the multi-valued structure is still unclear, our simulations
+reveal some limitations of the statistical mechanics [19], and it is worthwhile to carry on further
+investigations in this direction. Of course, the PTF scheme may play an important role in these
+large scale computations because of its high parallel eﬃciency.
+
+With maximum 32 processors available for long time simulation, the peak speed of PFT is only
+about 70% faster than that of PFFT for the resolution of 5122, and 24% for 10242. However, for
+runs like what are shown in Figs. 6, 24% shortage still means 4 days’ calculation on 32 nodes,
+which is deﬁnitely nontrivial.
+
+3 Application of PTF scheme to 2D inviscid Boussinesq equations
+
+It is very interesting to understand whether a ﬁnite time blow-up of the vorticity and temperature
+gradient can happen from a smooth initial condition in 2D inviscid Boussinesq convection. This
+has been studied recently by several groups ending with diﬀerent conclusions: Pumir and Siggia
+used the TVD scheme with the adaptive meshes (the maximum grid size is 2562), which observed
+[20]; E and Shu did not obtain the blow-up phenomena using the ENO
+the blow-up process
+scheme on a 5122 grid and spectral methods on a 15002 grid [21]; and Ceniceros and Hou also
+obtained blow-up free solutions using the adaptive mesh computation with a 5122 grid [22]. It is
+worth mentioning that the maximum mesh compression ratio in [22] is 8.83, which gave an eﬀective
+resolution of 46002 on uniform mesh. Although those groups yielded diﬀerent conclusions, they all
+tried to use the highest possible resolutions to investigate the problem. Hence, parallel computing
+is a natural choice.
+
+The 2D inviscid Boussinesq convection equations can be written in ω-ψ formulation:
+
+ρt + u · ∇ρ = 0,
+ωt + u · ∇ω = −ρx,
+∆ψ = −ω.
+
+(23)
+(24)
+(25)
+
+Again, ABCN scheme is adopted to carry out the time integration. Below we will discuss how to
+implement our parallel strategy for Eqs. (23) - (25). Numerical results on the ﬁnite time blow-up
+will be reported.
+
+3.1 The application of the new strategy to Boussinesq equations
+
+As shown in Table 3, there are 20 FFTs involved when the Fourier-Galerkin spectral methods
+are used to solve Eqs. (23)-(25). These FFTs can be divided into four independent groups, which
+are indicated by the diﬀerent columns in Table 3. There is no communication within the diﬀerent
+columns until all FFTs are ﬁnished. In each column, the 1st and the 2nd FFT need to be evaluated
+before the 4th one, while the 5th FFT should be calculated after the 1st and 3rd one are ﬁnished.
+
+When the PTF scheme is used to parallelize the code, there are ﬁve options to divide the groups
+without too much extra data communication:
+
+(1) 1 - N scheme – one group; each FFT is computed by all the CPUs involved, i.e. PFFT
+scheme. (Here we use “N” instead of “n” to avoid conﬂicts with the parallel schemes for the
+NS equations).
+
+(2) 2 - N scheme – two groups; column A & B in one group, and column C & D in the other
+
+group.
+
+(3) 4 - N scheme – four groups, which belongs to diﬀerent columns in Table 3, respectively.
+(4) 8 - N scheme – eight groups, see column A-H of Table 4. Note that there are four extra FFTs
+
+1
+
+2
+
+3
+
+4
+
+5
+
+1
+
+2
+
+3
+
+1
+
+2
+
+3
+
+Table 3
+Twenty FFTs need to be calculated in each time step of Boussinesq spectral solver.
+
+A
+
+ˆu → u
+
+ˆωx → ωx
+
+ˆρx → ρx
+
+B
+
+ˆU → U
+
+ˆΩx → Ωx
+
+ˆPx → Px
+
+C
+
+ˆv → v
+
+ˆωy → ωy
+
+ˆρy → ρy
+
+D
+
+ˆV → V
+
+ˆΩy → Ωy
+
+ˆPy → Py
+
+uωx →
+
+\
+(uωx)
+
+uρx →
+
+[
+(uρx)
+
+UΩx →
+
+UPx →
+
+\
+(UΩx)
+
+\
+(UPx)
+
+vωy →
+
+\
+(vωy)
+
+vρy →
+
+[
+(vρy)
+
+VΩy →
+
+VPy →
+
+\
+(VΩy)
+
+\
+(VPy)
+
+Table 4
+In 8-N scheme, the total twenty four FFTs in each time step of Boussinesq spectral solver are divided
+into eight groups (A-H). There are four FFTs introduced in addition to the twenty FFTs in Table 3.
+
+uωx →
+
+\
+(uωx)
+
+UΩx →
+
+\
+(UΩx)
+
+vωy →
+
+\
+(vωy)
+
+VΩy →
+
+\
+(VΩy)
+
+A
+
+ˆu → u
+
+ˆωx → ωx
+
+E
+
+ˆu → u
+
+ˆρx → ρx
+
+ˆU → U
+
+ˆΩx → Ωx
+
+B
+
+F
+
+ˆU → U
+
+ˆPx → Px
+
+C
+
+ˆv → v
+
+ˆωy → ωy
+
+G
+
+ˆv → v
+
+ˆρy → ρy
+
+ˆV → V
+
+ˆΩy → Ωy
+
+D
+
+H
+
+ˆV → V
+
+ˆPy → Py
+
+uρx →
+
+[
+(uρx)
+
+UPx →
+
+\
+(UPx)
+
+vρy →
+
+[
+(vρy)
+
+VPy →
+
+\
+(VPy)
+
+introduced to save the communication time:. The ﬁrst row FFTs in Table 3 are calculated
+twice in the ﬁrst row of Table 4.
+
+(5) 12 - N scheme – twelve groups; the ﬁrst three rows FFTs in Table 3 are calculated simulta-
+neously in twelve groups, the results from the four groups calculating the ﬁrst row FFTs are
+transferred to the eight groups computing the 2nd and 3rd row respectively, and the rest eight
+FFTs in the 4th and 5th rows are performed in those eight groups. (Like the 6-n scheme in
+the NS solver, the 12-N scheme will not be discussed here because the number of processors
+involved is not of the power of 2.)
+
+Similar to Section 2, we will analyze the total computation time for diﬀerent schemes in the
+
+following:
+
+• 1-N scheme, 20 FFTs are involved:
+
+Tsum = 20 × (p − 1) × 2 × M 2
+
+p2 × tsendrec + 20 × (p − 1) × 2 × tdelay
+
+p × (M 2 log2 (M 2) tc)
+
++ 20
+= (40p − 40) × M 2
+
+p2 × tsendrec + (40p − 40) × tdelay + 20
+
+p × (M 2 log2 (M 2) tc) .
+
+(26)
+
+• 2-N scheme, 10 FFTs in each groups, and two blocks (there are two equations in the system -
+size data will be transferred between the master group and the slave
+
+Eqs. (23) and (24)) of M 2
+p/2
+group in the beginning and end parts of the time loop:
+
+Tsum =
+
+10 × (
+"
+
+p
+
+2 − 1) × 2 × M 2
+
++
+
+10 × ( p
+(cid:16)
+= (48p − 80) × M 2
+
+2 − 1) × 2 + 2 × 2
+
+(p/2)2 + 2 × 2 × M 2
+p/2 #
+× tdelay + 10
+p/2
+
+(cid:17)
+
+× tsendrec
+
+p2 × tsendrec + (10p − 16) × tdelay + 20
+
+p × (M 2 log2 (M 2) tc) .
+
+× (M 2 log2 (M 2) tc)
+
+(27)
+
+• 4-N scheme, 5 FFTs in each groups, and two blocks of M 2
+p/4
+
+size data will be transferred between
+
+the master group and the slave groups in the beginning and end parts of the time loop:
+
+Tsum =
+
+p
+
+(p/4)2 + 2 × 2 × log4
+
+5 × (
+"
+
+4 − 1) × 2 × M 2
+4 − 1) × 2 + 2 × 2 × log4
+p2 × tsendrec + ( 5
+
+5 × ( p
+(cid:16)
+= (72p − 160) × M 2
+
+2 × M 2
+p/4 #
+× tdelay + 5
+p/4
+2 p − 2) × tdelay + 20
+
++
+
+(cid:17)
+
+2
+
+× tsendrec
+
+× (M 2 log2 (M 2) tc)
+
+(28)
+
+p × (M 2 log2 (M 2) tc) .
+
+• 8-N scheme, 3 FFTs in each group, and two blocks of M 2
+p/8
+
+size data will be transferred between
+
+the master group and the slave groups in the beginning and end parts of the time loop:
+
+Tsum =
+
+3 × (
+"
+
+p
+
+(p/8)2 + 2 × 2 × log8
+
+8 − 1) × 2 × M 2
+8 − 1) × 2 + 2 × 2 × log8
+p2 × tsendrec + ( 3
+
+2 × M 2
+p/8 #
+× tdelay + 3
+p/8
+4 p + 6) × tdelay + 24
+
+(cid:17)
+
+2
+
++
+
+3 × ( p
+(cid:16)
+
+= (144p − 384) × M 2
+
+× tsendrec
+
+× (M 2 log2 (M 2) tc)
+
+(29)
+
+p × (M 2 log2 (M 2) tc) .
+
+For all the PTF discussed above (Eq. (26)-(29)), it is clear that Tdelay will take larger portion of
+Tsum when p becomes larger in those schemes. For ﬁxed p, Tdelay will take smaller portion of Tsum
+when more groups are adopted in the PTF schemes (e.g. 4-N or 8-N scheme). Hence, the 4-N and
+8-N schemes have some advantage over the 1-N and 2-N schemes when p is large. Some further
+discussions for Eqs. (26) - (29) will be continued in the next subsection together with the speedup
+plots (Figs.7).
+
+35
+
+30
+
+25
+
+20
+
+15
+
+10
+
+5
+
+p
+u
+d
+e
+e
+p
+S
+
+(a)
+
+ideal speedup
+  64 x 64
+ 128 x 128
+ 256 x 256
+ 512 x 512
+1024 x 1024
+
+(b)
+
+ideal speedup
+  64 x 64
+ 128 x 128
+ 256 x 256
+ 512 x 512
+1024 x 1024
+
+35
+
+30
+
+25
+
+20
+
+15
+
+10
+
+5
+
+p
+u
+d
+e
+e
+p
+S
+
+5
+
+10
+
+25
+Number of Processors
+
+15
+
+20
+
+30
+
+5
+
+10
+
+25
+Number of Processors
+
+15
+
+20
+
+30
+
+Fig. 7. (a) The speedup of 2D Boussinesq code with PFFT scheme (or “1-N” scheme). (b) The speedup
+of 2D Boussinesq code with “ideal” scheme. The values used on (b) are the top speedup among 1-N, 2-N,
+4-N, and 8-N scheme for same resolutions and same numbers of processors.
+
+Like the 2D NS equations (Eqs. (4) and (5)), Eq. (24) and (25) can also be written in the conser-
+vative form:
+
+ρt + ∇ · (ρu) = 0,
+
+(ρω)t + ∇ · (ρωu) = −
+
+1
+2
+
+ρ2
+
+.
+
+x
+(cid:17)
+
+(cid:16)
+
+(30)
+
+(31)
+
+When the Fourier-Galerkin spectral methods are used to solve the equations above, Eq. (31)
+presents some problem because the time evolution step is carried out in spectral space: to get the
+value of ˆω in the next time step,
+(ρω) has to be transferred back to physical space so the new value
+can be obtained by using the relation ω = (ρω)/ρ. Furthermore, there is an extra nonlinear term
+− 1
+2 (ρ2)x in Eq. (33) which requires one extra FFT. The total number of FFTs in conservative
+form is the same as non-conservative form. Hence, unlike what we did for 2D NS equations in
+section 2, the non-conservative equations are solved here.
+
+d
+
+3.2 Benchmarks and comparisons
+
+In this subsection, we will show the speedup plots of the Boussinesq equations on SGI3800. Unlike
+what we did for the NS equations, we added a new resolution (642) to show the eﬀectiveness of the
+new parallel scheme in the low resolution. The maximum processors used here is 32, which makes
+the resulting speedup plots (Figs. 7) more concise. It is also easier to use less than 32 processors
+in our 64-nodes machine; because we have to shut all other computing jobs down if we want to
+do the 64 CPUs run.
+
+Fig. 7 (a) shows the speedup plot for PFFT (or. 1-N) scheme. The top speedup is obtained on 4
+processors for the 642 grid, while 8 and 16 processors reach the top speed for the resolutions of
+1282 and 2562, respectively. The speedup curves of 5122 and 10242 show reasonably good parallel
+
+Table 5
+The corresponding schemes for the values in Fig. 7(b).
+
+642
+
+1-N
+
+2-N
+
+2-N
+
+8-N
+
+8-N
+
+8-N
+
+1282
+
+2562
+
+5122
+
+10242
+
+1-N
+
+2-N
+
+2-N
+
+2-N
+
+8-N
+
+8-N
+
+1-N
+
+1-N
+
+1-N
+
+2-N
+
+2-N
+
+8-N
+
+1-N
+
+1-N
+
+1-N
+
+1-N
+
+2-N
+
+4-N
+
+1-N
+
+2-N
+
+2-N
+
+1-N
+
+1-N
+
+2-N
+
+1 CPU
+
+2 CPUs
+
+4 CPUs
+
+8 CPUs
+
+16 CPUs
+
+32 CPUs
+
+eﬃciency of PFFT scheme. The 5122 runs show super linear speedup for 2, 4, 8, and 16 nodes,
+which is due to the cache eﬀect. The 10242 runs only have super linear speedup in the cases of
+8 and 16 nodes. The speedups of 32-nodes run for these two high resolutions are lower than 32
+because Tdelay begins to dominate the total computation time.
+
+We did not show the speedup plots for resolutions higher than 10242 because of the limit of the
+maximum local memory. However, since solving the equations with the highest possible resolution
+is the main task of our research, we will discuss the parallel eﬃciency on those high resolutions
+(20482 and 40962) in other ways later in the next subsection.
+
+Fig. 7(b) shows the “best speedup” plot of PTF schemes. All the resolutions have their top speed
+in the 32 CPUs case. Moreover, almost all the points on the curves show super linear speedup for
+higher resolutions (5122 and 10242).
+
+The peak speeds shown in Fig. 7(b) are increased by a factor of 27% (10242 resolution) to 171%
+(642 resolution) compared to the PFFT scheme. The lower resolutions get a higher factor because
+the limitation of the total CPUs available. We can predict that the factor of 10242 resolution will
+be larger than 27% if the maximum number of CPUs used is larger than 32.
+
+Table 5 shows the corresponding schemes to the points on the Fig. 7(b). PFFT (or, 1-N) scheme
+never show the best performance for resolutions of 642 and 1282 for p ≥ 2 (For p = 1, 1-N is
+the only choice, which is not necessary for comparison). For resolutions higher than 2562, the 1-N
+scheme reaches the peak speed more frequently, especially for runs with fewer processors.
+
+As indicated in Table 5, the PTF schemes with more groups (e.g. 4-N or 8-N scheme) have better
+speedup for lower resolutions and larger number of CPUs, while the schemes divided into fewer
+groups (e.g. 1-N or 2-N scheme) work best for higher resolutions and relatively smaller number of
+CPUs.
+
+In the real programming eﬀorts, we found that it is more convenient to ﬁx the size of each group
+(instead of ﬁxing p) because the size of main calculating arrays can be determined beforehand.
+The code will get the number of groups (1, 2, 4, or 8) at the initial stage of real runs, and distribute
+
+the 20 FFTs into diﬀerent groups. Thus, the programming eﬀort concerning the PFT scheme is
+trivial if the PFFT code is already available.
+
+Attention should be drawn to the performance of the 2-N scheme, which occupy eight of the total
+thirty places in Table 5. In the 10242 runs, the 2-N scheme is faster than the 1-N scheme on 2
+and 4 nodes’ simulations, which is counter to the conclusion we made in the above paragraph.
+Although most of the weird speedup behaviors in parallel computing can be attributed to cache
+eﬀect, this one presents some diﬃculties because normally the more CPUs are used to calculate
+one FFT, the smaller tc will be (see the discussion in Section 2.2). To explain this, we need to
+calculate the exact values of Tcomm for the 1-N and 2-N schemes in our analytical models (Eqs.
+(26) and (27)).
+
+For the 1-N scheme,
+
+Tcomm = 
+
+
+10M 2 × tsendrec + 40 × tdelay
+
+if p = 2
+
+7.5M 2 × tsendrec + 120 × tdelay
+
+if p = 4.
+
+For the 2-N scheme,
+
+Tcomm = 
+
+
+4M 2 × tsendrev + 4 × tdelay
+
+if p = 2
+
+7M 2 × tsendrev + 24 × tdelay
+
+if p = 4.
+
+
+
+
+
+It is clear that all parts of Tcomm in the 2-N scheme are smaller than the 1-N scheme in the case of
+p ≤ 4, although Tsendrec of the 2-N scheme is larger than that of the 1-N scheme for p ≥ 8. Again,
+we assume that tc remains roughly the same for diﬀerent schemes. The complete explanation has
+to take “cache eﬀect” into consideration.
+
+3.3 Numerical results for the Boussinesq convection
+
+In this subsection, we will show some numerical simulations calculated by our parallel codes. For
+ease of comparison with former results, we adopted the same initial condition in Ref
+
+[21]:
+
+ω(x, y, 0) = 0,
+
+ρ(x, y, 0) = 50ρ1(x, y)ρ2(x, y) [1 − ρ1(x, y)] ,
+
+(32)
+
+(33)
+
+where
+
+ρ1(x, y) = 
+
+
+
+exp
+
+1 −
+
+(cid:18)
+
+π2
+π2 − x2 − (y − π)2
+
+,
+
+(cid:19)
+
+0,
+
+otherwise,
+
+if x2 − (y − π)2 ≤ π2,
+
+density contours at t=0
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+1
+
+3
+
+4
+
+5
+
+6
+
+Fig. 8. The contour plot of initial density, with the resolution of 10242.
+
+2
+
+2
+
+exp
+
+1 −
+
+ 
+
+(1.95π)
+(1.95π)2 − (x − 2π)2
+
+,
+
+!
+
+if |x − 2π| ≤ 1.95π,
+
+ρ2(x, y) = 
+
+
+
+0,
+
+otherwise.
+
+Fig. 8 shows the initial contour of ρ on a grid of 10242. The cap-like contour will develop into a
+rising bubble during the evolution, with the edge of the cap rolling up.
+
+At t ≃ 3.4, the density and vorticity contour develop into the shape of “two eyes.” Figs. 9 (a) and
+(b) show the results with the resolution of 10242. For spectral methods with diﬀerent resolutions
+(20482 run of our simulation, and 15002 run of
+[21]) and ENO ﬁnite diﬀerence methods in [21],
+some good agreements have been observed.
+
+Arguments arise when the computations are carried on. At t ≃ 3.7, the smooth edge of the rolling
+eyes becomes unstable, see Figs. 9(c) and (d). Whether this phenomenon is physically real or not
+is still an open question. It was argued that this collapse is due to the numerical eﬀect [21,22].
+
+As discussed above, the most straightforward way to investigate this problem is to increase the
+resolution of simulations. Therefore, we also adopted grids of 20482 and 40962 in the simulations.
+
+For the 10242 run, the time step used is 0.0008 which is determined by the CFL condition. It took
+the parallel 2-N scheme twenty hours to reach t = 3.7 with 32 processors. It takes 25 hours for
+PFFT schemes, and 28 days for the serial code.
+
+For the 20482 run, the time step used is 0.0004. The speed of the 1-N scheme and the 2-N scheme
+with 32 nodes are very close (a diﬀerence of 2%). We use the 1-N scheme because it is slightly
+faster. The code lasts for 13 days before it reaches t = 3.7. For serial code, it may take one year
+
+(a) density contours at t=3.4
+
+(b) vorticity contours at t=3.4
+
+1
+
+2
+
+5
+(c) density contours at t=3.7
+
+4
+
+3
+
+6
+
+1
+
+2
+
+5
+3
+(d) vorticity contours at t=3.7
+
+4
+
+6
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+Fig. 9. (a) and (b) show the contour plots of density and vorticity at t=3.4 with the resolution of 10242,
+(c) and (d) show the contour plots at t=3.7.
+
+provided the memory of the computer is large enough.
+
+For the 40962 run, the time step used is 0.0002. The 1-N scheme is the only choice because other
+schemes require larger computer memory: in principle, the memory size of the 2-N, 4-N, and 8-
+N schemes are 2, 4, and 8 times as large as that of the 1-N scheme. For this run, it is even a
+burdensome job for the parallel computation with 32 processors, which may last for four months
+in total. We actually use the interpolated data of the 20482 run at t = 3.4 as the initial condition.
+It is believed that the solution at t = 3.4 is smooth. The code lasts for three weeks before it
+reaches t = 3.7.
+
+Figs. 10(a, b) show contour plots of the 20482 run at t = 3.7, on which the collapse is observed in
+the smooth edge; the same phenomenon is observed in the 40962 run (Figs. 10(c, d)). It is noticed
+that more rolling vortices are observed on the edge of the “eyes” in Fig. 10(a) than that in Fig.
+9(c), and even more vortices appear in Fig. 10(c). There are some trivial diﬀerences if we make a
+
+(a) density contours at t=3.7
+
+(b) vorticity contours at t=3.7
+
+1
+
+2
+
+5
+(c) density contours at t=3.7
+
+4
+
+3
+
+6
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+(d) vorticity contours at t=3.7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+Fig. 10. (a) and (b) are the contour plots of density and vorticity at t=3.7, with the resolution of 20482.
+(c) and (d) are the contour plots with the resolution of 40962 at t=3.7.
+
+detailed comparison within these three runs, but Figs. 9(c, d) and Figs. 10 clearly show that the
+collapsing process is not a non-physical phenomenon from the numerical artifacts. If we started
+the 40962 run from t = 0 using Eq. (32) and (33) to get the initial data, the contour plots might be
+slightly diﬀerent from what we obtained in Figs. 10(c, d). The main task here is to determine the
+possibility of the collapse phenomenon, the potential small diﬀerence in the ﬂow pattern will not
+hurt the general conclusion. Some further details of the physical phenomenon will be discussed in
+another work. Here, we will try to focus our topic on the parallel solver.
+
+Unlike the simulations in Section 2, most of computations (two of the three) in this section use
+the traditional PFFT scheme mainly due to the limitation of the maximum CPU number. If more
+processors are available so that the computer memory presents no problem to the PTF scheme,
+then the speed of PTF will also be faster than PFFT.
+
+4 Conclusions and discussions
+
+To sum up, the PTF scheme takes the advantages of the PTD and PFFT schemes, and can increase
+peak speed of codes signiﬁcantly. The PTF scheme works best for low resolution run, or relatively
+large resolution with large number of CPUs. For very high resolutions, the PTF scheme is most
+likely slower than PFFT if not many processors are involved; PTF also needs more memory than
+that for PFFT, which presents some limitations on the scale of the highest resolution that one
+particular parallel computer can handle. These two disadvantages of PTF explain why similar
+schemes are not very popular in the 3D simulations where the array sizes may be even larger than
+that for the 2D simulations with high resolutions. It is advisable to treat PFFT as a special case
+of PTF, and the combined version of the parallel codes will always yield the best performance
+after a small amount of preparing work (e.g. making a table similar to Table 2 and Table 5 on
+the particular parallel machine to be used). In the meanwhile, the simple analytical mode of
+the parallel scheme, which divide Tsum into three parts: Tsendrec, Tdelay, and Tcomp, is useful in
+explaining the performance of the parallel codes.
+
+The parallel code of the NS equations helps us to ﬁnd another example of double-valued ω-ψ
+structure; and the parallel Boussinesq code reveals the insight of an open question, which suggests
+that the collapse of the bubble cap may be a candidate for the ﬁnite time singularity formation.
+Both sets of investigation show that the parallel computing is useful in large scale numerical
+simulations.
+
+We conclude our paper by some discussions on the future parallel computing. It is well-known
+that the speed of single processor increases much faster than the speed of memory access (ﬁve
+times faster in the last decade). Hence the latency of memory access in terms of processor clock
+cycle grows by a factor of ﬁve in the last ten years [32]. For a ﬁxed type of parallel scheme, the
+speedup curves (see Figs. 1-3 and 7) for high resolution (e.g. 10242) in future machines may be
+similar to that of low resolutions in current computers (642 or 1282). In the case of PFFT scheme
+applied on a 10242 resolution, it is possible that the speed of 64-nodes run is slower than that of
+the serial code in the future. On the other hand, the PTF scheme which uses much less Tdelay than
+that of the PFFT scheme has greater advantage over the PFFT scheme in parallel computing. In
+other words, the PTF strategy is also a scheme for the future.
+
+Acknowledgments. We would like to thank Linbo Zhang, Zhongze Li, and Ying Bai for the
+support of using local parallel computers. ZY also thanks Prof. W.H. Matthaeus who supplied the
+original serial FORTRAN 77 Navier-Stokes pseudospectral codes. TT thanks the supports from
+International Research Team on Complex System, Chinese Academy of Sciences, and from Hong
+Kong Research Grant Council.
+
+References
+
+[1]
+
+[2]
+
+Z. Yin, H.J.H. Clercx, and D.C. Montgomery, An easily implemented task-based parallel scheme
+for the Fourier pseudospectral solver applied to 2D Navier-Stokes turbulence, Comput. Fluids, 33,
+509 (2004).
+
+S.A. Orszag, Accurate solution of the Orr-Sommerfeld stability equation, J.Fluid Mech., 50, 689,
+(1971)
+
+[3] G.S. Patterson and S.A. Orszag, Spectral calculations of isotropic turbulence: Eﬃcient removal of
+
+aliasing interaction, Phys. Fluids, 14, 2538, (1971).
+
+[4] C. Canuto, M.Y. Hussaini, A. Quarteroni, and T.A. Zang, Spectral methods in ﬂuid dynamics,
+
+Springer, New York, Berlin, 1987.
+
+[5]
+
+J. P. Boyd, Chebyshev and Fourier Spectral Methods, 2nd ed., Dover, Mineola/New York, 2001.
+
+[6]
+
+S. Chen, G.D. Doolen, R.H. Kraichnan, and Z. She, On statistical correlations between velocity
+increments and locally averaged dissipation in homogeneous turbulence, Phys. Fluids A, 5, 458
+(1993).
+
+[7] Y. Kaneda, T. Ishihara, M. Yokokawa, K. Itakura, and A. Uno, Energy dissipation rate and energy
+spectrum in high resolution direct numerical simulations of turbulence in a periodic box, Phys.
+Fluids, 15, L21 (2003).
+
+[8] P. Moin and K. Mahesh, Direct numerical simulation: a tool in turbulence research, Annu. Rev.
+
+Fluid Mech., 30, 539 (1998).
+
+[9] R.B. Pelz, The parallel Fourier pseudospectral method, J. Comput. Phys., 92, 296, (1991).
+
+[10] E. Jackson, Z. She, and S.A. Orszag, A case study in parallel computing: I. Homogeneous turbulence
+
+on a hypercube, J. Sci. Comput., 6, 27, (1991).
+
+[11] P.F. Fischer and A.T. Patera, Parallel simulation of viscous incompressible ﬂows, Annu. Rev. Fluid
+
+Mech., 26, 483 (1994)
+
+[12] M. Briscolini, A parallel implementation of a 3-D pseudospectral based code on the IBM 9076
+
+scalable POWERparallel system, Parallel Comput., 21, 1849, (1995).
+
+[13] P. Dmitruk, L.P. Wang, W.H. Matthaeus, R. Zhang, and D. Seckel, Scalable parallel FFT for
+
+spectral simulations on a Beowulf cluster, Parallel Comput., 27, 1921, (2001).
+
+[14] M. Iovieno, C. Cavazzoni, and D. Tordella, A new technique for a parallel dealiased pseudospectral
+
+Navier-Stokes code, Comp. Phys. Commun., 141,365,(2001).
+
+[15] A.J. Basu, A parallel algorithm for spectral solution of the three-dimensional Navier-Stokes
+
+equations, Parallel Comput., 20, 1191, (1994).
+
+[16] W. Ling, J. Liu, J.N. Chung, and C.T. Crowe, Parallel algorithms for particles-turbulence two-way
+
+interaction direct numerical simulation, J. Parallel Distributed Comput., 62, 38, (2002).
+
+[17] E. Fournier, S. Gauthier, and F. Renaud, 2D pseudo-spectral parallel Navier-Stokes simulations of
+
+compressible Rayleigh-Taylor instability, Comput. Fluids, 31, 569 (2002).
+
+[18] Z. Yin, D.C. Montgomery, and H.J.H. Clercx, Alternative statistical-mechanical descriptions of
+decaying two-dimensional turbulence in terms of “patches” and “points,” Phys. Fluids, 15, 1937
+(2003).
+
+[19] Z. Yin, On ﬁnal states of two-dimensional decaying turbulence, Phys. Fluids, 16, 4623 (2003).
+
+[20] A. Pumir and E.D. Siggia, Development of singular solutions to the axisymmetric Euler equations,
+
+Phys. Fluids A, 4, 1472, (1992).
+
+[21] W. E and C. Shu, Small-scale structures in Boussinesq convection, Phys. Fluids, 6, 49, (1994).
+
+[22] H.D. Ceniceros and T.Y. Hou, An eﬃcient dynamically adaptive mesh for potentially singular
+
+solutions, J. Comput. Phys., 172, 609,(2001).
+
+[23] D. Montgomery and G.R. Joyce, Statistical mechanics of negative temperature states, Phys. Fluids,
+
+17, 1139, (1974).
+
+[24] C.Y. Chu, Comparison of two-dimensional FFT methods on the hypercube, in Proc. Third Confer.
+on Hypercube concurrent comput. Appl., Pasadena, California, United States, 1988, (ACM Press,
+New York, NY, USA, 1989), Vol. 2, pp. 1430.
+
+[25] P.N. Swarztrauber, Multiprocessor FFTs, Parallel Comput., 5, 197, (1987).
+
+[26] R.M. Chamberlain, Gray codes, Fast Fourier Transforms and hypercubes, Parallel Comput., 6, 225,
+
+(1988).
+
+[27] R.B. Pelz, Parallel compact FFTs for real sequences, SIAM J. Sci. Comput., 14, 914, (1993).
+
+[28] C. Mermer, D. Kim, and Y. Kim, Eﬃcient 2D FFT implementation on mediaprocessors, Parallel
+
+Comput., 29, 691, (2003).
+
+Washington, D.C., 2000.
+
+[29] E. Chu and A. George, Inside the FFT black box, CRC Press, Boca Raton, London, New York,
+
+[30] D. Roose and R. Van Driessche, Parallel computers and parallel algorithms for CFD: an introduction,
+
+Special Course on Parallel Computing in CFD, AGARD R-807, NATO, 1995, pp. 1.1.
+
+[31] B.B. Fraguela, R. Doallo, J. Touri˜no, and E.L. Zapata, A compiler tool to predict memory hierarchy
+
+performance of scientiﬁc codes, Parallel Comput., 30, 225, (2004) (and references therein).
+
+[32] D.E. Culler, J.P. Singh, and A. Gupta, Parallel computer architecture, Morgan Kaufmann
+
+Publishers, Inc., San Francisco, 1999.
+
+

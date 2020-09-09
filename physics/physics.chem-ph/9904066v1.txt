@@ -1,0 +1,1235 @@
+A molecular-dynamics algorithm for mixed hard-core/continuous potentials
+
+Yao A. Houndonougbo and Brian B. Laird
+Department of Chemistry, University of Kansas, Lawrence, Kansas 66045
+Benedict J. Leimkuhler
+Department of Mathematics, University of Kansas, Lawrence, Kansas 66045
+(February 9, 2008)
+
+Abstract
+
+We present a new molecular-dynamics algorithm for integrating the equations of motion for a system
+of particles interacting with mixed continuous/impulsive forces. This method, which we call Impul-
+sive Verlet, is constructed using operator splitting techniques similar to those that have been used
+successfully to generate a variety molecular-dynamics integrators. In numerical experiments, the Im-
+pulsive Verlet method is shown to be superior to previous methods with respect to stability and energy
+conservation in long simulations.
+
+9
+9
+9
+1
+ 
+r
+p
+A
+ 
+9
+2
+ 
+ 
+]
+h
+p
+-
+m
+e
+h
+c
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+6
+6
+0
+4
+0
+9
+9
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+1
+
+I. INTRODUCTION
+
+Purely collisional systems were among the ﬁrst to be studied by molecular-dynamics simulation1. These systems
+include hard spheres or hard ellipsoids, which undergo purely elastic collisions, and square-well ﬂuids, in which an
+attractive impulse force at a particular interparticle position is present in addition to the hard-core interactions. The
+algorithms for such systems are exact, to within roundoﬀ error, and consist of free particle motion punctuated by
+exact resolution of the impulsive collisions—the resulting phase space trajectory is discontinuous. On the other hand,
+the vast majority of current molecular-dynamics simulations are performed on systems with continuous potentials.
+For such systems, the trajectory must be approximated using a numerical timestepping scheme such as the popular
+Verlet algorithm2.
+
+There exist, however, systems that are neither purely collisional, nor continuous, but are hybrids of the two. Im-
+portant examples of such systems are the restricted primitive model (RPM) for electrolyte solutions and dipolar hard
+spheres3.
+In addition, the use of hard-core potentials with attractive continuous tails is common in perturbative
+treatments of liquids4. Since the the algorithms for simulating impulsive and continuous systems are fundamentally
+diﬀerent from one another, the construction of hybrid methods for mixed systems is non-trivial and little studied. Con-
+sequently, the vast majority of studies on such systems have utilized Monte Carlo simulation techniques, eliminating
+the possibility of obtaining dynamical information.
+
+In this paper, we present a new method for mixed hard-core/continuous potentials, which we call the Impulsive
+Verlet algorithm. This algorithm is suitable for any continuous potential, is less likely than alternatives to miss
+collisions, and exhibits good stability and energy conservation in long time simulation. In the construction of this
+new method we have been guided by recent work in the use of Hamiltonian splitting methods for the development of
+eﬃcient and stable molecular-dynamics algorithms5,6.
+
+A few ad hoc hybrid methods have been constructed for mixed (hard/soft) systems7–10. All of these methods are
+rather similar, in that the particles are advanced according to the continuous forces by a time step using a standard
+algorithm for continuous potentials, usually some variant of the Verlet algorithm, and the trajectories are checked for
+the existence of particle overlaps at the end or during the step. If no overlaps occur, the procedure is repeated for the
+next step. If overlaps (collisions) do occur, the system is returned to its state before the step and then is advanced
+without momentum modiﬁcation by the forces to the time of collision, and the momenta are then modiﬁed according
+to the rules of elastic collision. This process is repeated until all collisions have been resolved and the end of the
+time step is reached. (One major diﬀerence between the algorithms is whether overlaps are checked only at the end
+of each step, or throughout the step. In the former case8, it is possible that glancing collisions are missed during the
+dynamics.) Heyes9 and Suh, et al.10 apply such algorithms to the restricted primitive model for electrolytes (hard-
+sphere with embedded charges in a dielectric continuum) with some apparent success. Unfortunately, as with the
+other papers on algorithms for mixed systems, no quantitative discussion on the stability or accuracy of the algorithm
+is given, making it diﬃcult to evaluate the quality of the methods.
+
+The Impulsive Verlet method is developed in the next two sections, followed by a discussion of certain numerical
+
+experiments on two model systems, comparing our scheme with the algorithm used in Suh,et al.10.
+
+II. SPLITTING METHODS FOR MIXED DYNAMICS
+
+Consider a system of N particles with instantaneous positions q = (q1, q2, ..., qN ) in d dimensions interacting
+according to a continuous potential Vc({qi}), assumed for simplicity to be spherically symmetric and pairwise additive,
+that is,
+
+N
+
+Vc(q) =
+
+φc(qij ) ,
+
+(1)
+
+j>i
+X
+where qij ≡ | qj − qi |, and φ is any smooth function of one variable. In addition, suppose the particles to have a
+hard core of diameter σ; that is, when the distance between two particles is σ an elastic collision occurs that reﬂects
+the momentum of each particle along the collision vector. Such a hard-sphere core can be represented formally by a
+discontinuous pair potential of the form
+
+i=1
+X
+
+2
+
+We will deﬁne the energy function of the mixed system by analogy with continuous dynamics as the sum of the
+
+kinetic and formal potential energies:
+
+where,
+
+and
+
+φhs(qij ) =
+
+∞ qij ≤ σ,
+0, qij > σ .
+
+(cid:26)
+
+H(q, p) = T (p) + Vhs(q) + Vc(q),
+
+Vhs =
+
+φhs(qij )
+
+i=1
+X
+
+j>i
+X
+
+T (p) =
+
+pT M −1p,
+
+N
+
+1
+2
+
+is the kinetic energy (M is the mass matrix) and p = (p1, p2, ..., pN ), where each pi is a d-dimensional vector. Despite
+appearances, this energy function is not, properly speaking, a Hamiltonian. Nonetheless, we can view the dynamics
+of the hard-sphere ﬂuid as the limiting dynamics in repulsive inverse-power potentials of the form Vsw(r) = 1/rβ, with
+β a large positive integer. In this sense and for the purpose of constructing numerical methods, we can interpret the
+formal energy H as representing a very hard repulsive inverse-power Hamiltonian. We will often refer to H as the
+pseudo-Hamiltonian.
+
+We deﬁne the ﬂow map as the generator of the phase space trajectory,
+
+(cid:19)
+The family of ﬂow maps is closed under composition,
+
+(cid:18)
+
+q(τ + t)
+p(τ + t)
+
+= ψt,H
+
+q(τ )
+p(τ )
+
+.
+
+(cid:19)
+
+(cid:18)
+
+ψt1,H ◦ ψt2,H = ψt2,H ◦ ψt1,H = ψt1+t2,H ,
+
+for any times t1 and t2.
+
+A continuous Hamiltonian system can often be split into integrable subproblems with Hamiltonians H1 and H2
+
+The ﬂow map of the full Hamiltonian can then be approximated as the concatenation of ﬂow maps for the subproblems.
+There are a variety of ways of doing this, but the most common is based on a Trotter factorization
+
+H(q, p) = H1(p) + H2(q) .
+
+ψh,H = ψ h
+
+2 ,H2 ◦ ψh,H1 ◦ ψ h
+
+2 ,H2 + O(h3) ,
+
+where h is the time step. For a separable Hamiltonian such as Eq. 3 with Vhs = 0, this factorization reduces to the
+usual velocity-Verlet algorithm11 when H1 = T (p) and H2 = Vc(q).
+
+The splitting framework for continuous Hamiltonians suggests a means of constructing integrators for mixed impul-
+sive/continuous systems. A natural splitting for the pseudo-Hamiltonian is to let H1 = T (p)+ Vhs(q) and H2 = Vc(q).
+(Note that in this case H1 is a function of both p and q, but since this represents a system with free particle motion
+punctuated by elastic collisions, it is exactly integrable.) This gives
+
+qn+1
+pn+1
+
+(cid:18)
+
+(cid:19)
+
+= ψ h
+
+2 ,Vc ◦ ψh,T +Vhs ◦ ψ h
+
+2 ,Vc
+
+qn
+pn
+
+,
+
+(cid:18)
+
+(cid:19)
+
+where qn and pn are the approximations to the phase space variables after the n-th time step. In other words, the
+momenta are adjusted at the beginning of each time step by one-half step according to the continuous forces (“kick”).
+The positions are next advanced for one time step, resolving all elastic collisions, but without further momentum
+
+3
+
+(2)
+
+(3)
+
+(4)
+
+(5)
+
+(6)
+
+6:
+
+(7)
+
+(8)
+
+(9)
+
+(10)
+
+(11)
+
+(12)
+
+(13)
+
+(14)
+(15)
+(16)
+
+(17)
+
+modiﬁcation by the continuous forces (“push”). At the end of the step, the momenta are advanced again by a half
+step using the forces calculated from the new positions (another “kick”). This is nearly identical to the algorithm of
+Suh, et al.10 except that there momenta are only deﬁned at half steps and a leap-frog formulation is used:
+
+qn+1
+pn+1/2
+
+(cid:18)
+
+(cid:19)Suh
+
+= ψh,T +Vhs ◦ ψh,Vc
+
+qn
+pn−1/2
+
+.
+
+(cid:19)
+
+(cid:18)
+
+Viewing the hard-sphere potential as being approximated by a very hard inverse-power repulsive potential, we see
+that either of the above two splitting methods is symmetric (i.e. time-reversible). From Eq. 8 we naively expect that
+such a method (applied to the inverse-power potential approximation) is second order accurate, meaning that in one
+step a local error of size O(h3) is introduced; on a ﬁnite ﬁxed time interval, these errors accumulate, but the total
+growth or global error is at most O(h2). However, the demonstration of third-order local error requires a C3 solution,
+and this assumption will break down in the limit of hard-sphere dynamics, in particular during a collision step. In
+fact, the local error introduced during a collision is really O(h).
+
+We illustrate this point with the simple example of a nonlinear “impact oscillator” with one degree-of-freedom
+
+pseudo-Hamiltonian
+
+H =
+
++ φhs(q) + φc(q),
+
+p2
+2
+
+describing a point mass acted on by some potential φc in collisional dynamics with a hard wall at q = δ. The
+particle moves in the continuous potential φc according to Newton’s equations, until an impact, when q = δ, then the
+momentum changes sign and the motion continues from the impact point.
+
+Consider a numerical step from the point (q0, p0) at time t = 0 for a timestep of size h during which the particle
+motion includes a single collision event. (We mostly use subscripts to index particle number and superscripts for
+timestep, but for the discussion that follows we need to indicate powers of the momenta; so for this one-particle
+model, we will use subscripts for the timestep index.) We need to compute the local energy error contribution during
+a collisional step for this single degree-of-freedom model problem. The sequence of computations is
+
+ˆp = p0 −
+
+′
+c(q0),
+φ
+
+h
+2
+q0 − δ
+ˆp
+
+,
+
+h# = −
+
+h♭ = h − h#,
+˜p = −ˆp,
+q1 = δ − h♭ ˆp,
+′
+c(q1) ,
+φ
+
+p1 = ˜p −
+
+h
+2
+
+where h#, and h♭ are the time to the next collision and the time from that collision to the end of the time step,
+respectively.
+
+Substituting the endpoint values into the energy relation, we quickly ﬁnd
+
+∆H = H(q1, p1) − H(q0, p0) =
+
+(˜p −
+
+p2
+0 − φc(q0),
+
+=
+
+(−p0 +
+
+h
+2
+
+′
+c(q1))2 + φc(q1) −
+φ
+h
+2
+
+1
+2
+′
+c(q1))2
+φ
+
+h
+2
+
+′
+c(q0) −
+φ
+1
+2
+
++φc(q1) −
+
+p2
+0 − φc(q0).
+
+Expand φc in a Taylor series about q = δ, substitute, and cancel like terms to obtain
+
+∆H = −
+
+h
+2
+
+′
+′
+c(q1)) +
+c(q0) − φ
+p0(φ
+1
+2
+
+′
+c(δ)(q1 − q0) +
++φ
+
+′
+′
+c(q1))2
+c(q0) − φ
+(φ
+
+h2
+8
+′′
+c (δ)((q1 − δ)2 − (q0 − δ)2) + Eh.
+φ
+
+1
+2
+1
+2
+
+4
+
+The remainder Eh contains terms of order the third power of h or higher, i.e. |Eh/h3| is bounded for all h < 1 such
+that the step contains a collision. Indeed, h2
+c(q1))2 is also of this order, since q1 − q0 is proportional to h.
+From the equations
+
+c(q0) − φ′
+
+8 (φ′
+
+and the use of a Taylor series expansion of φ′
+
+c, we arrive after discarding terms of order three or higher at,
+
+q1 = δ − h♭ ˆp,
+
+q0 = δ − h# ˆp,
+
+∆H =
+
+h(h# − h♭)
+2
+
+′
+′′
+c (δ)ˆp2 − φ
+c(δ)(h♭ − h#)ˆp +
+φ
+
+′′
+c (δ)(h2
+φ
+
+♭ − h2
+
+#)ˆp2 + ˜Eh.
+
+1
+2
+
+with ˜Eh again of third order. This ﬁnally leads to
+
+∆H =
+
+(h# − h♭)
+2
+c(δ)(h♭ − h#)ˆp + ˜Eh.
+
+′
+= −φ
+
+′′
+′
+c (δ)ˆp2 − φ
+(h − (h# + h♭))φ
+
+c(δ)(h♭ − h#)ˆp + ˜Eh
+
+Therefore, the expected energy error introduced in this one collisional step is
+
+′
+H(q1, p1) − H(q0, p0) = −φ
+
+c(δ)(h♭ − h#)ˆp + ˜Eh,
+
+(18)
+
+where the quantity | ˜Eh/h3| is bounded independent of h. (A similar result would hold for the solution error.)
+
+Technically speaking, it is incorrect to say that the energy jump in one step is O(h) since if we decrease the
+timestep h suﬃciently, there will be no collision event within the particular step, and so the error will revert to
+O(h3). Nonetheless, in any timestepping simulation in which there are collision events, these steps will introduce
+errors proportional to h. If we deﬁne the local approximation error eloc as the maximum of magnitudes of the local
+errors introduced, then eloc is of ﬁrst order in h, not third order as we would expect in the continuous case. Since there
+are, in general, a ﬁnite number of such collisions in any ﬁnite interval, the accumulation is bounded and the global
+error is also O(h). The apparent contradiction of an odd-order symmetric method is just one of several anomalies
+that result from the complex transition from the smooth problem to the discontinuous limit. In another terminology,
+we could say that the splitting method undergoes an order reduction for stiﬀ potential wells.
+
+From this discussion and Eq. 18, we expect the naive splitting method to give rather poor energy conservation,
+
+except in three special cases:
+
+Case 1 Collisions do not occur within timesteps but precisely at the timesteps, so third order is recovered.
+
+Case 2 The collisions occur at precisely the middle of a timestep, so that the ﬁrst order term in the error formula
+
+vanishes and third order local energy drift is again recovered.
+
+Case 3 Third order will be recovered if the derivative of the continuous pair potential vanishes for two spheres in
+
+contact.
+
+To illustrate this last point, we apply the method to one degree-of-freedom anharmonic “impact oscillator” with a
+continuous potential, φc(q) = 1
+4 q4. We show in Fig. 1 the maximum total energy error as a function of the time
+step when the wall is placed at q = 0.00 and q = −4.00. One can see that the naive splitting is a second order method
+when the derivative at the wall vanishes .
+
+2 q2 + 1
+
+Because it is only applicable for a relatively limited class of potentials the naive splitting method is not a candidate
+for a viable general technique, however, it does provide a good starting point for the development of a general method,
+which we call the Impulsive Verlet (IV) algorithm.
+
+To develop our method, we deliberately exploit two of the special cases in the naive algorithm for which third order
+can be expected, namely Cases 1 and 3 mentioned at the end of the previous section. (Case 2, the situation that
+
+III. IMPULSIVE VERLET
+
+5
+
+collisions occur at the midpoint of the time interval, does not appear to be of practical use.) We begin by introducing
+an artiﬁcial splitting of the continuous potential, φc(qij ), into into a short-ranged part, φ1(qij ), and a long-range part,
+φ2(qij ), according to
+
+(This decomposition is similar to that invoked in multiple timestepping5,12–14 molecular-dynamics algorithms.) For
+the reasons discussed above, the long-range (and therefore most expensive to calculate) part of the potential is deﬁned
+so that the derivative vanishes at the hard-core separation. We deﬁne φ2(qij ) as follows:
+
+where, q1 and q2 are parameters, and P (r) = Ao + A1r + A2r2 + A3r3 is a Hermite interpolant introduced so that the
+two potentials are smooth to the order C1 for any continuous potential. From Eqns. 19) and 20), φ1(q) is given by
+
+
+
+The continuity condition, P (r2) = φc(r2) , and the smoothness conditions, P ′(q2) = φ′
+0, allow us to calculate the coeﬃcients of the Hermite interpolant, giving
+
+
+
+c(q2), P ′(q1) = 0, and P ′′(q1) =
+
+φc(qij ) = φ1(qij ) + φ2(qij) .
+
+φ2(q) =
+
+P (q1), q < q1,
+P (q),
+φc(q), q ≥ q2 ,
+
+q1 ≤ q < q2,
+
+
+
+
+φ1(rij ) =
+
+φc(q) − P (q1)
+q < q1
+φc(q) − P (q) q1 ≤ q < q2,
+q ≥ q2.
+
+0
+
+
+
+
+A3 =
+
+φ′
+c(q2)
+6r1(q1 − q2) + 3(q2
+
+2 − q2
+1)
+
+for q1 6= q2,
+
+A2 = −3q1A3,
+
+A1 = 3q2
+
+1A3,
+
+A0 = −(A1q2 + A2q2
+
+2 + A3q3
+
+2) + Vc(q2) .
+
+(An example of this potential splitting for an inverse-sixth-power attractive potential, φc(q) = −ǫ(σ/q)6, is shown in
+Fig. 2.)
+
+Next, we deﬁne N -body potentials V1 and V2 as a sum of pair contributions from φ1 and φ2, respectively. We then
+
+split the total Hamiltonian in the following way:
+
+and
+
+H1(q, p) = T (p) + Vhs(q) + V1(q)
+
+H2(q) = V2(q) .
+
+The Trotter factorization (Eq. 8) is now applied to this splitting. The problem now is that H2 is not integrable and
+
+its ﬂow map must be approximated. This is done is the following way:
+
+nc+1
+
+ψH2,h ≈
+
+ψVhs ◦ ψV1,τ (c)
+
+i /2 ◦ ψT,τ (c)
+
+i
+
+◦ ψV1,τ (c)
+
+i /2 ,
+
+i=1
+Y
+where nc is the number of hard-sphere collisions between during the time step h, τ (c)
+(with τ (c)
+
+being measured from the beginning of the time step until the ﬁrst collision and τ (c)
+
+i
+
+1
+
+is the time between each collision
+n+1 measured from the
+
+6
+
+(19)
+
+(20)
+
+(21)
+
+(22)
+
+(23)
+
+(24)
+
+(25)
+
+(26)
+
+(27)
+
+(28)
+
+last collision to the end of the time step), and ψVhs is an operator representing the resolution of each elastic collisions.
+This is essentially the execution of a Verlet step of length τ (c) between each elastic collision. The collision times can
+be calculated since the Verlet step generates a quadratic trajectory, which together with the collision condition for
+two particles i and j can be written as
+
+kqi(τ (c)) − qj(τ (c))k2 − σ2 = 0,
+
+(29)
+
+generates a quartic equation for τ (c).
+
+We describe below the algorithm for the Impulsive Verlet molecular-dynamics simulation in more detail.
+
+Impulsive Verlet Timestepping Algorithm
+
+pn+1/2,0
+i
+
+= pn,0 + 1
+
+2 F2,i(qn,0)h
+
+do ic = 1, nc
+
+= pn+1/2,i−1 + 1
+
+pn+1/2,i−1/2
+i
+qn,i = qn,i−1 + M−1pn+1/2,ic τ i
+c
+˜pn+1/2,i
+i
+
+= pn+1/2,i−1/2 + 1
+
+2 F1,i(qn,i)τ i
+c
+
+2 F1,i(qn,i−1)τ i
+
+c
+
+pn+1/2,i = ψVhs
+
+qn,ic
+˜pn+1/2,i
+
+(cid:16)
+
+(cid:17)
+
+end do
+pn+1/2,nc +1/2
+i
+qn+1,0 = qn,nc + M−1pn+1/2,nc +1/2(h −
+
+= pn+1/2,nc + 1
+
+pn+1/2,nc +1
+i
+
+= pn+1/2,nc +1/2 + 1
+
+pn+1,0
+
+i
+
+= pn+1/2,nc + 1
+
+2 F2,i(qn+1,0)h
+
+nc
+
+2 F1,i(qn,nc )(h −
+nc
+
+i=1 τ i
+c)
+i=1 τ i
+c)
+P
+2 F1,i(qn+1,0)(h −
+
+nc
+
+P
+
+i=1 τ i
+c)
+
+P
+
+To make sure that no collisions are missed it is necessary to ensure that the quartic equation (Eq. 29) is accurately
+solved to give the nearest root to zero. This is not a trivial problem as the solution becomes increasingly unstable as
+smaller time steps are used (i.e. when the time to collision is small). To ensure the inaccuracies are not large enough
+to aﬀect the overall accuracy and order of the method, we employ Laguerre’s method15 to ﬁnd all roots of the quartic
+and take the smallest, positive real root, which is then reﬁned using Newton-Raphson. This proved to be suﬃcient
+at all but the very smallest time steps studied.
+
+There is a small probability that the Impulsive Verlet method can miss a grazing collision, since the trajectories
+that are followed in determining collisions are quadratic approximations. However, this probability is greatly reduced
+in comparison to the method of Suh, et al. or any other algorithm that uses linear motion to determine the collisions.
+
+We test the Impulsive Verlet algorithm using as our continuous potentials, φc(q), the Lennard-Jones potential
+
+and an attractive inverse-sixth-power potential
+
+IV. NUMERICAL EXPERIMENTS
+
+φc,LJ = 4ǫ
+
+12
+
+−
+
+σ
+q
+
+6
+
+.
+
+σ
+q
+
+"(cid:18)
+
+(cid:19)
+
+(cid:18)
+
+(cid:19)
+
+#
+
+φc,6 = −ǫ
+
+6
+
+.
+
+σ
+q
+
+(cid:18)
+
+(cid:19)
+
+7
+
+(30)
+
+(31)
+
+In both potentials σ is the same as the hard-core diameter. We truncate both potentials at the distance q∗
+c = qc/σ = 2.5
+and, to ensure their continuity, they are shifted so that the value of the potential at the cutoﬀ is zero. In implementing
+the Impulsive Verlet algorithm, we split each potential as prescribed in Eq. 19- 25, with q1 and q2 as input parameters.
+For the Lennard-Jones potential there is, of course, a natural splitting, namely that of Weeks, Chander and Anderson
+(WCA)4, where the potential is split at the minimum with q∗
+
+2 = 21/6, which gives the following splitting:
+
+1 = q∗
+
+φ1,LJ (q; WCA) =
+
+4ǫ[( σ
+
+q )−12 − ( σ
+
+q )−6] + ǫ q < 2
+q ≥ 2
+
+1
+
+6 σ,
+6 σ.
+
+1
+
+0,
+
+(
+
+(32)
+
+1
+
+4ǫ[( σ
+
+φ2,LJ(q, WCA) =
+
+−ǫ,
+q )−12 − ( σ
+The MD simulations were carried out on systems of 108 particles. The system of reduced units was chosen so that all
+quantities are dimensionless. So, as units of distance and energy we used the potential parameters σ and ǫ, respectively,
+and the mass of one atom as the unit mass. The unit of time is (mσ2/ǫ)1/2. An asterisk superscript indicates reduced
+units. Except were otherwise indicated all simulations are performed using a reduced density ρ∗ = ρσ3 = 0.9 and
+reduced temperature T ∗ = kT /ǫ = 2.5. In addition, a cubic box with periodic boundary conditions is used. For
+greater eﬃciency, the MD program incorporates three neighbor lists16 for the evaluation of the short-range force, the
+long-range force, and the collision times.
+
+q < 2
+q )−6], q ≥ 2
+
+6 σ,
+6 σ,
+
+(33)
+
+(
+
+1
+
+The results of the Impulsive Verlet on the instantaneous total energy for the Lennard-Jones and the attractive
+inverse sixth continuous potentials are illustrated in Fig. 3 and 4. A comparison to the naive splitting algorithm of
+Suh, et al.10 is also made for both potentials. The superiority in energy conservation and stability of the Impulsive
+Verlet algorithm over the naive splitting method is striking.
+
+We study in Fig. 5 the order of the method while varying q1 and q2. The order is obtained by plotting (on a log-log)
+the maximum energy error for a ﬁxed-length simulation versus the time step. A comparison with a straight line of
+slope two tells us that the method is of second order for various values of q∗
+2. (Note the slight deviation of the
+slope at very small time steps from the theoretical value of 2.0 is due to the diﬃculty in solving the quartic equation
+for the collision times when the time to collision is very small. This is not a real problem in practice since the goal of
+molecular-dynamics simulation is to use the largest time steps possible.)
+
+1 and q∗
+
+Finally, to demonstrate the ability of the Impulsive-Verlet method to yield relevant dynamical quantities, we show
+in Fig. 6 the result for the normalized velocity autocorrelation function , C(t) = hv(t) · v(0)i/hv(0) · v(0)i, for the
+Lennard-Jones system (108 particles) with ρ∗ = 0.9 and T ∗ = 0.9. In this calculation we use a splitting with q∗
+1 = 1.122
+and q∗
+
+2 = 1.5.
+
+V. CONCLUSION
+
+We have introduced a molecular-dynamics method for mixed hard-core/continuous potentials, which we refer to as
+the Impulsive Verlet algorithm. This algorithm is produced by extending general potential splitting methods to the
+speciﬁc case of mixed potentials. In addition to providing a mechanism for generating the Impulsive Verlet method,
+the potential splitting formalism helps to understand the failings of previous methods. The Impulsive Verlet algorithm
+uses a quadratic trajectory between collisions and does not miss any collisions of the approximate trajectory. As a
+result the algorithm is suitable for any type of continuous potential, is second order, has good energy preservation,
+and is far more stable over long time simulation than previously integrators for such systems. (A detailed theoretical
+analysis of the algorithm is the subject of current research.)
+
+VI. ACKNOWLEDGEMENTS
+
+The authors were supported in this work by NSF Grant DMS-9627330. In addition, the simulations reported herein
+were performed on computers provided by the Kansas Institute for Theory and Computational Science (KITCS)
+and the Kansas Center for Advanced Scientiﬁc Computing (KCASC). The authors thank Steve Bond for helpful
+discussions.
+
+8
+
+REFERENCES
+
+1 B.J. Alder and T.E. Wainwright, J. Chem. Phys. 27, 1208–1209 (1957).
+2 L. Verlet, Phys. Rev. 159, 98 (1967).
+3 J.P. Hansen and I.R. McDonald, Theory of Simple Liquids, (Academic Press, New York, second edition, 1986).
+4 J.D. Weeks, D. Chandler, and H.C. Anderson, J. Chem. Phys. 54, 5237 (1971).
+5 M. Tuckerman and B.J. Berne, J. Chem. Phys. 97, 1990 (1992).
+6 J.M. Sanz-Serna and M.P Calvo, Numerical Hamiltonian Problems, (Chapman and Hall, New York, 1995).
+7 R.M. Stratt, S.L. Holmgren, and D. Chandler, Mol. Phys. 42, 1233–1243 (1981).
+8 W.J. McNeil and W.G. Madden, J. Chem. Phys. 76, 6221–6226 (1982).
+9 D.M. Heyes, Chem. Phys. 69, 166–163 (1982).
+10 S.-H. Suh, M.-Y. Teran, H.S. White, and H.T. Davis, Chem. Phys. 142, 203–211 (1990).
+11 W.C. Swope, H.C. Anderson, P.H. Berens, and K.R. Wilson, J. Chem. Phys. 76, 637 (1982).
+12 D.J. Tildesley, W.B. Street, and G. Saville, Mol. Phys. 35, 639 (1978).
+13 A. Windemuth, H. Grubmuller, H. Heller, and K. Schulten, Mol. Simul. 6, 121 (1991).
+14 R.D. Skeel and J. Biesidecki, Annals of Numerical Mathematics 1, 191 (1994).
+15 W.H. Press, S.A. Teukolsky, W.T. Vetterling, and B.P. Flannery, Numerical Recipies in Fortran, (Cambridge
+
+University Press,, New York, 1992).
+
+16 M.A. Allen and D.J. Tildesley, Computer Simulation of Liquids, (Oxford Science Press, Oxford, 1987).
+
+9
+
+FIG. 1. The maximum total energy error as a function of the time step for one degree-of-freedom anharmonic
+“impact oscillator” is using the naive splitting approach. The wall is placed at q = −4.00 (square) and at q = 0.00
+(circle). Comparison is made with lines of slope two(solid line) and one(dashed line).
+
+FIGURES
+
+FIG. 2.
+
+A potential splitting of a inverse-sixth-power attractive interaction, −( σ
+
+q )6, with q1/σ = 1.1 and
+
+q2/σ = 1.200. The short range and the long potentials are (a) and (b) respectively.
+
+FIG. 3. Instantaneous total energy for a 108 particle simulation using a Lennard-Jones continuous potential with
+a hard-sphere core, using both Impulsive Verlet (solid line) and the naive splitting algorithm of Suh, et al. (dashed
+line). The time step is h∗ = 4 × 10−3.
+
+FIG. 4. Instantaneous total energy for a 108 particle system interacting via an inverse sixth-power attractive
+potential with a hard-sphere core, using both Impulsive Verlet(solid line) and the naive splitting algorithm of Suh, et
+al. (dashed line). The time step is h∗ = 4 × 10−3 .
+
+FIG. 5. The maximum total energy error as a function of the time step for a system of 108 particles using the
+
+Impulsive Verlet algorithm and the Lennard-Jones potential. Comparison is made with a line of slope two.
+
+FIG. 6. Normalized velocity autocorrelation as a function of time for 108 Lennard-Jones particles at ρ∗ = 0.9 and
+
+T ∗ = 0.9, using the Impulsive Verlet algorithm with a time step h∗ = 1 × 10−2.
+
+10
+
+104
+
+102
+
+E
+δ
+
+100
+
+10−2
+
+10−4
+
+10−4
+
+10−3
+
+10−2
+
+h
+
+10−1
+
+11
+
+(a)
+
+0.0
+
+−0.2
+
+−0.4
+
+ǫ
+/
+)
+j
+i
+r
+(
+c
+V
+
+−0.6
+
+1.0
+
+1.1
+r/σ
+
+1.2
+
+−0.4
+
+1.0 1.1
+
+1.6
+
+r/σ
+
+2.5
+
+0.0
+
+(b)
+
+ǫ
+/
+)
+j
+i
+r
+(
+c
+V
+
+−0.2
+
+12
+
+δE∗
+
+102
+
+100
+
+10−2
+
+10−4
+
+10−6
+
+0
+
+20
+
+t∗
+
+40
+
+60
+
+13
+
+10−2
+
+δE∗
+
+100
+
+10−1
+
+10−3
+
+10−4
+
+10−5
+
+0
+
+20
+
+t∗
+
+40
+
+60
+
+14
+
+100
+
+10−2
+
+∗
+
+E
+δ
+
+10−4
+
+10−6
+
+q1=1.122; q2=1.122(WCA)
+q1=1.122; q2=1.400
+q1=1.122; q2=1.500
+q1=1.122; q2=1.600
+q1=1.122; q2=1.700
+line 0f slope=2.000
+
+q1=1.000; q2=1.500
+q1=1.000; q2=1.600
+q1=1.000; q2=1.700
+line of slope=2.000
+
+10−8
+
+10−4
+
+10−3
+
+10−2
+
+h∗
+
+10−1
+
+10−8
+
+10−4
+
+10−3
+
+h∗
+
+10−2
+
+10−1
+
+100
+
+10−2
+
+∗
+
+E
+δ
+
+10−4
+
+10−6
+
+15
+
+1.0
+
+0.5
+
+0.0
+
+)
+t
+(
+C
+
+−0.5
+
+0.0
+
+0.5
+
+1.0
+
+t∗
+
+1.5
+
+16
+
+

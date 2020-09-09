@@ -1,0 +1,4342 @@
+7
+0
+0
+2
+ 
+r
+a
+
+M
+ 
+1
+2
+ 
+ 
+]
+h
+p
+-
+o
+a
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+5
+9
+1
+3
+0
+7
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Implementation of the LANS-alpha turbulence
+model in a primitive equation ocean model
+
+Matthew W. Hecht a Darryl D. Holm a,c Mark R. Petersen a,b,
+∗
+Beth A. Wingate a
+
+aComputer, Computational and Statistical Sciences Division, Los Alamos National
+Laboratory, Los Alamos, New Mexico
+bCenter for Nonlinear Studies, Los Alamos National Laboratory, Los Alamos, New
+Mexico
+cMathematics Department, Imperial College London, United Kingdom
+
+Abstract
+
+This paper presents the ﬁrst numerical implementation and tests of the Lagrangian-
+averaged Navier-Stokes-alpha (LANS-α) turbulence model in a primitive equation
+ocean model. The ocean model in which we work is the Los Alamos Parallel Ocean
+Program (POP); we refer to POP and our implementation of LANS-α as POP-α.
+
+Two versions of POP-α are presented: the full POP-α algorithm is derived from
+the LANS-α primitive equations, but requires a nested iteration that makes it too
+slow for practical simulations; a reduced POP-α algorithm is proposed, which lacks
+the nested iteration and is two to three times faster than the full algorithm. The
+reduced algorithm does not follow from a formal derivation of the LANS-α model
+equations. Despite this, simulations of the reduced algorithm are nearly identical to
+the full algorithm, as judged by globally averaged temperature and kinetic energy,
+and snapshots of temperature and velocity ﬁelds. Both POP-α algorithms can run
+stably with longer timesteps than standard POP.
+
+Comparison of implementations of full and reduced POP-α algorithms are made
+within an idealized test problem that captures some aspects of the Antarctic Cir-
+cumpolar Current, a problem in which baroclinic instability is prominent. Both
+POP-α algorithms produce statistics that resemble higher-resolution simulations of
+standard POP.
+
+A linear stability analysis shows that both the full and reduced POP-α algorithms
+beneﬁt from the way the LANS-α equations take into account the eﬀects of the small
+scales on the large. Both algorithms (1) are stable; (2) have an eﬀective Rossby
+deformation radius that is larger than the deformation radius of the unmodeled
+equations; and (3) reduce the propagation speeds of the modeled Rossby and gravity
+waves relative to the unmodeled waves at high wave numbers.
+
+Preprint submitted to Elsevier
+
+2 February 2008
+
+1 Introduction
+
+Ocean-climate models are typically run at relatively low resolution (1◦ or
+100km grid cells) in
+climate simulations due to the computational requirements of the coupled components and duration
+of the simulations, which might last for hundreds or thousands of model years. This resolution is well
+above the Rossby radius of deformation over most of the ocean domain, the typical horizontal size of
+eddies in the ocean. As a result, ocean-climate simulations only include the mean, large-scale ﬂow,
+and not the eddies one might observe in satellite images. These eddies aﬀect the mean circulation
+by transporting buoyancy and kinetic energy. Recent ocean-only simulations at resolutions of 1/10◦
+and ﬁner conﬁrm that when eddy-scale dynamics are resolved, some of the more prominent biases in
+the mean circulation, such as the well known biases in Gulf Stream path and structure, are greatly
+reduced [1].
+
+∼
+
+The goal of turbulence modeling is to capture the eﬀects of small scale structures on the large-scale
+ﬂow. In the case of ocean-climate models, this need is particularly pressing because the Rossby
+radius, the length scale where available potential energy is converted into kinetic energy, is not
+resolved except in the equatorial region. This leaves not just part of the mesoscale eddy spectrum
+unresolved, but all of that spectrum unresolved except perhaps in the region in which the equatorial
+jets occur. Thus, parameterization of those eﬀects becomes a necessity.
+
+A particular parameterization of scalar transport, following the approach of Gent and McWilliams
+(GM) [2] and extensions thereof [3,4] has been widely embraced in ocean modeling. These schemes
+involve two sources of scalar mixing. One of these is similar to horizontal mixing by diﬀusion, but
+its diﬀusivity is rotated slightly from the horizontal into a surface along which potential density is
+constant. The other source of scalar mixing involves the diﬀusion of layer thickness, which acts to
+ﬂatten surfaces of constant density (isopycnal surfaces). This ﬂattening of density surfaces releases
+potential energy and, thus, mimics the action of eddies generated through baroclinic instability.
+(The scalars in question here include heat and salt, the constituents of density.) This isopycnal
+mixing scheme, ﬁrst applied to coupled atmosphere-ocean models in the Community Climate System
+[5], represents one of the more signiﬁcant advances not only in ocean modeling, but more generally
+in climate. Implementing this parameterization allows coupled atmosphere and ocean models to be
+conﬁgured without the“ﬂux corrections” formerly required in order to compensate for incompatible
+heat transports in oceanic and atmospheric components.
+
+A number of important mean ﬂow features in the oceans, however, remain poorly represented in
+most ocean models. These ﬂow features only come into focus in eddy-resolving models which remain
+too expensive for long time scale climate simulation. This resistance to parameterization by scalar
+transport on isopycnal surfaces persists in the Gulf Stream/North Atlantic Current system and in a
+few other regions. This is probably because the process through which the variability in the circulation
+feeds back on the mean is dynamically more complex than what can be adequately parameterized by
+diﬀusion of layer thickness. Hence, although the very serious issue of spurious cross-frontal diﬀusion
+of heat (the “Veronis eﬀect” [6,7]) is greatly reduced by using the GM parameterization, the path
+
+∗ Corresponding author
+
+Email address: mpetersen@lanl.gov (Mark R. Petersen).
+
+2
+
+and structure of the Gulf Stream and its downstream development remain strongly biased.
+
+In this paper we consider for the ﬁrst time a non-diﬀusive parameterization that primarily modiﬁes
+the momentum equations. We anticipate that this parameterization will prove complementary to the
+scalar-transport-based parameterizations currently in use, a subject for later investigation.
+
+We have implemented a parameterization of mean multiscale transport eﬀects known as the Lagrangian-
+Averaged Navier-Stokes alpha (LANS-α) model in a primitive equation ocean model. The LANS-α
+model is a member of a hierarchy of equations developed using asymptotic methods and Lagrangian-
+averaging in Hamilton’s principle [8]. These equations have desirable characteristics, such as con-
+servation of energy and potential vorticity in the absence of dissipation. They also satisfy Kelvin’s
+circulation theorem and conserve a form of potential vorticity.
+
+The LANS-α model is implemented by using two velocities: the Lagrangian-averaged velocity and
+the Eulerian-averaged velocity. The Eulerian-averaged velocity is related to the Lagrangian-averaged
+velocity through a smoothing operation. This smoother Eulerian velocity, which does not include
+the smallest scale variability, appears as the advecting velocity for both momentum and tracers.
+The Lagrangian-averaged (non-smoothed) velocity, which does include mean eﬀects of the smaller
+scales, is transported by this smoother advecting velocity. The parameter alpha is a length scale that
+determines the amount of smoothing. Structures smaller than alpha are slaved to the larger structures
+in the Eulerian-averaged velocity. Solutions of the LANS-α equations converge to the Navier-Stokes
+solutions in the limit as alpha goes to zero, and the LANS-α equations are Galilean invariant. Note
+that the LANS-α equations change the nonlinear terms of the Navier-Stokes equations, rather than
+the dissipative terms, as most turbulence models, such as hyperviscosity, do. In other words, LANS-α
+is a model of stirring—the purely mechanical movement and rearrangement of ﬂuid—rather than
+mixing, which simply occurs through diﬀusion (see, e.g. [9]). The LANS-α model also tempers vortex
+stretching while preserving the original form of the vortex dynamics [10]. This can be seen with the
+vorticity equation, where the vortex stretching term contains the smoothed velocity. The LANS-α
+equations may be interpreted as a closure of a viscous version of the GLM equations of Andrews and
+McIntyre[11].
+
+The alpha-parameterization was introduced within inviscid equations by Holm, Marsden and Ratiu
+[12]. Soon afterwards, its viscous version, LANS-alpha, was developed into a turbulence model by
+Chen et al. [13,14]. See also Marsden and Shkoller [15] for parallel developments. Its performance as
+a model of turbulence and mixing was tested in a variety of observations and numerical simulations.
+A summary of results obtained between 1997 and 2004 can be found in [16]; only the highlights are
+reviewed here. In high-Reynolds-number pipe ﬂow, its steady analytical solutions matched observa-
+tions of mean velocity over several orders of magnitude, demonstrating its potential for describing
+the mean properties of turbulence over a wide range of scales [13]. In forced isotropic turbulence in
+a three-dimensional periodic domain, the energy spectrum E(k) was found to be proportional to the
+expected k−5/3 for kα < 1 [14]. However, for kα > 1 the energy spectrum turns over to approximate
+k−3, thereby greatly reducing the number of degrees of freedom excited in the ﬂow. This occurs be-
+cause the scales smaller than α (that is, kα > 1) are slaved to the larger scales. This slaving greatly
+reduces the computational work required in a numerical ﬂuid simulation. In fact, the computational
+work for a turbulence simulation scales with the Reynolds number Re as Re3 for Navier-Stokes and
+as Re2 LANS-α. The LANS-α model was found to be at least as accurate as modern Large Eddy
+
+3
+
+Simulation (LES) models (such as the dynamic models in [17,18]) when measured against a reference
+solution in a high-resolution direct numerical simulation of Kelvin-Helmholtz shear layer instability
+[19].
+
+Recent work has extended LANS-α to geophysical ﬂuid dynamic models. For example, a quasi-
+geostrophic alpha model, developed by Holm and Nadiga [20], showed that the alpha model can
+capture the qualitatively correct time-mean circulation in the double-gyre problem at a resolution
+four to eight times coarser than a traditional quasi-geostrophic model. The shallow water LANS-α
+equations have been shown to allow larger time steps than the unaveraged shallow water equations
+[21]. A linear analysis leads to the understanding that this is due to a slow down of the frequency of
+the high wave-number gravity waves. As the grid is reﬁned, the time step becomes independent of
+the mesh spacing and dependent on α. The LANS-alpha model’s method of accounting for the eﬀect
+of the small scales on the large impacts the way it models baroclinic instability in a two-layer QG
+model; it lowers the critical wavenumber, reduces the bandwidth of the instability, and preserves the
+value of forcing at the onset [22].
+
+Our work presents the ﬁrst implementation of the LANS-α model in a primitive equation ocean
+general circulation model, and therefore the ﬁrst that could potentially be used for century to
+millennium scale climate projection. Implementation of LANS-α in Los Alamos’ Parallel Ocean
+Program (POP) presented numerous new challenges, including most notably accommodating the
+barotropic/baroclinic mode splitting that is performed in ocean models of this class. This decom-
+position of the momenta into a depth-averaged barotropic component and the three dimensional
+baroclinic residual is responsible for a gain of eﬃciency on the order of one to two orders of magni-
+tude under explicit or semi-implicit time-stepping, and so must be preserved, despite the complication
+presented to implementation of LANS-α. Other challenges involved enforcement of continuity on the
+Eulerian-averaged velocity in the barotropic equations; correct handling of boundaries and topogra-
+phy; and establishment of an eﬃcient algorithm that retains the essential properties of the LANS-α
+model.
+
+2, the POP-α
+The organization of this paper is as follows: after reviewing the LANS-α model in
+§
+algorithm is derived from the LANS-α primitive equation set in
+3. A reduced version of the full
+§
+POP-α algorithm, which is faster by a factor of two to three, is presented in
+3.5. The stability
+§
+4 shows that the eﬀect of the LANS-α model is to increase the eﬀective Rossby radius
+analysis in
+§
+of deformation, lowering the wavenumber at which the onset of baroclinic instability occurs, and to
+slow down gravity waves and Rossby waves at high wave numbers. In this section we also show that
+the reduced algorithm does not change the character of the continuous equations very much, and
+that both the full and reduced algorithms are stable. Simulations using an idealized channel domain
+5. They show that POP-α statistics resemble
+that invokes baroclinic instability are presented in
+§
+higher-resolution simulations of standard POP, and that results from the full and reduced POP-α
+algorithms are nearly identical. Section
+
+6 states our conclusions.
+§
+
+4
+
+2 LANS-α model equations
+
+2.1 The LANS-α model
+
+The nondissipative part of the LANS-α equations is obtained using the Euler-Poincar´e variational
+framework, where the Lagrangian expression of Hamilton’s principle is obtained for each approxima-
+tion of the full equations of motion, such as shallow water, quasi-geostrophic, Boussinesq, and primi-
+tive equations [8,23]. The eﬀect of this procedure is that two ﬂuid velocities appear: the Lagrangian-
+averaged velocity, v, which is the momentum velocity, and the Eulerian-averaged velocity, u, which
+is the advecting velocity. In the original derivation, the Lagrangian-averaged and Eulerian-averaged
+velocities are related by the Helmholtz operator,
+
+v =
+
+1
+(cid:16)
+
+−
+
+˜∆
+(cid:17)
+
+u,
+
+˜∆
+
+ξξ
+
+≡ ∇ · h
+
+i · ∇
+
+(1)
+
+X
+
+where the displacement ﬂuctuation ξ = X
+is the diﬀerence between the spatial trajectory
+of a ﬂuid parcel, X, and the Lagrangian mean of that ﬂuid trajectory,
+. The covariance of the
+i
+displacement ﬂuctuation,
+, is a three-by-three symmetric tensor (in three-dimensional turbulence)
+i
+that describes the small-scale (or short-time) ﬂuctuations in the ﬂuid ﬂow. This tensor varies in both
+space and time. The size of the ﬂuctuations described by
+is determined by the time-scale of the
+, as described by Holm [8], p. 217. It is possible to
+Lagrangian mean time-averaging operation
+replace (1) by a convolution (and thus, a ﬁlter), as discussed in Geurts and Holm [24].
+
+− h
+
+h · i
+
+ξξ
+
+ξξ
+
+X
+
+i
+
+i
+
+h
+
+h
+
+h
+
+,
+The Lagrangian mean equations include a prognostic equation for each of the components of
+i
+which are then used in (1) and the Navier-Stokes equation. The additional memory and computation
+required by this fully dynamic covariance tensor could be prohibitively expensive for computational
+ξξ
+ﬂuids models. In the original LANS-α model, the covariance displacement ﬂuctuation tensor
+i
+is simpliﬁed to the scalar α2 by assuming that the displacements are spatially isotropic, uniform
+throughout the domain, and constant in time. These are severe restrictions to the original Lagrangian
+mean equations. Nevertheless, the resulting LANS-α equation set has been shown to be an eﬀective
+turbulence model [13,20].
+
+ξξ
+
+h
+
+h
+
+2.2 The primitive equation LANS-α model
+
+The implementation of the LANS-α model in POP described in this work uses the primitive-equation
+form ([23], section 6.3):
+
+5
+
+∂v
+∂t
+
++ u
+
+· ∇
+
+u =
+
+1
+ρ0 ∇
+
+−
+
+π +
+
+(v)
+
+F
+
+×
+
+uj + f
+
+v + u3∂zv + vj∇
+∂π
+=
+∂z
+−
+u + ∂zu3 = 0,
+2 + ∂2
+z )
+
+∇ ·
+1
+
+v =
+
+α2(
+
+ρg,
+
+−
+
+∇
+
+(cid:16)
+
+u,
+
+(cid:17)
+
+ξξ
+
+where v = (v1, v2) and u = (u1, u2) are horizontal velocities and
+is the horizontal gradient.
+The Helmholtz operator in (5) indicates that the Eulerian-averaged velocity u is smoother than
+the Lagrangian-averaged velocity v. In the Lagrangian mean equations, the covariance displacement
+is determined prognostically by the equations. In the LANS-α model, alpha
+ﬂuctuation tensor
+takes the place of this tensor; this length scale alpha is the only user-deﬁned parameter in the model.
+Alpha determines how smooth u is; more precisely, structures in v which are smaller than alpha are
+strongly suppressed by the inverse Helmholtz operator and do not appear in u. In practice alpha
+is chosen to be on the order of a grid-cell width. An important question is how well the eﬀects of
+turbulence are represented in the particular context of a primitive equation ocean model as alpha is
+varied; this is addressed in [25].
+
+∇
+
+h
+
+i
+
+A fundamental characteristic of the LANS-α equations is that the smoother Eulerian-averaged ve-
+locity u is the advecting velocity. Thus the small-scale structures in v are advected by the smoother
+velocity u. However, this advection is not like passive tracers embedded in the ﬂow. Rather, it is ﬂuid
+transport as in Kelvin’s circulation theorem, where the line element with respect to which the circula-
+v
+tion is deﬁned must also be advected. This is the source of the additional term
+in the motion equation for the alpha model.
+
+j=1 vj∇
+
+uj = (
+
+u)T
+
+∇
+
+·
+
+3
+
+P
+
+acts on the Lagrangian-averaged velocity v, so (2) can be thought of as
+The diﬀusion operator
+an advection-diﬀusion equation for v, and v as the speciﬁc momentum. Additional terms are the
+Coriolis force f
+uj.
+In the absence of this extra nonlinear term, the LANS-α model reduces to the Leray model [8]. A
+comparison of the LANS-α and Leray models will be presented in a future work.
+
+π, and the additional nonlinear term,
+
+u, the pressure gradient ρ0
+
+j=1 vj∇
+
+∇
+
+×
+
+−1
+
+P
+
+F
+
+3
+
+The pressure π is not the physical pressure but a modiﬁed pressure, where
+
+π = p
+
+1
+2|
+
+2
+
+u
+|
+
+−
+
+α2
+2 |∇
+
+2
+
+u
+|
+
+−
+
+and p is the actual pressure. However, in the algorithms presented in this paper, the modiﬁed pressure
+π is never calculated this way. Instead, it is computed at each time step from the hydrostatic equation
+(3) once the density at that step is known. This is identical to the way the physical pressure is
+computed in POP.
+
+The LANS-α version of tracer equations in a primitive-equation ocean model is
+
+(2)
+
+(3)
+
+(4)
+
+(5)
+
+(6)
+
+(7)
+
+∂ϕ
+∂t
+
++ u
+
+ϕ =
+
+(ϕ) ,
+
+· ∇
+
+D
+
+6
+
+D
+
+where ϕ may be temperature, salinity, or another conserved quantity, and
+is the horizontal and
+vertical tracer diﬀusion. The tracer advecting velocity is the smooth velocity u. This is the velocity
+responsible for transport of ﬂuid particles carrying mass and salinity. This is not a model choice; rather
+it is part of the derivation of the alpha model. Before their diﬀusivities were introduced as kinetic
+coeﬃcients, the tracer equations described quantities such as heat and salinity that were simply
+carried along with each ﬂuid parcel. The Lagrangian average of such a quantity that is conserved
+on ﬂuid parcels is simply its average value, computed at ﬁxed Lagrangian coordinate. Likewise, the
+Lagrangian averaged equation for such a process keeps the same form as the exact dynamics, but the
+transport velocity in this equation is replaced by the Lagrangian averaged particle velocity (u) and
+the instantaneous value of the tracer is replaced by its average value taken along the trajectory of the
+ﬂuid parcel. The value of the diﬀusivity of such a Lagrangian averaged tracer is a model parameter.
+However, the form of its dynamics was ﬁxed by the use of the Lagrangian average in the derivation
+of the alpha model.
+
+3 Implementation of LANS-α in POP
+
+3.1 POP barotropic/baroclinic splitting
+
+The Parallel Ocean Program (POP), developed at Los Alamos National Laboratory by Smith, Dukow-
+icz and Malone [26], is well-known in the ocean modeling community. As the ocean component of
+NCAR’s Community Climate System Model [27] and NCAR’s Parallel Climate Model, it is used for
+twenty-ﬁrst century climate simulations by the Intergovernmental Panel on Climate Change (IPCC).
+
+POP uses ﬁnite diﬀerences to discretize the primitive equations, and has a leap-frog time stepping
+scheme. The horizontal grid is a logically rectangular B-grid, the vertical coordinate is z-level and
+incorporates a free surface [28] and optional partial bottom cells [29]. Diﬀusion can be Laplacian or
+biharmonic, and the Gent-McWilliams scheme is available for tracer diﬀusion [2].
+
+The barotropic/baroclinic mode splitting used in ocean general circulation models presents a signif-
+icant complication to the implementation of LANS-α. The mode splitting is performed in order to
+isolate the very fast free-surface gravity waves, which have speeds in excess of 200 m/sec. These fast
+external waves are responsible for the very rapid propagation of tsunami events, for example, but have
+negligible bearing on ocean circulation. The problematic external mode is almost completely isolated
+by a modal decomposition into the vertically averaged velocity and the departure from that average,
+with internal waves speeds of a few meters per second, at most, presenting a much less stringent
+time step limitation within the 3-dimensional baroclinic equations. The much faster external mode is
+treated by solving the barotropic equations with an implicit method in POP; some other models use
+an explicit subcycling of the barotropic equations. In either case the isolation of the external mode
+within a lower-dimensional set of equations results in a tremendous gain in eﬃciency. It is within
+these split equations that the model is implemented in order to arrive at a primitive equation ocean
+model containing the LANS-α turbulence scheme in a form suitable not just for the very limited
+research application that could be addressed with a simpler unsplit model, but for consideration in
+
+7
+
+In POP, the barotropic velocity U(x, y, t) = (U1, U2) is deﬁned as the vertical integral of the horizontal
+velocity u(x, y, z, t) = (u1, u2),
+
+where H(x, y) is the ocean depth when the surface is at rest and η(x, y, t) is the free surface height.
+Subscripts are used on U and u to indicate horizontal directions because we reserve V and v for the
+rough velocity in the LANS-α model.
+
+The continuity equation may now be integrated in the vertical to produce a prognostic equation for
+the free surface height,
+
+climate modeling.
+
+U
+
+≡
+
+1
+H + η Z
+
+η
+
+−H
+
+u dz,
+
+η
+
+Z
+
+−H
+∂η
+∂t
+
+(
+
+∇ ·
+
++
+
+∇ ·
+
+u + ∂zu3) dz = 0,
+
+(H + η) U = 0.
+
+(8)
+
+(9)
+
+(10)
+
+An outline of the POP algorithm for the momentum equation using the baroclinic/barotropic splitting
+at time step n + 1 is presented graphically in Fig. 1 and as follows:
+
+k + 2∆tRHSn
+k ,
+
+k = 1 . . . km
+
+k contains the momentum forcing: advection, centrifugal, Coriolis, diﬀusion, and
+
+(P1) Baroclinic component
+leapfrog step: un+1
+where RHSn
+pressure gradients.
+(P2) Subtract depth-average:
+
+k = un
+
+k = un+1
+˜un+1
+
+k −
+
+1
+H
+
+(P3) Barotropic component:
+
+P
+
+km
+κ=1 un+1
+
+κ dzκ, k = 1 . . . km
+
+compute ηn+1 using the conjugate gradient method.
+leapfrog step: Un+1 = Un−1 + RHSn
+where RHSn contains
+
+(P4) Add baroclinic and barotropic velocities:
+
+∇
+k + Un+1, k = 1 . . . km
+
+k = ˜un+1
+un+1
+
+η, the Coriolis term, and the vertically integrated forcing.
+
+In this notation, un
+k is the baroclinic horizontal velocity at the kth vertical level at time step n, for
+levels k = 1 . . . km, ∆t is the time step, and ˜u is an intermediate baroclinic velocity. This outline
+contains only enough detail for the purposes of this paper; a complete description can be found in
+the POP reference manual [29].
+
+8
+
+3.2 POP-α baroclinic implementation
+
+Because POP’s baroclinic and barotropic components use explicit and implicit time stepping, respec-
+tively, the implementation of the alpha model in POP was quite diﬀerent in these two parts of the
+code. The explicit baroclinic part was straightforward, while the implicit barotropic part presented
+numerous diﬃculties, as detailed in the following section.
+
+When POP is adapted to use the LANS-α model (2–5), the following changes must be made: (1) there
+are two full velocity ﬁelds, the Eulerian-averaged, or smooth, velocity u and the Lagrangian-averaged,
+or rough, velocity v; (2) likewise, there is a smooth and rough barotropic velocity, U and V; (3) the
+appropriate velocities must be used in each term in the momentum equation; (4) the nonlinear term
+v is added to the forcing terms in the momentum equation; and (5) the advecting velocity in
+
+uT
+
+∇
+the tracer equation is the smooth velocity u.
+
+·
+
+Because the time derivative in the LANS-α momentum equation (2) is on the rough velocity v, one
+must take a time step in v and then compute u by inverting the Helmholtz operator (5), i.e.
+
+k and un
+
+where vn
+j,k is the jth component at level k, and
+vn
+
+is the horizontal gradient.
+
+k are the rough and smooth horizontal velocities at time step n and vertical level k,
+
+(11)
+
+(12)
+
+vn+1
+k
+
+vn+1
+k −
+2∆t
+
++ un
+
+k · ∇
+
+k + un
+vn
+
+3,k∂zvn
+
+k +
+
+2
+
+un
+j,k∇
+1
+ρ0 ∇
+
+Xj=1
+=
+
+−
+un+1
+k
+
+vn
+j,k + f
+
+un
+k
+
+×
+
+pn
+k +
+
+vn
+k ,
+
+F
+
+, k = 1 . . . km
+
+un+1
+
+k =
+
+1
+
+α2
+
+−
+
+∇
+
+(cid:16)
+
+−1
+
+2
+
+(cid:17)
+
+∇
+
+The outline for the POP-α algorithm is then
+
+(A1) Baroclinic component
+
+leapfrog step: vn+1
+where RHSn
+
+k + 2∆tRHSn
+k ,
+k contains the momentum forcing:
+
+k = vn
+
+k = 1 . . . km
+
+centrifugal, Coriolis, diﬀusion, and pressure gradients.
+
+(A2) Subtract depth-average from v:
+
+k = vn+1
+˜vn+1
+
+1
+H
+(A3) Solve for smooth baroclinic velocity:
+
+km
+κ=1 vn+1
+
+k −
+
+κ dzκ, k = 1 . . . km
+
+ˆun+1
+
+k = (1
+
+α2
+
+−
+(A4) Subtract depth-average from ˆu:
+
+∇
+
+, k = 1 . . . km
+
+P
+2)
+
+−1 ˜vn+1
+
+k
+
+k = ˆun+1
+˜un+1
+(A5) Barotropic component:
+
+k −
+
+1
+H
+
+P
+
+km
+κ=1 ˆun+1
+
+κ dzκ, k = 1 . . . km
+
+compute ηn+1 using the conjugate gradient method.
+leapfrog step: Vn+1 = Vn−1 + RHSn
+
+9
+
+extra nonlinear term un
+
+vn
+j,k , advection,
+
+j,k∇
+
+where RHSn contains
+
+η, Coriolis term, and the vertically integrated forcing.
+
+(A6)
+
+∇
+solve for smooth barotropic velocity, Un+1
+
+(A7) Add baroclinic and barotropic velocities:
+
+k = ˜vn+1
+vn+1
+k = un+1
+˜un+1
+
+k + Vn+1, k = 1 . . . km
+
+k + Un+1, k = 1 . . . km
+
+The boxes indicate steps which were added to POP to implement the LANS-α model. Velocities
+˜v, ˜u, and ˆu are intermediate baroclinic velocities. Fig. 2 shows a graphical version of the POP-α
+algorithm. The depth-average must to be subtracted from v and then again from u in steps (A2)
+and (A4) to guarantee that both have zero barotropic component.
+
+−1, the smoothing is in the horizontal directions only.
+Note that in the Helmholtz operator (1
+This is a reduction from the original LANS-α formulation (5), which includes a vertical component.
+This reduction was chosen not only to reduce computational time, but because it is numerical res-
+olution in the horizontal plane which limits physical processes at the scale ofthe Rossby radius of
+deformation and presents the opportunity for eﬀective use of the turbulence model.
+
+α2
+
+2)
+
+∇
+
+−
+
+The extra nonlinear term—the fourth term in (11)—only includes a summation from j = 1 . . . 2
+v3, involves only
+rather than j = 1 . . . 3 as in the original LANS-α equations. The missing term, u3∇
+vertical velocities and is several orders of magnitude smaller that the ﬁrst two terms in the summation
+in primitive equation applications. If this term were included a smoothed vertical velocity u3 would
+have to be computed at each horizontal level, adding to the overall computational cost for this
+unimportant term.
+
+Simulations where LANS-α was implemented in only the baroclinic component (A1–A4) were imme-
+diately unstable, failing to converge within 100 timesteps. Those with LANS-α only in the barotropic
+component (A5–A6) of the algorithm were usually unstable, and failed to converge after 105 timesteps
+(30 years). Thus LANS-α must be uniformly implemented in both components.
+
+3.3 POP barotropic implementation
+
+The abbreviated description of the barotropic component in steps 5 and 6 on the POP-α algorithm
+above does not reveal the full complexity of these steps. Essentially, one needs to ﬁnd Vn+1, Un+1, and
+ηn+1 from the vertically integrated momentum and continuity equations by the end of the procedure.
+However, both of these equations depend on the velocities and surface height, so there are potentially
+two simultaneous implicit solves.
+
+To review this diﬃculty in more detail, we step back from the LANS-α model and review the POP
+barotropic implementation by Dukowicz and Smith [28]. The leapfrog discretization of the barotropic
+momentum equation and vertically integrated continuity equation are:
+
+10
+
+where g is gravitational acceleration, Gn = (Gn
+x, Gn
+y ) are the x and y components of the vertically
+integrated baroclinic momentum forcing terms, and the Coriolis parameter is written as the matrix
+
+The superscripts ζ, ζ ′, and θ are parameters which specify the degree to which the Coriolis term,
+pressure gradient, and continuity are implicit:
+
+Un+1
+
+Un−1
+
+−
+2∆t
+
++ BUξ′
+
+=
+
+ηξ + Gn,
+
+g
+−
+
+∇
+
+ηn+1
+
+ηn
+
+−
+∆t
+
++
+
+∇ ·
+
+HUθ = 0,
+
+B = 
+
+
+
+0
+
+f
+−
+f 0
+
+.
+
+
+
+
+
+
+Uξ′
+
+= ξ′Un+1 + (1
+ηξ = ξηn+1 + (1
+
+−
+−
+Uθ = θUn+1 + (1
+
+−
+−
+
+ξ′
+ξ
+
+γ′)Un + γ′Un−1,
+γ)ηn + γηn−1,
+θ)Un.
+
+−
+
+In the POP code, the pressure splitting is equally weighted (ξ = γ = 1/3) and the divergence is
+fully implicit (θ = 1). These choices are the optimal choice of parameters to damp the computational
+gravity wave mode ([28], Fig. 2). One may specify implicit Coriolis (ξ′ = γ′ = 1/3) or centered
+explicit Coriolis (ξ′ = γ′ = 0) in the POP input ﬁle. The advantage of an implicit Coriolis term is
+that a larger time step may be taken, sometimes by a factor of two. The POP-α algorithm described
+in this paper uses an explicit Coriolis term because the implicit version would require an iterative
+method to solve the barotropic momentum equation.
+
+Using ξ = γ = 1/3, θ = 1, and explicit Coriolis (ξ′ = γ′ = 0), equations (13—14) become
+
+Un+1 = Un−1 + τ
+
+Gn
+h
+ηn+1
+(cid:16)
+
+−
+
+−
+ηn
+
+(cid:17)
+
+2
+τ
+
+BUn
+
+gγ
+
+−
+
+∇
+
+ηn+1 + ηn + ηn−1
+(cid:16)
+
+(cid:17)i
+
+,
+
+HUn+1 = 0,
+
++
+
+∇ ·
+
+where τ = 2∆t. These equations are both implicit and so must be solved simultaneously for Un+1
+and ηn+1. Substituting Un+1 from (19) into (20) and solving for the pressure, we have
+
+H
+
+ ∇ ·
+
+∇ −
+1
+gγ ∇ ·
+Un+1 = Un−1 + τ
+
+H
+
++
+
+h
+
+Gn
+
+2
+γgτ 2 !
+
+ηn+1 =
+
+2
+γgτ 2 ηn +
+
+−
+
+1
+
+HUn−1
+
+γτ g ∇ ·
+ηn + ηn−1
+∇
+(cid:16)
+gγ
+
+,
+
+BUn
+
+gγ
+
+−
+BUn
+
+−
+Gn
+h
+
+−
+
+−
+
+∇
+
+i
+(cid:17)
+ηn+1 + ηn + ηn−1
+(cid:16)
+
+.
+
+(cid:17)i
+
+11
+
+(13)
+
+(14)
+
+(15)
+
+(16)
+(17)
+(18)
+
+(19)
+
+(20)
+
+(21)
+
+(22)
+
+Thus the algorithm for solving the barotropic equations with explicit Coriolis terms is to solve (21)
+for ηn+1 and then (22) for Un+1. Solving for ηn+1 requires the inversion of a Laplacian-like operator;
+POP uses a conjugate gradient (CG) routine.
+
+3.4 Full POP-α barotropic implementation
+
+The POP-α version of the barotropic equations (13-14) are:
+
+Vn+1
+
+Vn−1 + τ BUξ′
+
+=
+
+τ g
+
+ηξ + τ Gn,
+
+−
+2
+τ
+
+ηn+1
+
+−
+(cid:16)
+Vn+1 =
+
+−
+∇
+HUθ = 0,
+
+Un+1.
+
+ηn
+
++
+
+∇ ·
+α2
+
+∇
+
+2
+
+(cid:17)
+1
+−
+
+(cid:16)
+
+(cid:17)
+
+(23)
+
+(24)
+
+(25)
+
+(26)
+
+(27)
+
+(28)
+
+(29)
+
+(30)
+
+Using the same weighting choices as POP with explicit Coriolis terms, we have
+
+Vn+1
+
+−
+
+BUn
+
+Vn−1 = τ
+2
+τ
+
+Gn
+h
+ηn+1
+(cid:16)
+
+−
+
+−
+ηn
+
+(cid:17)
+
++
+
+∇ ·
+
+γg
+
+−
+
+∇
+
+ηn+1 + ηn + ηn−1
+(cid:16)
+
+(cid:17)i
+
+,
+
+HUn+1 = 0.
+
+To solve equations (25—27) for Vn+1, Un+1, and ηn+1, replace Vn+1 and Vn−1 in (26) with Un+1
+and Un−1 using the Helmholtz relation, solve for Un+1, substitute into (27), and solve for ηn+1. The
+algorithm is then
+
+Full POP-α barotropic algorithm:
+
+α2
+
+−
+
+H
+
+∇
+
+ ∇ ·
+
+1
+(cid:16)
+1
+gγ ∇ ·
+(cid:16)
+Vn+1 = Vn−1 + τ
+
+H
+
++
+
+1
+
+(cid:17)
+
+−
+
+Un+1 =
+
+α2
+
+−
+
+∇
+
+1
+(cid:16)
+
+(cid:17)
+
+−1
+
+2
+
+2
+γgτ 2 !
+−1
+
+Gn
+
+∇ −
+
+α2
+
+2
+
+∇
+
+Gn
+−1
+h
+2
+
+(cid:17)
+h
+BUn
+
+−
+Vn+1.
+
+ηn+1 =
+
+2
+γgτ 2 ηn +
+
+−
+
+1
+
+τ γg ∇ ·
+
+HUn−1
+
+−
+γg
+
+−
+
+∇
+
+BUn
+
+gγ
+
+ηn + ηn−1
+(cid:16)
+
+−
+
+∇
+ηn+1 + ηn + ηn−1
+(cid:16)
+
+(cid:17)i
+
+(cid:17)i
+
+,
+
+,
+
+The added complexity of the algorithm due to the LANS-α model in these equations is the smooth-
+−1 operator appears. This Helmholtz inversion is solved using the
+ing step wherever the (1
+iterative CG method. The operator in front of ηn+1 in (28) is also inverted using the CG method.
+This means that solving the full algorithm requires solving a nested inversion. There are typically 50
+iterations of CG in standard POP, so here there might be 502 iterations to solve for ηn+1 when the
+Helmholtz inversion is used.
+
+α2
+
+2)
+
+∇
+
+−
+
+12
+
+Another option is to use a simple ﬁlter such as nearest-neighbor averaging instead of a Helmholtz
+inversion to avoid the nested iteration. Filters have been successfully used in LANS-α models in large
+eddy simulations by Geurts and Holm [30]. Using a local ﬁlter in place of the Helmholtz inversion
+improves speed, but the ﬁlter must still be applied within each CG iteration for the ηn+1 solve.
+
+The best option would be to avoid the smoothing operator on the LHS of (28) altogether. This is
+the motivation for the reduced algorithm presented in the next section. Data on the computing time
+for these diﬀerent options are discussed in section 5.2
+
+Another version of the algorithm (28—30) would be to replace (30) with
+
+Un+1 = Un−1
+α2
+1
+
++τ
+
+−1
+
+2
+
+−
+
+∇
+
+(cid:17)
+
+(cid:16)
+
+Gn
+h
+
+−
+
+BUn
+
+gγ
+
+−
+
+∇
+
+ηn+1 + ηn + ηn−1
+(cid:16)
+
+(cid:17)i
+
+,
+
+(31)
+
+which can be obtained by combining (29), (30), and (25). Although this is a valid derivation of the
+model equations, it was found to be unstable in practice. In (31), Un+1 is calculated from Un−1 using
+a pressure-averaged leap-frog time step. In practice this allows the smooth velocity U to drift away
+from the rough velocity V: Numerical experiments where this algorithm is used proceed as expected
+initially, but after ﬁve or ten years (order 106 time steps) U is seen to depart greatly from V. This
+drift is avoided by using (30), with U computed as a smooth version of V at every step.
+
+There are two types of variables that are smoothed in the full POP-α algorithm: the velocity in
+η,
+(30) and the pressure gradients in (28). The form of the pressure gradient term is (1
+which comes directly from the derivation of the equations and was used in the algorithm. This form
+requires boundary conditions for the pressure gradient on the boundary, which are zero. In a periodic
+−1 η could be
+domain, the order of the ﬁlter and gradient could be changed, that is,
+used instead. This change in the operator order is not possible with solid boundaries, as then the free
+surface height η must be speciﬁed at the boundary, and it is unknown. Thus the Helmholtz inversion
+must be applied to the pressure gradient, not to the pressure.
+
+α2
+
+α2
+
+2)
+
+(1
+
+2)
+
+∇
+
+∇
+
+∇
+
+∇
+
+−
+
+−
+
+−1
+
+3.5 Reduced POP-α barotropic implementation
+
+The full algorithm, (28—30), is an exact derivation of the LANS-α primitive equations, but has the
+overwhelming disadvantage that it is extremely slow due to the Helmholtz inversion on the LHS of
+(28). In this section we test a reduced algorithm that does not include this inversion, and ﬁnd that
+numerical experiments of this reduced algorithm are almost identical to the original.
+
+First, we must review the barotropic POP algorithm as it is actually implemented in the code:
+
+13
+
+(32)
+
+(33)
+
+(34)
+
+(35)
+
+(36)
+
+(37)
+
+(38)
+
+(39)
+
+ˆU = Un−1 + τ
+Gn
+h
+2
+γgτ 2 !
+
+H
+
+ ∇ ·
+∇ −
+Un+1 = ˆU
+
+τ γg
+
+−
+
+BUn
+
+−
+ηn+1 =
+
+ηn+1
+(cid:16)
+
+∇
+
+−
+
+γg
+
+−
+∇
+2
+γgτ 2 ηn +
+−
+ηn−1
+.
+
+(cid:17)
+
+ηn + 2ηn−1
+(cid:16)
+
+(cid:17)i
+1
+τ γg
+
+ 
+
+H
+
+∇ ·
+
+ˆU +
+
+ηn−1
+
+∇
+
+!
+
+These equations are equivalent to (21—22); they have the additional step of computing an auxiliary
+velocity ˆU because it is required when the Coriolis term is implicit.
+
+Our goal in designing the reduced POP-α algorithm was to capture the eﬀects of the LANS-α model,
+as represented by the full algorithm, but with as few additional computational steps as possible. The
+reduced algorithm,
+
+Reduced POP-α barotropic algorithm:
+
+ˆV = Vn−1 + τ
+
+ˆU =
+
+1
+
+α2
+
+Gn
+−
+−1 ˆV
+h
+2
+
+BUn
+
+γg
+
+−
+
+∇
+
+ηn + 2ηn−1
+(cid:16)
+
+(cid:17)i
+
+−
+
+(cid:16)
+H
+
+(cid:17)
+
+∇
+2
+γgτ 2 !
+
+ηn+1 =
+
+ ∇ ·
+∇ −
+Vn+1 = ˆV
+Un+1 = ˆU
+
+τ γg
+
+τ γg
+
+∇
+
+∇
+
+−
+
+−
+
+ηn+1
+(cid:16)
+ηn+1
+(cid:16)
+
+−
+
+−
+
+2
+γgτ 2 ηn +
+−
+ηn−1
+ηn−1
+
+(cid:17)
+
+,
+
+(cid:17)
+
+H
+
+1
+τ γg
+
+ 
+
+ˆU +
+
+ηn−1
+
+∇
+
+!
+
+∇ ·
+
+uses only a single smoothing step, which is in (36). In terms of equations, there are only two additions
+to the original POP implementation (32—34): the computation of the smooth auxiliary velocity in
+(36) and the ﬁnal smooth velocity in (39).
+
+The reduced algorithm (35—39) is written with auxiliary velocities ˆU, ˆV because the POP code is
+structured in this way to accommodate an implicit Coriolis force. However, we are using an explicit
+Coriolis force, so the algorithm can be rewritten in an equivalent form without the auxiliary velocities
+as:
+
+14
+
+(40)
+
+(41)
+
+(42)
+
+(43)
+
+−
+−1
+
+2
+γgτ 2 ηn +
+Gn
+h
+
+−
+
+1
+
+τ γg ∇ ·
+
+H
+
+1
+
+α2
+
+−1
+
+2
+
+Vn−1
+
+BUn
+
+gγ
+
+−
+
+∇
+
+−
+
+∇
+(cid:17)
+(cid:16)
+ηn + 2ηn−1
+(cid:16)
+
+(cid:17)i
+
+H
+
+ ∇ ·
+
+∇ −
+1
+gγ ∇ ·
+1
+gγ ∇ ·
+
++
+
++
+
+ηn+1 =
+
+2
+γgτ 2 !
+
+H
+
+1
+
+H
+
+∇
+α2
+
+α2
+
+2
+
+∇
+
+(cid:17)
+
+(cid:16)
+
+−
+ηn−1
+
+−1
+
+2
+
+Vn−1
+
+Un+1 =
+
+1
+(cid:16)
+1
+
+−
+α2
+
+∇
+2
+
+−1
+(cid:17)
+
++τ
+
++τ
+
+−
+gγ
+
+∇
+(cid:17)
+(cid:16)
+ηn+1
+−
+h
+(cid:16)
+Vn+1 = Vn−1 + τ
+
+∇
+
+h
+−
+Gn
+h
+
+−
+
+BUn
+
+gγ
+
+−
+
+∇
+
+Gn
+−
+ηn−1
+
+,
+
+ηn + 2ηn−1
+(cid:16)
+
+(cid:17)i
+
+(cid:17)i
+BUn
+
+γg
+
+−
+
+∇
+
+ηn+1 + ηn + ηn−1
+(cid:16)
+
+(cid:17)i
+
+.
+
+In the standard POP implementation, the Coriolis term in the barotropic momentum equation may
+be chosen to be implicit or explicit using ξ′ and γ′ in (16). The POP-α algorithms presented here
+use an explicit Coriolis force. However, standard POP simulations typically use an implicit Coriolis
+force, which allows one to take a longer timestep (Table 2). Thus there is a motivation to implement
+POP-α with an implicit Coriolis term as well. Following Appendix C of [28], it can be shown that
+(35) should be replaced by
+
+−1
+
+2
+
+I + τ γB
+(cid:18)
++τ
+
+Gn
+h
+
+−
+
+1
+
+−
+(cid:16)
+γB
+
+α2
+
+∇
+
+−
+
+(cid:19) (cid:16)
+(cid:17)
+Un + 2Un−1
+(cid:16)
+
+−
+
+(cid:17)
+
+ˆV
+
+Vn−1
+
+=
+
+γg
+
+∇
+
+(cid:17)
+ηn+1 + ηn + ηn−1
+(cid:16)
+
+(cid:17)i
+
+.
+
+−1
+
+α2
+
+I + τ γB (1
+
+for an implicit Coriolis force. Unfortunately, solving this equation would be extremely slow since the
+would require an iterative routine. In the standard POP code,
+inversion of
+this operator is simply (I + τ γB), which is a 2x2 matrix and only takes a few operations to solve
+for each grid point. If an iterative routine, like a CG solver, is required to implement the POP-α
+momentum equation with implicit Coriolis, it would negate any eﬃciency gains due to the smaller
+time step. Thus POP-α was not implemented with an implicit Coriolis term.
+
+2)
+
+∇
+
+−
+
+(cid:17)
+
+(cid:16)
+
+Fortunately, POP-α with explicit Coriolis runs stably using longer timesteps than standard POP with
+explicit Coriolis (Table 2). In fact, the maximum timestep with POP-α was found to be comparable
+to that with standard POP and implicit Coriolis. This is an important beneﬁt of the LANS-α model,
+and makes the lack of an implicit Coriolis version a moot point.
+
+3.6 Unstable variations of the reduced POP-α algorithm
+
+A slightly altered version of the reduced algorithm was tried in which (37) was replaced with
+
+15
+
+H
+
+ ∇ ·
+
+∇ −
+
++
+
+∇ ·
+
+H
+
+2
+γgτ 2 !
+1
+τ γg
+
+ 
+
+ηn+1 =
+
+2
+γgτ 2 ηn
+
+−
+
+ˆU +
+
+−1
+
+2
+
+α2
+
+−
+
+∇
+
+1
+(cid:16)
+
+(cid:17)
+
+ηn−1
+
+.
+
+!
+
+∇
+
+(44)
+
+(45)
+
+(46)
+
+The only change from (37) is that the
+algorithm, as can be seen by substituting in the auxiliary velocity,
+
+∇
+
+ηn−1 term is smoothed here. This version is closer to the full
+
+ ∇ ·
+
+H
+
+∇ −
+1
+gγ ∇ ·
+
++
+
+2
+γgτ 2 !
+
+ηn+1 =
+
+H
+
+1
+
+(cid:16)
+
+α2
+
+2
+
+∇
+
+−
+
+(cid:17)
+
+−
+−1
+
+2
+γgτ 2 ηn +
+Gn
+h
+
+−
+
+1
+
+τ γg ∇ ·
+
+BUn
+
+gγ
+
+−
+
+∇
+
+H
+
+1
+
+α2
+
+−
+∇
+(cid:16)
+ηn + ηn−1
+(cid:16)
+
+(cid:17)
+
+(cid:17)i
+
+−1
+
+2
+
+Vn−1
+
+That is, (45) is more similar to the full algorithm (28) (only one smoothing, on the LHS, is missing)
+than is the reduced algorithm (40). Despite being closer in appearance to the full algorithm, this
+version of the reduced algorithm was found to be unstable in practice, and is therefore not a viable
+option. This instability is not revealed by the linear stability analysis; the damping factor for this
+algorithm is nearly identical to the full POP-α algorithm. One possible explanation for this instability
+is that when the smoothing operator is removed from the LHS of the η equation in the reduced
+algorithm, it must be partially removed from the RHS as well.
+
+Another alteration of the reduced POP-α algorithm is to replace (39) with
+
+Un+1 =
+
+1
+
+α2
+
+−
+
+∇
+
+(cid:17)
+
+(cid:16)
+
+−1
+
+2
+
+Vn+1.
+
+Simulations where this method was employed were often unstable. Even though (46) follows directly
+η
+from the LANS-α equations, it appears that (39)–which lacks the smoothing operation on the
+terms–works better in practice. Again, this is probably because the reduced barotropic algorithm
+lacks pressure gradient smoothing in (37), and a corresponding lack of smoothing in (46) makes for
+a more stable algorithm.
+
+∇
+
+One of the diﬃculties encountered in devising the appropriate POP-α algorithm was to ensure that
+the velocity is nondivergent at each baroclinic level. The LANS-α equations specify that the smooth
+velocity u satisﬁes the continuity equation (5). This is a practical requirement as well; simulations
+where the rough velocity v is used in the free surface height equation (40) (which is derived from the
+continuity equation) were found to be unstable.
+
+4 Stability Analysis of the POP-α Barotropic Solver
+
+The stability analysis of the POP algorithm by Dukowicz and Smith [28] was used to ﬁnd the
+best weighting for the implicit/explicit variables in (16–18), which are γ = ξ = ξ′ = 1/3 and
+θ = 1. For gravity waves, this choice of parameters strongly damps the computational mode, and
+
+16
+
+slightly damps and slows down the the physical modes. For Rossby waves, the computational mode
+is slightly damped, and the physical mode is nearly undamped but slowed down. These results are
+reproduced here, in order to compare with the stability analysis of POP-α. The analysis is partly
+based on previous work by Wingate [21], who investigated the stability of the LANS-α shallow water
+equations by comparing a third-order Adams-Bashforth method to the Dukowicz and Smith [28]
+POP barotropic algorithm.
+
+The barotropic component of POP (and POP-α) compute the vertically integrated velocities and the
+free surface height, and is therefore the same as the shallow water equations. The dispersion relation
+for the continuous equations is derived by transforming the equations of motion into dimensionless
+form, combining them, and assuming a plane wave solution of the form ei(kh·x−ωt) for the remaining
+variable. This analysis appears in [28] and [21], and only the results are stated here. For the continuous
+shallow water equations, the dispersion relation for (external) gravity waves are
+
+for the shallow water equations (used by the barotropic component of standard POP) and
+
+for LANS-α (used in POP-α), where k2
+h = k2 + l2 is the horizontal wave number, F = U/√gHo is
+the Froude number, g is gravitational acceleration, Ho is the average ﬂuid depth, and U a typical
+velocity scale. The dispersion relation for Rossby waves is
+
+ωg =
+
+kh
+F 2
+
+ωg =
+
+kh
+F 2 (1 + α2k2
+h)
+
+ωr = −
+
+kβ′
+k2
+h + 1/B2
+
+for the shallow water equations and
+
+ωr =
+
+kβ′
+h (1 + α2k2
+k2
+h) + 1/B2
+
+−
+
+(47)
+
+(48)
+
+(49)
+
+(50)
+
+for LANS-α, where B = R/L, R = √gHo/fo is the Rossby deformation radius, f = f0 + βy is the
+Coriolis parameter, β′ = βL2/U is the dimensionless beta parameter, β = ∂yf , and L is a typical
+length scale. For scales that are much larger than alpha (1/kh >> α), 1 + α2k2
+1, and the
+LANS-α dispersion relations are identical to their Navier-Stokes counterparts. For scales near alpha,
+1 + α2k2
+
+2, so that both the gravity waves and Rossby waves are slowed down.
+
+h →
+
+h ∼
+
+We now investigate how varying α eﬀectively changes the Rossby radius in these equations. First,
+deﬁne the Rossby wavenumber as kr = L/R, and note that the Rossby wavenumber maximizes the
+dispersion relation for the Navier-Stokes equation (49). This is clear in plots of the dispersion relation
+(see Fig. 2 in [21]). Analogously, we deﬁne an eﬀective Rossby radius R∗ for the LANS-α model using
+
+17
+
+the wavenumber that maximizes (50). Solving dωr/dk = 0 for k and letting l = 0 and k = L/R∗, we
+produce a relationship between the Rossby radius R and the eﬀective Rossby radius R∗ as a function
+of alpha:
+
+3
+
+2
+
+α
+R (cid:19)
+
+(cid:18)
+
+R
+R∗
+
+4
+
++
+
+R
+R∗
+
+2
+
+−
+
+(cid:18)
+
+(cid:19)
+
+(cid:18)
+
+(cid:19)
+
+1 = 0.
+
+When α = 0 (no alpha model) then R = R∗, as expected. As α increases, the eﬀective Rossby radius
+increases (Fig. 4). This is the mechanism by which POP-α allows more eddy activity than standard
+POP at scales just above the actual Rossby radius.
+
+4.1 Gravity waves
+
+In this section we conduct the stability analysis for gravity waves in the discrete barotropic equations
+for standard POP, full POP-α, and reduced POP-α. The notation of the derivation follows [21],
+section 4.2. The starting point is the POP-α barotropic equations, (23–25), which are then rescaled
+using a velocity scale U, a length scale L, a height scale H0, and a time scale τ . In the limit where
+the timescale τ = L/U, the equations are
+
+δn+1
+
+δn−1 +
+
+−
+
+ηn+1
+¯δn+1 =
+
+2ηξ = 0,
+
+2∆t
+F 2 ∇
+ηn + ∆t¯δθ = 0,
+2
+δn+1
+
+α2
+
+−1
+
+−
+
+∇
+
+(cid:17)
+
+−
+1
+(cid:16)
+
+S = θλ + 1
+
+θ.
+
+−
+
+∇
+
+P = ξλ2 + (1
+
+ξ
+
+γ)λ + γ.
+
+−
+
+−
+
+where δ = ∂xU1 + ∂yU2 is the divergence, and the superscripts ξ and θ have the same meaning
+0 so that ¯δ = δ. Substituting
+as (17-18). The standard POP equations are recovered when α
+δn = λneikhxˆδ and ηn = λneikhx ˆη into the above equations, we obtain the characteristic polynomial
+
+→
+
+λ2
+(cid:16)
+
+−
+
+1
+
+(λ
+
+1) +
+
+−
+
+(cid:17)
+[28,21] where Q2 = ∆t2k2
+
+2Q2
+F 2 P S = 0.
+h, Q is a nondimensional CFL number, and
+
+The diﬀerence between POP, full POP-α, and reduced POP-α in this analysis is in the polynomial
+P , which comes from the
+
+2ηξ term. For POP,
+
+For the full POP-α algorithm, a Helmholtz inversion is applied to the full
+
+ηξ term in (28), so that
+
+∇
+
+18
+
+(51)
+
+(52)
+
+(53)
+
+(54)
+
+(55)
+
+(56)
+
+(57)
+
+(58)
+
+ηn−1
+
+∇
+
+(59)
+
+(60)
+
+(61)
+
+(62)
+
+(63)
+
+P =
+
+1 + α2
+(cid:16)
+
+2
+
+kh|
+
+|
+
+(cid:17)
+
+(cid:16)
+
+−1
+
+ξλ2 + (1
+
+ξ
+
+γ)λ + γ
+
+.
+
+−
+
+−
+
+(cid:17)
+
+For the reduced POP-α algorithm, the Helmholtz inversion is not applied to
+in (37):
+
+∇
+
+ηn+1 and one
+
+P =
+
+ξλ2 +
+
+(cid:18)
+
+−1
+
+1 + α2
+(cid:16)
+
+2
+
+kh|
+
+|
+
+(cid:17)
+
+((1
+
+ξ
+
+γ)λ + 2γ)
+
+−
+
+−
+
+γ
+
+.
+
+(cid:19)
+
+−
+
+The gravity wave ampliﬁcation factors and dispersion errors for these algorithms are shown in Fig.
+3. These curves were computed numerically from the characteristic polynomial (55) using typical
+parameters, θ = 1 and ξ = γ = 1/3. The Coriolis term does not appear in the divergence equation
+(52), so this analysis is valid for both implicit and explicit Coriolis schemes, and the parameters ξ′
+and γ′ do not appear. Because the plots are shown with Q on the horizontal axis, α
+is left as a
+free parameter and was chosen such that α
+
+kh|
+Fig. 3 shows that all schemes are stable to linear gravity waves, because all of the damping factors
+are less than one. Fig. 3a, for standard POP, is the basis of comparison, and is identical to Fig.
+2 in [28]. The POP-α reduced algorithm damps the physical gravity waves more strongly and the
+computation gravity waves less strongly than both POP and the full POP-α algorithm.
+
+kh|
+
+1/
+
+∼
+
+|
+
+|
+
+.
+
+4.2 Rossby waves
+
+To conduct a stability analysis of the Rossby waves, we begin with the POP-α equations in streamfunction-
+divergence form,
+
+Ro
+
+2Ψn+1
+
+2Ψn−1
+
+− ∇
+
+∇
+(cid:16)
+
+x + ¯δξ′
+
+β′Ro ¯Ψξ′
++ 2∆t
+(cid:16)
+(cid:17)
+¯Ψn+1
+¯Ψn
+Ro
+−
+2 = ∂x ¯Ψn,
+∂y ¯Ψn, U n
+(cid:16)
+(cid:17)
+α2
+1
+
+= 0,
++ ∆tB2¯δθ = 0,
+ηn = ¯Ψn,
+−1
+2
+Ψn.
+
+¯Ψn =
+
+(cid:17)
+
+−
+
+∇
+
+U n
+
+1 =
+
+−
+
+(cid:16)
+
+(cid:17)
+([21], sections 1b2 and 5b), where the Rossby number Ro = U/foL. Again, the standard POP
+0, so that ¯Ψ = Ψ and ¯δ = δ. The free surface height η is equal to
+equations are recovered when α
+the smooth streamfunction ¯Ψ because of geostrophic balance, where the
+η is balanced by the Coriolis
+force, which uses the smooth velocity. Geostrophic balance also requires that the implicit/explicit
+weighting of the Coriolis velocity (16) and pressure (17) are identical, so that ξ = ξ′ and γ = γ′
+([28], section 3.3). This means that the explicit Coriolis formulation, where ξ′ = γ′ = 0, cannot be
+considered in this stability analysis, because for stability ξ > 1/4 is required [28].
+
+→
+
+∇
+
+This system has a characteristic polynomial of
+
+19
+
+2
+
+1 + α2
+
+kh|
+where S is deﬁned in (56) and
+
+B2k2
+h
+
+λ2
+
+−
+
+(cid:16)
+
+(cid:17)
+
+(cid:16)
+
+|
+
+(cid:17)
+
+1
+
+S + 2P
+
+1
+
+−
+
+−
+
+λ
+h
+
+∆tikβ
+
+′
+
+B2S
+
+= 0
+
+i
+
+P = ξλ2 + (1
+
+ξ
+
+γ)λ + γ.
+
+−
+
+−
+
+In this Rossby wave analysis, the full and reduced POP-α algorithms have identical characteristic
+polynomials. That is because when one takes the curl of the momentum equation to get the vorticity
+η term is where the diﬀerences between the full and
+equation (60), the
+reduced POP-α algorithms appear.
+
+η term drops out, and the
+
+∇
+
+∇
+
+Here B2 = R2/L2, so the alpha model is eﬀectively making the Rossby Radius, R, larger in the
+ﬁrst term of (64). This same eﬀect was observed in the continuous equations (Fig. 4). The damping
+factors, using the typical choice of parameters (θ = 1, ξ = γ = ξ′ = γ′ = 1/3) are shown in Figure 5.
+Compared to standard POP, POP-α slows down the Rossby waves. The damping of Rossby waves
+is unaﬀected in this analysis.
+
+A stability analysis of both gravity and Rossby waves may be conducted by beginning with the full
+beta-plane equations in vorticity-divergence, dimensionless form (following [28], equations 19 and 41)
+
+4.3 Full Stability Analysis
+
+∂tδ
+
+−
+
+¯ζ + ǫU1 +
+2η = 0,
+∇
+∂tζ + ¯δ + ǫU2 = 0,
+∂tη + ¯δ = 0
+
+where the barred variables are smoothed, as in (54), and ǫ = βL/fo. Discretizing and introduc-
+ing Fourier modes as before, one obtains a ﬁfth-degree complex characteristic polynomial for the
+ampliﬁcation factors:
+
+1)P S
+
+4∆t2(λ2
+kh|
+2
+|
+2(λ
+kh|
++
+|
+−
+2iǫk∆t(λ
+−
+
+−
+
+−
+1)(λ2
+
+−
+1)(λ2
+
+4iǫk
+−
+1)2 + 4
+1)P ′
+
+2∆t3P P ′S
+kh|
+|
+2∆t2(λ
+kh|
+|
+−
+4iǫl∆t2(λ
+−
+
+−
+
+−
+
+1)P ′2
+
+1)P ′2 = 0
+
+where S is deﬁned in (56),
+
+P ′ = ξ′λ2 + (1
+
+ξ′
+
+γ′)λ + γ′
+
+−
+
+−
+
+depends on the implicit/explicit Coriolis parameters, and P is deﬁned as in (57–59) for POP and
+various POP-α algorithms.
+
+20
+
+(64)
+
+(65)
+
+(66)
+(67)
+(68)
+
+(69)
+
+(70)
+
+Figure 6 shows that all versions of POP are stable when ∆tfo = 1/2 and
+instabilities when
+standard POP with explicit Coriolis terms, there is always a region where
+small
+of the POP-α algorithms as well.
+
+1. These plots show
+< 1, but this does not aﬀect the overall stability. As explained in [28] for
+> 1 for suﬃciently
+. In practice, this instability is not an issue if ∆t is chosen such that ∆tfo < 1. This is true
+
+| ≥
+
+λ
+
+k
+
+k
+
+k
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+|
+
+Comparing the POP-α reduced algorithm with POP in Fig. 6, we see that the Rossby waves are not
+damped in either, the computational modes are less damped and the Poincare-wave modes are more
+damped in the POP-α reduced algorithm than in standard POP.
+
+5 Results
+
+Long-time simulations of POP, full POP-α, and reduced POP-α were run in a channel-model domain.
+In this section, we show that the reduced POP-α algorithm produces results that are nearly identical
+to the full POP-α algorithm, but is much faster. For the POP-α simulations, smoothing was achieved
+by both a Helmholtz inversion, as prescribed by the LANS-α equations, and a simple ﬁlter that
+averages nearest neighbors. Using the ﬁlter to smooth also produces a substantial speed-up over the
+Helmholtz ﬁlter, which requires an iterative method; a comparison of smoothing methods is addressed
+in [25].
+
+5.1 Description of the Model Problem
+
+The model problem can be thought of as an idealization of the Antarctic Circumpolar Current. The
+Circumpolar region is unique in the World Ocean in being zonally continuous, the only region of the
+ocean where there is no continent against which a zonal pressure gradient can be supported, and
+consequently the only region where meridional heat transport falls so heavily to the mesoscale eddies.
+A reentrant channel model therefore provides a relevant setting in which to consider the impact of
+a turbulence parameterization in an ocean general circulation model. Our test problem is based in
+part on the works of Karsten et al. [31] and Henning and Vallis [32]; the physical analysis in both
+of those works is more thorough than what we present, as our focus is on model development rather
+than physical oceanography.
+
+The zonally periodic model domain has solid boundaries to the north and south (Fig. 7). An eastward
+wind stress drives an eastward circulation in the channel. A deep-sea ridge between 11E and 18E
+that is uniform from north to south forces the water column northward from 10-15oE and then
+southward again from 15-20oE by conservation of potential vorticity (Fig. 8) (see, e.g. [33] p. 100).
+This deﬂection of the mean ﬂow spawns mesoscale eddies to the east of 18oE if the resolution is
+suﬃciently high. For this study, POP was run in three resolutions, referred to as 0.8, 0.4, and 0.2
+to correspond with the longitudinal resolution, as shown in Table 1. The longitudinal resolution was
+chosen to have an aspect ratio of one at the central latitude of 60◦ south. At the lowest resolution,
+0.8, the Rossby Radius of deformation is not resolved, and so the velocity ﬁeld does not contain
+
+21
+
+eddies. At the next higher resolution of 0.4 eddies form, and even ﬁner and more numerous eddies
+can be seen in simulation 0.2.
+
+The model induces a surface thermal forcing by restoring the SST to a smooth temperature proﬁle
+ranging from 2oC at 68oS to 12oC at 52oS. The thermal forcing in conjunction with the wind stress
+drive downwelling of warmer waters in the north and deep penetration of colder waters in the south,
+giving rise to the sloping isotherms seen in Figure 9. These tilted isotherms are a source of potential
+energy, driving baroclinic instability. The mesoscale eddies generated from this conversion of potential
+to kinetic energy tend to ﬂatten the isotherms.
+
+The action of the eddies can be gauged through their eﬀect on the temperature distribution. As
+the resolution of standard POP simulation is increased, mesoscale eddies are better resolved, and
+the isotherms are ﬂatter. Figure 9 shows an important property of the LANS-α model: it allows
+more eddy activity. By capturing the eﬀects of these eddies, lower resolution POP-α simulations also
+have ﬂatter isotherms than standard POP at the same resolution. A global statistic that represents
+the tilting of isotherms is potential temperature averaged over the entire domain (Fig. 10a). With
+progressively higher resolution simulations of standard POP (0.8, 0.4, 0.2) the ocean cools faster
+and levels out to a cooler equilibrium. All simulations begin with a constant temperature of 7oC.
+The cooler global temperature of higher resolution simulations indicate that the isotherms are more
+level due to the eddies. Higher-resolution eﬀects are also seen in the kinetic energy using POP-α:
+kinetic energy averaged over the domain increases with resolution (Fig. 10b); lower resolution POP-α
+simulations also capture this eﬀect.
+
+Thus the POP-α results in this channel test problem are similar to those in other numerical sim-
+ulations of LANS-α: they produce turbulence statistics that resemble those from higher-resolution
+simulations without LANS-α[34,14,20]. Some of these eﬀects, like the ﬂattening of isotherms, must
+be due to the inclusion of LANS-α in the baroclinic component of POP. Based on previous work in
+barotropic LANS-α simulations [20], barotropic eﬀects are most likely involved as well.
+
+5.2 Comparison of algorithms
+
+The purpose of this section is to show that the full and reduced POP-α algorithms produce nearly
+identical results. A qualitative comparison of temperature and velocity ﬁelds of simulation 0.4F after
+150 years shows that the dynamics are essentially the same (Figs. 8 and 12). Minor diﬀerences in
+the strength and location of eddies are due to the chaotic, time-varying nature of these structures. A
+more comprehensive comparison involves quantitative global statistics such as potential temperature
+and kinetic energy averaged over the domain. The diﬀerence between the full and reduced POP-α
+algorithms is less than 0.05% in potential temperature (Fig. 11a), and less than 1% in kinetic energy
+for low resolution experiments (Fig. 11b). Diﬀerences of up to 20% in global kinetic energy for the
+0.4 cases are due to the high variability caused by transient eddies (Fig. 10b).
+
+The general goal of turbulence modeling is to produce results similar to higher resolution simulations
+without the computational cost of the higher resolution. Thus the running time of POP-α versus
+POP is a critical metric for the success of POP-α. The full POP-α algorithm using a Helmholtz
+
+22
+
+inversion is nearly as costly as a doubling of resolution (Fig. 13, Table 2); thus it is not a viable
+option for a turbulence model. The reduced algorithm is faster than the full algorithm. Switching
+from a Helmholtz inversion, which requires a CG iterative method for each smoothing step, to a
+simple ﬁlter that averages nearest neighbors makes it faster still. A full comparison of timing and
+performance of various smoothing methods is detailed in [25]. The point here is that an eﬃcient
+model results from use of the reduced, rather than the full, algorithm, with nearly identical results.
+
+An important feature of the POP-α algorithm is that a longer time-step can be taken with it than
+with standard POP (Table 2), consistent with the ﬁndings of [21]. The reduced POP-α algorithm
+with a ﬁlter is actually faster than POP due to this relaxed time step restriction, so long as the
+comparison is restricted to cases making use of an explicit treatment of the Coriolis term. Even when
+POP is used with the advantageous implicit treatment of the Coriolis term the best POP-α algorithm
+only takes 6.5% longer than the best POP time (at 0.4 resolution). This compares to a doubling of
+resolution of standard POP that takes nine times as long.
+
+The eﬃciency of the LANS-α model depends on the value of α in the Helmholtz inversion, or
+equivalently the size of the averaging stencil for the ﬁlter. As α
+0 the LANS-α equations return
+to the Navier-Stokes equations; larger α makes the smooth velocity smoother, so that the LANS-
+α model has greater eﬀect. In the results presented here, α = ∆x, the width of one grid-cell. As α
+reaches a value in the range of 2 to 2.5∆x the global kinetic energy grows and the simulation becomes
+unstable. Analogously, simulations may become unstable with larger ﬁlter widths. This instability
+can be countered somewhat with higher viscosity, but a threshold of instability for large α still exists.
+
+→
+
+We found that the reduced algorithm is less sensitive to this instability than the full algorithm. For
+example, in the 0.4 case, both full and reduced algorithms run stably for α = 1.5∆x; when α = 2∆x
+the reduced algorithm is stable but the full algorithm is not; when α = 2.5∆x both algorithms are
+unstable. The ﬁlter produces similar results, where the reduced algorithm is stable for a wider range
+of ﬁlters than the full algorithm. This instability manifests itself in the barotropic solver, where the
+iterative CG routine does not converge. It is not surprising that the full algorithm is more sensitive to
+instabilities than the reduced algorithm in the barotropic solver; in the full algorithm, each iteration
+of the CG solver includes a smoothing step that requires a nested CG solver for the Helmholtz
+inversion. Generally, this type of nested iteration is poor algorithm design.
+
+6 Conclusions
+
+Implementation of the LANS-α turbulence parameterization in a primitive equation ocean model
+raises a number of new issues. The expediency of substituting a local smoothing ﬁlter for the global
+inverse Helmholtz operation has been previously established [30] but the appearance of the operator
+within the barotropic mode equation raises an additional challenge to eﬃcient implementation.
+
+We have presented here the details of a fundamental implementation of LANS-α within a primitive
+equation ocean general circulation, with that form referred to here as the full POP-α algorithm.
+Results from the full algorithm have been shown to be consistent with those from previous geophysical
+studies of LANS-α in simpler models [20,21,22]. With this full algorithm as a point of reference we
+
+23
+
+have found an alternative implementation, which we refer to as the reduced POP-α algorithm and
+which produces nearly identical results; the step that is skipped in the reduced form was anticipated
+to have little impact due to the known tolerance for approximation in the barotropic set of equations.
+Either algorithm can be used with local ﬁltering in place of the global Helmholtz inversion.
+
+The reduced form of the POP-α algorithm used in conjunction with local ﬁltering in place of the
+much more costly global Helmholtz inversion produces a model which is only slightly more expensive
+than plain POP on a per-time-step basis. The longer time step, which is possible with inclusion of
+LANS-α, is countered in our experience by our inability to achieve a stable form of the algorithm
+with an implicit form of the Coriolis term; even so the overall increase in cost with use of our most
+eﬃcient implementation is very small in comparison with the cost associated with a doubling of
+model resolution, making POP-α an attractive and potentially powerful option for ocean climate
+modeling.
+
+The linear stability analysis of the continuous equations and algorithm gives some insight into how
+the LANS-alpha model improves turbulence characteristics: the LANS-α model eﬀectively makes
+the Rossby radius of deformation larger. Typical ocean-climate simulations either don’t resolve or
+just barely resolve the Rossby radius; yet this scale is critical, as it is the size of ocean eddies and
+is the scale where kinetic energy forcing occurs due to the baroclinic instability. Because of the
+way the LANS-α model accounts for the eﬀects of the small scale on the large, it generates an
+’eﬀective’ Rossby radius that is larger than in the unaveraged case, making the eﬀects of baroclinic
+instability resolvable on coarser meshes than it could normally appear. One might object that a
+larger Rossby radius is an unphysical representation of the original primitive equation set. This
+would be a valid objection if those scales were well resolved in the ﬁrst place. However, in most
+ocean-climate simulations today the Rossby radius is smaller than a grid-cell width or as large as a
+few grid-cells. Obviously, the turbulence and kinetic energy forcing cannot be well-represented when
+it is so completely underresolved. By making the eﬀective Rossby radius larger, the LANS-α model
+circumvents this particular deﬁciency of low resolution, so that global statistics related to baroclinic
+instability more closely resemble those of higher resolution simulations.
+
+We expect the LANS-α turbulence parameterization to be particularly eﬀective at an ocean model
+grid resolution that has been coarsened by approximately a factor of two to four, relative to the
+resolution required to bring out a vigorous mesoscale eddy ﬁeld. So-called eddy-resolving ocean
+modeling, capturing such a vigorous eddy ﬁeld, is known to require a grid resolution on the order
+of 0.1◦ [35]. Future work should address the question of the interaction of LANS-α with Gent-
+McWilliams-style isopycnal tracer mixing. If the two parameterizations are found to be compatible, as
+would seem likely, and if furthermore the oceanic jet systems such as the Gulf Stream/North Atlantic
+Current come into much more realistic focus with the inclusion of strong eddy transport of momentum
+at what would otherwise be non-eddy-resolving scale, then we enter a new regime of climate modeling
+with much more powerful modeling capabilities at our disposal, enabling long simulations with a more
+detailed and more faithful representation of the climate system. This statement is predicated on not
+one but two caveats. There is more work yet to be done, but we believe the results found thus far
+justify such work towards an ambitious goal.
+
+24
+
+This work was carried out under the auspices of the National Nuclear Security Administration of
+the U.S. Department of Energy at Los Alamos National Laboratory under Contract No. DE-AC52-
+06NA25396.
+
+7 Acknowledgements
+
+References
+
+[1] F. O. Bryan, M. W. Hecht, R. D. Smith, Resolution convergence and sensitivity studies with North
+Atlantic circulation models. Part I: The Western Boundary Current system, Ocean Modelling 16 (2007)
+141–159.
+
+[2] P. R. Gent, J. C. McWilliams, Isopycnal mixing in ocean circulation models, J. Phys. Oceanogr.20 (1)
+
+(1990) 150–155.
+
+[3] S. Griﬃes, The Gent-McWilliams skew-ﬂux, J. Phys. Oceanogr.28 (1998) 831–841.
+
+[4] M. Visbeck, J. Marshall, T. Haine, M. Spall, Speciﬁcation of eddy transfer coeﬃcients coarse-resolution
+
+ocean circulation models, J. Phys. Oceanogr.27 (1997) 381–402.
+
+[5] B. A. Boville, P. R. Gent, The NCAR Climate System Model, version one, J. Climate11 (1998) 1115–
+
+1130.
+
+[6] G. Veronis, The role of models in tracer studies, Numerical Models of the Ocean Circulation, National
+
+Academy of Sciences, 1975, pp. 133–146.
+
+[7] C. W. B¨oning, W. R. Holland, F. O. Bryan, G. Danabasoglu, J. C. McWilliams, An overlooked problem
+in model simulations of the thermohaline circulation and heat-transport in the Atlantic Ocean, J.
+Climate8 (3) (1995) 515–523.
+
+[8] D. D. Holm, Fluctuation eﬀects on 3D Lagrangian mean and Eulerian mean ﬂuid motion, Physica D133
+
+(1999) 215–269.
+
+[9] H. Aref, Fluid dynamics: Order in chaos, Nature 401 (1999) 756–758.
+
+[10] C. Foias, D. D. Holm, E. S. Titi, The Navier-Stokes-alpha model of ﬂuid turbulence, Physica D Nonlinear
+
+Phenomena 152 (2001) 505–519.
+
+Fluid Mech.89 (1978) 609–646.
+
+[11] D. G. Andrews, M. E. McIntyre, An exact theory of nonlinear waves on a Lagrangian-mean ﬂow, J.
+
+[12] D. D. Holm, J. E. Marsden, T. S. Ratiu, Euler-Poincar´e Models of Ideal Fluids with Nonlinear Dispersion,
+
+Physical Review Letters 80 (1998) 4173–4176.
+
+[13] S. Chen, C. Foias, D. D. Holm, E. Olson, E. S. Titi, S. Wynne, The Camassa-Holm equations and
+
+turbulence, Physica D Nonlinear Phenomena 133 (1999) 49–65.
+
+[14] S. Chen, D. D. Holm, L. G. Margolin, R. Zhang, Direct numerical simulations of the Navier-Stokes
+
+alpha model, Physica D Nonlinear Phenomena 133 (1999) 66–83.
+
+25
+
+[15] J. E. Marsden, S. Shkoller, Global well-posedness for the Lagrangian averaged Navier-Stokes (LANS-
+
+alpha) equations on bounded domains, Phil. Trans. Roy. Soc. A 359 (2001) 1449 – 1468.
+
+[16] D. D. Holm, C. Jeﬀery, S. Kurien, D. Livescu, M. A. Taylor, B. A. Wingate, The lans-alpha model
+for computing turbulence: Origins, results, and open problems, Los Alamos Science 29 (2005) 152–172,
+available at http://la-science.lanl.gov/lascience29.shtml.
+
+[17] M. Germano, U. Piomelli, P. Moin, W. H. Cabot, A dynamic subgrid-scale eddy viscosity model, Phys.
+
+Fluids A 3 (1991) 1760.
+
+Fluid Mech. 31 (2000) 1–32.
+
+[18] C. Meneveau, J. Katz, Scale-invariance and turbulence models for large-eddy simulation, Ann. Rev.
+
+[19] B. J. Geurts, D. D. Holm, Alpha-modeling strategy for LES of turbulent mixing, Turbulent Flow
+
+Computation, Kluwer Academic Publishers, 2002, Ch. 7, pp. 237–278.
+
+[20] D. D. Holm, B. T. Nadiga, Modeling mesoscale turbulence in the barotropic double-gyre circulation, J.
+
+Phys. Oceanogr.33 (11) (2003) 2355–2365.
+
+[21] B. A. Wingate, The maximum allowable time step for the shallow water alpha model and its relation
+
+to time-implicit diﬀerencing, Mon. Weather Rev.132 (12) (2004) 2719–2731.
+
+[22] D. D. Holm, B. A. Wingate, Baroclinic instabilities of the two-layer quasigeostrophic alpha model, J.
+
+Phys. Oceanogr.35 (7) (2005) 1287–1296.
+
+[23] D. Holm, J. Marsden, T. Ratiu, The Euler-Poincare equations in geophysical ﬂuid dynamics, Isaac
+
+Newton institute proceedings — (1998) —.
+
+[24] B. J. Geurts, D. D. Holm, Regularization modeling for large-eddy simulation, Phys. Fluids15 (1) (2003)
+
+[25] M. R. Petersen, Eﬃcient form of the LANS-alpha turbulence model in a primitive-equation ocean model,
+
+[26] R. D. Smith, J. K. Dukowicz, R. C. Malone, Parallel ocean general circulation modeling, Physica D 60
+
+[27] W. D. Collins, C. M. Bitz, M. L. Blackmon, G. B. Bonan, C. S. Bretherton, J. A. Carton, P. Chang,
+S. C. Doney, J. J. Hack, T. B. Henderson, J. T. Kiehl, W. G. Large, D. S. McKenna, B. D. Santer, R. D.
+Smith, The Community Climate System Model Version 3 (CCSM3), J. Climate19 (2006) 2122–2143.
+
+[28] J. K. Dukowicz, R. D. Smith, Implicit free-surface method for the Bryan-Cox-Semtner ocean model, J.
+
+Geophys. Res.99 (1994) 7991–8014.
+
+[29] R.
+
+Smith, P. Gent, Reference manual
+
+for
+
+the Parallel Ocean Program (POP),
+
+see
+
+http://climate.lanl.gov/source/projects/climate/Models/POP (2002).
+
+[30] B. J. Geurts, D. D. Holm, Leray and LANS-α modeling of
+
+turbulent mixing, Journal of
+
+TurbulenceSubmitted.
+
+[31] R. Karsten, H. Jones, J. Marshall, The role of eddy transfer in setting the stratiﬁcation and transport
+
+of a circumpolar current, J. Phys. Oceanogr.32 (2002) 39–54.
+
+[32] C. C. Henning, G. K. Vallis, The eﬀects of mesoscale eddies on the stratiﬁcation and transport of an
+
+ocean with a circumpolar channel, J. Phys. Oceanogr.35 (2005) 880–896.
+
+L13–L16.
+
+submitted to JCP (2007).
+
+(1992) 38–61.
+
+26
+
+[33] J. R. Holton, An Introduction to Dynamic Meteorology, 3rd Edition, Academic Press, 1992.
+
+[34] S. Chen, C. Foias, D. D. Holm, E. Olson, E. S. Titi, S. Wynne, Camassa-Holm Equations as a Closure
+
+Model for Turbulent Channel and Pipe Flow, Physical Review Letters 81 (1998) 5338–5341.
+
+[35] R. D. Smith, M. E. Maltrud, F. O. Bryan, M. W. Hecht, Numerical simulation of the north atlantic
+
+ocean at 1/10o, J. Phys. Oceanogr.30 (2000) 1532–1561.
+
+27
+
+Fig. 1. Schematic of POP algorithm, showing the baroclinic/barotropic splitting.
+
+28
+
+Fig. 2. Schematic of POP-α algorithm, showing the baroclinic/barotropic splitting.
+
+29
+
+POP
+
+gravity physical mode
+
+POP−α full
+
+gravity physical mode
+
+gravity
+comp. mode
+
+0
+
+0
+
+1
+
+(a)
+
+3
+
+2
+
+k∆ t c
+g
+
+c/c
+g
+
+4
+
+gravity
+computational mode
+
+0
+
+0
+
+1
+
+2
+
+3
+
+k∆ t c
+g
+
+4
+
+5
+
+c/c
+g
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+5
+
+ 
+
+(b)
+
+POP−α reduced
+
+gravity
+computational
+mode
+
+gravity physical
+mode
+
+0
+
+ 
+0
+
+1
+
+c/c
+g
+
+3
+
+2
+
+k∆ t c
+g
+
+(c)
+
+4
+
+5
+
+Fig. 3. Gravity wave stability analysis results for POP (a), POP-α full algorithm (b), and POP-α reduced
+algorithm (c). Each plot shows the damping factors and phase speed as a function of the Courant-Friedrich-
+s-Lewy number k∆tcg, and uses α = 1/kh, ξ = γ = 1/3, and θ = 1.
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+2.5
+
+3
+
+2
+
+1.5
+
+*
+
+R
+
+/
+
+R
+
+i
+
+ 
+,
+s
+u
+d
+a
+R
+ 
+y
+b
+s
+s
+o
+R
+ 
+e
+v
+i
+t
+c
+e
+f
+f
+e
+
+1
+
+0
+
+1
+
+2
+α / R
+
+3
+
+4
+
+Fig. 4. The eﬀective Rossby radius of deformation, R∗, as a function of α, where both are normalized
+by the non-alpha model Rossby Radius, R. This shows that the LANS-α model increases the eﬀective
+Rossby Radius. This relation was produced using the dispersion relation for Rossby waves in the continuous
+shallow water LANS-α equations. The eﬀective Rossby deformation radius includes the eﬀects of the small,
+unresolved scales on the large.
+
+30
+
+POP
+
+ω/ω
+r
+
+Rossby physical
+mode
+
+POP−α
+
+1
+
+0.5
+
+Rossby comp.
+modes
+2
+
+4
+
+0
+
+0
+
+(a)
+
+|k|
+
+Rossby physical
+mode
+
+ω/ω
+r
+
+1
+
+0.5
+
+0
+
+0
+
+(b)
+
+Rossby comp.
+modes
+
+|k|
+
+6
+
+8
+
+10
+
+2
+
+4
+
+6
+
+8
+
+10
+
+Fig. 5. Rossby wave stability analysis results for POP (a) and POP-α (b) as a function of wave number k.
+For both algorithms, the physical Rossby wave is undamped. POP-α slows down Rossby waves, while POP
+does not. Here B2 = 1/4 and α = 1/8 of the domain width.
+
+POP
+
+Rossby mode
+
+POP−α full
+
+Rossby comp.
+
+gravity comp.
+
+Poincare
+modes
+
+Poincare
+modes
+
+Rossby mode
+
+Rossby comp.
+
+gravity comp.
+
+2
+
+4
+
+6
+
+8
+
+10
+
+2
+
+4
+
+6
+
+8
+
+10
+
+(b)
+
+|k|
+
+r
+o
+t
+c
+a
+f
+ 
+g
+n
+p
+m
+a
+d
+
+i
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+0
+
+r
+o
+t
+c
+a
+f
+ 
+g
+n
+p
+m
+a
+d
+
+i
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+0
+
+(a)
+
+(c)
+
+POP−α reduced
+
+Rossby comp.
+
+gravity comp.
+
+|k|
+
+|k|
+
+Poincare modes
+
+2
+
+4
+
+6
+
+8
+
+10
+
+Fig. 6. Damping factor for the discrete equations for purely zonal waves of the barotropic beta plane equations
+at midlatitudes (ǫ = 3), using a time step of ∆tfo = 1/2, α = 1/8 of the domain width, and typical POP
+parameters (ξ = γ = 1/3, θ = 1) and explicit Coriolis terms (ξ′ = γ′ = 0).
+
+r
+o
+t
+c
+a
+f
+ 
+g
+n
+p
+m
+a
+d
+
+i
+
+1
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+
+0
+
+31
+
+up
+
+b n dry
+
+N
+
+E
+
+p erio dic
+
+thermal
+
+forcing
+
+s urface
+
+12 C
+
+zonal wind
+
+2 C
+
+solid boundary
+
+b n dry
+
+p erio dic
+
+solid boundary
+
+deep-sea ridge
+
+Fig. 7. Schematic of the model domain, which has periodic zonal boundaries, solid north/south boundaries,
+a deep-sea ridge, surface wind forcing, and thermal forcing.
+
+32
+
+1
+
+1
+
+1
+
+1
+
+1
+
+1
+
+1
+
+11
+
+1
+
+1
+11
+1
+
+11
+
+1
+
+111
+
+1
+1111
+
+1
+
+1
+
+1 1
+
+(a) Surface pot. temp., full algorithm
+
+(b) Surface pot. temp., reduced algorithm
+
+1
+
+1
+1
+1
+1
+111
+11
+1
+
+1
+
+1
+
+11
+
+1 1
+
+1
+
+1111
+1
+
+111
+
+111
+
+1
+
+1
+
+1
+
+(c) Pot. temp. at 1600m, full algorithm
+
+(d) Pot. temp. at 1600m, reduced algorithm
+
+Fig. 8. Snapshots of the rough velocity ﬁeld v at 150 years for experiment 0.4F. A deep-sea ridge between
+11oE and 18oE causes northward and then southward ﬂow, and spurs eddies east of 18oE. The full and
+reduced POP-α algorithm produce dynamics that are nearly identical.
+
+33
+
+ 
+
+0
+
+500
+
+1000
+
+1500
+
+m
+
+ 
+,
+h
+t
+p
+e
+d
+
+0.8
+0.4
+0.2
+0.8H, α=1.5
+0.8H, α=2
+0.4H, α=1
+0.4H, α=1.5
+
+ 
+−64 −62 −60 −58 −56 −54
+
+latitude
+
+Fig. 9. Depth of 6oC isotherm of potential temperature, averaged between 0oE and 10oE. Isotherms ﬂatten
+with increasing resolution of standard POP (solid, dotted), due to the eﬀects of mesoscale eddies. Simulations
+using POP-α (dash, dash-dot) have ﬂatter isotherms than standard POP at the same resolution.
+
+C
+o
+
+6.5
+
+ 
+,
+p
+m
+e
+t
+ 
+l
+a
+i
+t
+n
+e
+t
+o
+p
+
+7
+
+6
+
+5
+
+5.5
+
+4.5
+
+ 
+0
+
+ 
+
+2
+10
+
+0.8
+0.4
+0.2
+0.8H, α=1.5
+0.8H, α=2
+0.4H, α=1
+0.4H, α=1.5
+
+2
+
+s
+/
+
+2
+m
+c
+ 
+,
+y
+g
+r
+e
+n
+e
+ 
+c
+i
+t
+e
+n
+k
+
+i
+
+0.4H, α=1.5
+
+0.8H, α=2
+
+0.2
+
+0.4
+
+0.8
+
+1
+10
+
+0.4H, α=1
+
+0.8H, α=1.5
+
+(a)
+
+time, years
+
+(b)
+
+time, years
+
+200
+
+400
+
+600
+
+800
+
+1000
+
+0
+
+200
+
+400
+
+600
+
+800
+
+1000
+
+Fig. 10. Global mean potential temperature (a) and kinetic energy (b) as a function of time using standard
+POP and POP-α. Higher resolution simulations (0.4 and 0.2) reach a cooler steady-state (a) and have higher
+kinetic energy (b) due to the activity of mesoscale eddies. POP-α simulations (0.8H, 0.4H) caputures the
+eﬀects of these eddies at lower resolution that standard POP. This trend increases with larger α.
+
+34
+
+0
+10
+
+−1
+
+10
+
+−2
+
+10
+
+−4
+
+10
+
+e
+r
+u
+t
+a
+r
+e
+p
+m
+e
+t
+ 
+,
+e
+c
+n
+e
+r
+e
+f
+f
+i
+d
+ 
+e
+v
+i
+t
+a
+e
+r
+
+l
+
+−6
+
+10
+
+ 
+0
+
+ 
+
+0.8H
+0.4H
+0.8F
+0.4F
+
+0
+10
+
+−1
+
+10
+
+−2
+
+10
+
+−4
+
+10
+
+i
+
+y
+g
+r
+e
+n
+e
+ 
+c
+i
+t
+e
+n
+k
+ 
+,
+e
+c
+n
+e
+r
+e
+f
+f
+i
+d
+ 
+e
+v
+i
+t
+a
+e
+r
+
+l
+
+−6
+
+10
+
+ 
+0
+
+ 
+
+0.8H
+0.4H
+0.8F
+0.4F
+
+150
+
+(a)
+
+50
+
+100
+
+150
+
+time, years
+
+(b)
+
+50
+
+100
+
+time, years
+
+Fig. 11. Relative diﬀerence between the full POP-α algorithm and reduced POP-α algorithm for several
+experiments. The diﬀerence in the global mean potential temperature (a) is less than 0.05% in all cases; the
+diﬀerence in global mean kinetic energy (b) is generally less than 1% for lower resolution (0.8o) cases, but
+is larger for higher resolution due to the variability, as seen in Fig. 10b. Statistics are only available for the
+ﬁrst 50 years of 0.4H because the full POP-α algorithm is so slow.
+
+35
+
+(a) Surface pot. temp., full algorithm
+
+(b) Surface pot. temp., reduced algorithm
+
+(c) Pot. temp. at 1600m, full algorithm
+
+(d) Pot. temp. at 1600m, reduced algorithm
+
+Fig. 12. Snapshots of potential temperature in oC at 150 years for full and reduced algorithm for experiment
+0.4F. This shows that the two algorithms produce nearly identical temperature ﬁelds.
+
+36
+
+POP, implicit Coriolis
+POP, explicit Coriolis
+POP−α reduced Filter
+POP−α reduced Helmholtz
+POP−α full Filter
+POP−α full Helmholtz
+
+ 
+
+n
+
+2.5
+
+0
+1
+ 
+,
+
+e
+d
+a
+c
+e
+d
+
+ 
+
+d
+e
+
+t
+
+l
+
+i
+
+a
+u
+m
+s
+/
+s
+r
+u
+o
+h
+−
+r
+o
+s
+s
+e
+c
+o
+r
+P
+
+1.5
+
+2
+
+1
+
+0.5
+
+0
+
+ 
+
+0.8
+
+0.4
+
+resolution
+
+0.2
+
+Fig. 13. Timing data from various implementations of POP and POP-α. All simulations that use the
+Helmholtz inversion to smooth are extremely slow. The POP-α algorithm can be sped up in two ways:
+using a ﬁlter, rather than a Helmholtz inversion to smooth; and changing from the full to the reduced
+algorithm. All POP-α simulations use explicit Coriolis discretization. Both implicit and explicit Coriolis
+simulations of POP are shown for comparison.
+
+37
+
+name model
+
+smoothing
+
+α
+
+fw
+
+grid
+
+lon
+
+lat
+
+0.8
+
+0.4
+
+0.2
+
+POP
+
+POP
+
+POP
+
+-
+
+-
+
+-
+
+0.8H POP-α Helmholtz
+
+1.0∆x
+
+0.4H POP-α Helmholtz
+
+1.0∆x
+
+0.8F
+
+POP-α
+
+0.4F
+
+POP-α
+
+ﬁlter
+
+ﬁlter
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+-
+
+3
+
+3
+
+40x40x34
+
+80x80x34
+
+160x160x34
+
+40x40x34
+
+80x80x34
+
+40x40x34
+
+80x80x34
+
+0.8
+
+0.4
+
+0.2
+
+0.8
+
+0.4
+
+0.8
+
+0.4
+
+0.4
+
+0.2
+
+0.1
+
+0.4
+
+0.2
+
+0.4
+
+0.2
+
+Table 1
+Model parameters for experiments discussed in this paper, where fw is the ﬁlter width; grid is the number
+of gridpoints in (x, y, z); lon is the longitudinal grid-cell width; and lat is the latitudinal grid-cell width. The
+names correspond to the meridional resolution and type of smoothing. All POP-α simulations were run with
+both the full and reduced algorithms.
+
+algorithm
+
+Cor
+
+steps/day
+
+clock time
+
+resolution
+
+resolution
+
+0.8
+
+0.4
+
+0.2
+
+0.8
+
+0.4
+
+0.2
+
+40
+
+52
+
+4.16
+
+21.3
+
+195
+
+5.82
+
+28.4
+
+212
+
+POP
+
+POP
+
+imp
+
+exp
+
+exp
+
+exp
+
+exp
+
+12
+
+20
+
+18
+
+12
+
+16
+
+12
+
+22
+
+32
+
+24
+
+18
+
+24
+
+18
+
+red. POP-α ﬁlter
+
+red. POP-α Helm.
+
+exp
+
+full POP-α ﬁlter
+
+full POP-α Helm.
+
+5.09
+
+22.7
+
+10.21
+
+33.0
+
+5.30
+
+40.2
+
+19.56
+
+97.8
+
+Table 2
+Minimimum steps/day and the resulting clock time for various algorithms and resoltions. The Cor column
+states whether the barotropic Coriolis term is implicit or exlpicit. Clock time is in processor-hours per
+simulated decade. The fastest POP-α algorithm is the reduced algorithm with a ﬁlter. Even though the
+POP-α algorithms use explicit Coriolis discretization, the timestep is smaller than standard POP with
+explicit Coriolis.
+
+38
+
+

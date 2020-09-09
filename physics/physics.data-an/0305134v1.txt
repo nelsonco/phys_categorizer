@@ -1,0 +1,1040 @@
+Computing in High Energy Physics (CHEP 2003), La Jolla, California, March 24 - 28, 2003
+
+1
+
+Next-Generation EU DataGrid Data Management Services
+
+3
+0
+0
+2
+ 
+y
+a
+M
+ 
+0
+3
+ 
+ 
+]
+n
+a
+-
+a
+t
+a
+d
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+4
+3
+1
+5
+0
+3
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+Diana Bosio, James Casey, Akos Frohner, Leanne Guy, Peter Kunszt, Erwin Laure, Sophie Lemaitre,
+Levi Lucio, Heinz Stockinger, Kurt Stockinger
+CERN, European Organization for Nuclear Research, CH-1211 Geneva 23, Switzerland
+William Bell, David Cameron, Gavin McCance, Paul Millar
+University of Glasgow, Glasgow, G12 8QQ, Scotland
+Joni Hahkala, Niklas Karlsson, Ville Nenonen, Mika Silander
+Helsinki Institute of Physics, P.O. Box 64, 00014 University of Helsinki, Finland
+Olle Mulmo, Gian-Luca Volpato
+Swedish Research Council, SE-103 78 Stockholm, Sweden
+Giuseppe Andronico
+INFN Catania, Via S. Soﬁa, 64, I-95123 Catania, Italy
+Federico DiCarlo
+INFN Roma, P.le Aldo Moro, 2, I-00185 Roma, Italy
+Livio Salconi
+INFN Pisa, via F. Buonarroti 2, I-56127 Pisa, Italy
+Andrea Domenici
+DIIEIT, via Diotisalvi, 2, I-56122 Pisa, Italy
+Ruben Carvajal-Schiafﬁno, Floriano Zini
+ITC-irst, via Sommarive 18, 38050 Povo, Trento, Italy
+
+We describe the architecture and initial implementation of the next-generation of Grid Data Management
+Middleware in the EU DataGrid (EDG) project.
+The new architecture stems out of our experience and the users requirements gathered during the two years
+of running our initial set of Grid Data Management Services. All of our new services are based on the Web
+Service technology paradigm, very much in line with the emerging Open Grid Services Architecture (OGSA).
+We have modularized our components and invested a great amount of eﬀort towards a secure, extensible and
+robust service, starting from the design but also using a streamlined build and testing framework.
+Our service components are: Replica Location Service, Replica Metadata Service, Replica Optimization Service,
+Replica Subscription and high-level replica management. The service security infrastructure is fully GSI-enabled,
+hence compatible with the existing Globus Toolkit 2-based services; moreover, it allows for ﬁne-grained autho-
+rization mechanisms that can be adjusted depending on the service semantics.
+
+1. Introduction
+
+• Evolution:
+
+The EU DataGrid project [6] (also referred to as
+EDG in this article) is now in its third and ﬁnal year
+and within the data management work package we
+have developed a second generation of data manage-
+ment services that will be deployed in EDG release 2.x.
+Our ﬁrst generation replication tools (GDMP, edg-
+replica-manager etc.) provided a very good base and
+input and we reported on the experience in [13, 14].
+The experience we gained in the ﬁrst generation of
+tools (mainly written in C++), is directly used in the
+second generation of data management services that
+are based on web service technologies and mainly im-
+plemented in Java.
+
+The basic design concepts in the second generation
+
+services are as follows:
+
+• Modularity:
+
+The design needs to be modular and allow for
+easy plug-ins and future extensions.
+
+In addition, we should use generally agreed stan-
+dards and do not rely on vendor speciﬁc solu-
+tions.
+
+TUAT008
+
+Since OGSA is an upcoming standard that is
+most likely to be adapted by several Grid ser-
+vices in the future, the design should allow for
+an easy adoption of the OGSA concept.
+It is
+also advisable to use a similar technology.
+
+In addition, the design should be independent of
+the underlying operating system as well as rela-
+tional database managements system that are
+used by our services.
+
+Having implemented the ﬁrst generation tools
+mainly in C++, the technology choice for the sec-
+ond generation services presented in this article are as
+follows:
+
+• Java based servers are used that host web ser-
+vices (mainly Jakarta’s Tomcat as well as Oracle
+9iAS for certain applications).
+
+• Interface deﬁnitions in WSDL
+
+• Client stubs for several programming languages
+(Java, C/C++) through SOAP using AXIS for
+Java and gSOAP for C++ interfaces.
+
+2
+
+Computing in High Energy Physics (CHEP 2003), La Jolla, California, March 24 - 28, 2003
+
+• Persistent service data is stored in a relational
+database management system. We mainly use
+MySQL for general services that require open
+source technology and Oracle for more robust
+services.
+
+The entire set of data management services consists
+
+of the following parts:
+
+• Replication service framework: This service
+framework is the main part of our data manage-
+ment services and is described in detail in Sec-
+tion 2. It basically consists of an overall replica
+management system that uses several other ser-
+vices like the Replica Location Service, Replica
+Optimization service etc.
+
+• SQL Database Service (Spitﬁre): Spitﬁre
+provides a means to access relational databases
+from the Grid.
+
+• Java Security Package: All of our services
+have very strict security requirements. The Java
+security package provides tools that can be used
+in Grid services such as our replication services.
+
+All these components are discussed in detail in the
+following sections and thus also outline the paper or-
+ganization.
+
+2. Replication Service Framework
+’Reptor’
+
+In the following section we ﬁrst give an architectural
+overview of the entire replication framework and then
+discuss individual services (Replica Location Service,
+Replica Optimization Service etc.) in more detail.
+
+2.1. General Overview of Replication
+Architecture
+
+Figure 1 presents the user’s perspective of the main
+components of a replica management system for which
+we have given the code-name ‘Reptor’. This design,
+which ﬁrst was discussed in [7], represents an evolu-
+tion of the original design presented in [8, 9]. Sev-
+eral of the components are already implemented and
+tested in EDG (see shaded components) whereas oth-
+ers (in white) are still in the design phase and might
+be implemented in the future.
+
+According to this design the entire framework is
+provided by the Replica Management Service
+which acts as a logical single entry point to the sys-
+tem and interacts with the other components of the
+systems as follows:
+
+• The Core module provides the main function-
+ality of replica management, namely replica cre-
+ation, deletion, and cataloging by interacting
+with third party modules such as transport and
+replica and meta data catalog services.
+
+• The goal of the Optimization component (im-
+plemented as a service) is to minimize ﬁle access
+times by pointing access requests to appropriate
+replicas and pro-actively replicating frequently
+used ﬁles based on access statistics gathered.
+
+• The Security module manages the required
+user authentication and authorization, in par-
+ticular, issues pertaining to whether a user is
+allowed to create, delete, read, and write a ﬁle.
+
+• Collections are deﬁned as sets of logical ﬁle-
+
+names and other collections.
+
+• The Consistency module taking care of keep-
+ing consistency between the set of replicas of
+a ﬁle, as well as between the meta information
+stored in the various catalogs.
+
+• The Session component provides generic check-
+pointing, restart, and rollback mechanisms to
+add fault tolerance to the system.
+
+• The Subscription service allows for a publish-
+
+subscribe model for replica creation.
+
+We decided to implement the Replica Management
+Service and the core module functionality on the client
+side in the Replica Manager Client. The other subser-
+vices and APIs are modules and services in their own
+right, allowing for a multitude of deployment scenarios
+in a distributed environment.
+
+One advantage of such a design is that if a subser-
+vice is unavailable, the Replica Manager Client can
+still provide all the functionality that does not make
+use of that particular service. Also, critical service
+components may have more than one instance to pro-
+vide a higher level of availability and to avoid service
+bottlenecks.
+
+A detailed description of the implemented compo-
+nents and services can be found in the following sub-
+sections as well as in the original design in [7].
+
+2.2. Interaction with Services
+
+As described above, Reptor needs to interact with
+many external services such as the Replica Location
+Service, the Information Service, and transport mech-
+anisms like GridFTP servers [1]. Reptor has been re-
+alized as a modular system that provides easy pluga-
+bility of third party components. Reptor deﬁnes the
+minimal interface third party components have to pro-
+vide. Most of the third party components required are
+services on their own, hence appropriate client stubs
+
+TUAT008
+
+Computing in High Energy Physics (CHEP 2003), La Jolla, California, March 24 - 28, 2003
+
+3
+
+User
+
+Replica
+Management
+Service
+
+   Processing
+
+MetaData
+Catalog
+
+Replica Location
+Service
+
+Transport
+
+Security
+
+Core
+
+Collection
+
+Optimization
+
+Sessions
+
+Consistency
+
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)(cid:0)
+(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)(cid:1)
+
+Subscription
+
+Replica Selection
+
+AccessHistory
+
+ReplicaInitiation
+
+Figure 1: Reptor’s main design components.
+
+satisfying the interface imposed by Reptor need to be
+provided. By means of conﬁguration ﬁles the actual
+component to be used can be speciﬁed and Java dy-
+namic class loading features are exploited for making
+them available at execution time.
+
+Currently, Reptor has been mainly tested using the
+
+following third party components:
+
+• Replica Location Service (RLS) [4]: used for lo-
+cating replicas in the Grid and assigning physi-
+cal ﬁle names.
+
+• Replica Metadata Catalog (RMC): used for
+
+querying and assigning logical ﬁle names.
+
+• Replica Optimization Service (ROS): used for lo-
+
+cating the best replica to access.
+
+• R-GMA: an information service provided by
+EDG: Reptor needs it for obtaining information
+about Storage and Computing Elements [7].
+
+• Globus C based libraries as well as CoG [12] pro-
+
+viding GridFTP transport functionality.
+
+• The EDG network monitoring services: EDG
+(in particular WP7) provides these services to
+obtain statistics and network characteristics.
+
+The implementation is mainly done using the Java
+J2EE framework and associated web service technolo-
+gies (the Apache Tomcat servlet container, Jakarta
+Axis , etc.).
+In more detail, we use client/server
+architectures making SOAP Remote Procedure Call
+(RPC) over HTTPS. The basic component interaction
+
+TUAT008
+
+is given in Figure 2 and will also explained in a few
+more details in the following sub sections. For more
+details on web service choices refer to Section 3.2.
+
+For the user, the main entry point to the Repli-
+cation Services is through the client interface that is
+provided via a Java API as well as a command line in-
+terface, the edg-replica-manager module. For each
+of the main components in Figure 1, the Reptor frame-
+work provides the necessary interface. For instance,
+the functionality of the core module includes mainly
+the ﬁle copy and cataloging process and is handled
+in the client library with the respective calls to the
+Transport and Replica Catalog modules.
+
+2.3. Replica Location Service (RLS)
+
+The Replica Location Service (RLS) is the service
+responsible for maintaining a (possibly distributed)
+catalog of ﬁles registered in the Grid infrastructure.
+For each ﬁle there may exist several replicas. This is
+due to the need for geographically distributed copies of
+the same ﬁle, so that accesses from diﬀerent points of
+the globe may be optimized (see section on the Replica
+Optimization Service). Obviously, one needs to keep
+track of the scattered replicas, so that they can be
+located and consistently updated.
+
+As such, the RLS is designed to store one-to-
+many relationships between (Grid Unique Identiﬁers
+(GUIDs) and Physical File Names (PFNS). As many
+replicas of the same ﬁle may coexist (with diﬀerent
+PFNs) we identify them as being replicas of the same
+ﬁle by assigning to them the same unique identiﬁer
+
+4
+
+Computing in High Energy Physics (CHEP 2003), La Jolla, California, March 24 - 28, 2003
+
+Resource Broker
+
+Information Service
+
+User Interface
+
+Replica Manager Client
+
+Replica Location Service
+
+Storage
+Element
+Monitor
+
+Storage
+Element
+
+Replica Optimization
+
+Network Monitor
+
+Figure 2: Interaction of Replica Manager with other Grid components.
+
+(the GUID).
+
+The RLS architecture encompasses two logical com-
+ponents - the LRC (Local Replica Catalog) and the
+RLI (Replica Location Index). While the LRC stores
+the mappings between GUIDs and PFNs on a per-site
+basis, the RLI stores information on where mappings
+exist for a given GUID. In this way, it is possible to
+split the search for replicas of a given ﬁle in two steps:
+in the ﬁrst one the RLI is consulted in order to deter-
+mine which LRCs contain mappings for a given GUID;
+in the second one, the speciﬁc LRCs are consulted in
+order to ﬁnd the PFNs one is interested in.
+
+It is however worth mentioning that the LRC is im-
+plemented to work in standalone mode, meaning that
+it can act as a full RLS on its own if such a deploy-
+ment architecture is necessary. When working in con-
+junction with one (or several) RLIs, the LRC provides
+periodic updates of the GUIDs it holds mappings for.
+These updates consist of bloom ﬁlter objects, which
+are a very compact form of representing a set, in order
+to support membership queries [? ].
+
+The RLS currently has two possible database back-
+
+end deployment possibilities: MySQL and Oracle9i.
+
+2.4. Replica Metadata Catalog Service
+(RMC)
+
+Despite the fact that the RLS already provides
+the necessary functionality for application clients, the
+GUID unique identiﬁers might prove diﬃcult to read
+and being remembered by humans. The Replica
+Metadata Catalog (RMC) can be considered as an-
+other layer of indirection on top of the RLS that pro-
+vides mappings between Logical File Names (LFNs)
+and GUIDs. The LFNs are user deﬁned aliases for
+
+GUIDs - many LFNs may exist for one GUID.
+
+Furthermore, the RMC is also capable of holding
+metadata about the original physical ﬁle represented
+by GUID (e.g. size, date of creation, owner).
+It is
+also possible for the user to deﬁne speciﬁc metadata
+and attach it to a GUID or to an LFN. The purpose of
+this mechanism is to provide to users and applications
+a way of querying the ﬁle catalog based on a wide
+range of attributes. The possibility of gathering LFNs
+as collections and manipulating these collections as
+a whole has already been envisaged, but is not yet
+implemented.
+
+As for the RLS, the RMC supports MySQL and
+
+Oracle9i as database backends.
+
+2.5. Replica Optimization Service (ROS)
+
+The goal of the optimization service is to select the
+best replica with respect to network and storage ac-
+cess latencies. It is implemented as a light-weight web
+service that gathers information from the EDG net-
+work monitoring service and the EDG storage element
+service about the respective access latencies.
+
+In [2] we deﬁned the APIs getNetworkCosts and
+getSECosts for interactions of the Replica Manager
+with the Network Monitoring and the Storage Ele-
+ment Monitor. These two components monitor the
+network traﬃc and the access traﬃc to the storage
+device respectively and calculate the expected trans-
+fer time of a given ﬁle with a speciﬁc size.
+
+In the EU DataGrid Project, Grid resources are
+managed by the meta scheduler of WP1, the Resource
+Broker [5]. One of the goals of the Resource Broker
+is to decide on which Computing Element the jobs
+should be run such that the throughput of all jobs
+
+TUAT008
+
+Computing in High Energy Physics (CHEP 2003), La Jolla, California, March 24 - 28, 2003
+
+5
+
+is maximized. Assuming highly data intensive jobs,
+a typical optimization strategy could be to select the
+least loaded resource with the maximum amount of
+data being local.
+In [2] we introduced the Replica
+Manager API getAccessCost that returns the access
+costs of a speciﬁc job for each candidate Computing
+Element. The Resource Broker can then take this in-
+formation provided by the Replica Manager to sched-
+ule each job to its optimal resources.
+
+The interaction of the Replica Manager with the
+Resource Broker, the Network Monitor and the Stor-
+age Element Monitor is depicted in Figure 2.
+
+2.6. Replica Subscription Service
+
+The Replica Subscription Service (RSS) is a service
+oﬀering automatic replication based on a subscription
+model. The basic design is based on our ﬁrst gen-
+eration replication tool GDMP (Grid Data Mirroring
+Package) [14].
+
+3. SQL Database Service: Spitﬁre
+
+Spitﬁre [3] provides a means to access relational
+databases from the Grid. This service has been pro-
+vided by our work package for some time and was
+our ﬁrst service that used the web service paradigm.
+Thus, we give more details about its implementation
+in Section 3.2 since many of the technology choices
+for the replication services explained in the previous
+section are based on choices also made for Spitﬁre.
+
+3.1. Spitﬁre Overview
+
+The SQL Database service (named Spitﬁre) permits
+convenient and secure storage, retrieval and query-
+ing of data held in any local or remote RDBMS. The
+service is optimized for meta-data storage. The pri-
+mary SQL Database service has been re-architected
+into a standard web service. This provides a plat-
+form and language independent way of accessing the
+information held by the service. The service exposes a
+standard interface in WSDL format, from which client
+stubs can be built in most common programming lan-
+guages, allowing a user application to invoke the re-
+mote service directly. The interface provides the com-
+mon SQL operations to work with the data. Pre-built
+client stubs exist for the Java, C and C++ program-
+ming languages. The service itself has been tested
+with the MySQL and Oracle databases.
+
+The earlier SQL Database service was primarily ac-
+cessed via a web browser (or command line) using
+pre-deﬁned server-side templates. This functionality,
+while less ﬂexible than the full web services interface,
+was found to be very useful for web portals, providing
+a standardised view of the data. It has therefore been
+
+TUAT008
+
+retained and re-factored into a separate SQL Database
+browser module.
+
+3.2. Component Description and Details
+about Web Service Design
+
+There are three main components to the SQL
+Database service: the primary server component, the
+client(s) component, and the browser component. Ap-
+plications that have been linked to the SQL Database
+client library communicate to a remote instance of
+the server. This server is put in front of a RDBMS
+(e.g. MySQL), and securely mediates all Grid access
+to that database. The browser is a standalone web
+portal that is also placed in front of a RDBMS.
+
+The server is a fully compliant web service imple-
+mented in Java.
+It runs on Apache Axis inside a
+Java servlet engine (currently we use the Java refer-
+ence servlet engine, Tomcat, from the Apache Jakarta
+project). The service mediates the access to a RDBMS
+that must be installed independently from the service.
+The service is reasonably non-intrusive, and can be
+installed in front of a pre-existing RDBMS. The lo-
+cal database administrator retains full control of the
+database back-end, with only limited administration
+rights being exposed to properly authorized grid users.
+The web services client, at its most basic, consists
+of a WSDL service description that describes fully the
+interface. Using this WSDL description, client stubs
+can be generated automatically in the programming
+language of choice. We provide pre-built client stubs
+for the Java, C and C++ programming languages.
+These are packaged as Java JAR ﬁles and static li-
+braries for Java and C/C++ respectively.
+
+The browser component is a server side component
+that provides web-based access to the RDBMS. It pro-
+vides the functionality of the previous version of the
+SQL Database service. This service does not depend
+on the other components and can be used from any
+web browser. The browser component is implemented
+as a Java servlet. In the case where it is installed to-
+gether with the primary service, it is envisaged that
+both services will be installed inside the same servlet
+engine.
+
+The design of the primary service is similar to that
+of the prototype Remote Procedure Call GridDataSer-
+vice standard discussed in [11], and indeed, inﬂuenced
+the design of the standard. It is expected that the SQL
+Database service will eventually evolve into a proto-
+type implementation of the RPC part of this GGF
+standard. However, to maximise the usability and
+portability of the service, we chose to implement it as
+a plain web service, rather than just an OGSA service.
+The architecture of the service has been designed so
+that it will be trivial to implement the OGSA speciﬁ-
+cation at a later date.
+
+The communication between the client and server
+
+6
+
+Computing in High Energy Physics (CHEP 2003), La Jolla, California, March 24 - 28, 2003
+
+components is over the HTTP(S) protocol. This max-
+imises the portability of the service, since this proto-
+col has many pre-existing applications that have been
+heavily tested and are now very robust. The data
+format is XML, with the request being wrapped us-
+ing standard SOAP Remote Procedure Call. The in-
+terface is designed around the SQL query language.
+The communication between the user’s web browser
+and the SQL Database Browser service is also over
+HTTP(S).
+
+The server and browser components (and parts of
+the Java client stub) make use of the common Java
+Security module as described in Section 4. The secure
+connection is made over HTTPS (HTTP with SSL or
+TLS).
+
+Both the server and browser have a service certiﬁ-
+cate (they can optionally make use of the system’s
+host certiﬁcate), signed by an appropriate CA, which
+they can use to authenticate themselves to the client.
+The client uses their GSI proxy to authenticate them-
+selves to the service. The user of the browser service
+should load their GSI certiﬁcate into the web browser,
+which will then use this to authenticate the user to the
+browser.
+
+A basic authorisation scheme is deﬁned by default
+for the SQL Database service, providing administra-
+tive and standard user functionality. The authorisa-
+tion is performed using the subject name of the user’s
+certiﬁcate (or a regular expression matching it). The
+service administrator can deﬁne a more complex au-
+thorisation scheme if necessary, as described in the
+security module documentation.
+
+4. Security
+
+The EDG Java security package covers two main
+security areas, the authentication and the authoriza-
+tion. The authentication assures that the entity (user,
+service or server) at the other end of the connection is
+who it claims to be. The authorization decides what
+the entity is allowed to do.
+
+The aim in the security package is always to make
+the software as ﬂexible as possible and to take into
+account the needs of both EDG and industry to make
+the software usable everywhere. To this end there
+has been some research into similarities and possibili-
+ties for cooperation with for example Liberty Alliance,
+which is a consortium developing standards and solu-
+tions for federated identity for web based authentica-
+tion, authorization and payment.
+
+4.1. Authentication
+
+The authentication mechanism is an extension of
+the normal Java SSL authentication mechanism. The
+mutual authentication in SSL happens by exchanging
+
+public certiﬁcates that are signed by trusted certiﬁcate
+authorities (CA). The user and the server prove that
+they are the owners of the certiﬁcate by proving in
+cryptographic means that they have the private key
+that matches with the certiﬁcate.
+
+In Grids the authentication is done using GSI proxy
+certiﬁcates that are derived from the user certiﬁcate.
+This proxy certiﬁcate comes close to fulﬁlling the
+PKIX [10] requirement for valid certiﬁcate chain, but
+does not fully follow the standard. This causes the
+SSL handshake to fail in the conforming mechanisms.
+For the GSI proxy authentication to work the SSL
+implementation has to be nonstandard or needs to be
+changed to accept them.
+
+The EDG Java security package extends the Java
+
+SSL package by
+
+• accept the GSI proxies as authentication method
+
+• support GSI proxy loading with periodical
+
+• support Openssl certiﬁcate-private key pair
+
+reloading
+
+loading
+
+• support CRLs with periodical reloading
+
+• integration with Tomcat
+
+• integration with Jakarta Axis SOAP framework
+
+The GSI proxy support is done by ﬁnding the user
+certiﬁcate and making special allowances and restric-
+tions to the following proxy certiﬁcates. The al-
+lowance is that the proxy certiﬁcate does not have
+to be signed by a CA. The restriction is that the dis-
+tinguished name (DN) of the proxy certiﬁcate has to
+start with the DN of the user certiﬁcate (e.g. ‘C=CH,
+O=cern, CN=John Doe’). This way the user cannot
+pretend to be someone else by making a proxy with
+DN ‘C=CH, O=cern, CN=Jane Doe’. The proxies
+are short lived, so the program using the SSL connec-
+tion may be running while the proxy is updated. For
+this reason the user credentials (for example the proxy
+certiﬁcate) can be made to be reloaded periodically.
+
+The Openssl saves the user credentials using two
+ﬁles, one for the user certiﬁcate and the other for
+the private key. With the EDG Java security pack-
+age these credentials can be loaded easily.
+
+The CAs periodically release lists of revoked cer-
+tiﬁcates in a certiﬁcate revocation list (CRL). The
+EDG Java security package supports this CRL mech-
+anism and even if the program using the package is
+running these lists can be periodically and automati-
+cally reloaded into the program by setting the reload
+interval.
+
+The integration to Jakarta Tomcat (a Java web
+server and servlet container) is done with a interface
+class and to use it only the Jakarta Tomcat conﬁgu-
+ration ﬁle has to be set up accordingly.
+
+TUAT008
+
+Computing in High Energy Physics (CHEP 2003), La Jolla, California, March 24 - 28, 2003
+
+7
+
+The Jakarta Axis SOAP framework provides an
+easy way to change the underlying SSL socket imple-
+mentation on the client side. Only a simple interface
+class was needed and to turn it on a system variable
+has to be set while calling the Java program. In the
+server side the integration was even simpler as Axis
+runs on top of Tomcat and Tomcat can be set up as
+above.
+
+Due to issues of performance, many of the services
+described in this document have equivalent clients
+written in C++. To this end, there are several C++
+SOAP clients that have been written based on the
+gSOAP library. In order to provide the same authen-
+tication and authorization functionality as in the cor-
+responding Java SOAP clients, an accompanying C
+library is being developed for gSOAP. When ready, it
+is to provide support for mutual authentication be-
+tween SOAP clients and SOAP servers, support for
+the coarse-grained authorization as implemented in
+the server end by the Authorization Manager (de-
+scribed below) and veriﬁcation of both standard X509
+and GSI style server and server proxy certiﬁcates.
+
+4.2. Coarse grained authorization
+
+The EDG Java security package only implements
+the coarse grained authorization. The coarse grained
+authorization decision is made in the server before
+the actual call to the service and can make decision
+like ‘what kind of access does this user have to that
+database table’ or ‘what kind of access does this user
+have to the ﬁle system’. The ﬁne grained authoriza-
+tion that answers the question ‘what kind of access
+does this user have to this ﬁle’ can only be handled
+inside the service, because the actual ﬁle to access is
+only known during the execution of the service. The
+authorization mechanism is positioned in the server
+before the service.
+
+In the EDG Java security package the authorization
+is implemented as role based authorization. Currently
+the authorization is done in the server end and the
+server authorizes the user, but there are plans to do
+mutual authorization where also the client end checks
+that the server end is authorized to perform the ser-
+vice or to save the data. The mutual authorization
+is especially important in the medical ﬁeld where the
+medical data can only be stored in trusted servers.
+
+The role based authorization happens in two stages,
+ﬁrst the system checks that the user can play the role
+they requested (or if there is a default role deﬁned
+for them). Then the role the user is authorized to
+play is mapped to a service speciﬁc attribute. The
+role deﬁnitions can be the same in all the services in
+the (virtual) organization, but the mapping from the
+role to the attribute is service speciﬁc. The service
+speciﬁc attribute can be for example a user id for ﬁle
+system access of database connection id with precon-
+
+TUAT008
+
+ﬁgured access rights. If either step fails, the user is
+not authorized to access the service using the role he
+requested.
+
+There are two modules to interface to the informa-
+tion ﬂow between the client and the service; one for
+normal HTTP web traﬃc and the other for SOAP web
+services. The authorization mechanism can attach to
+other information ﬂows by writing a simple interface
+module for them.
+
+In similar fashion the authorization information
+that is used to make the authorization decisions can
+be stored in several ways. For simple and small instal-
+lation and for testing purposes the information can be
+a simple XML ﬁle. For larger installations the infor-
+mation can be stored into a database and when using
+the Globus tools to distribute the authorization infor-
+mation, the data is stored in a text ﬁle that is called
+gridmap ﬁle. For each of these stores there are a mod-
+ule to handle the speciﬁcs of that store, and to add a
+new way to store the authorization information only a
+interface module needs to be written. When the vir-
+tual organization membership service (VOMS) is used
+the information provided by the VOMS server can be
+used for the authorization decisions and all the infor-
+mation from the VOMS is parsed and forwarded to
+the service.
+
+4.3. Administration web interface
+
+The authorization information usually ends up be-
+ing rather complex, and maintaining that manually
+would be diﬃcult, so a web based administration in-
+terface was created. This helps to understand the au-
+thorization conﬁguration, eases the remote manage-
+ment and by making management easier improves the
+security.
+
+5. Conclusions
+
+The second generation of our data management ser-
+vices has been designed and implemented based on
+the web service paradigm.
+In this way, we have a
+ﬂexible and extensible service framework and are thus
+prepared to follow the general trend of the upcoming
+OGSA standard that is based on web service tech-
+nology. Since interoperability of services seems to be
+a key feature in the upcoming years, we believe that
+our approach used in the second generation of data
+management is compatible with the need for service
+interoperability in a rapidly changing Grid environ-
+ment.
+
+Our design choices have been as follows: we aim for
+supporting robust, highly available commercial prod-
+ucts (like Oracle/DB and Oracle/Application Server)
+as well as standard open source technology (MySQL,
+Tomcat, etc.).
+
+8
+
+Computing in High Energy Physics (CHEP 2003), La Jolla, California, March 24 - 28, 2003
+
+The ﬁrst experience in using the new generation
+of services shows that basic performance expectations
+are met. During this year, the services will be de-
+ployed on the EDG testbed (and possibly others): this
+will show the strength and the weaknesses of the ser-
+vices.
+
+Acknowledgments
+
+This work was partially funded by the European
+Commission program IST-2000-25182 through the EU
+DataGrid Project.
+
+References
+
+[1] W. Allcock,
+
+J. Bester,
+
+J. Bresnahan, A.
+Chernevak, I. Foster, C. Kesselman, S. Meder, V.
+Nefedova, D. Quesnal, S. Tuecke; ”Data Manage-
+ment and Transfer in High Performance Compu-
+tational Grid Environments.” Parallel Comput-
+ing, 2002.
+
+[2] W. H. Bell, D. G. Cameron, L. Capozza,
+P. Millar, K. Stockinger, F. Zini, Design of
+a Replica Optimisation Framework, Techni-
+cal Report, DataGrid-02-TED-021215, Geneva,
+Switzerland, December 2002.
+
+[3] William Bell, Diana Bosio, Wolfgang Hoschek,
+Peter Kunszt, Gavin McCance, and Mika Silan-
+der. “Project Spitﬁre - Towards Grid Web Service
+Databases”. Technical report, Global Grid Fo-
+rum Informational Document, GGF5, Edinburgh,
+Scotland, July 2002.
+
+[4] A. Chervenak, E. Deelman,
+
+I. Foster, W.
+Hoschek, A. Iamnitchi, C. Kesselman, P. Kun-
+szt, M. Ripenau, H. Stockinger, K. Stockinger, B.
+Tierney, “Giggle: A Framework for Constructing
+Scalable Replica Location Services”, Technical
+Report, GGF4 Working Draft, Toronto Canada,
+February 2002
+
+[5] DataGrid WP1, Deﬁnition of Architecture, Tech-
+nical Plan and Evaluation Criteria for Scheduling,
+Resource Management, Security and Job Descrip-
+tion, Technical Report, EU DataGrid Project. De-
+liverable D1.2, September 2001.
+
+[6] European
+
+DataGrid
+
+project
+
+(EDG):
+
+http://www.eu-datagrid.org
+
+[7] L. Guy, P. Kunszt, E. Laure, H. Stockinger, K.
+Stockinger “Replica Management in Data Grids”,
+Technical Report, GGF5 Working Draft, Edin-
+burgh Scotland, July 2002
+
+[8] Wolfgang Hoschek, Javier Jaen- Martinez, Pe-
+ter Kunszt, Ben Segal, Heinz Stockinger, Kurt
+Stockinger, Brian Tierney, ”Data Management
+(WP2) Architecture Report”, EDG Deliverable
+2.2, http://edms.cern.ch/document/332390
+[9] Wolfgang Hoschek, Javier Jean-Martinez, Asad
+Samar, Heinz Stockinger, Kurt Stockinger. Data
+Management
+in an International Data Grid
+Project. 1st IEEE/ACM International Workshop
+on Grid Computing (Grid’2000). Bangalore, In-
+dia, Dec 17-20, 2000.
+
+[10] R. Housley et.al. “Internet X.509 Public Key In-
+frastructure Internet X.509 Public Key Infras-
+tructure, RFC 3280, The Internet Society April
+2002, http://www.ietf.org/rfc/rfc3280.txt
+
+[11] Amy Krause, Susan Malaika, Gavin McCance,
+James Magowan, Norman W. Paton, Greg Ric-
+cardi “Grid Database Service Speciﬁcation”,
+Global Grid Forum 6, Edinburgh, 2002.
+
+[12] Gregor von Laszewski, Ian Foster, Jarek Gawor,
+Peter Lane: “A Java Commodity Grid Kit”, Con-
+currency and Computation: Practice and Expe-
+rience, 13(8-9), 2001.
+
+[13] H. Stockinger, A. Samar, B. Allcock, I. Foster,
+K. Holtman, B. Tierney. ”File and Object Repli-
+cation in Data Grids.” Proceedings of the Tenth
+International Symposium on High Performance
+Distributed Computing (HPDC-10), IEEE Press,
+August 2001
+
+[14] Heinz Stockinger, Flavia Donno, Erwin Laure,
+Shahzad Muzaﬀar, Giuseppe Andronico, Peter
+Kunszt, Paul Millar. “Grid Data Management in
+Action: Experience in Running and Supporting
+Data Management Services in the EU DataGrid
+Project”, Computing in High Energy Physics
+(CHEP 2003), La Jolla, California, March 24 -
+28, 2003.
+
+[15] B. Bloom “Space/time tradeoﬀs in hash cod-
+ing with allowable errors”, CACM, 13(7):422-426,
+1970.
+
+TUAT008
+
+

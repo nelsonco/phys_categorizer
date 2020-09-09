@@ -1,0 +1,2351 @@
+4
+0
+0
+2
+ 
+t
+c
+O
+ 
+3
+1
+ 
+ 
+]
+n
+y
+d
+-
+u
+l
+f
+.
+s
+c
+i
+s
+y
+h
+p
+[
+ 
+ 
+1
+v
+6
+8
+0
+0
+1
+4
+0
+/
+s
+c
+i
+s
+y
+h
+p
+:
+v
+i
+X
+r
+a
+
+A high-level programming-language implementation of topology optimization applied
+to steady-state Navier–Stokes ﬂow
+
+Laurits Højgaard Olesen, Fridolin Okkels, and Henrik Bruus
+MIC – Department of Micro and Nanotechnology,
+Technical University of Denmark, DK-2800 Kongens Lyngby, Denmark
+(Dated: 11 October 2004)
+
+We present a versatile high-level programming-language implementation of nonlinear topology
+optimization. Our implementation is based on the commercial software package Femlab. For
+problems that can be formulated in the simple divergence form it allows a wide range of optimization
+objectives to be dealt with easily. We exemplify our method by studies of steady-state Navier–
+Stokes ﬂow problems, thus extending the work by Borrvall and Petersson on topology optimization
+of ﬂuids in Stokes ﬂow [Int. J. Num. Meth. Fluids 41, 77 (2003)]. We analyze the physical aspects
+of the solutions and how they are aﬀected by diﬀerent parameters of the optimization algorithm. A
+complete example of our implementation is included as Femlab code in an appendix.
+
+Keywords: topology optimization, Navier–Stokes ﬂow, inertial eﬀects, Femlab
+
+I.
+
+INTRODUCTION
+
+The material distribution method in topology optimization was originally developed for stiﬀness design of mechanical
+structures [2] but has now been extended to a multitude of design problems in structural mechanics as well as to
+optics and acoustics [3, 4, 5, 6]. Recently Borrvall and Petersson introduced the method for ﬂuids in Stokes ﬂow [1].
+However, it is desirable to extend the method to ﬂuids described in a full Navier–Stokes ﬂow; a direction pioneered
+by the work of Sigmund and Gersborg-Hansen [7, 8].
+
+In the present work we present such an extension by introducing a versatile high-level programming-language
+implementation of nonlinear topology optimization. Our implementation is based on the commercial software package
+Femlab. It has a wider range of applicability than the Navier–Stokes problems studied here, since any problem that
+can be formulated in the simple divergence form can be treated. Moreover it allows a wide range of optimization
+objectives to be dealt with easily.
+
+Extending the topology optimization method to new physical domains generally involves some rethinking of the
+design problem and some ’trial and error’ to determine suitable design objectives. It also requires the analysis and
+implementation of the problem problem in the ﬁnite element method (FEM). This process is accelerated a lot by
+using a high-level FEM library or package that allows diﬀerent physical models to be joined and eases the tasks of,
+e.g., geometry setup, mesh generation and postprocessing. The disadvantage is that high-level packages tend to have
+rather complex data structure, not easily accessible to the user. This can complicate the actual implementation of
+the problem because the sensitivity analysis is traditionally formulated in a low-level manner.
+
+In this work we have used the commercial ﬁnite-element package Femlab both for the solution of the ﬂow problem
+and for the sensitivity analysis required by the optimization algorithm. We show how this sensitivity analysis can be
+performed in Femlab in a simple way that is almost independent of the particular physical problem studied. This
+approach may prove even more useful for multiphysical extensions, where the ﬂow problem is coupled to, e.g., with
+heat conduction, convection-diﬀusion of solutes, and deformation of elastic channel walls in valves and ﬂow rectiﬁers.
+The paper is organized as follows: In Sec. II we introduce the topology optimization method for ﬂuids in Navier–
+Stokes ﬂow, and discuss the objective of designing ﬂuidic devices or channel networks for which the power dissipation
+is minimized.
+In Sec. III we express the Navier–Stokes equations in a generic divergence form that allows them
+to be solved with Femlab. This form encompasses a wide range of physical problems. We also work out the
+sensitivity analysis for a general class of integral-type optimization objectives in such a way that the built-in symbolic
+diﬀerentiation tools of Femlab can be exploited. In Sec. IV we present our two numerical examples that illustrates
+diﬀerent aspects and problems to consider: The ﬁrst example deals with designing a structure that can guide the ﬂow
+in the reverse direction of the applied pressure drop. The general outcome of the optimization is an S-shaped channel,
+but the example illustrates how the detailed structure depends on the choice of the parameters of the algorithm.
+The second example deals with a four terminal device for which the ﬂuidic channel design that minimizes the power
+dissipation shows a Reynolds number dependence. As the Reynolds number is increased a transition occurs between
+two topologically diﬀerent solutions, and we discuss how the position of the transition depends on the choice of initial
+conditions. Finally in the appendix we include a transcript of our Femlab code required for solving the second
+numerical example. The code amounts to 111 lines excluding the optimization algorithm, that can be obtained by
+contacting K. Svanberg [9, 10].
+
+II. TOPOLOGY OPTIMIZATION FOR NAVIER–STOKES FLOW IN STEADY STATE
+
+Although our high-level programming-language implementation is generally applicable we have chosen to start on
+the concrete level by treating the basic equations for our main example: the full steady-state Navier–Stokes ﬂow
+problem for incompressible ﬂuids.
+
+We consider a given computational domain Ω with appropriate boundary conditions for the ﬂow given on the
+domain boundary ∂Ω. The goal of the optimization is to distribute a certain amount of solid material inside Ω such
+that the material layout deﬁnes a ﬂuidic device or channel network that is optimal with respect to some objective,
+formulated as a function of the variables, e.g., minimization the power dissipated inside the domain.
+
+The basic principle in the material distribution method for topology optimization is to replace the original discrete
+design problem with a continuous one where the material density is allowed to vary continuously between solid and
+void. Thus in our ﬂow problem we assume the design domain to be ﬁlled with some idealized porous material of
+spatially varying permeability. Solid wall and open channels then correspond to the limits of very low and very high
+permeability, respectively.
+
+In the ﬁnal design there should preferably be no regions at intermediate permeability since otherwise it cannot be
+interpreted as a solution to the original discret problem. Alternatively it may be possible to fabricate the device from
+polymeric materials that naturally have a ﬁnite permeability to the ﬂuid.
+
+A. Governing equations for ﬂow in idealized porous media
+
+We assume that the ﬂuid ﬂowing in the idealized porous medium is subject to a friction force f which is proportional
+to the ﬂuid velocity v, c.f. Darcy’s law. Thus f =
+αv, where α(r) is the inverse of the local permeability of the
+medium at position r. These properties of the idealized porous medium may only be approximately valid for an actual
+medium. However, the assumptions are not in conﬂict with any fundamental physical law, and since the converged
+solutions contain only solid walls and open channels, the speciﬁc nature of the idealized porous medium is of no
+consequence.
+
+The ﬂow problem is described in terms of the ﬂuid velocity ﬁeld v(r) and pressure p(r). The governing equations
+
+−
+
+are the steady state Navier–Stokes equation and the incompressibility constraint
+
+ρ(v
+
+∇)v = ∇
+·
+v = 0,
+∇
+
+·
+
+αv,
+
+σ
+
+−
+
+·
+
+σij =
+
+p δij + η
+
+−
+
+∂vi
+∂xj
+
+(cid:16)
+
++
+
+∂vj
+∂xi (cid:17)
+
+,
+
+where ρ is the mass density of the ﬂuid. For an incompressible Newtonian ﬂuid the components σij of the Cauchy
+stress tensor σ are given by
+
+where η is the dynamic viscosity. The formalism is valid in three dimensions, but for simplicity we shall consider only
+two-dimensional problems, i.e., we assume translational invariance in the third dimension and set r = (x1, x2) and
+. The boundary conditions will typically be either Dirichlet type specifying the velocity ﬁeld v on
+v1(r), v2(r)
+v =
+the boundary or Neumann type specifying the external forces n
+σ.
+(cid:1)
+(cid:0)
+
+It is convenient to introduce a design variable ﬁeld γ(r) controlling the local permeability of the medium. We let γ
+vary between zero and unity, with γ = 0 corresponding to solid material and γ = 1 to no material. Following Ref. [1]
+we then relate the local inverse permeability α(r) to the design ﬁeld γ(r) by the convex interpolation
+
+·
+
+α(γ)
+
+αmin + (αmax −
+
+≡
+
+αmin)
+
+q
+
+γ
+1
+−
+(cid:2)
+q + γ
+
+,
+
+(cid:3)
+
+where q is a real and positive parameter used to tune the shape of α(γ). Ideally, impermeable solid walls would be
+obtained with αmax =
+, but for numerical reasons we need to choose a ﬁnite value for αmax. For the minimal value
+we choose αmin = 0.[14]
+
+For a given material distribution γ(r) there are two dimensionless numbers characterizing the ﬂow, namely the
+
+∞
+
+Reynolds number
+
+Re =
+
+ρ ℓ v
+η
+
+2
+
+(1)
+(2)
+
+(3)
+
+(4)
+
+(5)
+
+3
+
+(6)
+
+(7a)
+
+(7b)
+
+(7c)
+
+describing the ratio between inertia and viscous forces, and the Darcy number
+
+Da =
+
+η
+αmaxℓ2
+
+describing the ratio between viscous and porous friction forces. Here ℓ is a characteristic length scale of the system
+and v a characteristic velocity.
+
+Almost impermeable solid material is obtaned for very low Darcy numbers, in practice Da . 10−3. Further insight
+into the meaning of the Darcy number is gained by considering Poiseuille ﬂow in an channel or slit of width ℓ between
+two inﬁnite parallel plates of porous material. In this case the ﬂuid velocity inside the porous walls decays on a length
+scale √Da ℓ =
+
+η/αmax.
+
+p
+
+B. Power dissipation
+
+In the pioneering work by Borrvall and Petersson [1] the main focus was on minimizing the power dissipation in the
+ﬂuid. The total power Φ dissipated inside the ﬂuidic system (per unit length in the third dimension) is given by [11]
+
+Φ(v, p, γ) =
+
+1
+2 η
+
+ZΩ(cid:20)
+
+Xi,j (cid:16)
+
+∂vi
+∂xj
+
++
+
+2
+
+∂vj
+∂xi (cid:17)
+
++
+
+Xi
+
+α(γ)v2
+i (cid:21)
+
+dr.
+
+In steady-state this is equal to the sum of the work done on the system by the external forces and the kinetic energy
+convected into it,
+
+Φ(v, p, γ) =
+
+Z∂Ω Xi,j h
+
+niσij vj
+
+nivi
+
+−
+
+1
+
+2 ρv2
+
+j
+
+ds.
+
+(cid:0)
+
+(cid:1)i
+
+Here n is a unit outward normal vector such that n
+v
+is the work done on the system by this force. Moreover, in the common case where the geometry and boundary
+conditions are such that the no-slip condition v = 0 applies on all external solid walls, while on the inlet and outlet
+boundaries v is parallel to n and (n
+
+σ is the external force acting on the system boundary and n
+
+∇) v = 0,[15] Eq. (7b) reduces to
+
+σ
+
+·
+
+·
+
+·
+
+·
+
+Φ(v, p, γ) =
+
+n
+
+v
+
+Z∂Ω−
+
+·
+
+2 ρv2
+
+p + 1
+(cid:0)
+
+(cid:1)
+
+ds.
+
+Borrvall and Petersson showed that for Stokes ﬂow with Dirichlet boundary conditions everywhere on the boundary
+∂Ω, the problem of minimizing the total power dissipation inside the ﬂuidic device subject to a volume constraint on
+the material distribution is mathematically well-posed. Moreover it was proven that in the case where α(γ) is a linear
+function, the optimal material distribution is fully discrete-valued.
+
+When α(γ) is not linear but convex then the solid/void interfaces in the optimal solution are not discrete zero/unity
+transitions but slightly smeared out. Convexity implies that the (negative value of the) slope of α at γ = 0 is larger
+than at γ = 1; therefore there will be a neighbourhood around the discrete interface where it pays to move material
+q whereas
+1+q . For large values of q the interpolation is almost linear and we expect almost discrete
+
+from the solid side to the void. Using the interpolation in Eq. (4) we have α′(0) = (αmin −
+α′(1) = (αmin −
+
+interfaces, whereas for small q we expect smeared out interfaces in the optimized solution.
+
+αmax) 1+q
+
+αmax) q
+
+Consider the case when Eq. (7c) applies. If the system is driven with a prescribed ﬂow rate then minimizing the
+total power dissipation is clearly equivalent to minimizing the pressure drop across the system. Conversely, if the
+system is driven at a prescribed pressure drop, then the natural design objective will be to maximize the ﬂow rate
+which is equivalent to maximizing the dissipated power, c.f. Eq. (7c). In either case the objective can be described
+as minimizing the hydraulic resistance of the system.
+
+For problems with more complex design objectives, such as a minimax problem for the ﬂow rate through several
+diﬀerent outlets, there will typically be no analog in terms of total dissipated power. In such cases there is no guarantee
+for the existence of a unique optimal solution, and one has to be extra careful when formulating the design problem.
+
+III. GENERALIZED FORMULATION OF THE OPTIMIZATION PROBLEM
+
+For a given material distribution we solve the Navier–Stokes ﬂow problem using the commercial ﬁnite element
+software Femlab. Femlab provides both a graphical front-end and a library of high-level scripting tools based on
+
+the Matlab programming language, and it allows the user to solve a wide range of physical problems by simply
+typing in the strong form of the governing equations as text expressions. The equations must comply with a generic
+divergence form that eases the conversion to weak form required for the ﬁnite element solution. Still, this is the
+natural way of expressing most physical problems originating from conservation laws.
+
+Since we have chosen ﬂuidics as our main example, we begin by expressing the incompressible Navier–Stokes ﬂow
+problem in divergence form. Then we state the optimization problem with a general form of the design objective
+function and perform the discretization and sensitivity analysis based on this generalized formulation. This last step
+ensures the applicability of our method to most problems that can be formulated in the divergence form.
+
+We ﬁrst introduce the velocity-pressure vector u = [v1, v2, p ] and deﬁne for i = 1, 2, 3 the quantities Γi and Fi as
+
+and
+
+Using this, Eqs. (1) and (2) can be written in divergence form as
+
+F1 ≡
+
+ρ(v
+
+∇)v1 + α(γ)v1, F2 ≡
+
+·
+
+ρ(v
+
+∇)v2 + α(γ)v2, F3 ≡
+
+·
+
+∇
+
+v.
+
+·
+
+A. The ﬂow problem in divergence form
+
+Γ1 ≡ (cid:20)
+
+σ11
+σ21(cid:21)
+
+, Γ2 ≡ (cid:20)
+
+σ12
+σ22(cid:21)
+
+, Γ3 ≡ (cid:20)
+
+0
+0(cid:21)
+
+,
+
+∇
+
+Γi = Fi
+
+·
+
+·
+
+n
+
+−
+
+Ri = 0
+Γi = Gi +
+
+3
+
+∂Rj
+∂ui
+
+µj
+
+Xj=1
+
+in Ω,
+
+on ∂Ω,
+on ∂Ω,
+
+where Γi and Fi are understood to be functions of the solution u, its gradient ∇u, and of the design variable γ.
+The quantity Ri(u, γ) in Eq. (10b) describes Dirichlet type boundary conditions. For example, ﬂuid no-slip boundary
+v2 on the external solid walls. The quantity Gi(u, γ) in
+conditions are obtained by deﬁning R1 ≡
+Eq. (10c) describe Neumann type boundary conditions, and µi denote the Lagrange multiplier necessary to enforce
+the constraint Ri = 0, e.g., the force with which the solid wall has to act upon the ﬂuid to enforce the no-slip boundary
+condition. Notice, that to enforce Neumann conditions the Lagrange multiplier term in 10c has to be zero. This can be
+0 for the Dirichlet constraint. In addition this choice satisﬁes Eq. (10b)
+obtained by choosing the zero-function Ri
+trivially.
+
+v1 and R2 ≡
+
+≡
+
+In general the design objective for the optimization is stated as the minimization of a certain objective function
+
+Φ(u, γ). We shall consider a generic integral-type objective function of the form
+
+B. The objective function
+
+Φ(u, γ) =
+
+A(u, γ) dr +
+
+B(u, γ) ds.
+
+ZΩ
+
+Z∂Ω
+
+In particular, we can treat the design objective of minimizing the power dissipation inside the ﬂuidic domain by
+taking, c.f. Eq. (7a)
+
+A
+
+≡
+
+1
+2 η
+
+∂vi
+∂xj
+
++
+
+2
+
+∂vj
+∂xi (cid:17)
+
++
+
+Xi
+
+Xi,j (cid:16)
+
+α(γ)v2
+i
+
+in Ω
+
+and
+
+B
+
+0 on ∂Ω.
+
+(12)
+
+≡
+
+Alternatively, the objective of maximizing the ﬂow out through a particular boundary segment ∂Ωo is obtained by
+choosing
+
+And, as a ﬁnal example, objectives related to N discrete points rk can be treated using Dirac delta functions as
+
+A
+
+0 in Ω
+
+and
+
+B
+
+≡
+
+v
+
+n
+0
+
+·
+
+−
+
+≡ (cid:26)
+
+on ∂Ωo,
+on ∂Ω
+
+∂Ωo.
+
+\
+
+N
+
+A
+
+≡
+
+Xk=1
+
+Ak δ(r
+
+rk)
+
+in Ω
+
+−
+
+and
+
+B
+
+0
+
+on ∂Ω.
+
+≡
+
+4
+
+(8)
+
+(9)
+
+(10a)
+
+(10b)
+(10c)
+
+(11)
+
+(13)
+
+(14)
+
+The optimal design problem can now be stated as a continuous constrained nonlinear optimization problem:
+
+C. Optimization problem
+
+Φ(u, γ)
+
+min
+γ
+
+subject to
+
+1
+Ω
+|
+
+|
+
+ZΩ
+0
+
+γ(r)dr
+
+β
+
+−
+
+≤
+
+0,
+
+γ(r)
+
+1,
+
+≤
+Γi = Fi,
+
+≤
+∇
+
+·
+
+·
+
+Ri = 0,
+
+n
+
+Γi = Gi +
+
+−
+
+Volume constraint
+
+Design variable bounds
+
+Governing equations
+
+Dirichlet b.c.
+
+µj, Neumann b.c.
+
+3
+
+Xj=1
+
+∂Rj
+∂ui
+
+With the volume constraint we require that at most a fraction β of the total volume
+
+should be void.
+
+The very reason for replacing the original discrete design problem with a continuous one by assuming a porous and
+permeable material, is that it allows the use of eﬃcient mathematical programming methods for smooth problems. We
+have chosen the popular method of moving asymptotes (MMA), which is designed for problems with a large number
+of degrees-of-freedom and thus well-suited for topology optimization [9, 10]. It is a gradient-based algorithm requiring
+information about the derivative with respect to γ of both the objective function Φ and the constraints. Notice that
+for any γ the governing equations allow us to solve for u; therefore in eﬀect they deﬁne u[γ] as an implicit function.
+The gradient of Φ is then obtained using the chain rule
+
+Ω
+|
+
+|
+
+d
+dγ h
+
+Φ
+
+u[γ], γ
+(cid:0)
+
+(cid:1)i
+
+=
+
+∂Φ
+∂γ
+
++
+
+ZΩ
+
+∂Φ
+∂u ·
+
+∂u
+∂γ
+
+dr.
+
+However, because u[γ] is implicit, it is impractical to evaluate the derivative ∂u/∂γ directly. Instead, we use the adjoint
+method to eliminate it from Eq. (16) by computing a set of Lagrange multipliers for Eqs. (15d)-(15f) considered as
+constraints [12]. For details see Sec. III D.
+
+The optimization process is iterative and the kth iteration consists of three steps:
+(i) Given a guess γ(k) for the optimal material distribution we ﬁrst solve Eqs. (15d)-(15f) for u(k) as a ﬁnite element
+
+problem using Femlab.
+
+(ii) Next the sensitivity analysis is performed where the gradient of the objective and constraints with respect to γ
+is evaluated. In order to eliminate ∂u/∂γ from Eq. (16) we solve the adjoint problem of Eqs. (15d)-(15f) for the
+Lagrange multipliers
+
+u(k), also using Femlab.
+
+(iii) Finally we use MMA to obtain a new guess γ(k+1) for the optimal design based on the gradient information and
+
+the past iteration history.
+
+e
+
+Of those, step (i) is the most expensive computationalwise since it involves the solution of a nonlinear partial diﬀerential
+equation.
+
+D. Discretization and sensitivity analysis
+
+The starting point of the FEM analysis is to approximate the solution component ui using a set of ﬁnite element
+
+basis functions
+
+ϕi,n(r)
+}
+
+,
+
+{
+
+where ui,n are the expansion coeﬃcients. Similiarly, the design variable ﬁeld γ(r) is expressed as
+
+ui(r) =
+
+ui,n ϕi,n(r),
+
+Xn
+
+Xn
+
+γ(r) =
+
+γn ϕ4,n(r).
+
+For our incompressible Navier–Stokes problem we use the standard Taylor–Hood element pair with quadratic velocity
+approximation and linear pressure. For the design variable we have chosen the linear Lagrange element.[16]
+
+5
+
+(15a)
+
+(15b)
+
+(15c)
+
+(15d)
+
+(15e)
+
+(15f)
+
+(16)
+
+(17)
+
+(18)
+
+The problem Eqs. (10a) to (10c) is discretized by the standard Galerkin method and takes the form
+
+Li(U, γ)
+
+NT
+ji
+
+Λj = 0
+
+and Mi(U, γ) = 0,
+
+3
+
+−
+
+Xj=1
+
+where Ui, Λi, and γ are column vectors holding all the expansion coeﬃcients for the solution ui,n, the Lagrange
+multipliers µi,n, and the design variable ﬁeld γn, respectively. The column vector Li contains the projection of
+Eq. (10a) onto ϕi,n which upon partial integration is given by
+
+The column vector Mi contains the pointwise enforcement of the Dirichlet constraint Eq. (10b)
+
+Li,n =
+
+ϕi,n Fi + ∇ϕi,n
+
+Γi) dr +
+
+ϕi,n Gi ds.
+
+·
+
+Z∂Ω
+
+ZΩ(cid:0)
+
+Finally, the matrix Nij =
+∂Mi/∂Uj describes the coupling to the Lagrange multipliers in Eq. (10c). The solution
+of the nonlinear system in Eq. (19) above corresponds to step (i) in kth iteration. The sensitivity analysis in step (ii)
+requires us to compute
+
+−
+
+Mi,n = Ri
+
+u(ri,n)
+.
+(cid:1)
+(cid:0)
+
+6
+
+(19)
+
+(20)
+
+(21)
+
+d
+Φ
+dγ h
+
+U(γ), γ
+(cid:0)
+
+(cid:1)i
+
+=
+
+∂Φ
+∂γ +
+
+3
+
+Xi=1
+
+∂Φ
+∂Ui
+
+∂Ui
+∂γ ,
+
+(22a)
+
+U(γ), γ
+(cid:0)
+
+(22b)
+
+Ui and
+
+Λi
+
+e
+
+e
+
+(23)
+
+which is done using the standard adjoint method [12]. By construction we have for any γ that Li
+
+−
+= 0. Therefore also the derivative of those quantities with respect to γ is
+
+(cid:1)
+
+3
+j=1
+
+NT
+ji
+
+Λj(γ) = 0 and Mi
+
+U(γ), γ
+(cid:0)
+
+P
+zero, and adding any multiple, say
+
+Ui and
+(cid:1)
+
+Λi, of them to Eq. (22a) does not change the result
+
+d
+Φ
+dγ h
+
+U(γ), γ
+(cid:0)
+
+(cid:1)i
+
+e
+∂Φ
+∂Ui
+
+∂Ui
+∂γ +
+
+3
+
+UT
+i
+
+∂
+∂γ (cid:16)
+
+Li
+
+(cid:20)
+
+Xi=1
+
+3
+
+−
+
+Xj=1
+
+NT
+ji
+
+Λj
+
++
+
+ΛT
+i
+
+(cid:17)
+
+e
+
+∂Mi
+∂γ (cid:21)
+
+3
+
+Xi=1
+3
+
+e
+∂Φ
+∂γ +
+
+=
+
+=
+
+∂Φ
+∂γ +
+
+e
+∂Mi
+∂γ (cid:17)
+
+UT
+i
+
+e
+
++
+
+Xi=1 (cid:16)
+
+∂Φ
+∂Ui
+
+(cid:20)
+
+∂Li
+∂γ +
+
+ΛT
+i
+
+3
+
+Xj=1 (cid:16)
+
+e
+UT
+j
+
+e
+
+∂Lj
+∂Ui
+
+3
+
++
+
+Xi=1
+
++
+
+ΛT
+j
+
+Nji
+
+e
+
+∂Ui
+∂γ +
+
+(cid:17)(cid:21)
+
+3
+
+3
+
+(cid:20)
+
+Xi=1
+
+Xj=1
+
+e
+
+UT
+j
+
+NT
+
+ij (cid:21)
+
+∂Λi
+∂γ .
+
+We see that the derivatives ∂Ui/∂γ and ∂Λi/∂γ of the implicit functions can be eliminated by choosing
+such that
+
+3
+
+Xj=1 (cid:16)
+
+KT
+ji
+
+Uj
+
+NT
+ji
+
+Λj
+
+=
+
+−
+
+e
+
+(cid:17)
+
+e
+
+∂Φ
+∂Ui
+
+and
+
+Nij
+
+Uj = 0,
+
+3
+
+Xj=1
+
+e
+
+where we introduced Kij =
+Lagrange multipliers.
+
+−
+
+∂Li/∂Uj. This problem is the adjoint of Eq. (19) and
+
+U and
+
+Λ are the corresponding
+
+e
+
+e
+
+E.
+
+Implementation aspects
+
+We end this section by discussing a few issues on the implementation of topology optimization using Femlab.
+Firstly there is the question of how to represent the design variable γ(r). The governing equations as expressed
+by Γi and Fi in Eq. (10a) depend not only on the solution u but also on γ, and the implementation should allow
+for this dependence in an eﬃcient way. Here our simple and straightforward approach is to include γ as an extra
+dependent variable on equal footing with the velocity ﬁeld and pressure, i.e., we append it to the velocity-pressure
+vector, redeﬁning u as
+
+u
+
+≡
+
+[v1, v2, p, γ].
+
+(24)
+
+This was already anticipated when we denoted the basis set for γ by
+. By making γ available as a ﬁeld
+variable we can take full advantage of all the symbolic diﬀerentiation, matrix, and postprocessing tools for analysing
+and displaying the material distribution. Appending γ to the list of dependent variables we are required to deﬁne a
+fourth governing equation. However, since we are never actually going to solve this equation, but rather update γ
+based on the MMA step, we simply deﬁne
+
+{
+
+φ4,n(r)
+}
+
+Γ4 ≡ (cid:20)
+
+0
+0(cid:21)
+
+, F4 ≡
+
+0, G4 ≡
+
+0, R4 ≡
+
+0.
+
+It is crucial then that the ﬁnite element solver allows diﬀerent parts of the problem to be solved in a decoupled
+manner, i.e., it must be possible to solve Eqs. (10a)-(10c) for ui for i = 1, 2, 3 while keeping u4, i.e., γ, ﬁxed.
+
+In Femlab the nonlinear problem Eq. (19) is solved using the damped Newton method [13]. Therefore the matrices
+∂Mi/∂Uj appearing in the adjoint problem Eq. (23) are computed automatically as
+
+Kij =
+part of the solution process and can be obtained directly as Matlab sparse matrices. They are given by
+
+∂Li/∂Uj and Nij =
+
+−
+
+−
+
+Kij,nm =
+
+− ZΩ(cid:16)
+
+ϕi,n
+
+h
+
+ϕj,m +
+
+∂Fi
+∂∇uj·
+
+∇ϕj,m
+
++ ∇ϕi,n
+
+ϕj,m +
+
+∂Γi
+∂uj
+
+· h
+
+∂Γi
+∂∇uj·
+
+∇ϕj,m
+
+dr
+
+i(cid:17)
+
+i
+
+∂Fi
+∂uj
+∂Gi
+∂uj
+
+ϕi,n
+
+ϕj,m ds
+
+− Z∂Ω
+
+and
+
+∂Ri
+∂uj (cid:12)
+(cid:12)
+(cid:12)
+Regarding the right-hand side vector ∂Φ/∂Ui in Eq. (23), notice that for a general objective as Eq. (11), it has the
+form
+
+ϕj,m(ri,n).
+
+Nij,nm =
+
+(27)
+
+ri,n
+
+−
+
+∂Φ
+∂ui,n
+
+=
+
+ZΩ (cid:16)
+
+∂A
+∂ui
+
++
+
+∂A
+∂∇ui·
+
+∇
+
+ϕi,n dr +
+(cid:17)
+
+Z∂Ω
+
+∂B
+∂ui
+
+ϕi,n ds.
+
+It is not in the spirit of a high-level ﬁnite element package to program the assembly of this vector by hand. In stead
+we employ the built-in assembly subroutine of Femlab. We construct a copy of the original problem sharing the
+geometry, ﬁnite element mesh, and degree-of-freedom numbering with the original. Only we replace the original ﬁelds
+Γi, Fi, and Gi with
+
+Γi =
+
+∂A
+,
+∂∇ui
+
+∂A
+∂ui
+
+,
+
+Fi =
+
+and
+
+Gi =
+
+∂B
+∂ui
+
+.
+
+e
+Li with this deﬁnition yields exactly Eq. (28), c.f. Eq. (20). An extra conve-
+Assembling the right-hand-side vector
+nience in Femlab is that we can rely on the built-in symbolic diﬀerentiation tools to compute the derivatives ∂A/∂ui
+etc. In order to try out a new objective for the optimization problem, the user essentially only needs to change the
+text expressions deﬁning the quantities A and B.
+
+e
+
+e
+
+e
+
+Finally solving the adjoint problem Eq. (23) for
+
+Ui and
+
+Λi to eliminate ∂Ui/∂γ and ∂Λi/∂γ for i = 1, 2, 3 in
+
+Eq. (22b) we can evaluate the sensitivity
+
+d
+dγ h
+
+Φ(U, γ)
+i
+
+=
+
+∂Φ
+∂γ +
+
+e
+∂Lj
+∂γ (cid:17)
+
+T
+
+e
+
+3
+
+Xj=1 (cid:16)
+3
+
+Uj +
+
+T
+
+∂Mj
+∂γ (cid:17)
+
+(cid:16)
+
+Λj
+
+e
+
+e
+Uj + NT
+j4
+
+L4 −
+e
+L4 = ∂Φ/∂γ in accordance with U4 = γ. Since the fourth variable
+where Ki4 =
+γ is treated on equal footing with the other three variables, all expressions required to compute the matrices Ki,4 and
+Ni,4 come out of the standard linearization of the problem. This is yet another advantage of including γ as an extra
+dependent variable.
+
+∂Li/∂γ, Ni,4 =
+
+∂Mi/∂γ, and
+
+Xj=1 (cid:16)
+
+KT
+j4
+
+(30)
+
+Λj
+
+−
+
+−
+
+=
+
+(cid:17)
+
+e
+
+e
+
+e
+
+,
+
+When dealing with a problem with a volume constraint as in Eq. (15b), it is necessary to compute the derivative
+
+of the constraint with respect to γ,
+
+7
+
+(25)
+
+(26)
+
+(28)
+
+(29)
+
+(31)
+
+∂
+∂γn (cid:20)
+
+1
+Ω
+|
+
+|
+
+ZΩ
+
+γ(r) dr
+
+β
+
+(cid:21)
+
+−
+
+=
+
+1
+Ω
+|
+
+|
+
+ZΩ
+
+ϕn,4(r) dr,
+
+8
+
+p0
+
+p0 + ∆p
+
+ℓ
+
+r∗
+
+5ℓ
+
+2.5ℓ
+
+2.5ℓ
+
+FIG. 1: Computational domain for the reverse ﬂow example. The design domain (gray) has length 5ℓ and height ℓ, and the
+ﬂuid enters and leaves the design domain through leads of length 2.5ℓ. The boundary conditions prescribe a pressure drop of
+∆p across the system, and the design objective is to reverse the ﬂow direction at the point r∗
+
+at center of the channel.
+
+which can be obtained by assembling ˆL4 with ˆΓ4 = 0, ˆF4 = 1, and ˆG4 = 0. In the Appendix we have included a
+transcript of the code required to set up and solve the example from Sec. IV B below with Femlab. It amounts to
+111 lines of code, of which the majority are spent on setting up the actual Navier–Stokes ﬂow problem. Only a minor
+part goes to set up the adjoint problem and perform the sensitivity analysis. Moreover, this part contains almost no
+reference to the actual physical problem being solved, and therefore it should apply for any multiphysical problem
+that can be expressed in the divergence form Eqs. (10a)-(10c) and for any objective function of the form of Eq. (11).
+The code example employs, but does not include, a Matlab implementation of the MMA optimization algorithm
+[9, 10].
+
+IV. NUMERICAL EXAMPLES
+
+In this section we present our results for topology optimization of Navier–Stokes ﬂow for two particular model
+systems that we have studied. These systems have been chosen because they illustrate the dependence of the solution
+on the two dimensionless numbers Re and Da, measuring the importance of the inertia of the ﬂuid and the permeability
+of the porous medium, respectively, relative to viscosity. Moreover we discuss the dependence of the solution on the
+initial condition for the material distribution.
+
+When solving the Navier–Stokes ﬂow problem we use the standard direct linear solver in Femlab in the Newton
+iterations. Typically we have around 6000 elements in the mesh, corresponding to 30000 degrees-of-freedom. The
+constrained optimization problem is solved using MMA [9], and the design iterations are stopped when the maximal
+change in the design ﬁeld is
+
+0.01, at which point we typically have
+
+< 10−5.
+
+γ(k+1)
+
+Φ(k)
+
+γ(k)
+
+∞
+
+Φ(k+1)
+|
+
+−
+
+|
+
+k
+
+−
+
+k
+
+≤
+
+A. Example: a channel with reverse ﬂow
+
+Our ﬁrst numerical example deals with the design of a structure that at a particular point inside a long straight
+channel can guide the ﬂow in the opposite direction of the applied pressure drop. The corresponding problem with
+a prescribed ﬂow rate was ﬁrst suggested and investigated by A. Gersborg-Hansen [8]. We elaborate on it here to
+illustrate the importance of the choice of permeability for the porous medium.
+
+The computational domain is shown in Fig. 1. It consists of a long straight channel of height ℓ and length L = 10ℓ;
+the actual design domain, inside which the porous material is distributed, is limited to the central part of length 5ℓ.
+The boundary conditions prescribe a pressure drop of ∆p from the inlet (left) to the outlet (right), and no-slip for
+the ﬂuid on the channel side walls.
+
+The optimization problem is stated as a minimization of the horizontal ﬂuid velocity at the point r∗ at the center
+
+of the channel; i.e., the design objective is
+
+Φ = v1(r∗
+
+).
+
+(32)
+
+In terms of the general objective Eq. (11) this is obtained with A
+0. There is no explicit
+need for a volume constraint because neither of the extreme solutions of completely ﬁlled or empty can be optimal.
+When the design domain is completely ﬁlled with porous material we expect a ﬂat ﬂow proﬁle with magnitude below
+∆p /(5ℓαmax). In the other extreme case when the channel is completely devoid of porous material the solution is
+
+−
+
+≡
+
+≡
+
+v1(r)δ(r
+
+r∗) and B
+
+9
+
+FIG. 2: Optimized structures (black) and streamlines at 5% intervals for Stokes ﬂow (Re = 0) at Darcy numbers decreasing
+from 10−3 to 10−6. Only the central part of length 3ℓ of the design domain is shown. The structures consist of two barriers
+deﬁning an S-shaped channel that reverses the ﬂow at the central point r∗
+. As the Darcy number is decreased, the optimized
+structures become thinner and less permeable.
+
+simply a parabolic Poiseuille proﬁle with maximum
+
+η
+8ℓ2
+However, a structure that reverses the ﬂow such that v1(r∗) becomes negative will be superior to both these extreme
+cases in the sense of minimizing Φ.
+
+∆p
+L
+
+v0 =
+
+(33)
+
+.
+
+1. Stokes ﬂow limit, Re = 0
+
+We ﬁrst consider the Stokes ﬂow limit of small ∆p where the inertial term becomes neglible. The problem is
+then linear and the solution is characterized by a single dimensionless parameter, namely the Darcy number Da,
+Eq. (6). We have solved the topology optimization problem for diﬀerent values of Da. The initial condition for the
+material distribution was γ(0) = 1, and the parameter q determining the shape of α(γ) in Eq. (4) was set to q = 0.1.
+Anticipating that the structural details close to r∗ should be more important than those further away we chose a
+non-uniform ﬁnite element mesh with increased resolution around r∗.
+
+Fig. 2 shows the optimal structures obtained for Da = 10−3, 10−4, 10−5, and 10−6. They all consist of two barriers
+deﬁning an S-shaped channel that guides the ﬂuid in the reverse direction of the applied pressure drop. At Da = 10−3
+the two barriers are rather thick but leaky with with almost all the streamlines penetrating them; as the Darcy number
+is decreased the optimal structures become thinner and less penetrable. This result can be interpreted as a trade-oﬀ
+between having either thick barriers or wide channels. Thick barriers are necessary to force the ﬂuid into the S-turn,
+while at the same time the open channel should be as wide as possible in order to minimize the hydraulic resistance
+and maximize the ﬂuid ﬂow at the prescribed pressure drop.
+
+Notice that if we had chosen to prescribe the ﬂow rate through the device rather than the pressure drop, then the
+optimal solution would have been somewhat diﬀerent. When the ﬂow rate is prescribed, it pays to make the gap
+between the barriers very small and the barriers very thick in order to force the ﬁxed amount of ﬂuid ﬂowing through
+the narrow contraction. The optimal structure is therefore one with a very large hydraulic resistance. In Ref. [8] this
+problem was circumvented by adding a constraint on the maximal power dissipation allowed at the given ﬂow rate.
+
+In order to validate the optimality of the structures computed by the topology optimization we do as follows. For
+each of the optimized structures from Fig. 2 we freeze the material distribution and solve the ﬂow problem for a range
+Darcy numbers. The resulting family of curves for v1(r∗) vs. Da is shown in Fig. 3 where it is seen that each of
+
+10
+
++ Daopt = 10–3
+(cid:13) Daopt = 10–4
+△ Daopt = 10–5
+(cid:3) Daopt = 10–6
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+–0.25
+
+–0.50
+
+–0.75
+
+0
+v
+
+/
+
+)
+∗
+r
+
+(
+1
+v
+
+10–7
+
+10–6
+
+10–5
+
+10–4
+
+10–3
+
+10–2
+
+Da
+
+FIG. 3: Comparing the performance of the structures from Fig. 2 optimized at Daopt = 10
+values of Da. The objective v1(r∗
+
+) is normalized with the velocity in an empty channel, v0, c.f. Eq. (33).
+
+−3, 10
+
+−4, 10
+
+−5, and 10
+
+−6 for diﬀerent
+
+the four structures from Fig. 2 do indeed perform better in minimizing v1(r∗) than the others at the value of Da for
+which they are optimized.
+
+For Da . 10−5 the optimal value of v1(r∗) tends to saturate because the thin barriers are then almost completely
+impermeable and the open channel cannot get much wider. Actually, in this limit the thickness of the optimized barrier
+structures approach the mesh resolution as seen in Fig. 2(d). When the optimal barrier thickness gets below the mesh
+size we have observed the appearance of artiﬁcial local optima for the barrier structure. The problem is that the
+thin barriers cannot continuously deform into another position without going through an intermediate structure with
+barriers that are thicker by at least one mesh element. Depending on the initial condition, the optimization algorithm
+can therefore end up with a sub-optimal structure. We have tried to work around this problem by decreasing the
+value of q in order to smear out the solid/void interfaces and thus reduce the cost of going through the intermediate
+structure. This did not work out well; the reason may be that the smearing property of a convex α(γ) was derived
+for the objective of minimizing the power dissipation subject to a volume constraint. In the present example we are
+dealing with a diﬀerent objective and have no volume constraint. However, when the barrier structures are resolved
+with at least a few elements across them the artiﬁcial local optima tend to be insigniﬁcant. Thus the problem can be
+avoided by choosing a suﬃciently ﬁne mesh, or by locally reﬁning the mesh at the solid/void interfaces based on the
+gradient of γ(r).
+
+Returning to Fig. 3 we notice that as Da increases all the structures perform poorly in minimizing v1(r∗), as they all
+approach v0. Extrapolating this trend we might suspect that the S-turn topology will cease to be optimal somewhere
+below Da = 10−3 simply because the porous material becomes too permable to make reversal of the ﬂow direction
+possible. We have tested this hypothesis by performing an optimization at Da = 10−2, resulting in the structure
+shown in Fig. 4 where the value of the objective is v1(r∗) = 0.1v0. It is seen to display a diﬀerent topology from
+those of Fig. 2, with the design domain is almost completely ﬁlled with porous material blocking the ﬂow through the
+channel. Only immediately above and below the point r∗ we see two empty regions emerging which act to short-circuit
+the pressure and guide the ﬂow away from r∗.
+
+Actually, in all four cases from Fig. 2, starting from an empty channel the design iterations initially converge towards
+a symmetric structure blocking the ﬂow like that in Fig. 4. However at a certain point in the iterations an asymmetry
+in the horizontal plane is excited and the structure quickly changes to the two-barrier S-geometry. Whether the
+optimization converge to an S- or an inverted S-turn depends how the asymmetry is excited from numerical noise or
+irregularity in the ﬁnite element mesh; in fact the structure in Fig. 2(b) originally came out as an inverted S but was
+mirrored by hand before plotting it to facilitate comparision with the three other structures.
+
+11
+
+FIG. 4: Optimized structure (black) and streamlines for Stokes ﬂow at Da = 10
+design domain is completely ﬁlled with porous material, except immediately above and below r∗
+emerge. These voids divert the ﬂow away from r∗
+
+resulting in a low velocity v1(r∗
+
+) = 0.1v0.
+
+−2; only the central part of length 3ℓ. The
+where two empty regions
+
+FIG. 5: Optimized structures (black) and streamlines for Navier–Stokes ﬂow; only a part of length 3.25ℓ near the center of
+the channel is shown. Panel (a)-(c) to the left show the optimized structures for diﬀerent values of the control parameter
+∆˜p = ∆p ρℓ2/η2. For comparision the ﬂow ﬁeld when the corresponding structure from Fig. 2(c) is frozen and exposed to the
+elevated pressure drops is shown in panel (d)-(f) to the right. The Reynolds number is deﬁned as Re = ρ ℓ vmax/η where vmax
+is the maximal velocity measured at the inlet; note that for a particular value of ∆˜p, the Reynolds number is not ﬁxed but
+diﬀers slightly between left and right column.
+
+2. Reverse ﬂow at ﬁnite Reynolds number
+
+We now consider ﬂow at ﬁnite Reynolds number, characterized by the two dimensionless numbers Re and Da.
+The geometry and boundary conditions remain unchanged, and we ﬁx the Darcy number at Da = 10−5. Also, it is
+convenient to introduce a non-dimensional pressure drop ∆˜p = ∆p ρ ℓ2/η2.
+
+vmax
+
+12
+
+ℓ✻
+❄
+
+2ℓ
+
+L
+
+2ℓ
+
+FIG. 6: Schematic illustration of the four-terminal device. Two inlet and two outlet leads (white areas) of width ℓ and length
+2ℓ are attached to the design domain (gray) of width 5ℓ and length L. The ﬂow is characterized by the Reynolds number
+Re = ρℓvmax/η, where vmax is the maximal velocity at the inlets.
+
+We have solved the topology optimization problem for diﬀerent values of ∆˜p, always using an empty channel as
+105, where only a few streamlines
+initial condition. The results are shown in Fig. 5(a)-(c) for ∆˜p = 0.2, 0.5, and 1.0
+are seen to penetrate the barriers. For comparision we also consider the ﬂow ﬁeld obtained when the structure
+optimized for Stokes ﬂow at Da = 10−5 is frozen and exposed to the three diﬀerent elevated pressure drops. This is
+shown in Fig. 5(d)-(f): as the pressure drop is increased, more and more streamlines penetrate the barriers. Moreover
+we ﬁnd a recirculation region emerging behind the second barrier which reduces pressure drop over the neck between
+the barriers.
+
+×
+
+Returning to Fig. 5(a)-(c), where the structures have been optimized for the corresponding pressure drops, we ﬁnd
+that the barriers grow thicker which reduces number of streamlines penetrating them. Also a beak-like tip grows on
+the second barrier that acts to bend the ﬂuid stream down. Finally, on the back of the second barrier a wing- or
+spoiler-like structure appears that removes the recirculation.
+
+In summary, our ﬁrst example has demonstrated that our implementation of topology optimization works, but that
+the optimal design and performance may depend strongly on the choice of the Darcy number. In particular, the zero
+Da limit solution contains zero thickness but impermeable barriers deﬂecting the ﬂuid. In order to approximate this
+solution at ﬁnite Da and on a ﬁnite resolution mesh it is important to choose the Darcy number small enough that
+even thin barriers can be almost impermeable, but large enough to avoid diﬃculties with artiﬁcial local optima in the
+discretized problem when the barrier thickness decreases below the mesh resolution. This result is important, e.g.,
+in relation to design of ﬂuidic diodes because these will often contain (narrow) barriers deﬂecting the ﬂuid stream
+diﬀerently depending on the ﬂow direction through the diode, c.f. the Tesla valve.
+
+B. Example: a four-terminal device
+
+Our second numerical example deals with minimization of the power dissipation in a four-terminal device subject
+to a volume constraint. The problem is found to exhibit a discrete change in optimal topology driven by the inertial
+term. The four-terminal device is related to one considered by Borrvall and Petersson for Stokes ﬂow in Ref. [1]; the
+present example demonstrates the diﬃculty for the optimization algorithm to ﬁnd the optimal topology when there
+are two strong candidates for the global optimum.
+
+The computational domain, shown in Fig. 6, consists of a rectangular design domain (gray) to which two inlet and
+two outlet leads (white) are attached symmetrically. The boundary conditions prescribe parabolic proﬁles for the ﬂow
+at the inlets, zero pressure and normal ﬂow at the outlets, and no-slip on all other external boundaries. Choosing the
+width ℓ of the leads as our characteristic length scale, we deﬁne the Reynolds number as Re = ρℓvmax/η, where vmax
+is the maximal velocity at the inlets. The Darcy number is ﬁxed at Da = 10−4 to obtain reasonably small leakage
+through the porous walls.
+
+The optimization problem is stated as a minimization of the total power dissipation inside the computational
+domain, given by Eq. (7a), subject to the constraint that at most a fraction β = 0.4 of the design domain should be
+without porous material, c.f. Eq. (15b).
+
+Fig. 7(a) and (b) shows the two optimal structures obtained for Re = 20 and 200, respectively, in a geometry with
+L = 3.5ℓ. At Re = 20 the optimal structure turns out to be a pair of U -turns connecting the inlets to the outlets on
+
+13
+
+FIG. 7: Optimal structures (black) and streamlines at 10% intervals for the four-terminal device at Reynolds number Re = 20
+and 200, respectively, in a geometry with L = 3.5ℓ.
+
+the same side of the design domain, while at Re = 200 the optimal structure is a pair of parallel channels. In order
+to minimize the power dissipation at low Re, the channel segments should be as short and as wide as possible, which
+favors the U -turns in Fig. 7(a). However, as the Reynolds number is increased, the cost of bending the ﬂuid stream
+grows. When inertia dominates, larger velocity gradients appear in the long outer lane of the U -turn. This increases
+the dissipation compared to low Re, where more ﬂuid ﬂows in the short inner lane. At a certain point it will exceed
+the dissipation in the parallel channels solution, that can be estimated from Poiseuille ﬂow in two straight channels,
+each of length L + 4ℓ and width ℓ,
+
+Φ0 =
+
+4 +
+
+96
+9 (cid:16)
+
+L
+ℓ (cid:17)
+
+ηv2
+
+max.
+
+(34)
+
+This is independent of inertia due to translation symmetry, and we use Φ0 as a natural unit of power dissipation (per
+unit length in the third dimension) in the following.
+
+Clearly the Reynolds number at which the transition between the two classes of solutions occurs will depend strongly
+on the ratio L/ℓ. For short lengths L . 2ℓ the parallel channels solution is expected to be optimal at all Re, whereas
+for long lengths L & 3ℓ the U -turn solution should be signiﬁcantly better than the parallel channels solution at low
+Re.
+
+1. Dependence on the Reynolds number
+
+In the following we investigate more closely the transition between the U -turns and the parallel channels solution
+as a function of the Reynolds number for the particular geometry L = 3ℓ. The topology optimization problem is
+solved for diﬀerent Re in the range 0 to 200, using a homogeneous material distribution γ(0) = 0.4 as initial condition.
+For the parameter q determining the shape of α(γ) in Eq. (4) we use a two-step solution procedure as suggested in
+Ref. [1]. First the problem is solved with q = 0.01 in order to obtain a solution with slightly smeared-out solid/void
+interfaces. Next this material distribution is used as initial guess for a solution with q = 0.1 which generates fully
+discrete solid/void interfaces at the resolution of our ﬁnite element mesh.
+
+Fig. 8(a) shows the result for the normalized power dissipation Φ/Φ0 obtained as a function of Re. At low Reynolds
+numbers the optimized solutions correctly come out as U -turns with a power dissipation Φ that is clearly less than Φ0.
+However, at high Reynolds numbers Re > 90 the method fails because the optimized solutions continue to come out as
+U -turns even though this yields Φ/Φ0 > 1. For Re
+160 the solution jumps from the simple U -turns to a hybrid with
+the parallel channels, as shown in the inset. The full lines in Fig. 8(a) show the result when the material distributions
+optimized for Re = 0, 50, and 180, respectively, are frozen and the power dissipation evaluated at diﬀerent Re. It is
+), all fall on or below the full lines which conﬁrms that they are indeed
+seen that the optimized solutions, marked (
+◦
+superior to the other solutions of the U -turn family. This also holds for Re > 90, except for the hybrid structures at
+Re
+160, that are actually inferior to the U -turns. Moreover, at Re = 160 the optimized solution falls slightly above
+that optimized at Re = 180.[17]
+
+≥
+
+≥
+
+The diﬃculty is that the two families of solutions, the U -turns and the parallel channels, are both deep local minima
+for the power dissipation in design space. Using γ(0) = 0.4 as initial condition, the initial permeability is everywhere
+very low, such that the porous friction almost completely dominates the inertia and viscous friction in the ﬂuid.
+Therefore the iteration path in design space is biased towards low Reynolds numbers and the U -turns solution.
+
+14
+
+FIG. 8: Power dissipation Φ in structures optimized for diﬀerent Reynolds numbers; normalized with the Poiseuille ﬂow result Φ0
+) show results using γ(0) = 0.4 as initial condition, failing to ﬁnd the optimal solution for Re > 90.
+(dashed line). (a) Markers (
+◦
+Full lines show the performance of the structures optimized at Re = 0, 50, and 180, when evaluated at diﬀerent Reynolds
+numbers. As expected, all points fall on or below the full lines, except the hybrid solutions for Re
+160. (b) Comparision
+between the two diﬀerent initial conditions γ(0) = 0.4 (
+), showing the success of the empty initial condition
+) fall slightly below Φ/Φ0 = 1 due to leakage through the porous walls (see the
+in ﬁnding the optimal solution. The crosses (
+text).
+
+) and γ(0) = 1 (
+◦
+
+×
+
+≥
+
+×
+
+In order to circumvent this problem we have tried using a completely empty design domain with γ(0) = 1 as initial
+condition. This should remove the bias towards the U -turns and allow the optimization algorithm to take inertia into
+account from iteration one. The result is shown in Fig. 8(b). For Re
+80 the solutions are still U -turns, whereas for
+Re
+90 they come out as parallel channels. Notice that Φ/Φ0 for the parallel channels solution is actually slightly
+less than unity, namely 0.98. This is due to a small amount of ﬂuid seeping through the porous walls deﬁning the
+device, which lowers the hydraulic resistance compared to the Poiseuille ﬂow result derived for solid walls.[18]
+
+≤
+
+≥
+
+Strictly speaking the initial condition γ(0) = 1 is not a feasible solution because it the volume constraint that at
+most a fraction β = 0.4 of the design domain should be open channel. However, the MMA optimization algorithm
+penalizes this and reaches a feasible solution after a few iterations. This is controlled by choosing a penalty parameter.
+If the penalty for violating the constraint is small, the material is added slowly and only where it does not disturb
+the ﬂow much. If the penalty is large, the material is added quickly and almost homogeneously until the constraint is
+satisﬁed. The succesful result from Fig. 8(b) was obtained with a moderate penalty. In Fig. 9 this is compared with
+results for smaller and larger penalty parameters, respectively. The ﬁgure shows that with the small penalization,
+the solution jumps to the parallel channels already at Re = 50 which is not optimal. For the large penalization, the
+solution does not jump until Re
+130.
+We have thus not full control over the convergence towards the global optimum.
+
+190. Also we observe hybrid structures similiar to those in Fig. 8(a) for Re
+
+≥
+
+≥
+
+2. Discussion of problems with local optima
+
+Further insight into the problem of local versus global optima is gained by inspecting the ﬂow ﬁeld in the initial
+material distribution γ(0). This is shown in Fig. 10 for the Stokes ﬂow limit, Re = 0. The streamlines are drawn as 10%
+contours of the streamfunction, and Fig. 10(a) shows that for γ(0) = 0.4 the streamline density is largest between the
+two leads on the same side of the design domain. Based on the sensitivity ∂Φ/∂γ the optimization algoritm therefore
+decides to remove material in order to reduce the porous friction in these large-ﬂow regions. The iteration path in
+design space is therefore biased towards the U -turn solution. This remains true even at ﬁnite Reynolds numbers as
+long as the porous friction dominates inertia.
+
+Fig. 10(b) shows that when γ(0) = 1 the streamline density is largest between the leads on the opposite side of the
+design domain. Because the volume constraint is violated the optimization algorithm has to place material somewhere,
+which it does in the low-ﬂow regions. The solution is therefore biased towards the parallel channels. Indeed if the
+
+15
+
+0
+Φ
+/
+Φ
+
+1.25
+
+1.20
+
+1.15
+
+1.10
+
+1.05
+
+1.00
+
+0.95
+
+0.90
+
+0.85
+
+0.80
+
+0
+
+20
+
+40
+
+60
+
+80
+
+100 120 140 160 180 200
+
+Re
+
+FIG. 9: Comparision between structures optimized with the initially non-feasible material distribution γ(0) = 1 for diﬀerent
+penalty parameters in optimization algorithm, revealing the diﬃculty in choosing the condition for ﬁnding the global optimum.
+Full line: the successful result from Fig. 8(b) with moderate penalty; (+): lower penalty yielding wrong result for 40 < Re < 80;
+((cid:3)) higher penalty yielding wrong results for 80 < Re < 190.
+
+FIG. 10: Flow distributions at Re = 0, L = 3ℓ and q = 0.01. (a) Initial design ﬁeld γ(0) = 0.4. (b) Initial design ﬁeld γ(0) = 0.4.
+(c) The optimal design ﬁeld γ(∗) obtained at Da = 10
+
+−2.
+
+penalty is chosen very small, the solution comes out as parallel channels even for Stokes ﬂow at L = 3ℓ, which is far
+from optimal. When the penalty is larger and the material is added faster, we move away from this adiabatic solution
+and closer to the situation for γ(0) = 0.4.
+
+The additional complexity associated with making a proper choice of the penalty parameter is somewhat incon-
+venient. We have therefore attempted to construct a more convex problem by increasing the initial permeability.
+This can be done either by increasing the Darcy number, or by decreasing the parameter q, c.f. Eq. (4). Fig. 10(c)
+shows the optimal solution γ(∗) obtained for Da = 10−2 and q = 0.01 at Re = 0. At this level the problem is
+convex because the solution is independent of the initial condition. Using this material distribution as initial guess
+and gradually decreasing the permeability to Da = 10−4 and q = 0.1 we correctly end up in the U -turn solution.
+However, it is evident from Fig. 10(c) that γ(∗) has a fair amount of parallel channels nature. Using this solution
+procedure of gradually decreasing the permeability at higher Reynolds numbers therefore result in a transition to the
+parallel channels solution already for Re
+30, which is clearly not optimal. Moreover, when the Reynolds number is
+increased and the inertia starts to play in, the system tends to loose convexity even at the high permeability.
+
+≥
+
+In summary, the topology optimization has diﬃculties in ﬁnding the global optimum for the problem. There are
+two strong candidates for the optimal structure, and the solution found is sensitive to the initial condition for the
+material distribution. Using an empty channel as initial condition, the method is able to ﬁnd the correct solution for
+
+16
+
+all Reynolds numbers. However, this successful result depends on a proper choice of the penalty parameter in the
+MMA algorithm. By using a high initial permeability of the porous medium, it is possible to convexify the problem
+at low Reynolds numbers. Continuation of this solution to the desired low permeability does not generally lead to the
+global minimum of the non-convex problem, though.
+
+In the original paper Ref. [1] it was argued that in Stokes ﬂow the true optimal design should be rather insensitive
+to the choice of the Darcy number, although the dissipated power may deviate quite a lot from the zero Da limit. In
+our work we have observed that the actual solution found by the topology optimization may depend a great deal on
+the choice of the Darcy number, whereas the dissipated power should approach the zero Da limit roughly as √Da.
+
+V. CONCLUSION
+
+Based on the work of Borrvall and Petersson [1] we have extended the topology optimization of ﬂuid networks to
+cover the full incompressible Navier–Stokes equations in steady-state. Our implementation of the method is based
+of the commercial ﬁnite element package Femlab, which reduces the programming eﬀort required to a minimum.
+Formulating the objective function in the general form Eq. (11) and performing the sensitivity analysis with the
+governing equations on the generic divergence form Eqs. (10a)-(10c) makes the implementation very compact and
+transparent. Moreover the code for this analysis should remain almost the same for any problem expressed in this
+way, whereas the code for describing the physical problem of course changes. Topology optimization of multiphysics
+problems can therefore be performed almost as easy as solving the PDE of a single realization of the underlying
+physical problem. Also deﬁning the optimization objective is easy since it simply amounts to stating the expression
+for A and B in Eq. (11).
+
+Our implementation of topology optimization has been tested on two ﬂuidics examples, both illustrating the inﬂu-
+
+ence of diﬀerent quantities and conditions on the eﬃciency of the optimization method.
+
+The ﬁrst example, a channel with reversed ﬂow, illustrates the inﬂuence of the Reynolds number Re and the Darcy
+number Da on the solutions. We have shown that the choice of Da has a strong impact on the solution when the
+structure contains barriers to deﬂect the ﬂuid stream.
+
+The second example, minimization of the power dissipation in a four-terminal device, show the problems of de-
+termining the global minimum when two strong minima are competing. This problem is highly non-convex, and we
+have shown that the solution depends on the initial condition. For a homogeneous material distribution, γ(0) = 0.4,
+the porous friction dominates and the solution is not the global optimum in all cases. Using an empty channel as
+the initial state, γ(0) = 1, inertia plays a role from the beginning, and more correct solutions are obtained. However,
+the initial condition in fact violates the volume constraint, and the part of the optimization routine correcting this
+depends on a penalty factor. Unfortunately, the chosen value for this factor inﬂuences the solution, and in some
+cases the solution is not the global minimum. Increasing the Darcy number makes the problem more convex, but
+continuation from large to small Da, i.e., from high to low permeability of the material, does not generally end up in
+global optimum.
+
+In conclusion, we have shown that our implementation of topology optimization is a useful tool for designing ﬂuidic
+
+devices.
+
+VI. ACKNOWLEDGEMENT
+
+We are grateful to Ole Sigmund and Allan Gersborg-Hansen for illuminating discussions on the topology optimiza-
+tion method, and to Krister Svanberg for providing us with the Matlab code for the MMA routine. This work is
+partly supported by The Danish Technical Research Council, Grant No. 26-03-0037.
+
+[1] T. Borrvall T, J. Petersson, Int. J. Numer. Meth. 41, 77 (2003)
+[2] M. P. Bendsøe, N. Kikuchi, Comp. Meth. Appl. Mech. Eng.2, 197 (1988)
+[3] Topology Optimization: Theory, Methods and Applications by M. P. Bendsøe and O. Sigmund, Springer Verlag (Berlin,
+
+2003).
+
+[4] H. A. Eschenauer, N. Olhoﬀ, Appl. Mech. Rev. 54, 331 (2001)
+[5] J. S. Jensen, J. Sound and Vibration 266, 1053 (2003)
+[6] J. S. Jensen, O. Sigmund, Appl. Phys. Letters 84, 2022 (2004)
+[7] O. Sigmund, A. Gersborg-Hansen, and R. B. Haber, proc. Nordic Matlab Conference 2003, L. Gregersen (Ed.), Comsol
+
+[8] Topology optimization of incompressible Newtonian ﬂows at moderate Reynolds numbers by A. Gersborg-Hansen, M.Sc.-
+
+A/S, Søborg, Denmark, pp. 237-242.
+
+thesis, Technical University of Denmark (2003)
+
+17
+
+[9] K. Svanberg, SIAM J. Optim. 12, 555 (2002).
+[10] A Matlab implementation of the MMA optimization algorithm [9] can be obtained (free of charge for academic purposes)
+
+from Krister Svanberg, KTH, Sweden. Email: krille@math.kth.se.
+
+[11] Course of Theoretical Physics, Vol. 6, Fluid Mechanics by L. D. Landau and E. M. Lifshitz, Butterworth and Heinemann,
+
+2nd edition, (Oxford, 2000)
+
+[12] P. Michaleris, D. A. Tortorelli, C. A. Vidal, Int. J. Numer. Methods Eng. 37, 2471 (1994)
+[13] FEMLAB reference manual. Stockholm: COMSOL AB
+[14] Borrvall and Petersson suggest a model for plane ﬂow between two parallel surfaces of varying separation h(r). The power
+αv, where v(r) is the average velocity between
+max in
+
+dissipation due to out-of-plane shears is modelled by an absorption term
+the surfaces and α(r) = 12η/h(r)2. In their model it is therefore natural to operate with a non-zero αmin = 12η/h2
+Eq. (4).
+
+−
+
+[15] In particular this is the case when the inlets and outlets are chosen as straight channels suﬃciently long that prescribing
+
+a parabolic Poiseuille proﬁle can be justiﬁed, see Figs. 1 and 6.
+
+[16] Another common choice is the discontinuous and piecewise constant element for the design variable. Notice that for second
+1 for all r because of under- or
+and higher order Lagrange elements the condition 0
+overshoot at sharp zero-one transitions in γ. This in turns can result in negative α, c.f. Eq. (4), which is unphysical and
+destroys the convergence of the algorithm.
+
+1 does not imply 0
+
+γ(r)
+
+γn
+
+≤
+
+≤
+
+≤
+
+≤
+
+[17] This could be an indication that the hybrid structures are not local optima in design space after all, but rather a very
+
+narrow saddle point that the optimization algorithm has a hard time getting away from.
+
+[18] The ﬂow in a straight channel of width ℓ bounded by two porous walls of thickness ℓ can easily be found analytically. At
+Da = 10−4 the hydraulic resistance of this system is 94% of that for a channel of width ℓ bounded by solid walls, and it
+approaches this zero Da limit only as √Da. When L = 3ℓ we therefore expect a power dissipation Φ/Φ0 = (3
+0.94+4)/7 =
+0.97 for the parallel channels solution, including the leads. This is close to the observed 0.98.
+
+×
+
+APPENDIX A: FEMLAB IMPLEMENTATION
+
+% FEMLAB CODE FOR THE 4-TERMINAL DEVICE OF SEC. 4.2
+clear fem femadj
+% DEFINE REYNOLDS NUMBER, DARCY NUMBER, LENGTH OF DESIGN DOMAIN, AND VOLUME FRACTION
+Re = 50;
+Da = 1e-4;
+L0 = 3.0;
+beta = 0.4;
+% DEFINE GEOMETRY, MESH, AND SUBDOMAIN/BOUNDARY GROUPS [SEE FIG. 6]
+fem.geom = rect2(0,L0,0,5) + rect2(-2,0,1,2) + rect2(-2,0,3,4) + rect2(L0,L0+2,1,2) ...
+
++ rect2(L0,L0+2,3,4);
+
+1:walls
+
+2:inlets
+
+3:outlets
+
+4:interior
+
+1:design domain
+
+2:inlet/outlet leads
+
+fem.mesh = meshinit(fem,’Hmaxsub’,[3 0.125]);
+% subdomain groups
+fem.equ.ind = {[3] [1 2 4 5]};
+% boundary groups
+fem.bnd.ind = {[2:3 5:8 10 12:14 16:18 20:22] [4 23] [1 24] [9 11 15 19]};
+% DEFINE SPACE COORDINATES, DEPENDENT VARIABLES, AND SHAPE FUNCTIONS
+fem.sdim = {’x’ ’y’};
+fem.dim = {’u’ ’v’ ’p’ ’gamma’};
+fem.shape = [2 2 1 1];
+% DEFINE CONSTANTS
+fem.const.rho = 1;
+fem.const.eta = 1;
+fem.const.umax = Re;
+fem.const.alphamin = 0;
+fem.const.alphamax = 1/Da;
+fem.const.q = 0.1;
+Phi0 = 96*fem.const.eta*(L0+4)*fem.const.umax^2/9;
+% DEFINE EXPRESSIONS ON SUBDOMAIN AND BOUNDARY GROUPS
+fem.equ.expr = {’A’ ’eta*(2*ux*ux+2*vy*vy+(uy+vx)*(uy+vx))+alpha*(u*u+v*v)’ ...
+
+’alpha’ {’alphamax+(alphamin-alphamax)*gamma*(1+q)/(q+gamma)’ ’0’}};
+
+fem.bnd.expr = {’B’ ’0’};
+
+% DEFINE GOVERNING EQUATIONS AND INITIAL CONDITIONS [SEE EQS. (8) AND (9)]
+fem.form = ’general’;
+fem.equ.shape = {[1:4] [1:3]};
+fem.equ.ga = {{{’-p+2*eta*ux’ ’eta*(uy+vx)’} {’eta*(uy+vx)’ ’-p+2*eta*vy’} {0 0} {0 0}}};
+fem.equ.f = {{’rho*(u*ux+v*uy)+alpha*u’ ’rho*(u*vx+v*vy)+alpha*v’ ’ux+vy’ 1}};
+fem.equ.init = {{0 0 0 beta}};
+% DEFINE BOUNDARY CONDITIONS
+fem.bnd.shape = {[1:3]};
+fem.bnd.r = {{’u’ ’v’ 0 0} ...
+
+% do not define gamma on any boundaries
+% walls:
+
+% only define gamma on subdomain group 1
+
+no-slip
+
+18
+
+{’u*nx+4*umax*s*(1-s)’ ’v’ 0 0} ...
+{0 ’v’ 0 0} ...
+{0 0 0 0}};
+
+% inlets:
+% outlets:
+% interior:
+% zero prescribed external forces everywhere
+
+parabolic profile
+normal flow
+nothing
+
+fem.bnd.g = {{0 0 0 0}};
+% PERFORM LINEARIZATION, DEGREE-OF-FREEDOM ASSIGNMENT, AND ASSEMBLE INITIAL CONDITION
+fem = femdiff(fem);
+fem.xmesh = meshextend(fem);
+fem.sol = asseminit(fem);
+
+% DEFINE STRUCTURE FOR COMPUTING RIGHT-HAND-SIDE IN ADJOINT PROBLEM [SEE EQ. (29)]
+femadj = fem;
+femadj.equ.ga = {{{’diff(A,ux)’ ’diff(A,uy)’} {’diff(A,vx)’ ’diff(A,vy)’} ...
+
+{’diff(A,px)’ ’diff(A,py)’} {’diff(A,gammax)’ ’diff(A,gammay)’}}};
+femadj.equ.f = {{’diff(A,u)’ ’diff(A,v)’ ’diff(A,p)’ ’diff(A,gamma)’}};
+femadj.bnd.g = {{’diff(B,u)’ ’diff(B,v)’ ’diff(B,p)’ ’diff(B,gamma)’}};
+femadj.xmesh = meshextend(femadj);
+% GET INDICES OF DESIGN VARIABLE IN THE GLOBAL SOLUTION VECTOR (fem.sol.u)
+i4 = find(asseminit(fem,’Init’,{’gamma’ 1},’Out’,’U’));
+% COMPUTE VOLUME BELOW DESIGN VARIABLE BASIS FUNCTIONS
+L = assemble(fem,’Out’,{’L’});
+Vgamma = L(i4);
+Vdomain = sum(Vgamma);
+% GET INDICES OF VELOCITY-PRESSURE VARIABLES
+i123 = find(asseminit(fem,’Init’,{’u’ 1 ’v’ 1 ’p’ 1},’Out’,’U’));
+
+% DEFINE VARIABLES PARAMETERS FOR MMA OPTIMIZATION ALGORITHM [SEE REF. [9,10]]
+a0 = 1;
+a = 0;
+c = 20;
+d = 0;
+xmin = 0;
+xmax = 1;
+xold = fem.sol.u(i4);
+xolder = xold;
+low = 0;
+upp = 1;
+
+% DESIGN LOOP FOR THE ACTUAL TOPOLOGY OPTIMIZATION
+for iter = 1:100
+
+% SOLVE NAVIER-STOKES FLOW PROBLEM TO UPDATE VELOCITY AND PRESSURE
+fem.sol = femnlin(fem,’Solcomp’,{’u’ ’v’ ’p’},’U’,fem.sol.u);
+% SOLVE ADJOINT PROBLEM FOR LAGRANGE MULTIPLIERS
+[K N] = assemble(fem,’Out’,{’K’ ’N’},’U’,fem.sol.u);
+[L M] = assemble(femadj,’Out’,{’L’ ’M’},’U’,fem.sol.u);
+femadj.sol = femlin(’In’,{’K’ K(i123,i123)’ ’L’ L(i123) ’M’ zeros(size(M)) ’N’ N(:,i123)});
+% SENSITIVITY ANALYSIS
+gamma = fem.sol.u(i4);
+Phi = postint(fem,’A’,’Edim’,2) + postint(fem,’B’,’Edim’,1);
+dPhidgamma = L(i4) - K(i123,i4)’*femadj.sol.u;
+% PERFORM MMA STEP TO UPDATE DESIGN FIELD
+x = gamma;
+f = Phi/Phi0;
+dfdx = dPhidgamma/Phi0;
+d2fdx2 = zeros(size(gamma)); d2gdx2 = zeros(size(gamma’));
+[xnew,y,z,lambda,ksi,eta,mu,zeta,s,low,upp] = mmasub(1,length(gamma),iter, ...
+
+g = gamma’*Vgamma/Vdomain - beta;
+dgdx = Vgamma’/Vdomain;
+
+x,xmin,xmax,xold,xolder,f,dfdx,d2fdx2,g,dgdx,d2gdx2,low,upp,a0,a,c,d);
+
+xolder = xold; xold = x; gamma = xnew;
+% TEST CONVERGENCE
+if iter >= 100 | max(abs(gamma-xold)) < 0.01
+
+break
+
+end
+% UPDATE DESIGN VARIABLE
+u0 = fem.sol.u; u0(i4) = gamma;
+fem.sol = femsol(u0);
+% DISPLAY RESULTS FOR EACH ITERATION STEP
+disp(sprintf(’Iter.:%3d
+
+Obj.: %8.4f
+
+iter,f,xold’*Vgamma,max(abs(xnew-xold))))
+
+postplot(fem,’arrowdata’,{’u’ ’v’},’tridata’,’gamma’,’trimap’,’gray’)
+axis equal; shg; pause(0.1)
+
+end
+
+Vol.: %6.3f
+
+Change: %6.3f’, ...
+
+
