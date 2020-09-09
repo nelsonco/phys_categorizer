@@ -55,6 +55,11 @@ pip install os
 pip install plotly
 ```
 
+
+```bash
+pip install -U kaleido
+```
+
 ## How to use:  
 ### To use the preprocessed and catagorized article's associated text file:
 Run main.py if using python 3  
