@@ -55,6 +55,11 @@ pip install os
 pip install plotly
 ```
 
+
+```bash
+conda install -c plotly plotly-orca
+```
+
 ## How to use:  
 ### To use the preprocessed and catagorized article's associated text file:
 Run main.py if using python 3  
